@@ -1,0 +1,204 @@
+.project-detail {
+  min-height: 100vh;
+  background: #f7f7f7;
+}
+
+.loading, .error {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-size: 1.25rem;
+  color: #666;
+}
+
+.project-content {
+  max-width: 1200px;
+  margin: 2rem auto;
+  padding: 0 2rem;
+}
+
+.project-summary,
+.cost-breakdown,
+.systems-detail {
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-item label {
+  font-size: 0.875rem;
+  color: #666;
+  margin-bottom: 0.25rem;
+}
+
+.summary-item span {
+  font-size: 1.125rem;
+  color: #333;
+}
+
+.highlight {
+  color: #667eea !important;
+  font-weight: bold;
+  font-size: 1.5rem !important;
+}
+
+.breakdown-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  align-items: center;
+}
+
+.chart-container {
+  display: flex;
+  justify-content: center;
+}
+
+.breakdown-table table,
+.systems-detail table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.breakdown-table th,
+.breakdown-table td,
+.systems-detail th,
+.systems-detail td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.breakdown-table th,
+.systems-detail th {
+  background: #f8f8f8;
+  font-weight: 600;
+  color: #555;
+}
+
+.category-section {
+  margin-bottom: 2rem;
+}
+
+.category-section:last-child {
+  margin-bottom: 0;
+}
+
+.category-section h3 {
+  color: #667eea;
+  margin-bottom: 1rem;
+}
+
+.project-footer {
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.footer-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
+.footer-summary > div {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.footer-summary label {
+  color: #666;
+}
+
+.footer-summary span {
+  font-size: 1.125rem;
+  color: #333;
+}
+
+.total {
+  padding-top: 1rem;
+  border-top: 2px solid #eee;
+}
+
+.total label {
+  font-weight: bold;
+  color: #333;
+}
+
+.total span {
+  font-size: 1.5rem !important;
+  font-weight: bold;
+  color: #667eea;
+}
+
+/* Trade Banner */
+.trade-banner {
+  background: #667eea;
+  color: white;
+  padding: 1rem;
+  text-align: center;
+  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Subcontractor Mode Styling */
+.subcontractor-mode {
+  position: relative;
+}
+
+.subcontractor-mode::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: #667eea;
+  z-index: 1000;
+}
+
+.subcontractor-mode .project-summary,
+.subcontractor-mode .cost-breakdown,
+.subcontractor-mode .systems-detail,
+.subcontractor-mode .project-footer {
+  border: 2px solid #667eea;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
+.subcontractor-mode .category-section h3 {
+  color: #667eea;
+  font-weight: 600;
+}
+
+.subcontractor-mode .highlight {
+  background: rgba(102, 126, 234, 0.1);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+@media (max-width: 768px) {
+  .breakdown-content {
+    grid-template-columns: 1fr;
+  }
+  
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
