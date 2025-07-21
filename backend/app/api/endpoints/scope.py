@@ -5,6 +5,7 @@ import json
 
 from app.models.scope import ScopeRequest, ScopeResponse
 from app.core.engine import engine as scope_engine
+from app.services.floor_plan_service import floor_plan_service
 from app.db.database import get_db
 from app.db.models import Project
 from app.api.endpoints.auth import get_current_user
@@ -21,6 +22,16 @@ async def generate_scope(
     try:
         print(f"Received scope request: {request.model_dump()}")
         scope_response = scope_engine.generate_scope(request)
+        
+        # Generate floor plan
+        floor_plan_data = floor_plan_service.generate_floor_plan(
+            square_footage=request.square_footage,
+            project_type=request.project_type.value,
+            building_mix=getattr(request, 'building_mix', None)
+        )
+        
+        # Add floor plan to response
+        scope_response.floor_plan = floor_plan_data
         
         # Always create a new project with unique ID
         db_project = Project(
@@ -87,4 +98,17 @@ async def get_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    return json.loads(project.scope_data)
+    # Parse stored scope data
+    scope_data = json.loads(project.scope_data)
+    
+    # Regenerate floor plan data
+    floor_plan_data = floor_plan_service.generate_floor_plan(
+        square_footage=project.square_footage,
+        project_type=project.project_type,
+        building_mix=scope_data.get('request_data', {}).get('building_mix')
+    )
+    
+    # Add floor plan to response
+    scope_data['floor_plan'] = floor_plan_data
+    
+    return scope_data

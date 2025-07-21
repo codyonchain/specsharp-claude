@@ -93,6 +93,7 @@ class ScopeResponse(BaseModel):
     contingency_amount: float = Field(default=0.0, ge=0)
     total_cost: float = Field(default=0.0, ge=0)
     cost_per_sqft: float = Field(default=0.0, ge=0)
+    floor_plan: Optional[Dict[str, Any]] = None
     
     @validator('subtotal', always=True)
     def calculate_subtotal(cls, v, values):
