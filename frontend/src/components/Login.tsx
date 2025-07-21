@@ -37,7 +37,14 @@ function Login({ setIsAuthenticated }: LoginProps) {
       setIsAuthenticated(true);
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'An error occurred');
+      console.error('Login error:', err);
+      if (err.response) {
+        setError(err.response.data?.detail || `Error: ${err.response.status}`);
+      } else if (err.request) {
+        setError('No response from server. Please check your connection.');
+      } else {
+        setError(err.message || 'An error occurred');
+      }
     }
   };
 

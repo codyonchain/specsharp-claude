@@ -7,25 +7,9 @@ interface DashboardProps {
   setIsAuthenticated: (value: boolean) => void;
 }
 
-type TradeType = 'electrical' | 'plumbing' | 'hvac' | 'structural' | 'general';
-
-const TRADES = [
-  { value: 'general', label: 'General Contractor', category: null },
-  { value: 'electrical', label: 'Electrical', category: 'electrical' },
-  { value: 'plumbing', label: 'Plumbing', category: 'plumbing' },
-  { value: 'hvac', label: 'HVAC', category: 'mechanical' },
-  { value: 'structural', label: 'Framing', category: 'structural' },
-];
-
 function Dashboard({ setIsAuthenticated }: DashboardProps) {
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isSubcontractorMode, setIsSubcontractorMode] = useState(
-    localStorage.getItem('subcontractorMode') === 'true'
-  );
-  const [selectedTrade, setSelectedTrade] = useState<TradeType>(
-    (localStorage.getItem('selectedTrade') as TradeType) || 'general'
-  );
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -49,24 +33,6 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
     navigate('/login');
   };
 
-  const handleSubcontractorToggle = () => {
-    const newMode = !isSubcontractorMode;
-    setIsSubcontractorMode(newMode);
-    localStorage.setItem('subcontractorMode', newMode.toString());
-    
-    if (!newMode) {
-      // Reset to general contractor when turning off subcontractor mode
-      setSelectedTrade('general');
-      localStorage.setItem('selectedTrade', 'general');
-    }
-  };
-
-  const handleTradeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const trade = e.target.value as TradeType;
-    setSelectedTrade(trade);
-    localStorage.setItem('selectedTrade', trade);
-  };
-
   return (
     <div className="dashboard">
       <header className="dashboard-header">
@@ -82,31 +48,6 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
           >
             Create New Scope
           </button>
-          
-          <div className="view-controls">
-            <label className="toggle-container">
-              <input
-                type="checkbox"
-                checked={isSubcontractorMode}
-                onChange={handleSubcontractorToggle}
-              />
-              <span className="toggle-label">Subcontractor View</span>
-            </label>
-            
-            {isSubcontractorMode && (
-              <select
-                value={selectedTrade}
-                onChange={handleTradeChange}
-                className="trade-select"
-              >
-                {TRADES.map(trade => (
-                  <option key={trade.value} value={trade.value}>
-                    {trade.label}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
         </div>
 
         <div className="projects-section">

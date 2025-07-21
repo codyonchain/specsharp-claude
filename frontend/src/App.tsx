@@ -15,6 +15,7 @@ function App() {
     setIsAuthenticated(!!token);
     setLoading(false);
     console.log('App loaded, authenticated:', !!token);
+    console.log('Current path:', window.location.pathname);
   }, []);
 
   if (loading) {

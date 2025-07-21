@@ -70,8 +70,8 @@ class FloorPlanService:
     """Service for generating professional floor plans"""
     
     def __init__(self):
-        self.grid_size = 10.0  # 10ft grid
-        self.min_corridor_width = 6.0  # ADA compliant
+        self.grid_size = 5.0  # 5ft grid for more precision
+        self.min_corridor_width = 8.0  # Generous corridors
         
         # Standard room sizes (min, max in sqft)
         self.room_sizes = {

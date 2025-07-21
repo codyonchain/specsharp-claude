@@ -19,6 +19,7 @@ interface ScopeRequest {
 }
 
 function ScopeGenerator() {
+  console.log('ScopeGenerator component mounted');
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -53,20 +54,96 @@ function ScopeGenerator() {
     
     // Parse building types with percentages
     const buildingTypes: { [key: string]: number } = {};
-    const typePattern = /(warehouse|office|retail|residential|industrial|commercial)\s*\(?\s*(\d+)?\s*%?\s*\)?/gi;
-    let typeMatch;
+    
+    // First, try to match patterns like "industrial (80%)" or "60% retail"
+    const percentagePatterns = [
+      /(warehouse|office|retail|residential|industrial|commercial|manufacturing|facility)\s*\((\d+)%\)/gi,
+      /(\d+)%\s+(warehouse|office|retail|residential|industrial|commercial|manufacturing)/gi,
+      /(warehouse|office|retail|residential|industrial|commercial|manufacturing)\s+(\d+)%/gi
+    ];
+    
+    let hasPercentages = false;
     let totalPercentage = 0;
     
-    while ((typeMatch = typePattern.exec(input)) !== null) {
-      const type = typeMatch[1].toLowerCase();
-      const percentage = typeMatch[2] ? parseInt(typeMatch[2]) : 100;
-      buildingTypes[type] = percentage;
-      totalPercentage += percentage;
+    // Try each pattern to find percentages
+    for (const pattern of percentagePatterns) {
+      let match;
+      while ((match = pattern.exec(input)) !== null) {
+        let type, percentage;
+        if (match[1] && isNaN(parseInt(match[1]))) {
+          // Pattern like "industrial (80%)"
+          type = match[1].toLowerCase();
+          percentage = parseInt(match[2]);
+        } else {
+          // Pattern like "60% retail"
+          percentage = parseInt(match[1]);
+          type = match[2].toLowerCase();
+        }
+        
+        // Normalize type names
+        if (type === 'manufacturing' || type === 'facility') {
+          type = 'industrial';
+        }
+        
+        buildingTypes[type] = percentage;
+        totalPercentage += percentage;
+        hasPercentages = true;
+      }
+    }
+    
+    // Look for patterns like "manufacturing facility with 25% office space"
+    if (hasPercentages && totalPercentage < 100) {
+      // Find building types mentioned without percentages
+      const simpleTypePattern = /(warehouse|office|retail|residential|industrial|commercial|manufacturing|facility)(?:\s+(?:space|building|area|facility))?/gi;
+      let typeMatch;
+      
+      while ((typeMatch = simpleTypePattern.exec(input)) !== null) {
+        let type = typeMatch[1].toLowerCase();
+        if (type === 'manufacturing' || type === 'facility') {
+          type = 'industrial';
+        }
+        // If this type doesn't have a percentage assigned yet
+        if (!buildingTypes[type]) {
+          buildingTypes[type] = 100 - totalPercentage;
+          totalPercentage = 100;
+          break;
+        }
+      }
+    }
+    
+    // If no percentages found, look for building types without percentages
+    if (!hasPercentages) {
+      const simpleTypePattern = /(warehouse|office|retail|residential|industrial|commercial|manufacturing|facility)(?:\s+(?:space|building|area))?/gi;
+      let typeMatch;
+      const foundTypes: string[] = [];
+      
+      while ((typeMatch = simpleTypePattern.exec(input)) !== null) {
+        let type = typeMatch[1].toLowerCase();
+        if (type === 'manufacturing' || type === 'facility') {
+          type = 'industrial';
+        }
+        if (!foundTypes.includes(type)) {
+          foundTypes.push(type);
+        }
+      }
+      
+      // If multiple types found without percentages, assume equal distribution
+      if (foundTypes.length > 1) {
+        const equalPercentage = Math.floor(100 / foundTypes.length);
+        foundTypes.forEach((type, index) => {
+          // Give any remainder to the first type
+          buildingTypes[type] = index === 0 ? equalPercentage + (100 % foundTypes.length) : equalPercentage;
+        });
+        totalPercentage = 100;
+      } else if (foundTypes.length === 1) {
+        buildingTypes[foundTypes[0]] = 100;
+        totalPercentage = 100;
+      }
     }
     
     // Determine primary project type
     if (Object.keys(buildingTypes).length > 0) {
-      if (totalPercentage > 100 || Object.keys(buildingTypes).length > 1) {
+      if (Object.keys(buildingTypes).length > 1) {
         result.project_type = 'mixed_use';
         // Add building mix to special requirements
         const mixDescription = Object.entries(buildingTypes)
@@ -79,11 +156,21 @@ function ScopeGenerator() {
           normalizedMix[type] = pct / 100;
         });
         result.building_mix = normalizedMix;
+        
+        // Set occupancy type to the dominant type
+        const dominantType = Object.entries(buildingTypes).reduce((a, b) => 
+          b[1] > a[1] ? b : a
+        )[0];
+        result.occupancy_type = dominantType;
       } else {
         const primaryType = Object.keys(buildingTypes)[0];
         result.project_type = primaryType === 'warehouse' ? 'industrial' : 
                             primaryType === 'office' ? 'commercial' : 
-                            primaryType as any;
+                            primaryType === 'industrial' ? 'industrial' :
+                            primaryType === 'retail' ? 'commercial' :
+                            primaryType === 'residential' ? 'residential' :
+                            'commercial';
+        result.occupancy_type = primaryType;
       }
     }
     
@@ -115,12 +202,23 @@ function ScopeGenerator() {
     if (input.toLowerCase().includes('kitchen')) requirements.push('Kitchen facilities');
     if (input.toLowerCase().includes('parking')) requirements.push('Parking');
     if (input.toLowerCase().includes('elevator')) requirements.push('Elevators');
+    if (input.toLowerCase().includes('dock door')) requirements.push('Multiple dock doors');
+    if (input.toLowerCase().includes('loading dock')) requirements.push('Loading docks');
+    if (input.toLowerCase().includes('crane')) requirements.push('Overhead crane');
+    if (input.toLowerCase().includes('high ceiling') || input.toLowerCase().includes('clear height')) {
+      requirements.push('High ceilings');
+    }
     
     if (requirements.length > 0) {
       const existingReqs = result.special_requirements || '';
-      result.special_requirements = existingReqs 
-        ? `${existingReqs}. ${requirements.join(', ')}`
-        : requirements.join(', ');
+      // If we already have building mix in special requirements, append other requirements
+      if (existingReqs.includes('Building mix:')) {
+        result.special_requirements = `${existingReqs}, ${requirements.join(', ')}`;
+      } else {
+        result.special_requirements = existingReqs 
+          ? `${existingReqs}. ${requirements.join(', ')}`
+          : requirements.join(', ');
+      }
     }
     
     // Parse floors
@@ -140,6 +238,9 @@ function ScopeGenerator() {
   const handleNaturalLanguageSubmit = () => {
     const parsed = parseNaturalLanguage(naturalLanguageInput);
     
+    console.log('Natural language input:', naturalLanguageInput);
+    console.log('Parsed result:', parsed);
+    
     // Merge with form data
     const updatedFormData = {
       ...formData,
@@ -149,6 +250,8 @@ function ScopeGenerator() {
       location: parsed.location || formData.location || 'Seattle, WA',
       square_footage: parsed.square_footage || formData.square_footage || 10000,
     };
+    
+    console.log('Updated form data:', updatedFormData);
     
     setFormData(updatedFormData);
     
@@ -168,15 +271,25 @@ function ScopeGenerator() {
     setLoading(true);
     setError('');
 
+    console.log('Submitting form data:', formData);
+
     try {
       const response = await scopeService.generate(formData);
       navigate(`/project/${response.project_id}`);
     } catch (err: any) {
       console.error('Scope generation error:', err);
+      console.error('Error response:', err.response);
       let errorMessage = 'Failed to generate scope';
       
       if (err.response?.data?.detail) {
-        errorMessage = err.response.data.detail;
+        if (Array.isArray(err.response.data.detail)) {
+          // Pydantic validation errors come as an array
+          errorMessage = err.response.data.detail.map((e: any) => 
+            `${e.loc.join(' → ')}: ${e.msg}`
+          ).join('\n');
+        } else {
+          errorMessage = err.response.data.detail;
+        }
       } else if (err.response?.data) {
         errorMessage = JSON.stringify(err.response.data);
       } else if (err.message) {
@@ -199,9 +312,11 @@ function ScopeGenerator() {
     });
   };
 
-  return (
-    <div className="scope-generator">
-      <header className="page-header">
+  // Add a try-catch for the render to catch any rendering errors
+  try {
+    return (
+      <div className="scope-generator">
+        <header className="page-header">
         <button onClick={() => navigate('/dashboard')} className="back-btn">
           ← Back to Dashboard
         </button>
@@ -403,6 +518,18 @@ function ScopeGenerator() {
       )}
     </div>
   );
+  } catch (renderError) {
+    console.error('ScopeGenerator render error:', renderError);
+    return (
+      <div className="scope-generator">
+        <div className="error-message">
+          An error occurred while rendering the form. Please refresh the page.
+          <br />
+          Error: {String(renderError)}
+        </div>
+      </div>
+    );
+  }
 }
 
 export default ScopeGenerator;
