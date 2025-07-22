@@ -26,7 +26,7 @@ function TradePackageModal({ isOpen, onClose, projectId, trade, onGenerate }: Tr
     try {
       setLoading(true);
       setError('');
-      const response = await fetch(`http://localhost:8000/api/v1/trade-package/preview/${projectId}/${trade}`, {
+      const response = await fetch(`http://localhost:8001/api/v1/trade-package/preview/${projectId}/${trade}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }

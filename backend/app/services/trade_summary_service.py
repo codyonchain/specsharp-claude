@@ -8,6 +8,9 @@ class TradeSummaryService:
     def generate_trade_summaries(self, project_data: Dict) -> List[Dict[str, Any]]:
         """Generate summary information for each trade with key quantities"""
         
+        if project_data is None:
+            return []
+        
         # First enhance with detailed trade data if applicable
         enhanced_data = project_data.copy()
         for trade in ['electrical', 'hvac', 'plumbing']:

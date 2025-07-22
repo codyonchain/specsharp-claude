@@ -55,7 +55,7 @@ function ProjectDetail() {
   };
 
   const handleGenerateTradePackage = async (projectId: string, trade: string) => {
-    const response = await fetch(`http://localhost:8000/api/v1/trade-package/generate/${projectId}/${trade}`, {
+    const response = await fetch(`http://localhost:8001/api/v1/trade-package/generate/${projectId}/${trade}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`

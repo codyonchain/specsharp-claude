@@ -93,6 +93,23 @@ class FloorPlanService:
     ) -> Dict[str, Any]:
         """Generate a professional floor plan based on project parameters"""
         
+        # If no building_mix provided, infer from project_type
+        if not building_mix or all(v == 0 for v in building_mix.values()):
+            if project_type == 'office':
+                building_mix = {'office': 1.0}
+            elif project_type == 'warehouse':
+                building_mix = {'warehouse': 1.0}
+            elif project_type == 'retail':
+                building_mix = {'retail': 1.0}
+            elif project_type == 'industrial':
+                building_mix = {'industrial': 1.0}
+            elif project_type == 'mixed_use':
+                # For mixed use, we MUST have explicit percentages
+                raise ValueError("Mixed-use buildings require explicit building mix percentages")
+            else:
+                # Default fallback
+                building_mix = {project_type: 1.0} if project_type else {}
+        
         if project_type == "mixed_use" and building_mix:
             return self._generate_mixed_use_plan(square_footage, building_mix)
         elif project_type == "commercial":
@@ -122,8 +139,8 @@ class FloorPlanService:
         equipment = []
         
         # Calculate area sizes
-        warehouse_pct = building_mix.get('warehouse', 0.7)
-        office_pct = building_mix.get('office', 0.3)
+        warehouse_pct = building_mix.get('warehouse', 0)
+        office_pct = building_mix.get('office', 0)
         
         warehouse_length = length * warehouse_pct
         office_length = length * office_pct

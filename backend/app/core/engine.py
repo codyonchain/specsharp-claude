@@ -162,7 +162,7 @@ class DeterministicScopeEngine:
         # Include timestamp to ensure unique IDs for each generation
         request_dict = request.model_dump()
         request_dict['timestamp'] = datetime.utcnow().isoformat()
-        request_str = json.dumps(request_dict, sort_keys=True)
+        request_str = json.dumps(request_dict, sort_keys=True, default=str)
         hash_object = hashlib.md5(request_str.encode())
         return hash_object.hexdigest()[:8]
     
@@ -345,13 +345,15 @@ class DeterministicScopeEngine:
             )
             categories.append(category)
         
+        contingency = self._calculate_contingency_percentage(request)
+        
         response = ScopeResponse(
             project_id=project_id,
             project_name=request.project_name,
             created_at=datetime.utcnow(),
             request_data=request,
             categories=categories,
-            contingency_percentage=self._calculate_contingency_percentage(request)
+            contingency_percentage=contingency
         )
         
         return response

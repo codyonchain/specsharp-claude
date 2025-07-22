@@ -6,10 +6,13 @@ class DetailedTradeService:
     
     def generate_detailed_electrical(self, project_data: Dict) -> List[Dict[str, Any]]:
         """Generate detailed electrical scope items"""
+        
         square_footage = project_data.get('square_footage', 0)
         num_floors = project_data.get('num_floors', 1)
         building_type = project_data.get('project_type', 'commercial')
         building_mix = project_data.get('building_mix', {})
+        if building_mix is None:
+            building_mix = {}
         
         # Calculate space allocations
         warehouse_sf = square_footage * building_mix.get('warehouse', 0)
@@ -215,6 +218,8 @@ class DetailedTradeService:
         """Generate detailed HVAC scope items"""
         square_footage = project_data.get('square_footage', 0)
         building_mix = project_data.get('building_mix', {})
+        if building_mix is None:
+            building_mix = {}
         ceiling_height = project_data.get('ceiling_height', 10)
         
         warehouse_sf = square_footage * building_mix.get('warehouse', 0)
@@ -401,7 +406,11 @@ class DetailedTradeService:
         """Generate detailed plumbing scope items"""
         square_footage = project_data.get('square_footage', 0)
         building_mix = project_data.get('building_mix', {})
+        if building_mix is None:
+            building_mix = {}
         special_requirements = project_data.get('special_requirements', '')
+        if special_requirements is None:
+            special_requirements = ''
         
         # Extract bathroom count from special requirements
         import re

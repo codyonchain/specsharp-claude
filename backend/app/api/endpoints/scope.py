@@ -22,7 +22,6 @@ async def generate_scope(
     current_user: dict = Depends(get_current_user)
 ):
     try:
-        print(f"Received scope request: {request.model_dump()}")
         scope_response = scope_engine.generate_scope(request)
         
         # Generate architectural floor plan with error handling
@@ -64,7 +63,7 @@ async def generate_scope(
             num_floors=request.num_floors,
             ceiling_height=request.ceiling_height,
             total_cost=scope_response.total_cost,
-            scope_data=json.dumps(scope_response_dict),  # Save complete data including trade summaries
+            scope_data=json.dumps(scope_response_dict, default=str),  # Save complete data including trade summaries
             user_id=current_user["id"]
         )
         
@@ -126,18 +125,22 @@ async def get_project(
     if 'floor_plan' not in scope_data or not scope_data.get('floor_plan'):
         # Generate floor plan if missing
         try:
+            request_data = scope_data.get('request_data', {})
+            building_mix = request_data.get('building_mix') if request_data else None
             floor_plan_data = architectural_floor_plan_service.generate_architectural_plan(
                 square_footage=project.square_footage,
                 project_type=project.project_type,
-                building_mix=scope_data.get('request_data', {}).get('building_mix')
+                building_mix=building_mix
             )
         except Exception as e:
             print(f"Error generating architectural floor plan: {e}")
             # Fallback to old service
+            request_data = scope_data.get('request_data', {})
+            building_mix = request_data.get('building_mix') if request_data else None
             floor_plan_data = floor_plan_service.generate_floor_plan(
                 square_footage=project.square_footage,
                 project_type=project.project_type,
-                building_mix=scope_data.get('request_data', {}).get('building_mix')
+                building_mix=building_mix
             )
         scope_data['floor_plan'] = floor_plan_data
     

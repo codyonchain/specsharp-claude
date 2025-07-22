@@ -118,6 +118,23 @@ class ArchitecturalFloorPlanService:
     ) -> Dict[str, Any]:
         """Generate a professional architectural floor plan"""
         
+        # If no building_mix provided, infer from project_type
+        if not building_mix or all(v == 0 for v in building_mix.values()):
+            if project_type == 'office':
+                building_mix = {'office': 1.0}
+            elif project_type == 'warehouse':
+                building_mix = {'warehouse': 1.0}
+            elif project_type == 'retail':
+                building_mix = {'retail': 1.0}
+            elif project_type == 'industrial':
+                building_mix = {'industrial': 1.0}
+            elif project_type == 'mixed_use':
+                # For mixed use, we MUST have explicit percentages
+                raise ValueError("Mixed-use buildings require explicit building mix percentages")
+            else:
+                # Default fallback
+                building_mix = {project_type: 1.0} if project_type else {}
+        
         # Calculate optimal dimensions
         dimensions = self._calculate_optimal_dimensions(square_footage)
         width, height = dimensions
@@ -174,12 +191,9 @@ class ArchitecturalFloorPlanService:
         walls.extend(exterior_walls)
         
         # Calculate zone sizes
-        if building_mix:
-            warehouse_pct = building_mix.get('warehouse', 0.7)
-            office_pct = building_mix.get('office', 0.3)
-        else:
-            warehouse_pct = 0.7
-            office_pct = 0.3
+        warehouse_pct = building_mix.get('warehouse', 0)
+        office_pct = building_mix.get('office', 0)
+        retail_pct = building_mix.get('retail', 0)
         
         warehouse_height = height * warehouse_pct
         office_height = height * office_pct
