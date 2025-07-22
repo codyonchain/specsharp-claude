@@ -1,0 +1,272 @@
+.professional-floor-plan {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #f0f0f0;
+}
+
+.floor-plan-toolbar {
+  background-color: #ffffff;
+  border-bottom: 1px solid #ddd;
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.toolbar-group label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #333;
+  cursor: pointer;
+}
+
+.toolbar-group select {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  font-size: 0.875rem;
+  background-color: #fff;
+  cursor: pointer;
+}
+
+.toolbar-group button {
+  padding: 0.5rem 1rem;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background-color: #fff;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toolbar-group button:hover {
+  background-color: #f5f5f5;
+  border-color: #999;
+}
+
+.print-btn {
+  background-color: #fff !important;
+  color: #333 !important;
+}
+
+.export-btn {
+  background-color: #1976d2 !important;
+  color: white !important;
+  border-color: #1976d2 !important;
+}
+
+.export-btn:hover {
+  background-color: #1565c0 !important;
+}
+
+.floor-plan-container {
+  flex: 1;
+  overflow: auto;
+  background-color: #ffffff;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+/* SVG styling for architectural appearance */
+.floor-plan-container svg {
+  font-family: Arial, sans-serif;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+  border: 1px solid #ccc;
+}
+
+/* Dimension text styling */
+.dimensions text {
+  font-size: 10px;
+  font-family: Arial, sans-serif;
+}
+
+/* Equipment styling */
+.equipment text {
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+/* Room text styling */
+.room text {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Print styles for professional output */
+@media print {
+  .professional-floor-plan {
+    height: auto;
+  }
+  
+  .floor-plan-toolbar {
+    display: none !important;
+  }
+  
+  .floor-plan-container {
+    padding: 0;
+    background-color: #ffffff;
+    box-shadow: none;
+    page-break-after: always;
+  }
+  
+  .floor-plan-container svg {
+    width: 100% !important;
+    height: auto !important;
+    max-width: none !important;
+    box-shadow: none;
+    border: none;
+  }
+  
+  /* Force black and white printing */
+  * {
+    color: #000000 !important;
+    background-color: #ffffff !important;
+  }
+  
+  /* Ensure lines are crisp */
+  line, path, rect {
+    shape-rendering: crispEdges;
+  }
+  
+  text {
+    font-rendering: optimizeLegibility;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+  .floor-plan-toolbar {
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  
+  .toolbar-group {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 768px) {
+  .floor-plan-toolbar {
+    padding: 0.5rem;
+    font-size: 0.75rem;
+  }
+  
+  .toolbar-group {
+    gap: 0.5rem;
+  }
+  
+  .toolbar-group label {
+    font-size: 0.75rem;
+  }
+  
+  .toolbar-group select,
+  .toolbar-group button {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+  }
+  
+  .floor-plan-container {
+    padding: 1rem;
+  }
+}
+
+/* Animation for view mode transitions */
+.room rect {
+  transition: fill 0.3s ease;
+}
+
+.equipment {
+  transition: opacity 0.3s ease;
+}
+
+/* Grid layer styling */
+.grid-layer {
+  opacity: 0.5;
+}
+
+/* Dimension layer styling */
+.dimensions {
+  pointer-events: none;
+}
+
+/* North arrow and scale bar styling */
+.north-arrow,
+.scale-bar {
+  pointer-events: none;
+}
+
+/* Title block styling */
+.title-block text {
+  fill: #000000;
+}
+
+/* Hover effects for interactive elements */
+.room:hover rect:first-of-type {
+  fill-opacity: 0.9;
+}
+
+/* Loading state */
+.floor-plan-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.25rem;
+  color: #666;
+}
+
+/* Error state */
+.floor-plan-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  color: #d32f2f;
+}
+
+/* Full screen mode */
+.professional-floor-plan.fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+}
+
+/* Drawing line styles */
+.architectural-line-heavy {
+  stroke-width: 2;
+  stroke: #000000;
+}
+
+.architectural-line-medium {
+  stroke-width: 1;
+  stroke: #000000;
+}
+
+.architectural-line-light {
+  stroke-width: 0.5;
+  stroke: #000000;
+}
+
+.architectural-line-dashed {
+  stroke-width: 1;
+  stroke: #000000;
+  stroke-dasharray: 5,5;
+}

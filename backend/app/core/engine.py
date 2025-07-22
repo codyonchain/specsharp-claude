@@ -8,6 +8,7 @@ from app.models.scope import (
 from datetime import datetime
 import uuid
 import re
+from app.services.detailed_trade_service import detailed_trade_service
 
 
 class DeterministicScopeEngine:
@@ -339,11 +340,63 @@ class DeterministicScopeEngine:
                 )
                 building_systems.append(building_system)
             
-            category = ScopeCategory(
-                name=category_name.title(),
-                systems=building_systems
-            )
-            categories.append(category)
+            # Use detailed service for MEP categories
+            if category_name in ["electrical", "mechanical", "plumbing"]:
+                # Generate detailed items based on trade
+                project_data = {
+                    'square_footage': request.square_footage,
+                    'num_floors': request.num_floors,
+                    'project_type': request.project_type.value,
+                    'building_mix': request.building_mix or {},
+                    'special_requirements': getattr(request, 'special_requirements', ''),
+                    'ceiling_height': getattr(request, 'ceiling_height', 10)
+                }
+                
+                if category_name == "electrical":
+                    detailed_items = detailed_trade_service.generate_detailed_electrical(project_data)
+                elif category_name == "mechanical":
+                    detailed_items = detailed_trade_service.generate_detailed_hvac(project_data)
+                elif category_name == "plumbing":
+                    detailed_items = detailed_trade_service.generate_detailed_plumbing(project_data)
+                
+                # Group by category and convert to BuildingSystem objects
+                category_groups = {}
+                for item in detailed_items:
+                    cat_name = item.get('category', category_name.title())
+                    if cat_name not in category_groups:
+                        category_groups[cat_name] = []
+                    
+                    # Apply regional multiplier to unit costs
+                    adjusted_unit_cost = round(item['unit_cost'] * cost_multiplier, 2)
+                    
+                    building_system = BuildingSystem(
+                        name=item['name'],
+                        quantity=item['quantity'],
+                        unit=item['unit'],
+                        unit_cost=adjusted_unit_cost,
+                        total_cost=round(item['quantity'] * adjusted_unit_cost, 2),
+                        specifications={
+                            'category': cat_name,
+                            'base_cost': item['unit_cost'],
+                            'multiplier': cost_multiplier
+                        }
+                    )
+                    category_groups[cat_name].append(building_system)
+                
+                # Create categories for each subcategory
+                trade_prefix = category_name.title()
+                for cat_name, systems in category_groups.items():
+                    category = ScopeCategory(
+                        name=f"{trade_prefix} - {cat_name}" if cat_name != trade_prefix else cat_name,
+                        systems=systems
+                    )
+                    categories.append(category)
+            else:
+                category = ScopeCategory(
+                    name=category_name.title(),
+                    systems=building_systems
+                )
+                categories.append(category)
         
         contingency = self._calculate_contingency_percentage(request)
         

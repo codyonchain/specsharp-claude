@@ -4,6 +4,7 @@ import { scopeService, costService } from '../services/api';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import ArchitecturalFloorPlan from './ArchitecturalFloorPlan';
 import FloorPlanViewer from './FloorPlanViewer';
+import ProfessionalFloorPlan from './ProfessionalFloorPlan';
 import TradePackageModal from './TradePackageModal';
 import ComparisonTool from './ComparisonTool';
 import TradeSummary from './TradeSummary';
@@ -383,7 +384,7 @@ function ProjectDetail() {
             projectName={project.project_name}
           />
         ) : (
-          <FloorPlanViewer 
+          <ProfessionalFloorPlan 
             floorPlan={project.floor_plan} 
             projectName={project.project_name}
           />

@@ -15,6 +15,7 @@ import matplotlib.patches as patches
 from PIL import Image as PILImage
 import numpy as np
 from app.services.detailed_trade_service import detailed_trade_service
+from app.services.professional_trade_package import professional_trade_package_service
 
 class TradePackageService:
     def __init__(self):
@@ -32,19 +33,18 @@ class TradePackageService:
         # Filter scope data for the specific trade
         filtered_data = self._filter_scope_by_trade(project_data, trade)
         
-        # Enhance with detailed trade breakdowns if applicable
-        if trade.lower() in ['electrical', 'hvac', 'plumbing']:
-            filtered_data = detailed_trade_service.enhance_trade_scope(filtered_data, trade)
+        # Skip enhancement since we already have detailed categories from the engine
+        # The engine already provides detailed breakdowns for electrical, hvac, and plumbing
         
-        # Generate trade-specific schematic
-        schematic_image = self._generate_trade_schematic(
+        # Generate improved trade-specific schematic
+        schematic_image = professional_trade_package_service.create_improved_schematic(
             project_data.get('floor_plan', {}), 
             trade,
             project_data.get('request_data', {})
         )
         
-        # Generate PDF document
-        pdf_buffer = self._generate_pdf_document(
+        # Generate professional PDF document
+        pdf_buffer = professional_trade_package_service.generate_professional_pdf(
             filtered_data, 
             trade, 
             project_data,
@@ -86,14 +86,29 @@ class TradePackageService:
         if trade.lower() == 'general' or not target_category:
             return project_data
         
-        # Filter categories
-        filtered_categories = [
-            cat for cat in project_data.get('categories', [])
-            if cat['name'].lower() == target_category.lower()
-        ]
+        # Filter categories - now handles both old and new category structures
+        filtered_categories = []
+        for cat in project_data.get('categories', []):
+            cat_name_lower = cat['name'].lower()
+            target_lower = target_category.lower()
+            
+            # Match exact category name or categories that start with trade name
+            if (cat_name_lower == target_lower or 
+                cat_name_lower.startswith(f"{target_lower} -") or
+                cat_name_lower.startswith(f"{target_lower}:")):
+                filtered_categories.append(cat)
         
         # Calculate filtered totals
-        subtotal = sum(cat['subtotal'] for cat in filtered_categories)
+        subtotal = 0
+        for cat in filtered_categories:
+            # Calculate category subtotal from systems if not present
+            if 'subtotal' in cat:
+                subtotal += cat['subtotal']
+            else:
+                cat_subtotal = sum(sys.get('total_cost', 0) for sys in cat.get('systems', []))
+                cat['subtotal'] = cat_subtotal
+                subtotal += cat_subtotal
+        
         contingency_amount = subtotal * (project_data.get('contingency_percentage', 10) / 100)
         total_cost = subtotal + contingency_amount
         
@@ -406,8 +421,8 @@ class TradePackageService:
             'categories': [
                 {
                     'name': cat['name'],
-                    'subtotal': cat['subtotal'],
-                    'system_count': len(cat['systems']),
+                    'subtotal': cat.get('subtotal', sum(sys.get('total_cost', 0) for sys in cat.get('systems', []))),
+                    'system_count': len(cat.get('systems', [])),
                     'systems': [
                         {
                             'name': sys['name'],

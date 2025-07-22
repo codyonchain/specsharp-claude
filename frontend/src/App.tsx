@@ -5,6 +5,7 @@ import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import ScopeGenerator from './components/ScopeGenerator';
 import ProjectDetail from './components/ProjectDetail';
+import ProgressiveProjectDetail from './components/ProgressiveProjectDetail';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -54,7 +55,7 @@ function App() {
             path="/project/:projectId" 
             element={
               isAuthenticated ? 
-              <ProjectDetail /> : 
+              <ProgressiveProjectDetail /> : 
               <Navigate to="/login" />
             } 
           />
