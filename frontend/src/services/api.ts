@@ -79,6 +79,11 @@ export const scopeService = {
     const response = await api.get(`/scope/projects/${projectId}`);
     return response.data;
   },
+
+  deleteProject: async (projectId: string) => {
+    const response = await api.delete(`/scope/projects/${projectId}`);
+    return response.data;
+  },
 };
 
 export const costService = {

@@ -37,17 +37,56 @@ class TradeSummaryService:
             'General Conditions': self._process_general_conditions
         }
         
+        # First, collect all categories that belong to each trade
+        trade_categories = {
+            'Electrical': [],
+            'Mechanical': [],
+            'Plumbing': [],
+            'Structural': [],
+            'General Conditions': []
+        }
+        
+        # Group categories by trade
         for category in categories:
-            trade_name = category['name']
-            if trade_name in trade_processors:
-                summary = trade_processors[trade_name](category, request_data)
-                summaries.append(summary)
-            else:
-                # Generic handler for other trades
+            category_name = category['name']
+            matched = False
+            
+            # Check if this category belongs to a specific trade
+            for trade, processor in trade_processors.items():
+                if trade in category_name or (trade == 'Mechanical' and 'HVAC' in category_name):
+                    trade_categories[trade].append(category)
+                    matched = True
+                    break
+            
+            # If not matched to a specific trade, use generic handler
+            if not matched:
                 summary = self._process_generic_trade(category, request_data)
                 summaries.append(summary)
         
+        # Process each trade with all its categories combined
+        for trade, categories_list in trade_categories.items():
+            if categories_list:
+                # Combine all categories for this trade
+                combined_category = self._combine_categories(categories_list, trade)
+                summary = trade_processors[trade](combined_category, request_data)
+                summaries.append(summary)
+        
         return summaries
+    
+    def _combine_categories(self, categories: List[Dict], trade_name: str) -> Dict[str, Any]:
+        """Combine multiple categories into a single category for a trade"""
+        combined_systems = []
+        total_subtotal = 0
+        
+        for category in categories:
+            combined_systems.extend(category.get('systems', []))
+            total_subtotal += category.get('subtotal', 0)
+        
+        return {
+            'name': trade_name,
+            'systems': combined_systems,
+            'subtotal': total_subtotal
+        }
     
     def _process_electrical(self, category: Dict, request_data: Dict) -> Dict[str, Any]:
         """Process electrical trade summary"""

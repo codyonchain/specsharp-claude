@@ -30,26 +30,42 @@ class TradePackageService:
     def generate_trade_package(self, project_data: Dict, trade: str) -> Dict[str, Any]:
         """Generate a complete trade package with PDF, CSV, and schematic"""
         
-        # Filter scope data for the specific trade
-        filtered_data = self._filter_scope_by_trade(project_data, trade)
+        try:
+            # Filter scope data for the specific trade
+            filtered_data = self._filter_scope_by_trade(project_data, trade)
+        except Exception as e:
+            print(f"[DEBUG] Error in _filter_scope_by_trade: {e}")
+            raise
         
         # Skip enhancement since we already have detailed categories from the engine
         # The engine already provides detailed breakdowns for electrical, hvac, and plumbing
         
-        # Generate improved trade-specific schematic
-        schematic_image = professional_trade_package_service.create_improved_schematic(
-            project_data.get('floor_plan', {}), 
-            trade,
-            project_data.get('request_data', {})
-        )
+        try:
+            # Generate improved trade-specific schematic
+            schematic_image = professional_trade_package_service.create_improved_schematic(
+                project_data.get('floor_plan', {}), 
+                trade,
+                project_data.get('request_data', {})
+            )
+        except Exception as e:
+            print(f"[DEBUG] Error in create_improved_schematic: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
         
-        # Generate professional PDF document
-        pdf_buffer = professional_trade_package_service.generate_professional_pdf(
-            filtered_data, 
-            trade, 
-            project_data,
-            schematic_image
-        )
+        try:
+            # Generate professional PDF document
+            pdf_buffer = professional_trade_package_service.generate_professional_pdf(
+                filtered_data, 
+                trade, 
+                project_data,
+                schematic_image
+            )
+        except Exception as e:
+            print(f"[DEBUG] Error in generate_professional_pdf: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
         
         # Generate CSV data
         csv_buffer = self._generate_csv_data(filtered_data, trade)
@@ -109,7 +125,23 @@ class TradePackageService:
                 cat['subtotal'] = cat_subtotal
                 subtotal += cat_subtotal
         
-        contingency_amount = subtotal * (project_data.get('contingency_percentage', 10) / 100)
+        # Check if project already has contingency applied
+        # If the project has a contingency_amount field, it means contingency is already included
+        if 'contingency_amount' in project_data and project_data.get('contingency_amount', 0) > 0:
+            # Project already has contingency applied to the total
+            # For trade package, we need to calculate the proportional contingency
+            project_subtotal = project_data.get('subtotal', 0)
+            print(f"[DEBUG] _filter_scope_by_trade: project_subtotal={project_subtotal}, subtotal={subtotal}")
+            if project_subtotal > 0:
+                # Calculate trade's proportion of the total contingency
+                trade_proportion = subtotal / project_subtotal
+                contingency_amount = project_data.get('contingency_amount', 0) * trade_proportion
+            else:
+                contingency_amount = 0
+        else:
+            # Legacy behavior: calculate contingency if not already present
+            contingency_amount = subtotal * (project_data.get('contingency_percentage', 10) / 100)
+        
         total_cost = subtotal + contingency_amount
         
         return {

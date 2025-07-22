@@ -44,6 +44,9 @@ class ProfessionalTradePackageService:
     def generate_professional_pdf(self, filtered_data: Dict, trade: str, 
                                  project_data: Dict, schematic_image: str) -> io.BytesIO:
         """Generate a professional PDF document for the trade package"""
+        print(f"[DEBUG] generate_professional_pdf called with trade: {trade}, type: {type(trade)}")
+        if trade is None:
+            raise ValueError("Trade parameter cannot be None in generate_professional_pdf")
         
         buffer = io.BytesIO()
         
@@ -69,6 +72,9 @@ class ProfessionalTradePackageService:
         if trade.lower() == 'electrical':
             elements.append(PageBreak())
             elements.extend(self._create_electrical_schedules(filtered_data, styles))
+            # Add electrical diagram
+            elements.append(PageBreak())
+            elements.extend(self._create_electrical_diagram_page(project_data, styles))
         elif trade.lower() in ['mechanical', 'hvac']:
             elements.append(PageBreak())
             elements.extend(self._create_mechanical_schedules(filtered_data, styles))
@@ -219,7 +225,7 @@ class ProfessionalTradePackageService:
             ["Number of Floors:", str(request_data.get('num_floors', 1))],
             ["", ""],
             ["Trade Package Total:", f"${filtered_data.get('total_cost', 0):,.2f}"],
-            ["Cost per SF:", f"${filtered_data.get('total_cost', 0) / request_data.get('square_footage', 1):.2f}"]
+            ["Cost per SF:", f"${filtered_data.get('total_cost', 0) / max(request_data.get('square_footage', 1), 1):.2f}"]
         ]
         
         table = Table(data, colWidths=[2.5*inch, 3.5*inch])
@@ -367,10 +373,19 @@ class ProfessionalTradePackageService:
     
     def _create_electrical_schedules(self, filtered_data: Dict, styles: Dict) -> List:
         """Create electrical-specific schedules"""
+        from app.services.electrical_standards_service import electrical_standards_service
+        
         elements = []
         
         elements.append(Paragraph("Electrical Schedules", styles['DocumentTitle']))
         elements.append(Spacer(1, 0.3*inch))
+        
+        # Get the project data from filtered_data
+        project_data = filtered_data
+        
+        # Generate fresh electrical data to ensure we have the lighting schedule
+        electrical_data = electrical_standards_service.calculate_electrical_items_with_labor(project_data)
+        lighting_schedule = electrical_data.get('lighting_schedule', [])
         
         # Panel Schedule Template
         elements.append(Paragraph("Panel Schedule", styles['SectionHeading']))
@@ -399,16 +414,29 @@ class ProfessionalTradePackageService:
         elements.append(panel_table)
         elements.append(Spacer(1, 0.3*inch))
         
-        # Fixture Schedule
+        # Fixture Schedule - Use calculated quantities from electrical standards service
         elements.append(Paragraph("Lighting Fixture Schedule", styles['SectionHeading']))
-        fixture_data = [
-            ["Type", "Description", "Watts", "Voltage", "Qty"],
-            ["A", "LED High Bay - 150W", "150", "277V", "24"],
-            ["B", "2x4 LED Troffer - 40W", "40", "277V", "36"],
-            ["C", "Wall Pack - 40W", "40", "120V", "8"],
-            ["D", "Exit Sign - LED", "5", "120/277V", "12"],
-            ["E", "Emergency Light", "12", "120/277V", "8"]
-        ]
+        fixture_data = [["Type", "Description", "Watts", "Voltage", "Qty"]]
+        
+        # Use the lighting schedule from the standardized calculations
+        if lighting_schedule:
+            for fixture in lighting_schedule:
+                fixture_data.append([
+                    fixture['type'],
+                    fixture['description'],
+                    str(fixture['watts']),
+                    fixture['voltage'],
+                    str(fixture['quantity'])
+                ])
+        else:
+            # Fallback to hardcoded if no schedule available
+            fixture_data.extend([
+                ["A", "LED High Bay - 150W", "150", "277V", "24"],
+                ["B", "2x4 LED Troffer - 40W", "40", "277V", "36"],
+                ["C", "Wall Pack - 40W", "40", "120V", "8"],
+                ["D", "Exit Sign - LED", "5", "120/277V", "12"],
+                ["E", "Emergency Light", "12", "120/277V", "8"]
+            ])
         
         fixture_table = Table(fixture_data, colWidths=[0.8*inch, 2.5*inch, 0.8*inch, 0.8*inch, 0.8*inch])
         fixture_table.setStyle(TableStyle([
@@ -423,6 +451,41 @@ class ProfessionalTradePackageService:
             ('TOPPADDING', (0, 0), (-1, -1), 4),
         ]))
         elements.append(fixture_table)
+        
+        return elements
+    
+    def _create_electrical_diagram_page(self, project_data: Dict, styles: Dict) -> List:
+        """Create electrical diagram page"""
+        elements = []
+        
+        elements.append(Paragraph("Electrical One-Line Diagram", styles['DocumentTitle']))
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Generate the electrical diagram
+        diagram_image = self._create_electrical_one_line_diagram(project_data)
+        
+        # Convert base64 to Image for ReportLab
+        if diagram_image.startswith('data:image/png;base64,'):
+            image_data = base64.b64decode(diagram_image.split(',')[1])
+            img = Image(io.BytesIO(image_data), width=6.5*inch, height=5*inch)
+            elements.append(img)
+        
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Add notes
+        elements.append(Paragraph("ELECTRICAL NOTES:", styles['SectionHeading']))
+        notes = [
+            "1. All electrical work shall comply with current NEC and local codes.",
+            "2. Verify all electrical loads and circuit requirements prior to installation.",
+            "3. Coordinate panel locations with architect and owner.",
+            "4. Provide surge protection on main electrical service.",
+            "5. All branch circuits to be run in EMT conduit.",
+            "6. Provide ground fault protection as required by code."
+        ]
+        
+        for note in notes:
+            elements.append(Paragraph(note, styles['Normal']))
+            elements.append(Spacer(1, 0.1*inch))
         
         return elements
     
@@ -761,16 +824,29 @@ class ProfessionalTradePackageService:
     def create_improved_schematic(self, floor_plan: Dict, trade: str, 
                                  request_data: Dict) -> str:
         """Create improved, clearer trade schematics"""
+        print(f"[DEBUG] create_improved_schematic called with trade: {trade}, type: {type(trade)}")
+        if trade is None:
+            raise ValueError("Trade parameter cannot be None")
+        
+        # Debug request_data
+        print(f"[DEBUG] request_data: {request_data}")
+        print(f"[DEBUG] square_footage from request_data: {request_data.get('square_footage')}")
+        
         fig, ax = plt.subplots(1, 1, figsize=(11, 8.5))
         
         # Get building dimensions
         square_footage = request_data.get('square_footage', 10000)
+        if square_footage <= 0:
+            square_footage = 10000  # Default to 10,000 if invalid
         aspect_ratio = 1.5
         width = np.sqrt(square_footage / aspect_ratio)
         height = width * aspect_ratio
         
         # Scale to fit page with margins
-        scale = min(9 / (width / 100), 6.5 / (height / 100))
+        # Prevent division by zero
+        width_ratio = max(width / 100, 0.01)
+        height_ratio = max(height / 100, 0.01)
+        scale = min(9 / width_ratio, 6.5 / height_ratio)
         width_scaled = width * scale / 100
         height_scaled = height * scale / 100
         
@@ -902,6 +978,133 @@ class ProfessionalTradePackageService:
             
             ax.legend(handles=legend_elements, loc='lower right', frameon=True, 
                      fancybox=True, shadow=True)
+    
+    def _create_electrical_one_line_diagram(self, project_data: Dict) -> str:
+        """Create a professional electrical one-line diagram"""
+        fig, ax = plt.subplots(1, 1, figsize=(10, 8), facecolor='white')
+        
+        # Get project details
+        request_data = project_data.get('request_data', {})
+        square_footage = request_data.get('square_footage', 10000)
+        
+        # Calculate electrical loads
+        lighting_load = square_footage * 2.0  # 2W/sqft for lighting
+        receptacle_load = square_footage * 1.5  # 1.5W/sqft for receptacles
+        hvac_load = square_footage * 5.0  # 5W/sqft for HVAC
+        total_load = lighting_load + receptacle_load + hvac_load
+        
+        # Main service calculation
+        voltage = 480  # 480V 3-phase service
+        if total_load > 0:
+            main_amps = int(total_load / (voltage * 1.732 * 0.8) / 100) * 100 + 200  # Round up to nearest 100A
+        else:
+            main_amps = 400  # Default minimum service
+        
+        # Draw utility connection
+        ax.text(5, 9.5, 'UTILITY SERVICE', ha='center', fontsize=12, weight='bold')
+        ax.plot([5, 5], [9.3, 8.8], 'k-', linewidth=3)
+        
+        # Main disconnect
+        main_disc = FancyBboxPatch((4.3, 8.3), 1.4, 0.5,
+                                  boxstyle="round,pad=0.05",
+                                  facecolor='red', edgecolor='black', linewidth=2)
+        ax.add_patch(main_disc)
+        ax.text(5, 8.55, f'{main_amps}A', ha='center', va='center', fontsize=10, weight='bold', color='white')
+        ax.text(6, 8.55, 'MAIN\nDISC', ha='left', va='center', fontsize=8)
+        
+        # Connection to main panel
+        ax.plot([5, 5], [8.3, 7.5], 'k-', linewidth=3)
+        
+        # Main distribution panel
+        mdp = FancyBboxPatch((3.5, 6.5), 3, 1,
+                           boxstyle="round,pad=0.05",
+                           facecolor='yellow', edgecolor='black', linewidth=2)
+        ax.add_patch(mdp)
+        ax.text(5, 7, 'MAIN DISTRIBUTION PANEL', ha='center', va='center', fontsize=11, weight='bold')
+        ax.text(5, 6.7, f'480/277V, 3Ø, 4W, {main_amps}A', ha='center', va='center', fontsize=9)
+        
+        # Panel feeders
+        panels = [
+            {'name': 'LP-1', 'amps': 225, 'desc': 'Lighting Panel 1', 'x': 1.5},
+            {'name': 'LP-2', 'amps': 225, 'desc': 'Lighting Panel 2', 'x': 3},
+            {'name': 'PP-1', 'amps': 400, 'desc': 'Power Panel 1', 'x': 5},
+            {'name': 'PP-2', 'amps': 400, 'desc': 'Power Panel 2', 'x': 7},
+            {'name': 'HVAC', 'amps': 600, 'desc': 'HVAC Panel', 'x': 8.5}
+        ]
+        
+        y_pos = 5.5
+        for panel in panels:
+            # Feeder line
+            ax.plot([5, panel['x']], [6.5, y_pos + 0.5], 'k-', linewidth=2)
+            ax.plot([panel['x'], panel['x']], [y_pos + 0.5, y_pos], 'k-', linewidth=2)
+            
+            # Circuit breaker symbol
+            cb = Circle((panel['x'], y_pos + 0.25), 0.1, facecolor='white', edgecolor='black', linewidth=2)
+            ax.add_patch(cb)
+            ax.text(panel['x'] + 0.2, y_pos + 0.25, f"{panel['amps']}A", fontsize=8, va='center')
+            
+            # Panel box
+            panel_box = FancyBboxPatch((panel['x'] - 0.4, y_pos - 0.7), 0.8, 0.7,
+                                     boxstyle="round,pad=0.02",
+                                     facecolor='lightgoldenrodyellow', edgecolor='black', linewidth=1.5)
+            ax.add_patch(panel_box)
+            ax.text(panel['x'], y_pos - 0.35, panel['name'], ha='center', va='center', fontsize=9, weight='bold')
+            ax.text(panel['x'], y_pos - 0.9, panel['desc'], ha='center', va='top', fontsize=7)
+        
+        # Add transformer for step-down
+        y_trans = 4
+        # Transformer symbol
+        ax.plot([1.5, 1.5], [5, y_trans + 0.5], 'k-', linewidth=1.5)
+        trans = Circle((1.5, y_trans), 0.3, facecolor='none', edgecolor='black', linewidth=2)
+        ax.add_patch(trans)
+        ax.text(1.5, y_trans, 'T1', ha='center', va='center', fontsize=8, weight='bold')
+        ax.text(0.5, y_trans, '480V→120/208V\n75kVA', ha='right', va='center', fontsize=7)
+        
+        # Emergency panel
+        ax.plot([1.5, 1.5], [y_trans - 0.3, 3], 'r-', linewidth=2)
+        em_panel = FancyBboxPatch((1.1, 2.3), 0.8, 0.7,
+                                boxstyle="round,pad=0.02",
+                                facecolor='lightcoral', edgecolor='red', linewidth=2)
+        ax.add_patch(em_panel)
+        ax.text(1.5, 2.65, 'EM', ha='center', va='center', fontsize=9, weight='bold')
+        ax.text(1.5, 2.1, 'Emergency\nPanel', ha='center', va='top', fontsize=7)
+        
+        # Add ground symbol
+        ax.plot([5, 5], [6.5, 6.3], 'g-', linewidth=2)
+        ax.plot([4.7, 5.3], [6.3, 6.3], 'g-', linewidth=2)
+        ax.plot([4.8, 5.2], [6.2, 6.2], 'g-', linewidth=2)
+        ax.plot([4.9, 5.1], [6.1, 6.1], 'g-', linewidth=2)
+        
+        # Add title and notes
+        ax.text(5, 10.3, 'ELECTRICAL ONE-LINE DIAGRAM', ha='center', fontsize=14, weight='bold')
+        ax.text(5, 10, f'{project_data.get("project_name", "Project")}', ha='center', fontsize=10)
+        
+        # Add legend
+        legend_elements = [
+            Line2D([0], [0], color='black', linewidth=3, label='Power Distribution'),
+            Line2D([0], [0], color='red', linewidth=2, label='Emergency Power'),
+            Line2D([0], [0], color='green', linewidth=2, label='Ground'),
+            Rectangle((0, 0), 1, 1, facecolor='yellow', edgecolor='black', label='Distribution Panel'),
+            Rectangle((0, 0), 1, 1, facecolor='lightcoral', edgecolor='red', label='Emergency Panel'),
+            Circle((0, 0), 1, facecolor='white', edgecolor='black', label='Circuit Breaker')
+        ]
+        ax.legend(handles=legend_elements, loc='lower center', ncol=3, frameon=True, fontsize=8)
+        
+        # Set limits and remove axes
+        ax.set_xlim(0, 10)
+        ax.set_ylim(1.5, 10.5)
+        ax.axis('off')
+        
+        # Save to buffer
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight', 
+                   facecolor='white', edgecolor='none')
+        plt.close()
+        
+        # Convert to base64
+        buffer.seek(0)
+        image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        return f"data:image/png;base64,{image_base64}"
 
 
 # Create service instance

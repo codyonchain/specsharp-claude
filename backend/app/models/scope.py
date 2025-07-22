@@ -116,7 +116,9 @@ class ScopeResponse(BaseModel):
     @validator('cost_per_sqft', always=True)
     def calculate_cost_per_sqft(cls, v, values):
         if 'total_cost' in values and 'request_data' in values:
-            return round(values['total_cost'] / values['request_data'].square_footage, 2)
+            request_data = values['request_data']
+            if hasattr(request_data, 'square_footage') and request_data.square_footage > 0:
+                return round(values['total_cost'] / request_data.square_footage, 2)
         return v
 
 

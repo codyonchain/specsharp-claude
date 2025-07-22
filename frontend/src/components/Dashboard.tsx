@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { scopeService, authService } from '../services/api';
+import { Trash2 } from 'lucide-react';
 import './Dashboard.css';
 
 interface DashboardProps {
@@ -10,6 +11,8 @@ interface DashboardProps {
 function Dashboard({ setIsAuthenticated }: DashboardProps) {
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ projectId: string; name: string } | null>(null);
+  const [deleteMessage, setDeleteMessage] = useState<string>('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -33,6 +36,35 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
     navigate('/login');
   };
 
+  const handleDeleteClick = (e: React.MouseEvent, projectId: string, projectName: string) => {
+    e.stopPropagation(); // Prevent navigation to project detail
+    setDeleteConfirm({ projectId, name: projectName });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirm) return;
+
+    try {
+      await scopeService.deleteProject(deleteConfirm.projectId);
+      setDeleteMessage(`Project "${deleteConfirm.name}" deleted successfully`);
+      setDeleteConfirm(null);
+      
+      // Reload projects
+      loadProjects();
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setDeleteMessage(''), 3000);
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+      setDeleteMessage('Failed to delete project. Please try again.');
+      setTimeout(() => setDeleteMessage(''), 3000);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirm(null);
+  };
+
   return (
     <div className="dashboard">
       <header className="dashboard-header">
@@ -50,6 +82,12 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
           </button>
         </div>
 
+        {deleteMessage && (
+          <div className={`message ${deleteMessage.includes('successfully') ? 'success' : 'error'}`}>
+            {deleteMessage}
+          </div>
+        )}
+
         <div className="projects-section">
           <h2>Your Projects</h2>
           {loading ? (
@@ -64,6 +102,13 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
                   className="project-card"
                   onClick={() => navigate(`/project/${project.project_id}`)}
                 >
+                  <button
+                    className="delete-btn"
+                    onClick={(e) => handleDeleteClick(e, project.project_id, project.name)}
+                    title="Delete project"
+                  >
+                    <Trash2 size={18} />
+                  </button>
                   <h3>{project.name}</h3>
                   <p>{project.location}</p>
                   <p>{project.square_footage.toLocaleString()} sq ft</p>
@@ -79,6 +124,25 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="modal-overlay" onClick={handleDeleteCancel}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Delete project?</h3>
+            <p>Are you sure you want to delete "{deleteConfirm.name}"?</p>
+            <p className="warning">This will permanently delete the project and cannot be undone.</p>
+            <div className="modal-actions">
+              <button onClick={handleDeleteCancel} className="cancel-btn">
+                Cancel
+              </button>
+              <button onClick={handleDeleteConfirm} className="delete-confirm-btn">
+                Delete Project
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

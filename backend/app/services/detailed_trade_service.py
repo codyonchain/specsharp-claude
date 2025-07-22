@@ -1,400 +1,138 @@
 from typing import Dict, List, Any
 import math
+from app.services.electrical_standards_service import electrical_standards_service
 
 class DetailedTradeService:
     """Service to generate detailed trade-specific breakdowns"""
     
     def generate_detailed_electrical(self, project_data: Dict) -> List[Dict[str, Any]]:
-        """Generate detailed electrical scope items"""
+        """Generate detailed electrical scope items using industry standards"""
         
-        square_footage = project_data.get('square_footage', 0)
-        num_floors = project_data.get('num_floors', 1)
-        building_type = project_data.get('project_type', 'commercial')
-        building_mix = project_data.get('building_mix', {})
-        if building_mix is None:
-            building_mix = {}
+        # Use the electrical standards service for consistent calculations
+        electrical_data = electrical_standards_service.calculate_electrical_items_with_labor(project_data)
         
-        # Calculate space allocations
-        warehouse_sf = square_footage * building_mix.get('warehouse', 0)
-        office_sf = square_footage * building_mix.get('office', 1)
+        # Store the electrical data in project data for later use
+        project_data['_electrical_standards_data'] = electrical_data
         
-        electrical_items = []
+        # Get the V2 calculation details
+        v2_calc = electrical_data.get('v2_calculation', {})
         
-        # Service entrance and main panel
-        total_load = square_footage * 5  # 5W/sqft average
-        amp_rating = math.ceil(total_load / 208 / 1.732 / 0.8)  # 208V 3-phase, 80% derating
-        amp_rating = max(400, min(round(amp_rating / 100) * 100, 3000))  # Round to standard sizes
+        # If we have V2 calculation details, use the detailed systems
+        if v2_calc and 'systems' in electrical_data:
+            # Return the already-calculated systems from V2
+            return electrical_data['systems']
         
-        electrical_items.append({
-            'name': f'Service Entrance - {amp_rating}A, 208V 3-Phase',
-            'quantity': 1,
-            'unit': 'EA',
-            'unit_cost': amp_rating * 15,  # $15 per amp
-            'category': 'Service & Distribution'
-        })
-        
-        electrical_items.append({
-            'name': f'Main Distribution Panel - {amp_rating}A MLO',
-            'quantity': 1,
-            'unit': 'EA',
-            'unit_cost': amp_rating * 8,
-            'category': 'Service & Distribution'
-        })
-        
-        # Sub-panels
-        num_subpanels = math.ceil(square_footage / 15000)  # 1 per 15,000 sqft
-        electrical_items.append({
-            'name': 'Sub-Panel - 225A, 42 Circuit',
-            'quantity': num_subpanels,
-            'unit': 'EA',
-            'unit_cost': 2500,
-            'category': 'Service & Distribution'
-        })
-        
-        # Feeders
-        electrical_items.append({
-            'name': 'Feeder Conduit & Wire - 225A',
-            'quantity': num_subpanels * 150,  # 150 LF average per panel
-            'unit': 'LF',
-            'unit_cost': 45,
-            'category': 'Service & Distribution'
-        })
-        
-        # Branch circuits
-        num_circuits = math.ceil(square_footage / 500)  # 1 circuit per 500 sqft
-        electrical_items.append({
-            'name': 'Branch Circuit - 20A, #12 MC Cable',
-            'quantity': num_circuits,
-            'unit': 'EA',
-            'unit_cost': 850,  # Average 100' run at $8.50/ft
-            'category': 'Branch Wiring'
-        })
-        
-        # Lighting by area type
-        if warehouse_sf > 0:
-            num_highbay = math.ceil(warehouse_sf / 400)  # 1 per 400 sqft
-            electrical_items.append({
-                'name': 'LED High Bay Fixture - 150W',
-                'quantity': num_highbay,
-                'unit': 'EA',
-                'unit_cost': 425,
-                'category': 'Lighting'
-            })
-        
-        if office_sf > 0:
-            num_office_fixtures = math.ceil(office_sf / 100)  # 1 per 100 sqft
-            electrical_items.append({
-                'name': 'LED Troffer 2x4 - 40W',
-                'quantity': num_office_fixtures,
-                'unit': 'EA',
-                'unit_cost': 185,
-                'category': 'Lighting'
-            })
-        
-        # Exterior lighting
-        building_perimeter = 2 * (math.sqrt(square_footage) + math.sqrt(square_footage) * 1.2)
-        num_exterior = math.ceil(building_perimeter / 50)  # 1 per 50 LF
-        electrical_items.append({
-            'name': 'LED Wall Pack - 40W',
-            'quantity': num_exterior,
-            'unit': 'EA',
-            'unit_cost': 275,
-            'category': 'Lighting'
-        })
-        
-        # Receptacles
-        num_standard_recep = math.ceil(office_sf / 150) + math.ceil(warehouse_sf / 1000)
-        electrical_items.append({
-            'name': 'Duplex Receptacle - 20A',
-            'quantity': num_standard_recep,
-            'unit': 'EA',
-            'unit_cost': 85,
-            'category': 'Devices'
-        })
-        
-        # GFCI receptacles
-        num_gfci = math.ceil(square_footage / 5000)  # Bathrooms, break rooms, etc
-        electrical_items.append({
-            'name': 'GFCI Receptacle - 20A',
-            'quantity': num_gfci * 4,
-            'unit': 'EA',
-            'unit_cost': 125,
-            'category': 'Devices'
-        })
-        
-        # Equipment connections
-        electrical_items.extend([
-            {
-                'name': 'HVAC Equipment Disconnect - 60A',
-                'quantity': math.ceil(square_footage / 15000),  # Per RTU
-                'unit': 'EA',
-                'unit_cost': 350,
-                'category': 'Equipment Connections'
-            },
-            {
-                'name': 'Equipment Connection - Misc',
-                'quantity': 10,
-                'unit': 'EA',
-                'unit_cost': 250,
-                'category': 'Equipment Connections'
-            }
-        ])
-        
-        # Emergency systems
-        electrical_items.extend([
-            {
-                'name': 'Exit Sign - LED',
-                'quantity': math.ceil(square_footage / 2500),
-                'unit': 'EA',
-                'unit_cost': 165,
-                'category': 'Life Safety'
-            },
-            {
-                'name': 'Emergency Light - LED Twin Head',
-                'quantity': math.ceil(square_footage / 2000),
-                'unit': 'EA',
-                'unit_cost': 225,
-                'category': 'Life Safety'
-            }
-        ])
-        
-        # Fire alarm
-        electrical_items.extend([
-            {
-                'name': 'Fire Alarm Control Panel',
-                'quantity': 1,
-                'unit': 'EA',
-                'unit_cost': 4500,
-                'category': 'Fire Alarm'
-            },
-            {
-                'name': 'Smoke Detector',
-                'quantity': math.ceil(square_footage / 1000),
-                'unit': 'EA',
-                'unit_cost': 185,
-                'category': 'Fire Alarm'
-            },
-            {
-                'name': 'Horn/Strobe Device',
-                'quantity': math.ceil(square_footage / 2000),
-                'unit': 'EA',
-                'unit_cost': 165,
-                'category': 'Fire Alarm'
-            },
-            {
-                'name': 'Pull Station',
-                'quantity': max(4, math.ceil(square_footage / 5000)),
-                'unit': 'EA',
-                'unit_cost': 125,
-                'category': 'Fire Alarm'
-            }
-        ])
-        
-        # Low voltage
-        electrical_items.extend([
-            {
-                'name': 'Data Cable - CAT6',
-                'quantity': num_standard_recep * 2 * 100,  # 2 drops per outlet, 100ft avg
-                'unit': 'LF',
-                'unit_cost': 1.25,
-                'category': 'Low Voltage'
-            },
-            {
-                'name': 'Data Outlet - Dual CAT6',
-                'quantity': num_standard_recep,
-                'unit': 'EA',
-                'unit_cost': 95,
-                'category': 'Low Voltage'
-            }
-        ])
-        
-        # Calculate total costs
-        for item in electrical_items:
-            item['total_cost'] = item['quantity'] * item['unit_cost']
-        
-        return electrical_items
+        # Fall back to detailed systems
+        return electrical_data['systems']
+    
+    def get_electrical_schedule_data(self, project_data: Dict) -> Dict[str, Any]:
+        """Get the electrical schedule data from standardized calculations"""
+        if '_electrical_standards_data' not in project_data:
+            # Generate if not already calculated
+            electrical_data = electrical_standards_service.calculate_electrical_items_with_labor(project_data)
+            project_data['_electrical_standards_data'] = electrical_data
+        return project_data['_electrical_standards_data']
     
     def generate_detailed_hvac(self, project_data: Dict) -> List[Dict[str, Any]]:
         """Generate detailed HVAC scope items"""
-        square_footage = project_data.get('square_footage', 0)
-        building_mix = project_data.get('building_mix', {})
+        # Extract project parameters - check both direct and request_data
+        request_data = project_data.get('request_data', {})
+        square_footage = project_data.get('square_footage', 0) or request_data.get('square_footage', 0)
+        building_mix = project_data.get('building_mix', {}) or request_data.get('building_mix', {})
         if building_mix is None:
             building_mix = {}
-        ceiling_height = project_data.get('ceiling_height', 10)
+        ceiling_height = request_data.get('ceiling_height', 10)
         
         warehouse_sf = square_footage * building_mix.get('warehouse', 0)
         office_sf = square_footage * building_mix.get('office', 1)
         
         hvac_items = []
         
-        # Calculate tonnage requirements
-        warehouse_tons = warehouse_sf * ceiling_height * 1.0 / 500  # 1 ton per 500 CF for warehouse
-        office_tons = office_sf * 45 / 12000  # 45 BTU/sqft for office
-        total_tons = warehouse_tons + office_tons
+        # Simplified HVAC calculation for mixed-use
+        # Warehouse: Basic RTUs, Office: VAV system
         
-        # Rooftop units
-        num_rtus = math.ceil(total_tons / 40)  # 40 ton max unit size
-        tons_per_unit = math.ceil(total_tons / num_rtus / 5) * 5  # Round to 5 ton increments
-        
+        # Warehouse HVAC
+        warehouse_rtus = max(1, math.ceil(warehouse_sf / 8000))  # 1 RTU per 8000 SF
         hvac_items.append({
-            'name': f'Rooftop Unit - {tons_per_unit} Ton, Gas/Electric',
-            'quantity': num_rtus,
+            'name': 'Rooftop Unit - 15 Ton, Gas/Electric (Warehouse)',
+            'quantity': warehouse_rtus,
             'unit': 'EA',
-            'unit_cost': tons_per_unit * 1200,  # $1200/ton
+            'unit_cost': 15000,  # $15k per unit
             'category': 'Equipment'
         })
         
-        # Curbs and accessories
+        # Office HVAC (more complex)
+        office_vav_units = max(1, math.ceil(office_sf / 7000))  # 1 unit per 7000 SF
+        hvac_items.append({
+            'name': 'VAV Air Handler - 20 Ton (Office)',
+            'quantity': office_vav_units,
+            'unit': 'EA',
+            'unit_cost': 20000,  # $20k per unit
+            'category': 'Equipment'
+        })
+        
+        # Installation and connections
+        total_units = warehouse_rtus + office_vav_units
         hvac_items.extend([
             {
-                'name': f'Roof Curb - {tons_per_unit} Ton RTU',
-                'quantity': num_rtus,
+                'name': 'Equipment Installation & Rigging',
+                'quantity': total_units,
                 'unit': 'EA',
-                'unit_cost': 850,
+                'unit_cost': 3500,
                 'category': 'Equipment'
             },
             {
-                'name': 'RTU Electrical Connection',
-                'quantity': num_rtus,
+                'name': 'Electrical/Gas Connections',
+                'quantity': total_units,
                 'unit': 'EA',
-                'unit_cost': 1500,
+                'unit_cost': 2000,
                 'category': 'Equipment'
-            },
-            {
-                'name': 'Gas Piping to RTU',
-                'quantity': num_rtus * 50,  # 50 LF average
-                'unit': 'LF',
-                'unit_cost': 35,
-                'category': 'Piping'
             }
         ])
         
-        # Ductwork
-        total_cfm = total_tons * 400  # 400 CFM/ton
-        
-        # Main trunk ducts
+        # Simplified ductwork based on space type
+        # Warehouse: Basic exposed spiral duct
         hvac_items.append({
-            'name': 'Supply Duct - Main Trunk (24"x16")',
-            'quantity': square_footage / 100,  # LF of main trunk
-            'unit': 'LF',
-            'unit_cost': 85,
+            'name': 'Warehouse Ductwork Package',
+            'quantity': warehouse_sf / 1000,  # Per 1000 SF
+            'unit': 'Lot',
+            'unit_cost': 3000,  # $3/SF = $94.5k total
             'category': 'Ductwork'
         })
         
+        # Office: Complex VAV ductwork
         hvac_items.append({
-            'name': 'Return Duct - Main Trunk (30"x20")',
-            'quantity': square_footage / 150,
-            'unit': 'LF',
-            'unit_cost': 95,
+            'name': 'Office VAV Ductwork Package',
+            'quantity': office_sf / 1000,  # Per 1000 SF
+            'unit': 'Lot',
+            'unit_cost': 5000,  # $5/SF = $67.5k total
             'category': 'Ductwork'
         })
         
-        # Branch ducts
-        hvac_items.append({
-            'name': 'Supply Branch Duct - Spiral (10" dia)',
-            'quantity': square_footage / 50,
-            'unit': 'LF',
-            'unit_cost': 28,
-            'category': 'Ductwork'
-        })
-        
-        # Diffusers and grilles
-        num_diffusers = math.ceil(office_sf / 200) + math.ceil(warehouse_sf / 800)
+        # Simplified controls and ventilation
         hvac_items.extend([
             {
-                'name': 'Supply Diffuser - 24"x24" Lay-in',
-                'quantity': math.ceil(office_sf / 200),
-                'unit': 'EA',
-                'unit_cost': 165,
-                'category': 'Terminals'
+                'name': 'Warehouse Controls/Ventilation Package',
+                'quantity': warehouse_sf / 1000,
+                'unit': 'Lot',
+                'unit_cost': 2500,  # $2.5/SF total for warehouse HVAC extras
+                'category': 'Controls'
             },
             {
-                'name': 'Supply Diffuser - Round 12"',
-                'quantity': math.ceil(warehouse_sf / 800),
-                'unit': 'EA',
-                'unit_cost': 125,
-                'category': 'Terminals'
+                'name': 'Office BMS/Controls Package',
+                'quantity': office_sf / 1000,
+                'unit': 'Lot',
+                'unit_cost': 5000,  # $5/SF total for office HVAC extras  
+                'category': 'Controls'
             },
             {
-                'name': 'Return Grille - 24"x24"',
-                'quantity': math.ceil(square_footage / 1500),
-                'unit': 'EA',
-                'unit_cost': 145,
-                'category': 'Terminals'
-            }
-        ])
-        
-        # VAV boxes for office areas
-        if office_sf > 5000:
-            num_vav = math.ceil(office_sf / 1500)
-            hvac_items.append({
-                'name': 'VAV Box w/ Hot Water Reheat',
-                'quantity': num_vav,
-                'unit': 'EA',
-                'unit_cost': 1850,
-                'category': 'Terminals'
-            })
-        
-        # Exhaust fans
-        hvac_items.extend([
-            {
-                'name': 'Restroom Exhaust Fan - 150 CFM',
-                'quantity': math.ceil(square_footage / 10000) * 2,
-                'unit': 'EA',
-                'unit_cost': 425,
-                'category': 'Exhaust'
-            },
-            {
-                'name': 'General Exhaust Fan - 1000 CFM',
-                'quantity': math.ceil(warehouse_sf / 20000),
-                'unit': 'EA',
-                'unit_cost': 1250,
-                'category': 'Exhaust'
-            }
-        ])
-        
-        # Controls
-        hvac_items.extend([
-            {
-                'name': 'DDC Control System',
+                'name': 'Testing & Commissioning',
                 'quantity': 1,
                 'unit': 'LS',
-                'unit_cost': 15000 + (square_footage * 0.5),
-                'category': 'Controls'
-            },
-            {
-                'name': 'Thermostat - Programmable',
-                'quantity': num_rtus + math.ceil(office_sf / 2500),
-                'unit': 'EA',
-                'unit_cost': 385,
-                'category': 'Controls'
-            },
-            {
-                'name': 'CO2 Sensor',
-                'quantity': math.ceil(office_sf / 5000),
-                'unit': 'EA',
-                'unit_cost': 425,
-                'category': 'Controls'
+                'unit_cost': 15000,
+                'category': 'Commissioning'
             }
         ])
-        
-        # Condensate drainage
-        hvac_items.append({
-            'name': 'Condensate Drain Piping',
-            'quantity': num_rtus * 30,  # 30 LF per unit
-            'unit': 'LF',
-            'unit_cost': 18,
-            'category': 'Piping'
-        })
-        
-        # Testing and balancing
-        hvac_items.append({
-            'name': 'Testing & Balancing',
-            'quantity': 1,
-            'unit': 'LS',
-            'unit_cost': square_footage * 0.35,
-            'category': 'Commissioning'
-        })
         
         # Calculate total costs
         for item in hvac_items:
@@ -403,19 +141,60 @@ class DetailedTradeService:
         return hvac_items
     
     def generate_detailed_plumbing(self, project_data: Dict) -> List[Dict[str, Any]]:
-        """Generate detailed plumbing scope items"""
-        square_footage = project_data.get('square_footage', 0)
-        building_mix = project_data.get('building_mix', {})
+        """Generate detailed plumbing scope items based on building characteristics"""
+        # Extract project parameters - check both direct and request_data
+        request_data = project_data.get('request_data', {})
+        square_footage = project_data.get('square_footage', 0) or request_data.get('square_footage', 0)
+        building_mix = project_data.get('building_mix', {}) or request_data.get('building_mix', {})
         if building_mix is None:
             building_mix = {}
-        special_requirements = project_data.get('special_requirements', '')
+        special_requirements = request_data.get('special_requirements', '')
         if special_requirements is None:
             special_requirements = ''
         
-        # Extract bathroom count from special requirements
-        import re
-        bathroom_match = re.search(r'(\d+)\s*bathroom', special_requirements, re.IGNORECASE)
-        num_bathrooms = int(bathroom_match.group(1)) if bathroom_match else math.ceil(square_footage / 15000)
+        # Determine if this is a restaurant or has commercial kitchen
+        has_commercial_kitchen = (
+            'restaurant' in building_mix or
+            'commercial kitchen' in special_requirements.lower() or
+            'food service' in special_requirements.lower()
+        )
+        
+        # For mixed-use, calculate weighted plumbing complexity
+        if building_mix:
+            # Calculate bathrooms based on occupancy for each space type
+            total_fixture_groups = 0
+            plumbing_complexity_score = 0  # Track overall complexity
+            
+            for space_type, percentage in building_mix.items():
+                space_sf = square_footage * percentage
+                if space_type == 'warehouse':
+                    # Minimal - 1 bathroom per 10,000 SF
+                    fixture_groups = max(1, math.ceil(space_sf / 10000))
+                    plumbing_complexity_score += percentage * 1  # Low complexity
+                elif space_type == 'office':
+                    # Standard - 1 bathroom per 2,500 SF
+                    fixture_groups = max(1, math.ceil(space_sf / 2500))
+                    plumbing_complexity_score += percentage * 3  # Medium complexity
+                elif space_type == 'retail':
+                    # Basic - 1 bathroom per 5,000 SF
+                    fixture_groups = max(1, math.ceil(space_sf / 5000))
+                    plumbing_complexity_score += percentage * 2  # Low-medium complexity
+                elif space_type == 'restaurant':
+                    # High - 1 bathroom per 1,000 SF plus kitchen needs
+                    fixture_groups = max(2, math.ceil(space_sf / 1000))
+                    plumbing_complexity_score += percentage * 10  # Very high complexity
+                else:
+                    # Default to office standard
+                    fixture_groups = max(1, math.ceil(space_sf / 2500))
+                    plumbing_complexity_score += percentage * 3
+                total_fixture_groups += fixture_groups
+            
+            num_bathrooms = max(1, int(total_fixture_groups))
+            is_complex_plumbing = plumbing_complexity_score > 5  # Threshold for complex plumbing
+        else:
+            # Default calculation for non-mixed use
+            num_bathrooms = max(1, math.ceil(square_footage / 5000))
+            is_complex_plumbing = False
         
         plumbing_items = []
         
@@ -483,68 +262,134 @@ class DetailedTradeService:
         })
         
         # Piping - Supply
-        supply_footage = square_footage * 0.8  # 0.8 LF per sqft average
-        plumbing_items.extend([
-            {
-                'name': 'Copper Water Pipe - 2"',
-                'quantity': supply_footage * 0.1,  # 10% main lines
-                'unit': 'LF',
-                'unit_cost': 38,
-                'category': 'Piping'
-            },
-            {
-                'name': 'Copper Water Pipe - 1"',
-                'quantity': supply_footage * 0.3,  # 30% branch lines
-                'unit': 'LF',
-                'unit_cost': 24,
-                'category': 'Piping'
-            },
-            {
-                'name': 'Copper Water Pipe - 3/4"',
-                'quantity': supply_footage * 0.4,  # 40% small branches
-                'unit': 'LF',
-                'unit_cost': 18,
-                'category': 'Piping'
-            },
-            {
-                'name': 'Copper Water Pipe - 1/2"',
-                'quantity': supply_footage * 0.2,  # 20% fixture connections
-                'unit': 'LF',
-                'unit_cost': 14,
-                'category': 'Piping'
-            }
-        ])
+        # Adjust piping density based on building type
+        if building_mix.get('warehouse', 0) > 0.5 and not has_commercial_kitchen:
+            # Warehouse dominant - minimal piping
+            supply_footage = square_footage * 0.15  # Much less piping needed
+        elif has_commercial_kitchen or is_complex_plumbing:
+            # Restaurant/complex - extensive piping
+            supply_footage = square_footage * 1.2  # More piping for kitchen equipment
+        else:
+            # Standard office/retail
+            supply_footage = square_footage * 0.4  # Moderate piping
+        
+        # Warehouse needs very simple distribution
+        if building_mix.get('warehouse', 0) > 0.5:
+            # Simplified piping for warehouse
+            plumbing_items.extend([
+                {
+                    'name': 'Copper Water Pipe - Main Distribution',
+                    'quantity': supply_footage * 0.2,  # Only 20% of total
+                    'unit': 'LF',
+                    'unit_cost': 22,  # Blended rate
+                    'category': 'Piping'
+                },
+                {
+                    'name': 'Copper Water Pipe - Branch Lines',
+                    'quantity': supply_footage * 0.8,  # 80% smaller pipes
+                    'unit': 'LF',
+                    'unit_cost': 16,  # Blended rate for 3/4" and 1/2"
+                    'category': 'Piping'
+                }
+            ])
+        else:
+            # Standard distribution for office/retail
+            plumbing_items.extend([
+                {
+                    'name': 'Copper Water Pipe - 2"',
+                    'quantity': supply_footage * 0.1,  # 10% main lines
+                    'unit': 'LF',
+                    'unit_cost': 38,
+                    'category': 'Piping'
+                },
+                {
+                    'name': 'Copper Water Pipe - 1"',
+                    'quantity': supply_footage * 0.3,  # 30% branch lines
+                    'unit': 'LF',
+                    'unit_cost': 24,
+                    'category': 'Piping'
+                },
+                {
+                    'name': 'Copper Water Pipe - 3/4"',
+                    'quantity': supply_footage * 0.4,  # 40% small branches
+                    'unit': 'LF',
+                    'unit_cost': 18,
+                    'category': 'Piping'
+                },
+                {
+                    'name': 'Copper Water Pipe - 1/2"',
+                    'quantity': supply_footage * 0.2,  # 20% fixture connections
+                    'unit': 'LF',
+                    'unit_cost': 14,
+                    'category': 'Piping'
+                }
+            ])
         
         # Piping - Waste
-        waste_footage = square_footage * 0.6
-        plumbing_items.extend([
-            {
-                'name': 'Cast Iron Waste Pipe - 4"',
-                'quantity': waste_footage * 0.2,
-                'unit': 'LF',
-                'unit_cost': 42,
-                'category': 'Piping'
-            },
-            {
-                'name': 'Cast Iron Waste Pipe - 3"',
-                'quantity': waste_footage * 0.3,
-                'unit': 'LF',
-                'unit_cost': 35,
-                'category': 'Piping'
-            },
-            {
-                'name': 'PVC Waste Pipe - 2"',
-                'quantity': waste_footage * 0.5,
-                'unit': 'LF',
-                'unit_cost': 18,
-                'category': 'Piping'
-            }
-        ])
+        # Adjust waste piping based on building type
+        if building_mix.get('warehouse', 0) > 0.5 and not has_commercial_kitchen:
+            # Warehouse dominant - minimal waste piping
+            waste_footage = square_footage * 0.1  # Much less waste piping
+        elif has_commercial_kitchen or is_complex_plumbing:
+            # Restaurant/complex - extensive waste piping
+            waste_footage = square_footage * 0.9  # More waste for kitchen drains
+        else:
+            # Standard office/retail
+            waste_footage = square_footage * 0.3  # Moderate waste piping
+        
+        # Simplified waste piping for warehouse
+        if building_mix.get('warehouse', 0) > 0.5:
+            plumbing_items.extend([
+                {
+                    'name': 'Cast Iron Waste Pipe - Main',
+                    'quantity': waste_footage * 0.3,  # Less main waste lines
+                    'unit': 'LF',
+                    'unit_cost': 38,  # Blended 4" and 3"
+                    'category': 'Piping'
+                },
+                {
+                    'name': 'PVC Waste Pipe - Branch',
+                    'quantity': waste_footage * 0.7,  # More PVC branches
+                    'unit': 'LF',
+                    'unit_cost': 18,
+                    'category': 'Piping'
+                }
+            ])
+        else:
+            plumbing_items.extend([
+                {
+                    'name': 'Cast Iron Waste Pipe - 4"',
+                    'quantity': waste_footage * 0.2,
+                    'unit': 'LF',
+                    'unit_cost': 42,
+                    'category': 'Piping'
+                },
+                {
+                    'name': 'Cast Iron Waste Pipe - 3"',
+                    'quantity': waste_footage * 0.3,
+                    'unit': 'LF',
+                    'unit_cost': 35,
+                    'category': 'Piping'
+                },
+                {
+                    'name': 'PVC Waste Pipe - 2"',
+                    'quantity': waste_footage * 0.5,
+                    'unit': 'LF',
+                    'unit_cost': 18,
+                    'category': 'Piping'
+                }
+            ])
         
         # Insulation
+        # Only insulate hot water and exposed piping
+        if building_mix.get('warehouse', 0) > 0.5:
+            insulation_factor = 0.2  # Minimal insulation for warehouse
+        else:
+            insulation_factor = 0.6  # Standard insulation for office/retail
+        
         plumbing_items.append({
             'name': 'Pipe Insulation - Fiberglass',
-            'quantity': supply_footage * 0.6,  # Insulate 60% of supply
+            'quantity': supply_footage * insulation_factor,
             'unit': 'LF',
             'unit_cost': 8.50,
             'category': 'Insulation'
@@ -636,26 +481,67 @@ class DetailedTradeService:
             'category': 'Fixtures'
         })
         
+        # Add restaurant/kitchen specific items if needed
+        if has_commercial_kitchen:
+            # Grease interceptor system
+            plumbing_items.extend([
+                {
+                    'name': 'Grease Interceptor - 1000 Gal',
+                    'quantity': 1,
+                    'unit': 'EA',
+                    'unit_cost': 8500,
+                    'category': 'Kitchen Systems'
+                },
+                {
+                    'name': 'Kitchen Floor Drains - Heavy Duty',
+                    'quantity': math.ceil(building_mix.get('restaurant', 0) * square_footage / 500),
+                    'unit': 'EA',
+                    'unit_cost': 650,
+                    'category': 'Kitchen Systems'
+                },
+                {
+                    'name': 'Pre-Rinse Spray Assembly',
+                    'quantity': 2,
+                    'unit': 'EA',
+                    'unit_cost': 485,
+                    'category': 'Kitchen Systems'
+                },
+                {
+                    'name': 'Kitchen Equipment Connections',
+                    'quantity': 8,
+                    'unit': 'EA',
+                    'unit_cost': 325,
+                    'category': 'Kitchen Systems'
+                }
+            ])
+        
         # Gas piping if needed
         if 'gas' in special_requirements.lower() or project_data.get('has_gas', True):
+            # Scale gas piping based on building type
+            gas_multiplier = 1.0
+            if has_commercial_kitchen:
+                gas_multiplier = 3.0  # Much more gas for kitchen equipment
+            elif building_mix.get('warehouse', 0) > 0.5:
+                gas_multiplier = 0.5  # Less gas for warehouse
+            
             plumbing_items.extend([
                 {
                     'name': 'Gas Pipe - 2" Black Steel',
-                    'quantity': 100,
+                    'quantity': 100 * gas_multiplier,
                     'unit': 'LF',
                     'unit_cost': 28,
                     'category': 'Gas Piping'
                 },
                 {
                     'name': 'Gas Pipe - 1" Black Steel',
-                    'quantity': 200,
+                    'quantity': 200 * gas_multiplier,
                     'unit': 'LF',
                     'unit_cost': 18,
                     'category': 'Gas Piping'
                 },
                 {
                     'name': 'Gas Shut-off Valve',
-                    'quantity': 5,
+                    'quantity': max(3, int(5 * gas_multiplier)),
                     'unit': 'EA',
                     'unit_cost': 125,
                     'category': 'Gas Piping'
@@ -676,11 +562,11 @@ class DetailedTradeService:
         
         # Generate detailed items based on trade
         if trade.lower() == 'electrical':
-            detailed_items = self.generate_detailed_electrical(request_data)
+            detailed_items = self.generate_detailed_electrical(project_data)
         elif trade.lower() == 'hvac':
-            detailed_items = self.generate_detailed_hvac(request_data)
+            detailed_items = self.generate_detailed_hvac(project_data)
         elif trade.lower() == 'plumbing':
-            detailed_items = self.generate_detailed_plumbing(request_data)
+            detailed_items = self.generate_detailed_plumbing(project_data)
         else:
             return project_data  # Return unchanged for other trades
         
