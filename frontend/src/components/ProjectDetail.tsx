@@ -82,6 +82,28 @@ function ProjectDetail() {
     return <div className="error">Project not found</div>;
   }
 
+  // Get display-friendly building type
+  const getDisplayBuildingType = () => {
+    // Check if this is a restaurant
+    const requestData = project.request_data;
+    if (requestData.occupancy_type === 'restaurant' || 
+        (requestData.building_mix && requestData.building_mix.restaurant >= 0.5)) {
+      // Get service level if available
+      const serviceLevel = requestData.service_level || 'full_service';
+      const displayLevel = serviceLevel.replace('_', ' ')
+        .split(' ')
+        .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+      return `Restaurant - ${displayLevel}`;
+    }
+    
+    // Default display
+    return requestData.project_type.replace('_', ' ')
+      .split(' ')
+      .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
   // Filter categories based on selected trade
   const getFilteredCategories = () => {
     if (selectedTrade === 'general') {
@@ -220,7 +242,7 @@ function ProjectDetail() {
             </div>
             <div className="summary-item">
               <label>Type</label>
-              <span>{project.request_data.project_type}</span>
+              <span>{getDisplayBuildingType()}</span>
             </div>
             <div className="summary-item">
               <label>Square Footage</label>

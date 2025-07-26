@@ -16,6 +16,8 @@ interface ScopeRequest {
   special_requirements?: string;
   budget_constraint?: number;
   building_mix?: { [key: string]: number };
+  service_level?: string;
+  building_features?: string[];
 }
 
 function ScopeGenerator() {
@@ -57,9 +59,9 @@ function ScopeGenerator() {
     
     // First, try to match patterns like "industrial (80%)" or "60% retail"
     const percentagePatterns = [
-      /(warehouse|office|retail|residential|industrial|commercial|manufacturing|facility)\s*\((\d+)%\)/gi,
-      /(\d+)%\s+(warehouse|office|retail|residential|industrial|commercial|manufacturing)/gi,
-      /(warehouse|office|retail|residential|industrial|commercial|manufacturing)\s+(\d+)%/gi
+      /(warehouse|office|retail|residential|industrial|commercial|manufacturing|facility|restaurant|kitchen|dining)\s*\((\d+)%\)/gi,
+      /(\d+)%\s+(warehouse|office|retail|residential|industrial|commercial|manufacturing|restaurant|kitchen|dining)/gi,
+      /(warehouse|office|retail|residential|industrial|commercial|manufacturing|restaurant|kitchen|dining)\s+(\d+)%/gi
     ];
     
     let hasPercentages = false;
@@ -84,6 +86,10 @@ function ScopeGenerator() {
         if (type === 'manufacturing' || type === 'facility') {
           type = 'industrial';
         }
+        // Handle restaurant-related terms
+        if (type === 'kitchen' || type === 'dining') {
+          type = 'restaurant';
+        }
         
         buildingTypes[type] = percentage;
         totalPercentage += percentage;
@@ -94,13 +100,17 @@ function ScopeGenerator() {
     // Look for patterns like "manufacturing facility with 25% office space"
     if (hasPercentages && totalPercentage < 100) {
       // Find building types mentioned without percentages
-      const simpleTypePattern = /(warehouse|office|retail|residential|industrial|commercial|manufacturing|facility)(?:\s+(?:space|building|area|facility))?/gi;
+      const simpleTypePattern = /(warehouse|office|retail|residential|industrial|commercial|manufacturing|facility|restaurant|kitchen|dining)(?:\s+(?:space|building|area|facility|room))?/gi;
       let typeMatch;
       
       while ((typeMatch = simpleTypePattern.exec(input)) !== null) {
         let type = typeMatch[1].toLowerCase();
         if (type === 'manufacturing' || type === 'facility') {
           type = 'industrial';
+        }
+        // Handle restaurant-related terms
+        if (type === 'kitchen' || type === 'dining') {
+          type = 'restaurant';
         }
         // If this type doesn't have a percentage assigned yet
         if (!buildingTypes[type]) {
@@ -113,7 +123,7 @@ function ScopeGenerator() {
     
     // If no percentages found, look for building types without percentages
     if (!hasPercentages) {
-      const simpleTypePattern = /(warehouse|office|retail|residential|industrial|commercial|manufacturing|facility)(?:\s+(?:space|building|area))?/gi;
+      const simpleTypePattern = /(warehouse|office|retail|residential|industrial|commercial|manufacturing|facility|restaurant|kitchen|dining)(?:\s+(?:space|building|area|room))?/gi;
       let typeMatch;
       const foundTypes: string[] = [];
       
@@ -121,6 +131,10 @@ function ScopeGenerator() {
         let type = typeMatch[1].toLowerCase();
         if (type === 'manufacturing' || type === 'facility') {
           type = 'industrial';
+        }
+        // Handle restaurant-related terms
+        if (type === 'kitchen' || type === 'dining') {
+          type = 'restaurant';
         }
         if (!foundTypes.includes(type)) {
           foundTypes.push(type);
@@ -168,6 +182,7 @@ function ScopeGenerator() {
                             primaryType === 'office' ? 'commercial' : 
                             primaryType === 'industrial' ? 'industrial' :
                             primaryType === 'retail' ? 'commercial' :
+                            primaryType === 'restaurant' ? 'commercial' :
                             primaryType === 'residential' ? 'residential' :
                             'commercial';
         result.occupancy_type = primaryType;
@@ -176,9 +191,19 @@ function ScopeGenerator() {
     
     // Parse location (state names or city, state format)
     const stateMap: { [key: string]: string } = {
-      'california': 'CA', 'texas': 'TX', 'new york': 'NY', 'florida': 'FL',
-      'washington': 'WA', 'oregon': 'OR', 'arizona': 'AZ', 'nevada': 'NV',
-      'colorado': 'CO', 'illinois': 'IL', 'georgia': 'GA', 'massachusetts': 'MA'
+      'alabama': 'AL', 'alaska': 'AK', 'arizona': 'AZ', 'arkansas': 'AR',
+      'california': 'CA', 'colorado': 'CO', 'connecticut': 'CT', 'delaware': 'DE',
+      'florida': 'FL', 'georgia': 'GA', 'hawaii': 'HI', 'idaho': 'ID',
+      'illinois': 'IL', 'indiana': 'IN', 'iowa': 'IA', 'kansas': 'KS',
+      'kentucky': 'KY', 'louisiana': 'LA', 'maine': 'ME', 'maryland': 'MD',
+      'massachusetts': 'MA', 'michigan': 'MI', 'minnesota': 'MN', 'mississippi': 'MS',
+      'missouri': 'MO', 'montana': 'MT', 'nebraska': 'NE', 'nevada': 'NV',
+      'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
+      'north carolina': 'NC', 'north dakota': 'ND', 'ohio': 'OH', 'oklahoma': 'OK',
+      'oregon': 'OR', 'pennsylvania': 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+      'south dakota': 'SD', 'tennessee': 'TN', 'texas': 'TX', 'utah': 'UT',
+      'vermont': 'VT', 'virginia': 'VA', 'washington': 'WA', 'west virginia': 'WV',
+      'wisconsin': 'WI', 'wyoming': 'WY', 'district of columbia': 'DC', 'dc': 'DC'
     };
     
     // Look for state names
@@ -195,11 +220,34 @@ function ScopeGenerator() {
       result.location = `${cityStateMatch[1].trim()}, ${cityStateMatch[2]}`;
     }
     
+    // Look for state codes (e.g., "in NH" or "NH location")
+    if (!result.location) {
+      const stateCodeMatch = input.match(/\b([A-Z]{2})\b/);
+      if (stateCodeMatch) {
+        const stateCode = stateCodeMatch[1];
+        // Verify it's a valid state code
+        const validStateCodes = Object.values(stateMap);
+        if (validStateCodes.includes(stateCode)) {
+          // Find the full state name
+          const stateName = Object.entries(stateMap).find(([name, code]) => code === stateCode)?.[0];
+          if (stateName) {
+            result.location = `${stateName.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}, ${stateCode}`;
+          }
+        }
+      }
+    }
+    
     // Parse special requirements
     const requirements: string[] = [];
     if (input.toLowerCase().includes('hvac')) requirements.push('HVAC system');
     if (input.toLowerCase().includes('bathroom')) requirements.push('Bathrooms');
-    if (input.toLowerCase().includes('kitchen')) requirements.push('Kitchen facilities');
+    if (input.toLowerCase().includes('commercial kitchen')) {
+      requirements.push('Commercial kitchen');
+    } else if (input.toLowerCase().includes('kitchen')) {
+      requirements.push('Kitchen facilities');
+    }
+    if (input.toLowerCase().includes('dining')) requirements.push('Dining area');
+    if (input.toLowerCase().includes('bar')) requirements.push('Bar area');
     if (input.toLowerCase().includes('parking')) requirements.push('Parking');
     if (input.toLowerCase().includes('elevator')) requirements.push('Elevators');
     if (input.toLowerCase().includes('dock door')) requirements.push('Multiple dock doors');
@@ -225,6 +273,51 @@ function ScopeGenerator() {
     const floorMatch = input.match(/(\d+)\s*(floor|story|storey|level)/i);
     if (floorMatch) {
       result.num_floors = parseInt(floorMatch[1]);
+    }
+    
+    // Parse restaurant service levels
+    if (result.occupancy_type === 'restaurant' || 
+        (result.building_mix && Object.keys(result.building_mix).includes('restaurant'))) {
+      if (input.toLowerCase().includes('quick service') || 
+          input.toLowerCase().includes('fast food') || 
+          input.toLowerCase().includes('qsr')) {
+        result.service_level = 'quick_service';
+      } else if (input.toLowerCase().includes('casual dining') || 
+                 input.toLowerCase().includes('family restaurant')) {
+        result.service_level = 'casual_dining';
+      } else if (input.toLowerCase().includes('fine dining') || 
+                 input.toLowerCase().includes('upscale') || 
+                 input.toLowerCase().includes('white tablecloth')) {
+        result.service_level = 'fine_dining';
+      } else if (input.toLowerCase().includes('full service') || 
+                 input.toLowerCase().includes('full-service')) {
+        result.service_level = 'full_service';
+      }
+      
+      // Parse restaurant features
+      const restaurantFeatures: string[] = [];
+      if (input.toLowerCase().includes('commercial kitchen') || input.toLowerCase().includes('kitchen')) {
+        restaurantFeatures.push('commercial_kitchen');
+      }
+      if (input.toLowerCase().includes('bar') || input.toLowerCase().includes('tavern') || input.toLowerCase().includes('pub')) {
+        restaurantFeatures.push('full_bar');
+      }
+      if (input.toLowerCase().includes('outdoor') || input.toLowerCase().includes('patio') || input.toLowerCase().includes('terrace')) {
+        restaurantFeatures.push('outdoor_dining');
+      }
+      if (input.toLowerCase().includes('drive-thru') || input.toLowerCase().includes('drive thru')) {
+        restaurantFeatures.push('drive_thru');
+      }
+      if (input.toLowerCase().includes('wine cellar') || input.toLowerCase().includes('wine storage')) {
+        restaurantFeatures.push('wine_cellar');
+      }
+      if (input.toLowerCase().includes('premium') || input.toLowerCase().includes('luxury') || input.toLowerCase().includes('high-end')) {
+        restaurantFeatures.push('premium_finishes');
+      }
+      
+      if (restaurantFeatures.length > 0) {
+        result.building_features = restaurantFeatures;
+      }
     }
     
     // Generate project name if not specified
@@ -347,6 +440,8 @@ function ScopeGenerator() {
               <br />• "150x300 warehouse (70%) + office(30%) with HVAC and bathrooms in California"
               <br />• "10000 SF office with HVAC and bathrooms in Texas"
               <br />• "50000 square feet mixed commercial and retail space in Seattle"
+              <br />• "4000 sf full-service restaurant with commercial kitchen and dining room in New Hampshire"
+              <br />• "20000 sf mixed office (60%) + restaurant (40%) in Boston"
             </p>
             
             <div className="form-group">
@@ -474,7 +569,7 @@ function ScopeGenerator() {
                 type="text"
                 value={formData.occupancy_type}
                 onChange={handleChange}
-                placeholder="e.g., office, retail, warehouse"
+                placeholder="e.g., office, retail, warehouse, restaurant"
               />
             </div>
 

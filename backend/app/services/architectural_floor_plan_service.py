@@ -143,7 +143,11 @@ class ArchitecturalFloorPlanService:
         if project_type == "mixed_use" and building_mix:
             plan = self._generate_mixed_use_architectural(width, height, building_mix)
         elif project_type == "commercial":
-            plan = self._generate_commercial_architectural(width, height)
+            # Check if it's a restaurant by looking at building mix or occupancy type
+            if building_mix and building_mix.get('restaurant', 0) > 0.5:
+                plan = self._generate_restaurant_architectural(width, height)
+            else:
+                plan = self._generate_commercial_architectural(width, height)
         elif project_type == "industrial":
             plan = self._generate_industrial_architectural(width, height)
         else:
@@ -973,6 +977,240 @@ class ArchitecturalFloorPlanService:
         """Generate commercial building plan"""
         # For now, reuse office logic
         return self._generate_office_architectural(width, height)
+    
+    def _generate_restaurant_architectural(self, width: float, height: float) -> ArchitecturalFloorPlan:
+        """Generate restaurant floor plan with kitchen, dining, bar, and support areas"""
+        plan = ArchitecturalFloorPlan()
+        
+        # Create exterior walls
+        plan.walls.extend(self._create_exterior_walls(width, height))
+        
+        # Restaurant layout:
+        # - Kitchen: 30-35% (back of house)
+        # - Dining: 40-45% (main area)
+        # - Bar: 10-15% (if applicable)
+        # - Support: 10-15% (restrooms, storage, etc.)
+        
+        # Kitchen area (back 35% of building)
+        kitchen_depth = height * 0.35
+        kitchen_wall = Wall(
+            id=f"wall_{uuid.uuid4().hex[:8]}",
+            type=WallType.INTERIOR,
+            start=Point(0, kitchen_depth),
+            end=Point(width, kitchen_depth),
+            thickness=8.0
+        )
+        plan.walls.append(kitchen_wall)
+        
+        # Add kitchen space
+        kitchen_space = Space(
+            id=f"space_{uuid.uuid4().hex[:8]}",
+            name="Commercial Kitchen",
+            type="kitchen",
+            boundaries=[
+                Point(0, 0),
+                Point(width, 0),
+                Point(width, kitchen_depth),
+                Point(0, kitchen_depth)
+            ],
+            area=width * kitchen_depth
+        )
+        plan.spaces.append(kitchen_space)
+        
+        # Bar area (15% width on one side)
+        bar_width = width * 0.15
+        bar_wall = Wall(
+            id=f"wall_{uuid.uuid4().hex[:8]}",
+            type=WallType.INTERIOR,
+            start=Point(bar_width, kitchen_depth),
+            end=Point(bar_width, height),
+            thickness=6.0
+        )
+        plan.walls.append(bar_wall)
+        
+        bar_space = Space(
+            id=f"space_{uuid.uuid4().hex[:8]}",
+            name="Bar Area",
+            type="bar",
+            boundaries=[
+                Point(0, kitchen_depth),
+                Point(bar_width, kitchen_depth),
+                Point(bar_width, height),
+                Point(0, height)
+            ],
+            area=bar_width * (height - kitchen_depth)
+        )
+        plan.spaces.append(bar_space)
+        
+        # Restroom area (10% of remaining width)
+        restroom_width = (width - bar_width) * 0.15
+        restroom_start = width - restroom_width
+        restroom_wall = Wall(
+            id=f"wall_{uuid.uuid4().hex[:8]}",
+            type=WallType.INTERIOR,
+            start=Point(restroom_start, kitchen_depth),
+            end=Point(restroom_start, height),
+            thickness=6.0
+        )
+        plan.walls.append(restroom_wall)
+        
+        # Dining area (main space)
+        dining_space = Space(
+            id=f"space_{uuid.uuid4().hex[:8]}",
+            name="Dining Room",
+            type="dining",
+            boundaries=[
+                Point(bar_width, kitchen_depth),
+                Point(restroom_start, kitchen_depth),
+                Point(restroom_start, height),
+                Point(bar_width, height)
+            ],
+            area=(restroom_start - bar_width) * (height - kitchen_depth)
+        )
+        plan.spaces.append(dining_space)
+        
+        # Add restrooms
+        restroom_elements = self._create_restaurant_restrooms(
+            x_start=restroom_start,
+            y_start=kitchen_depth,
+            width=restroom_width,
+            height=height - kitchen_depth
+        )
+        plan.walls.extend(restroom_elements['walls'])
+        plan.spaces.extend(restroom_elements['spaces'])
+        plan.fixtures.extend(restroom_elements['fixtures'])
+        plan.doors.extend(restroom_elements['doors'])
+        
+        # Add main entrance
+        plan.doors.append(Door(
+            id=f"door_{uuid.uuid4().hex[:8]}",
+            type=DoorType.DOUBLE,
+            position=Point(width/2, height),
+            width=72.0,
+            wall_id="wall_south",
+            swing_direction="in"
+        ))
+        
+        # Kitchen service door
+        plan.doors.append(Door(
+            id=f"door_{uuid.uuid4().hex[:8]}",
+            type=DoorType.DOUBLE,
+            position=Point(width * 0.9, 0),
+            width=48.0,
+            wall_id="wall_north",
+            swing_direction="in"
+        ))
+        
+        # Kitchen to dining pass door
+        plan.doors.append(Door(
+            id=f"door_{uuid.uuid4().hex[:8]}",
+            type=DoorType.DOUBLE,
+            position=Point(width/2, kitchen_depth),
+            width=42.0,
+            wall_id=kitchen_wall.id,
+            swing_direction="both"
+        ))
+        
+        # Windows along front (dining area)
+        window_spacing = 120.0  # 10 feet
+        num_windows = int((restroom_start - bar_width - 60) / window_spacing)
+        for i in range(num_windows):
+            x_pos = bar_width + 60 + (i * window_spacing)
+            plan.windows.append(Window(
+                id=f"window_{uuid.uuid4().hex[:8]}",
+                position=Point(x_pos, height),
+                width=60.0,
+                height=48.0,
+                wall_id="wall_south"
+            ))
+        
+        # Add kitchen equipment zones
+        equipment_annotation = Annotation(
+            id=f"annotation_{uuid.uuid4().hex[:8]}",
+            type="equipment",
+            position=Point(width/2, kitchen_depth/2),
+            text="Commercial Kitchen Equipment",
+            style={"fontSize": 12, "textAlign": "center"}
+        )
+        plan.annotations.append(equipment_annotation)
+        
+        return plan
+    
+    def _create_restaurant_restrooms(self, x_start: float, y_start: float, 
+                                    width: float, height: float) -> Dict[str, List[Any]]:
+        """Create restaurant restroom layout"""
+        elements = {
+            'walls': [],
+            'spaces': [],
+            'fixtures': [],
+            'doors': []
+        }
+        
+        # Divide into men's and women's restrooms
+        divider_wall = Wall(
+            id=f"wall_{uuid.uuid4().hex[:8]}",
+            type=WallType.INTERIOR,
+            start=Point(x_start + width/2, y_start),
+            end=Point(x_start + width/2, y_start + height),
+            thickness=6.0
+        )
+        elements['walls'].append(divider_wall)
+        
+        # Men's restroom
+        mens_space = Space(
+            id=f"space_{uuid.uuid4().hex[:8]}",
+            name="Men's Restroom",
+            type="restroom",
+            boundaries=[
+                Point(x_start, y_start),
+                Point(x_start + width/2, y_start),
+                Point(x_start + width/2, y_start + height),
+                Point(x_start, y_start + height)
+            ],
+            area=(width/2) * height
+        )
+        elements['spaces'].append(mens_space)
+        
+        # Women's restroom
+        womens_space = Space(
+            id=f"space_{uuid.uuid4().hex[:8]}",
+            name="Women's Restroom",
+            type="restroom",
+            boundaries=[
+                Point(x_start + width/2, y_start),
+                Point(x_start + width, y_start),
+                Point(x_start + width, y_start + height),
+                Point(x_start + width/2, y_start + height)
+            ],
+            area=(width/2) * height
+        )
+        elements['spaces'].append(womens_space)
+        
+        # Add fixtures (simplified)
+        # Men's: 2 toilets, 2 urinals, 2 sinks
+        # Women's: 3 toilets, 2 sinks
+        
+        # Doors
+        elements['doors'].extend([
+            Door(
+                id=f"door_{uuid.uuid4().hex[:8]}",
+                type=DoorType.SINGLE,
+                position=Point(x_start + width/4, y_start),
+                width=36.0,
+                wall_id="restroom_wall",
+                swing_direction="in"
+            ),
+            Door(
+                id=f"door_{uuid.uuid4().hex[:8]}",
+                type=DoorType.SINGLE,
+                position=Point(x_start + 3*width/4, y_start),
+                width=36.0,
+                wall_id="restroom_wall",
+                swing_direction="in"
+            )
+        ])
+        
+        return elements
     
     def _generate_industrial_architectural(self, width: float, height: float) -> ArchitecturalFloorPlan:
         """Generate industrial building plan"""

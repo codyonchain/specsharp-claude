@@ -53,6 +53,17 @@ class NLPService:
             "modern": ["modern", "contemporary", "open concept", "minimalist"],
             "traditional": ["traditional", "classic", "conventional"],
             "special_systems": ["data center", "clean room", "laboratory", "kitchen", "auditorium"],
+            "restaurant_features": ["restaurant", "dining", "commercial kitchen", "bar", "tavern", "pub", 
+                                  "cafe", "bistro", "grill", "diner", "food service", "hospitality",
+                                  "full-service", "quick-service", "fast food", "fine dining"],
+            "restaurant_equipment": ["hood", "exhaust", "grease trap", "walk-in", "cooler", "freezer",
+                                   "fryer", "grill", "range", "oven", "dishwasher", "prep area"],
+            "service_levels": {
+                "quick_service": ["quick service", "fast food", "fast-food", "qsr", "drive-thru", "drive thru"],
+                "casual_dining": ["casual dining", "family restaurant", "casual restaurant"],
+                "full_service": ["full service", "full-service", "sit-down", "table service"],
+                "fine_dining": ["fine dining", "upscale", "high-end dining", "white tablecloth", "gourmet"]
+            },
         }
     
     def extract_project_details(self, text: str) -> Dict[str, Any]:
@@ -70,12 +81,26 @@ class NLPService:
                     extracted[field] = float(value)
         
         for category, keywords in self.keywords.items():
-            if any(keyword in text.lower() for keyword in keywords):
+            if category == "service_levels":
+                # Handle service levels differently as it's a nested dictionary
+                for service_level, level_keywords in keywords.items():
+                    if any(kw in text.lower() for kw in level_keywords):
+                        extracted["service_level"] = service_level
+                        break
+            elif any(keyword in text.lower() for keyword in keywords):
                 if category == "special_systems":
                     extracted["special_requirements"] = extracted.get("special_requirements", [])
                     for keyword in keywords:
                         if keyword in text.lower():
                             extracted["special_requirements"].append(keyword)
+                elif category == "restaurant_features":
+                    extracted["is_restaurant"] = True
+                    extracted["restaurant_features"] = [k for k in keywords if k in text.lower()]
+                elif category == "restaurant_equipment":
+                    extracted["restaurant_equipment"] = extracted.get("restaurant_equipment", [])
+                    for keyword in keywords:
+                        if keyword in text.lower():
+                            extracted["restaurant_equipment"].append(keyword)
                 else:
                     extracted[f"style_{category}"] = True
         
@@ -108,10 +133,12 @@ class NLPService:
         
         Please identify and structure:
         1. Project type (residential, commercial, industrial, mixed-use)
-        2. Size and scope details
-        3. Special requirements or features
-        4. Quality level expectations
-        5. Any sustainability or compliance requirements
+        2. Building subtype if applicable (e.g., restaurant, retail, office, warehouse)
+        3. Size and scope details
+        4. Special requirements or features (especially for restaurants: commercial kitchen, bar, dining areas)
+        5. Quality level expectations
+        6. Any sustainability or compliance requirements
+        7. For restaurants: identify kitchen equipment needs, ventilation requirements, seating capacity
         
         Format the response as a structured analysis.
         """
@@ -156,26 +183,69 @@ class NLPService:
     def _fallback_analysis(self, text: str) -> Dict[str, Any]:
         extracted = self.extract_project_details(text)
         
+        # Determine project type with restaurant recognition
         project_type = "commercial"
+        building_subtype = None
+        
         if any(word in text.lower() for word in ["home", "house", "residential", "apartment"]):
             project_type = "residential"
         elif any(word in text.lower() for word in ["factory", "warehouse", "industrial"]):
             project_type = "industrial"
         elif any(word in text.lower() for word in ["mixed", "multi-use"]):
             project_type = "mixed_use"
+        elif extracted.get("is_restaurant", False):
+            project_type = "commercial"
+            building_subtype = "restaurant"
+        
+        # Determine if it's specifically a restaurant even if not explicitly stated
+        restaurant_indicators = ["commercial kitchen", "dining room", "food service", "bar"]
+        if not building_subtype and sum(1 for ind in restaurant_indicators if ind in text.lower()) >= 2:
+            building_subtype = "restaurant"
         
         quality_level = "standard"
-        if any(word in text.lower() for word in ["luxury", "premium", "high-end"]):
+        if any(word in text.lower() for word in ["luxury", "premium", "high-end", "fine dining"]):
             quality_level = "premium"
-        elif any(word in text.lower() for word in ["budget", "economical", "basic"]):
+        elif any(word in text.lower() for word in ["budget", "economical", "basic", "fast food"]):
             quality_level = "economy"
         
-        return {
+        result = {
             "project_type": project_type,
             "quality_level": quality_level,
             "extracted_details": extracted,
             "analysis_method": "pattern_matching"
         }
+        
+        if building_subtype:
+            result["building_subtype"] = building_subtype
+        
+        # Add service level if detected
+        if extracted.get("service_level"):
+            result["service_level"] = extracted["service_level"]
+        elif building_subtype == "restaurant" and not extracted.get("service_level"):
+            # Default to full_service if not specified
+            result["service_level"] = "full_service"
+        
+        # Detect building features
+        building_features = []
+        if building_subtype == "restaurant":
+            # Check for specific restaurant features
+            if any(word in text.lower() for word in ["commercial kitchen", "kitchen"]):
+                building_features.append("commercial_kitchen")
+            if any(word in text.lower() for word in ["bar", "tavern", "pub"]):
+                building_features.append("full_bar")
+            if any(word in text.lower() for word in ["outdoor", "patio", "terrace"]):
+                building_features.append("outdoor_dining")
+            if any(word in text.lower() for word in ["drive-thru", "drive thru", "drive through"]):
+                building_features.append("drive_thru")
+            if any(word in text.lower() for word in ["wine cellar", "wine storage"]):
+                building_features.append("wine_cellar")
+            if any(word in text.lower() for word in ["premium", "upscale", "luxury", "high-end"]):
+                building_features.append("premium_finishes")
+        
+        if building_features:
+            result["building_features"] = building_features
+            
+        return result
     
     def _parse_llm_response(self, response: str) -> Dict[str, Any]:
         try:

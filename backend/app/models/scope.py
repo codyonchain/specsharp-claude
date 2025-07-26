@@ -46,6 +46,8 @@ class ScopeRequest(BaseModel):
     special_requirements: Optional[str] = None
     budget_constraint: Optional[float] = Field(None, gt=0)
     building_mix: Optional[Dict[str, float]] = None
+    service_level: Optional[str] = None  # e.g., "full_service" for restaurants
+    building_features: Optional[List[str]] = None  # e.g., ["commercial_kitchen", "full_bar"]
     
     @validator('building_mix')
     def validate_building_mix(cls, v, values):

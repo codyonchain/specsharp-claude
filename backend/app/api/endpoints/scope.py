@@ -181,6 +181,62 @@ async def delete_project(
     return {"message": "Project deleted successfully", "project_id": project_id}
 
 
+@router.post("/projects/{project_id}/recalculate", response_model=ScopeResponse)
+async def recalculate_project(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Recalculate an existing project with the latest pricing engine"""
+    project = db.query(Project).filter(
+        Project.project_id == project_id,
+        Project.user_id == current_user["id"]
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Parse stored scope data to get original request
+    scope_data = json.loads(project.scope_data)
+    request_data = scope_data.get('request_data', {})
+    
+    # Reconstruct the ScopeRequest
+    scope_request = ScopeRequest(**request_data)
+    
+    # Regenerate the scope with current engine
+    new_scope_response = scope_engine.generate_scope(scope_request)
+    
+    # Generate floor plan
+    if 'floor_plan' not in scope_data or not scope_data.get('floor_plan'):
+        try:
+            floor_plan_data = architectural_floor_plan_service.generate_architectural_plan(
+                square_footage=scope_request.square_footage,
+                project_type=scope_request.project_type.value,
+                building_mix=getattr(scope_request, 'building_mix', None)
+            )
+            new_scope_response.floor_plan = floor_plan_data
+        except Exception as e:
+            floor_plan_data = floor_plan_service.generate_floor_plan(
+                square_footage=scope_request.square_footage,
+                project_type=scope_request.project_type.value,
+                building_mix=getattr(scope_request, 'building_mix', None)
+            )
+            new_scope_response.floor_plan = floor_plan_data
+    else:
+        new_scope_response.floor_plan = scope_data['floor_plan']
+    
+    # Generate trade summaries
+    new_scope_response.trade_summaries = trade_summary_service.generate_trade_summaries(
+        json.loads(new_scope_response.model_dump_json())
+    )
+    
+    # Update the project in database
+    project.scope_data = new_scope_response.model_dump_json()
+    db.commit()
+    
+    return new_scope_response
+
+
 @router.get("/debug/electrical/{project_id}")
 async def debug_electrical(
     project_id: str,

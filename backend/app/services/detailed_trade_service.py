@@ -45,8 +45,107 @@ class DetailedTradeService:
         
         warehouse_sf = square_footage * building_mix.get('warehouse', 0)
         office_sf = square_footage * building_mix.get('office', 1)
+        restaurant_sf = square_footage * building_mix.get('restaurant', 0)
+        
+        # Check if this is a restaurant project
+        special_requirements = request_data.get('special_requirements', '')
+        occupancy_type = request_data.get('occupancy_type', '')
+        is_restaurant = (
+            restaurant_sf > 0 or 
+            occupancy_type == 'restaurant' or
+            'restaurant' in special_requirements.lower() or
+            'commercial kitchen' in special_requirements.lower()
+        )
         
         hvac_items = []
+        
+        # Handle restaurant HVAC specially
+        if is_restaurant and restaurant_sf == 0:
+            # Pure restaurant, not mixed-use
+            restaurant_sf = square_footage
+        
+        if restaurant_sf > 0:
+            # Restaurant-specific HVAC calculations
+            kitchen_area = restaurant_sf * 0.3  # Assume 30% is kitchen
+            dining_area = restaurant_sf * 0.7   # 70% is dining
+            
+            # Kitchen exhaust hood system
+            hood_length = math.ceil(kitchen_area / 50)  # Rough calc for hood length
+            hvac_items.extend([
+                {
+                    'name': 'Type I Exhaust Hood System',
+                    'quantity': hood_length,
+                    'unit': 'LF',
+                    'unit_cost': 850,
+                    'category': 'Kitchen Ventilation'
+                },
+                {
+                    'name': 'Make-up Air Unit - Kitchen',
+                    'quantity': math.ceil(kitchen_area * 1.2 / 1000),  # CFM calculation
+                    'unit': 'Ton',
+                    'unit_cost': 3500,
+                    'category': 'Kitchen Ventilation'
+                },
+                {
+                    'name': 'Ansul Fire Suppression System',
+                    'quantity': hood_length,
+                    'unit': 'LF',
+                    'unit_cost': 225,
+                    'category': 'Kitchen Ventilation'
+                },
+                {
+                    'name': 'Kitchen Exhaust Ductwork - Stainless',
+                    'quantity': math.ceil(kitchen_area * 0.8),
+                    'unit': 'LB',
+                    'unit_cost': 12.50,
+                    'category': 'Kitchen Ventilation'
+                }
+            ])
+            
+            # Walk-in coolers/freezers
+            if restaurant_sf >= 2000:
+                hvac_items.extend([
+                    {
+                        'name': 'Walk-in Cooler (8x10)',
+                        'quantity': 1,
+                        'unit': 'EA',
+                        'unit_cost': 14800,
+                        'category': 'Refrigeration'
+                    },
+                    {
+                        'name': 'Walk-in Freezer (6x8)',
+                        'quantity': 1,
+                        'unit': 'EA',
+                        'unit_cost': 12600,
+                        'category': 'Refrigeration'
+                    },
+                    {
+                        'name': 'Refrigeration Compressor/Condenser Units',
+                        'quantity': 2,
+                        'unit': 'EA',
+                        'unit_cost': 4500,
+                        'category': 'Refrigeration'
+                    }
+                ])
+            
+            # Dining area HVAC
+            dining_tons = math.ceil(dining_area / 250)  # Higher load for dining
+            hvac_items.extend([
+                {
+                    'name': 'Restaurant RTU - High Efficiency',
+                    'quantity': math.ceil(dining_tons / 5),  # 5-ton units
+                    'unit': 'EA',
+                    'unit_cost': 9250,
+                    'category': 'HVAC Equipment'
+                },
+                {
+                    'name': 'Dining Area Ductwork',
+                    'quantity': dining_area / 1000,
+                    'unit': 'Lot',
+                    'unit_cost': 4500,
+                    'category': 'Ductwork'
+                }
+            ])
         
         # Simplified HVAC calculation for mixed-use
         # Warehouse: Basic RTUs, Office: VAV system

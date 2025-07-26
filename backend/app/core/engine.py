@@ -10,6 +10,8 @@ from datetime import datetime
 import uuid
 import re
 from app.services.detailed_trade_service import detailed_trade_service
+from app.services.building_type_service import building_type_service
+from app.services.restaurant_scope_service import restaurant_scope_service
 
 logger = logging.getLogger(__name__)
 
@@ -212,6 +214,13 @@ class DeterministicScopeEngine:
                 'electrical': 10.00,
                 'plumbing': 2.00,
                 'finishes': 12.00
+            },
+            'restaurant': {
+                'structural': 20.00,  # Heavy equipment loads, grease trap requirements
+                'mechanical': 35.00,  # Commercial kitchen exhaust, makeup air, heavy HVAC
+                'electrical': 25.00,  # High power for kitchen equipment
+                'plumbing': 30.00,   # Extensive kitchen plumbing, grease management
+                'finishes': 80.00    # Kitchen equipment, dining finishes
             }
         }
     
@@ -222,7 +231,8 @@ class DeterministicScopeEngine:
             'office': {'min': 120, 'max': 200},
             'mixed_use': {'min': 70, 'max': 130},
             'retail': {'min': 90, 'max': 150},
-            'light_industrial': {'min': 60, 'max': 100}
+            'light_industrial': {'min': 60, 'max': 100},
+            'restaurant': {'min': 200, 'max': 400}
         }
     
     def _initialize_building_characteristics(self) -> Dict[str, Dict[str, Any]]:
@@ -364,7 +374,8 @@ class DeterministicScopeEngine:
             "office": 1/400,       # Full HVAC - 1 ton per 400 sqft
             "retail": 1/350,       # Heavy HVAC - 1 ton per 350 sqft
             "residential": 1/500,  # Moderate HVAC - 1 ton per 500 sqft
-            "industrial": 1/1500   # Same as warehouse
+            "industrial": 1/1500,  # Same as warehouse
+            "restaurant": 1/250    # Very heavy HVAC for kitchen exhaust/makeup air
         }
         
         bathroom_per_sqft = {
@@ -372,7 +383,8 @@ class DeterministicScopeEngine:
             "office": 1/1000,      # Standard - 1 bathroom per 1000 sqft
             "retail": 1/2000,      # Moderate - 1 bathroom per 2000 sqft
             "residential": 1/800,  # High - 1 bathroom per 800 sqft
-            "industrial": 1/10000  # Same as warehouse
+            "industrial": 1/10000, # Same as warehouse
+            "restaurant": 1/1000   # High fixture count for customers + staff
         }
         
         electrical_watts_per_sqft = {
@@ -380,7 +392,8 @@ class DeterministicScopeEngine:
             "office": 15,          # Full electrical
             "retail": 20,          # Heavy electrical
             "residential": 12,     # Moderate electrical
-            "industrial": 5        # Same as warehouse
+            "industrial": 5,       # Same as warehouse
+            "restaurant": 30       # Very high for kitchen equipment
         }
         
         if system_type == "hvac":
@@ -406,6 +419,71 @@ class DeterministicScopeEngine:
         
         return {}
     
+    def _apply_building_type_adjustments(self, request: ScopeRequest, category_name: str, base_cost_per_sqft: float, num_systems: int = 1) -> float:
+        """Apply building type specific adjustments including service levels and features"""
+        # Check if this is a restaurant
+        if (request.occupancy_type == "restaurant" or 
+            (request.building_mix and "restaurant" in request.building_mix and request.building_mix["restaurant"] >= 0.5)):
+            
+            # Get state code from location
+            state = "NH"  # Default
+            if request.location:
+                # Extract state code from location string
+                location_upper = request.location.upper()
+                state_codes = ["NH", "MA", "NY", "CA", "TX", "FL", "IL", "WA", "OR", "CO"]
+                for code in state_codes:
+                    if code in location_upper:
+                        state = code
+                        break
+            
+            # Get service level (default to full_service if not specified)
+            service_level = getattr(request, 'service_level', 'full_service')
+            
+            # Get base cost for this restaurant type
+            restaurant_base_cost = building_type_service.get_base_cost('restaurant', state, service_level)
+            
+            logger.info(f"[BUILDING TYPE] Restaurant detected - State: {state}, Service: {service_level}, Base Cost: ${restaurant_base_cost}/sf")
+            
+            if restaurant_base_cost > 0:
+                # Get trade allocations for this service level
+                trade_allocations = building_type_service.get_trade_allocations('restaurant', service_level)
+                
+                # Map our category names to trade allocation keys
+                category_mapping = {
+                    'structural': 'structural',
+                    'mechanical': 'mechanical', 
+                    'electrical': 'electrical',
+                    'plumbing': 'plumbing',
+                    'finishes': 'finishes',
+                    'general_conditions': 'general_conditions'
+                }
+                
+                if category_name in category_mapping:
+                    trade_key = category_mapping[category_name]
+                    if trade_key in trade_allocations:
+                        # Calculate the cost for this trade based on total building cost
+                        trade_percentage = trade_allocations[trade_key]
+                        trade_cost_per_sqft = restaurant_base_cost * trade_percentage
+                        
+                        # Add feature costs proportionally
+                        if hasattr(request, 'building_features') and request.building_features:
+                            feature_cost = building_type_service.calculate_feature_costs(
+                                'restaurant', 
+                                request.building_features, 
+                                1.0  # Per square foot
+                            )
+                            # Distribute feature costs proportionally across trades
+                            trade_cost_per_sqft += feature_cost * trade_percentage
+                        
+                        # Divide by number of systems in this category to avoid multiplication
+                        trade_cost_per_sqft = trade_cost_per_sqft / num_systems
+                        
+                        logger.info(f"[BUILDING TYPE] Category: {category_name}, Trade %: {trade_percentage*100:.1f}%, Systems: {num_systems}, Cost/SF: ${trade_cost_per_sqft:.2f}")
+                        return trade_cost_per_sqft
+        
+        # Return original cost if not a restaurant
+        return base_cost_per_sqft
+    
     def _apply_climate_adjustments(self, systems: List[Dict], category: str, climate_zone: ClimateZone) -> List[Dict]:
         adjusted_systems = systems.copy()
         
@@ -430,6 +508,17 @@ class DeterministicScopeEngine:
     def generate_scope(self, request: ScopeRequest) -> ScopeResponse:
         project_id = self._generate_deterministic_id(request)
         cost_multiplier = self._calculate_multiplier(request)
+        
+        # Check if this is a restaurant project to use specialized pricing
+        is_restaurant = (request.occupancy_type == "restaurant" or 
+                        (request.building_mix and "restaurant" in request.building_mix and 
+                         request.building_mix["restaurant"] >= 0.5))
+        
+        if is_restaurant:
+            logger.info(f"[RESTAURANT] Processing restaurant project with service level: {getattr(request, 'service_level', 'full_service')}")
+            
+            # Use specialized restaurant scope service
+            return self._generate_restaurant_scope(request, project_id, cost_multiplier)
         
         categories = []
         
@@ -466,8 +555,12 @@ class DeterministicScopeEngine:
                 if system_copy["name"] == "Roofing" or system_copy["name"] == "Roof Structure":
                     quantity = request.square_footage / request.num_floors
                 
-                # Apply mixed-use adjustments using space type rates
-                if request.project_type == ProjectType.MIXED_USE and request.building_mix:
+                # Apply restaurant or mixed-use adjustments using space type rates
+                if is_restaurant and request.project_type != ProjectType.MIXED_USE:
+                    # For pure restaurant projects, skip the hardcoded space rates
+                    # The building type service will provide the correct rates
+                    pass
+                elif request.project_type == ProjectType.MIXED_USE and request.building_mix:
                     # Calculate weighted average cost based on space mix
                     weighted_rate = 0
                     for space_type, percentage in request.building_mix.items():
@@ -501,7 +594,23 @@ class DeterministicScopeEngine:
                             adjustment_factor = mixed_reqs["watts_per_sqft"] / base_watts_per_sqft
                             system_copy["base_cost_per_sqft"] = system_copy["base_cost_per_sqft"] * adjustment_factor
                 
-                unit_cost = round(system_copy["base_cost_per_sqft"] * cost_multiplier, 2)
+                # Apply building type adjustments (service levels, features)
+                if is_restaurant:
+                    # For restaurants, completely replace the cost with building type service cost
+                    # Pass 0 as base to avoid double-counting
+                    num_systems_in_category = len([s for s in systems if s.get("base_cost_per_sqft", 0) > 0])
+                    # Before adjustment
+                    adjusted_cost_per_sqft = self._apply_building_type_adjustments(
+                        request, category_name, 0, num_systems_in_category
+                    )
+                    # After adjustment
+                else:
+                    # For other building types, adjust the base cost
+                    adjusted_cost_per_sqft = self._apply_building_type_adjustments(
+                        request, category_name, system_copy["base_cost_per_sqft"]
+                    )
+                
+                unit_cost = round(adjusted_cost_per_sqft * cost_multiplier, 2)
                 
                 building_system = BuildingSystem(
                     name=system_copy["name"],
@@ -534,7 +643,13 @@ class DeterministicScopeEngine:
                     'special_requirements': getattr(request, 'special_requirements', ''),
                     'ceiling_height': getattr(request, 'ceiling_height', 10),
                     'location': request.location,  # Critical for V2 engine!
-                    'quality_level': getattr(request, 'quality_level', 'standard')
+                    'quality_level': getattr(request, 'quality_level', 'standard'),
+                    'occupancy_type': getattr(request, 'occupancy_type', ''),
+                    'service_level': getattr(request, 'service_level', 'full_service'),
+                    'request_data': {  # Some services look for request_data
+                        'occupancy_type': getattr(request, 'occupancy_type', ''),
+                        'special_requirements': getattr(request, 'special_requirements', '')
+                    }
                 }
                 
                 if category_name == "electrical":
@@ -552,7 +667,32 @@ class DeterministicScopeEngine:
                         logger.warning(f"Skipping item with zero/negative quantity: {item.get('name', 'Unknown')}")
                         continue
                         
-                    cat_name = item.get('category', category_name.title())
+                    # Use building type service to properly categorize restaurant items
+                    if is_restaurant:
+                        proper_category = building_type_service.categorize_line_item(
+                            item.get('name', ''), 
+                            'restaurant'
+                        )
+                        # Map to proper category name
+                        if proper_category == 'mechanical':
+                            cat_name = 'Mechanical'
+                        elif proper_category == 'electrical':
+                            cat_name = 'Electrical'
+                        elif proper_category == 'plumbing':
+                            cat_name = 'Plumbing'
+                        elif proper_category == 'finishes':
+                            cat_name = 'Finishes'
+                        elif proper_category == 'structural':
+                            cat_name = 'Structural'
+                        else:
+                            cat_name = item.get('category', category_name.title())
+                        
+                        # Debug logging for restaurant categorization
+                        item_name_lower = item.get('name', '').lower()
+                        if any(keyword in item_name_lower for keyword in ['exhaust', 'hood', 'make-up', 'walk-in', 'kitchen', 'grease']):
+                            logger.info(f"Restaurant item categorization: {item.get('name')} -> {proper_category} -> {cat_name}")
+                    else:
+                        cat_name = item.get('category', category_name.title())
                     if cat_name not in category_groups:
                         category_groups[cat_name] = []
                     
@@ -590,14 +730,27 @@ class DeterministicScopeEngine:
                     )
                     categories.append(category)
                 else:
-                    # Create categories for each subcategory
-                    trade_prefix = category_name.title()
-                    for cat_name, systems in category_groups.items():
+                    # For restaurants, consolidate all mechanical/plumbing into main categories
+                    if is_restaurant and category_name in ["mechanical", "plumbing"]:
+                        # Combine all subcategories into the main trade category
+                        all_systems = []
+                        for cat_name, systems in category_groups.items():
+                            all_systems.extend(systems)
+                        
                         category = ScopeCategory(
-                            name=f"{trade_prefix} - {cat_name}" if cat_name != trade_prefix else cat_name,
-                            systems=systems
+                            name=category_name.title(),
+                            systems=all_systems
                         )
                         categories.append(category)
+                    else:
+                        # Create categories for each subcategory
+                        trade_prefix = category_name.title()
+                        for cat_name, systems in category_groups.items():
+                            category = ScopeCategory(
+                                name=f"{trade_prefix} - {cat_name}" if cat_name != trade_prefix else cat_name,
+                                systems=systems
+                            )
+                            categories.append(category)
             else:
                 category = ScopeCategory(
                     name=category_name.title(),
@@ -612,14 +765,47 @@ class DeterministicScopeEngine:
         )
         
         # General conditions percentage based on project size
-        if trade_subtotal < 1000000:
-            gc_percentage = 0.15  # 15% for small projects
-        elif trade_subtotal < 5000000:
-            gc_percentage = 0.10  # 10% for medium projects
-        else:
-            gc_percentage = 0.08  # 8% for large projects
+        gc_percentage = 0.10  # Default
         
-        gc_total = trade_subtotal * gc_percentage
+        # Check if this is a restaurant to use specific GC percentage
+        if (request.occupancy_type == "restaurant" or 
+            (request.building_mix and "restaurant" in request.building_mix and request.building_mix["restaurant"] >= 0.5)):
+            service_level = getattr(request, 'service_level', 'full_service')
+            trade_allocations = building_type_service.get_trade_allocations('restaurant', service_level)
+            if 'general_conditions' in trade_allocations:
+                # For restaurants, GC is already included in the base pricing
+                # So we need to calculate it based on the expected total
+                state = "NH"  # Default
+                if request.location:
+                    location_upper = request.location.upper()
+                    state_codes = ["NH", "MA", "NY", "CA", "TX", "FL", "IL", "WA", "OR", "CO"]
+                    for code in state_codes:
+                        if code in location_upper:
+                            state = code
+                            break
+                
+                restaurant_base_cost = building_type_service.get_base_cost('restaurant', state, service_level)
+                if restaurant_base_cost > 0:
+                    # Add feature costs
+                    if hasattr(request, 'building_features') and request.building_features:
+                        feature_cost = building_type_service.calculate_feature_costs(
+                            'restaurant', request.building_features, 1.0
+                        )
+                        restaurant_base_cost += feature_cost
+                    
+                    expected_total = restaurant_base_cost * request.square_footage
+                    gc_percentage = trade_allocations['general_conditions']
+                    gc_total = expected_total * gc_percentage
+        else:
+            # Non-restaurant: use size-based percentage
+            if trade_subtotal < 1000000:
+                gc_percentage = 0.15  # 15% for small projects
+            elif trade_subtotal < 5000000:
+                gc_percentage = 0.10  # 10% for medium projects
+            else:
+                gc_percentage = 0.08  # 8% for large projects
+            
+            gc_total = trade_subtotal * gc_percentage
         
         # Create general conditions category
         gc_systems = [
@@ -677,6 +863,38 @@ class DeterministicScopeEngine:
             contingency_percentage=contingency
         )
         
+        # Log trade allocations for restaurants
+        if is_restaurant:
+            logger.info("[RESTAURANT TRADE ALLOCATION SUMMARY]")
+            service_level = getattr(request, 'service_level', 'full_service')
+            logger.info(f"Service Level: {service_level}")
+            
+            # Calculate actual trade percentages
+            trade_totals = {}
+            subtotal = 0
+            for category in categories:
+                cat_total = sum(system.total_cost for system in category.systems)
+                trade_totals[category.name] = cat_total
+                subtotal += cat_total
+            
+            logger.info(f"Trade Totals:")
+            for trade, total in trade_totals.items():
+                percentage = (total / subtotal * 100) if subtotal > 0 else 0
+                logger.info(f"  {trade}: ${total:,.0f} ({percentage:.1f}%)")
+            
+            # Log expected allocations
+            expected_allocations = building_type_service.get_trade_allocations('restaurant', service_level)
+            logger.info("Expected Allocations:")
+            for trade, percentage in expected_allocations.items():
+                logger.info(f"  {trade}: {percentage*100:.1f}%")
+            
+            # Log key restaurant items and their categorization
+            logger.info("Key Restaurant Items:")
+            for category in categories:
+                for system in category.systems:
+                    if any(keyword in system.name.lower() for keyword in ['exhaust', 'hood', 'walk-in', 'grease', 'kitchen']):
+                        logger.info(f"  {system.name} -> {category.name} (${system.total_cost:,.0f})")
+        
         # Validate the total cost is within expected ranges
         total_cost = response.total_cost
         cost_per_sf = total_cost / request.square_footage if request.square_footage > 0 else 0
@@ -690,6 +908,123 @@ class DeterministicScopeEngine:
                     f"${valid_range['min']}-${valid_range['max']}/SF for {building_type}"
                 )
                 logger.warning(f"Total cost: ${total_cost:,.0f} for {request.square_footage:,.0f} SF")
+        
+        return response
+    
+    def _generate_restaurant_scope(self, request: ScopeRequest, project_id: str, cost_multiplier: float) -> ScopeResponse:
+        """Generate restaurant-specific scope using the restaurant scope service"""
+        
+        # Extract state from location
+        state = "NH"  # Default
+        if request.location:
+            location_upper = request.location.upper()
+            state_codes = ["NH", "MA", "NY", "CA", "TX", "FL", "IL", "WA", "OR", "CO"]
+            for code in state_codes:
+                if code in location_upper:
+                    state = code
+                    break
+        
+        # Prepare project data for restaurant scope service
+        project_data = {
+            'square_footage': request.square_footage,
+            'state': state,
+            'service_level': getattr(request, 'service_level', 'full_service')
+        }
+        
+        # Generate restaurant-specific scope
+        trade_scopes = restaurant_scope_service.generate_restaurant_scope(project_data)
+        
+        # Convert to ScopeCategory objects
+        categories = []
+        for trade_name, items in trade_scopes.items():
+            # Convert items to BuildingSystem objects
+            building_systems = []
+            for item in items:
+                building_system = BuildingSystem(
+                    name=item['name'],
+                    quantity=item['quantity'],
+                    unit=item['unit'],
+                    unit_cost=round(item['unit_cost'] * cost_multiplier, 2),
+                    total_cost=round(item['total_cost'] * cost_multiplier, 2),
+                    specifications={
+                        'category': item.get('category', trade_name),
+                        'base_cost': item['unit_cost'],
+                        'multiplier': cost_multiplier,
+                        'description': item.get('description', '')
+                    }
+                )
+                building_systems.append(building_system)
+            
+            # Create category with proper name
+            category_names = {
+                'structural': 'Structural',
+                'mechanical': 'Mechanical',
+                'electrical': 'Electrical',
+                'plumbing': 'Plumbing',
+                'finishes': 'Finishes',
+                'general_conditions': 'General Conditions'
+            }
+            
+            category = ScopeCategory(
+                name=category_names.get(trade_name, trade_name.title()),
+                systems=building_systems
+            )
+            categories.append(category)
+        
+        # Create response
+        contingency = self._calculate_contingency_percentage(request)
+        
+        response = ScopeResponse(
+            project_id=project_id,
+            project_name=request.project_name,
+            created_at=datetime.utcnow(),
+            request_data=request,
+            categories=categories,
+            contingency_percentage=contingency
+        )
+        
+        # Log trade allocations
+        logger.info("[RESTAURANT TRADE ALLOCATION SUMMARY]")
+        service_level = getattr(request, 'service_level', 'full_service')
+        logger.info(f"Service Level: {service_level}")
+        
+        # Calculate actual trade percentages
+        trade_totals = {}
+        subtotal = 0
+        for category in categories:
+            cat_total = sum(system.total_cost for system in category.systems)
+            trade_totals[category.name] = cat_total
+            subtotal += cat_total
+        
+        logger.info(f"Trade Totals:")
+        for trade, total in trade_totals.items():
+            percentage = (total / subtotal * 100) if subtotal > 0 else 0
+            logger.info(f"  {trade}: ${total:,.0f} ({percentage:.1f}%)")
+        
+        # Log expected allocations
+        expected_allocations = restaurant_scope_service.trade_allocations.get(service_level, {})
+        logger.info("Expected Allocations:")
+        for trade, percentage in expected_allocations.items():
+            logger.info(f"  {trade}: {percentage*100:.1f}%")
+        
+        # Log key restaurant items
+        logger.info("Key Restaurant Items:")
+        for category in categories:
+            for system in category.systems:
+                if any(keyword in system.name.lower() for keyword in ['exhaust', 'hood', 'walk-in', 'grease', 'kitchen', 'equipment package']):
+                    logger.info(f"  {system.name} -> {category.name} (${system.total_cost:,.0f})")
+        
+        # Validate the total cost
+        total_cost = response.total_cost
+        cost_per_sf = total_cost / request.square_footage if request.square_footage > 0 else 0
+        
+        logger.info(f"Restaurant Total Cost: ${total_cost:,.0f} (${cost_per_sf:.2f}/SF)")
+        
+        # Check if cost is within restaurant range
+        if 300 <= cost_per_sf <= 600:
+            logger.info(f"Cost validation passed: ${cost_per_sf:.2f}/SF is within restaurant range $300-$600/SF")
+        else:
+            logger.warning(f"Cost validation warning: ${cost_per_sf:.2f}/SF is outside restaurant range $300-$600/SF")
         
         return response
     
