@@ -3,6 +3,8 @@ import os
 import re
 from enum import Enum
 from app.core.config import settings
+from app.core.floor_parser import extract_floors
+from app.core.building_type_detector import determine_building_type, get_building_subtype
 
 # Optional imports
 try:
@@ -73,12 +75,20 @@ class NLPService:
             match = pattern.search(text)
             if match:
                 value = match.group(1).replace(',', '')
-                if field in ["square_footage", "floors", "room_count"]:
+                if field in ["square_footage", "room_count"]:
                     extracted[field] = int(value)
+                elif field == "floors":
+                    # Skip pattern matching for floors - use dedicated parser below
+                    continue
                 elif field == "budget":
                     extracted[field] = float(value)
                 elif field == "ceiling_height":
                     extracted[field] = float(value)
+        
+        # Use dedicated floor parser for better accuracy
+        floors = extract_floors(text)
+        if floors > 0:
+            extracted["floors"] = floors
         
         for category, keywords in self.keywords.items():
             if category == "service_levels":
@@ -183,24 +193,27 @@ class NLPService:
     def _fallback_analysis(self, text: str) -> Dict[str, Any]:
         extracted = self.extract_project_details(text)
         
-        # Determine project type with restaurant recognition
-        project_type = "commercial"
-        building_subtype = None
+        # Use centralized building type detection
+        occupancy_type = determine_building_type(text)
+        building_subtype = get_building_subtype(occupancy_type, text) if occupancy_type != 'commercial' else None
         
-        if any(word in text.lower() for word in ["home", "house", "residential", "apartment"]):
-            project_type = "residential"
-        elif any(word in text.lower() for word in ["factory", "warehouse", "industrial"]):
+        print(f"[NLP] Detected {occupancy_type} building type for: {text}")
+        if building_subtype:
+            print(f"[NLP] Building subtype: {building_subtype}")
+        
+        # Determine project type based on occupancy type
+        if occupancy_type == 'warehouse':
             project_type = "industrial"
+        elif occupancy_type in ['healthcare', 'educational', 'restaurant', 'retail', 'office']:
+            project_type = "commercial"
+        elif any(word in text.lower() for word in ["home", "house", "residential", "apartment"]):
+            project_type = "residential"
         elif any(word in text.lower() for word in ["mixed", "multi-use"]):
             project_type = "mixed_use"
-        elif extracted.get("is_restaurant", False):
+        else:
             project_type = "commercial"
-            building_subtype = "restaurant"
         
-        # Determine if it's specifically a restaurant even if not explicitly stated
-        restaurant_indicators = ["commercial kitchen", "dining room", "food service", "bar"]
-        if not building_subtype and sum(1 for ind in restaurant_indicators if ind in text.lower()) >= 2:
-            building_subtype = "restaurant"
+        # Restaurant was already detected by determine_building_type if applicable
         
         quality_level = "standard"
         if any(word in text.lower() for word in ["luxury", "premium", "high-end", "fine dining"]):
@@ -215,6 +228,7 @@ class NLPService:
             "analysis_method": "pattern_matching"
         }
         
+        result["occupancy_type"] = occupancy_type
         if building_subtype:
             result["building_subtype"] = building_subtype
         

@@ -1,6 +1,14 @@
 from typing import Dict, List, Optional, Tuple
 import json
 from datetime import datetime
+from app.core.cost_engine import (
+    calculate_trade_cost, 
+    add_building_specific_items,
+    BUILDING_TYPE_SPECIFICATIONS,
+    BUILDING_COMPLEXITY_FACTORS,
+    REGIONAL_MULTIPLIERS,
+    ScopeItem
+)
 
 
 class CostService:
@@ -299,6 +307,151 @@ class CostService:
                 material_cost["total_cost"] + labor_cost["total_cost"], 2
             )
         }
+    
+    def calculate_trade_cost_v2(
+        self,
+        trade: str,
+        building_type: str,
+        square_footage: float,
+        location: str
+    ) -> Tuple[float, List[Dict[str, any]]]:
+        """
+        Calculate trade cost using the new cost engine with proper hierarchy:
+        1. Base material cost from specifications
+        2. Building type complexity adjustment
+        3. Regional multiplier
+        
+        Returns: (total_cost, list_of_scope_items)
+        """
+        # Extract region from location
+        region = self._extract_region_from_location(location)
+        
+        # Use the new cost engine
+        total_cost, scope_items = calculate_trade_cost(
+            trade=trade,
+            building_type=building_type,
+            square_footage=square_footage,
+            region=region
+        )
+        
+        # Convert ScopeItem objects to dictionaries for JSON serialization
+        scope_items_dict = []
+        for item in scope_items:
+            scope_items_dict.append({
+                'name': item.name,
+                'quantity': item.quantity,
+                'unit': item.unit,
+                'unit_cost': item.unit_cost,
+                'total_cost': item.total_cost,
+                'note': item.note,
+                'category': item.category
+            })
+        
+        return total_cost, scope_items_dict
+    
+    def add_building_specific_items_v2(
+        self,
+        building_type: str,
+        square_footage: float,
+        existing_items: List[Dict[str, any]] = None
+    ) -> List[Dict[str, any]]:
+        """
+        Add building-type specific scope items using the new cost engine
+        """
+        # Convert existing items to ScopeItem objects
+        scope_items = []
+        if existing_items:
+            for item in existing_items:
+                scope_items.append(ScopeItem(
+                    name=item.get('name', ''),
+                    quantity=item.get('quantity', 0),
+                    unit=item.get('unit', ''),
+                    unit_cost=item.get('unit_cost', 0),
+                    total_cost=item.get('total_cost', 0),
+                    note=item.get('note', ''),
+                    category=item.get('category', '')
+                ))
+        
+        # Add building-specific items
+        updated_items = add_building_specific_items(
+            building_type=building_type,
+            scope_items=scope_items,
+            square_footage=square_footage
+        )
+        
+        # Convert back to dictionaries
+        result = []
+        for item in updated_items:
+            result.append({
+                'name': item.name,
+                'quantity': item.quantity,
+                'unit': item.unit,
+                'unit_cost': item.unit_cost,
+                'total_cost': item.total_cost,
+                'note': item.note,
+                'category': item.category
+            })
+        
+        return result
+    
+    def _extract_region_from_location(self, location: str) -> str:
+        """Extract state/region code from location string"""
+        if not location:
+            return "TX"  # Default
+        
+        # Common state codes
+        state_codes = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", 
+                      "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+                      "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+                      "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+                      "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"]
+        
+        location_upper = location.upper()
+        
+        # Check if any state code appears in the location
+        for code in state_codes:
+            if code in location_upper:
+                return code
+        
+        # Check for city names and map to states
+        city_to_state = {
+            "SAN FRANCISCO": "CA",
+            "LOS ANGELES": "CA",
+            "SAN DIEGO": "CA",
+            "SACRAMENTO": "CA",
+            "SEATTLE": "WA",
+            "PORTLAND": "OR",
+            "AUSTIN": "TX",
+            "DALLAS": "TX",
+            "HOUSTON": "TX",
+            "MIAMI": "FL",
+            "DENVER": "CO",
+            "NEW YORK": "NY",
+            "BOSTON": "MA",
+            "CHICAGO": "IL",
+            "ATLANTA": "GA",
+            "PHOENIX": "AZ",
+            "LAS VEGAS": "NV",
+            "PHILADELPHIA": "PA"
+        }
+        
+        for city, state in city_to_state.items():
+            if city in location_upper:
+                return state
+        
+        return "TX"  # Default to Texas
+    
+    def get_available_building_types(self) -> List[str]:
+        """Get list of available building types from the cost engine"""
+        return list(BUILDING_TYPE_SPECIFICATIONS.keys())
+    
+    def get_building_complexity_factors(self, building_type: str) -> Dict[str, float]:
+        """Get complexity factors for a specific building type"""
+        return BUILDING_COMPLEXITY_FACTORS.get(building_type, BUILDING_COMPLEXITY_FACTORS["commercial"])
+    
+    def get_regional_multipliers(self, region: str) -> Dict[str, float]:
+        """Get regional multipliers for a specific region"""
+        return REGIONAL_MULTIPLIERS.get(region, {"structural": 1.0, "mechanical": 1.0, "electrical": 1.0, "plumbing": 1.0, "finishes": 1.0})
 
 
 cost_service = CostService()

@@ -12,6 +12,15 @@ import re
 from app.services.detailed_trade_service import detailed_trade_service
 from app.services.building_type_service import building_type_service
 from app.services.restaurant_scope_service import restaurant_scope_service
+from app.core.cost_engine import (
+    calculate_trade_cost,
+    add_building_specific_items,
+    add_building_specific_mechanical_items,
+    BUILDING_TYPE_SPECIFICATIONS,
+    BUILDING_COMPLEXITY_FACTORS,
+    ScopeItem
+)
+from app.core.building_type_detector import determine_building_type
 
 logger = logging.getLogger(__name__)
 
@@ -508,6 +517,16 @@ class DeterministicScopeEngine:
     def generate_scope(self, request: ScopeRequest) -> ScopeResponse:
         project_id = self._generate_deterministic_id(request)
         cost_multiplier = self._calculate_multiplier(request)
+        
+        # Check if we should use V2 engine for specific building types
+        if hasattr(request, 'occupancy_type') and request.occupancy_type:
+            occupancy_lower = request.occupancy_type.lower()
+            logger.info(f"[SCOPE ENGINE] Occupancy type detected: {occupancy_lower}")
+            
+            # Use V2 engine for educational, healthcare, and warehouse buildings
+            if occupancy_lower in ['educational', 'healthcare', 'warehouse']:
+                logger.info(f"[SCOPE ENGINE] Using V2 engine for {occupancy_lower} building")
+                return self.generate_scope_v2(request)
         
         # Check if this is a restaurant project to use specialized pricing
         is_restaurant = (request.occupancy_type == "restaurant" or 
@@ -1032,6 +1051,279 @@ class DeterministicScopeEngine:
         # Standardized 10% contingency for construction documents phase
         # This ensures consistency across all views and calculations
         return 10.0
+    
+    def generate_scope_v2(self, request: ScopeRequest) -> ScopeResponse:
+        """Generate scope using the new cost engine with proper hierarchy"""
+        project_id = self._generate_deterministic_id(request)
+        
+        # Determine building type
+        building_type = self._determine_building_type(request)
+        
+        # Get location for regional adjustment
+        location = request.location or "TX"
+        region = self._extract_region_from_location(location)
+        
+        categories = []
+        all_scope_items = []
+        
+        # Define trade categories to generate
+        trades = ["structural", "mechanical", "electrical", "plumbing", "finishes"]
+        
+        for trade in trades:
+            # Calculate trade cost using new engine
+            trade_cost, scope_items = calculate_trade_cost(
+                trade=trade,
+                building_type=building_type,
+                square_footage=request.square_footage,
+                region=region,
+                floors=request.num_floors or 1
+            )
+            
+            # Add detailed mechanical items for specific building types
+            if trade == "mechanical":
+                # Get original description if available
+                original_description = getattr(request, 'special_requirements', '') or ''
+                scope_items = add_building_specific_mechanical_items(
+                    scope_items=scope_items,
+                    building_type=building_type,
+                    square_footage=request.square_footage,
+                    floors=request.num_floors or 1,
+                    description=original_description
+                )
+            
+            # Convert ScopeItem objects to BuildingSystem objects
+            building_systems = []
+            for item in scope_items:
+                building_system = BuildingSystem(
+                    name=item.name,
+                    quantity=item.quantity,
+                    unit=item.unit,
+                    unit_cost=item.unit_cost,
+                    total_cost=item.total_cost,
+                    specifications={
+                        'note': item.note,
+                        'category': item.category
+                    }
+                )
+                building_systems.append(building_system)
+                all_scope_items.append(item)
+            
+            # Create category
+            category = ScopeCategory(
+                name=trade.title(),
+                systems=building_systems
+            )
+            categories.append(category)
+        
+        # Add building-specific items
+        additional_items = add_building_specific_items(
+            building_type=building_type,
+            scope_items=all_scope_items,
+            square_footage=request.square_footage,
+            floors=request.num_floors or 1
+        )
+        
+        logger.info(f"[COST ENGINE V2] Adding {len(additional_items)} building-specific items for {building_type}")
+        
+        # Add additional items to appropriate categories
+        for item in additional_items:
+            # Check if this item already exists by name
+            item_exists = any(existing.name == item.name for existing in all_scope_items)
+            if not item_exists:
+                # Find or create category
+                category_found = False
+                for category in categories:
+                    if category.name.lower() == item.category.lower():
+                        building_system = BuildingSystem(
+                            name=item.name,
+                            quantity=item.quantity,
+                            unit=item.unit,
+                            unit_cost=item.unit_cost,
+                            total_cost=item.total_cost,
+                            specifications={'note': item.note}
+                        )
+                        category.systems.append(building_system)
+                        category_found = True
+                        break
+                
+                if not category_found:
+                    # Create new category if needed
+                    category = ScopeCategory(
+                        name=item.category,
+                        systems=[BuildingSystem(
+                            name=item.name,
+                            quantity=item.quantity,
+                            unit=item.unit,
+                            unit_cost=item.unit_cost,
+                            total_cost=item.total_cost,
+                            specifications={'note': item.note}
+                        )]
+                    )
+                    categories.append(category)
+        
+        # Add General Conditions
+        trade_subtotal = sum(
+            sum(system.total_cost for system in category.systems)
+            for category in categories
+        )
+        
+        # General conditions percentage based on project size
+        if trade_subtotal < 1000000:
+            gc_percentage = 0.15  # 15% for small projects
+        elif trade_subtotal < 5000000:
+            gc_percentage = 0.10  # 10% for medium projects
+        else:
+            gc_percentage = 0.08  # 8% for large projects
+        
+        gc_total = trade_subtotal * gc_percentage
+        
+        # Create general conditions category
+        gc_systems = [
+            BuildingSystem(
+                name="Project Management & Supervision",
+                quantity=1,
+                unit="LS",
+                unit_cost=gc_total * 0.30,
+                total_cost=gc_total * 0.30
+            ),
+            BuildingSystem(
+                name="Temporary Facilities & Equipment",
+                quantity=1,
+                unit="LS",
+                unit_cost=gc_total * 0.20,
+                total_cost=gc_total * 0.20
+            ),
+            BuildingSystem(
+                name="Insurance & Bonds",
+                quantity=1,
+                unit="LS",
+                unit_cost=gc_total * 0.25,
+                total_cost=gc_total * 0.25
+            ),
+            BuildingSystem(
+                name="Permits & Fees",
+                quantity=1,
+                unit="LS",
+                unit_cost=gc_total * 0.15,
+                total_cost=gc_total * 0.15
+            ),
+            BuildingSystem(
+                name="Project Closeout & Commissioning",
+                quantity=1,
+                unit="LS",
+                unit_cost=gc_total * 0.10,
+                total_cost=gc_total * 0.10
+            )
+        ]
+        
+        gc_category = ScopeCategory(
+            name="General Conditions",
+            systems=gc_systems
+        )
+        categories.append(gc_category)
+        
+        # Create response
+        contingency = self._calculate_contingency_percentage(request)
+        
+        response = ScopeResponse(
+            project_id=project_id,
+            project_name=request.project_name,
+            created_at=datetime.utcnow(),
+            request_data=request,
+            categories=categories,
+            contingency_percentage=contingency
+        )
+        
+        # Log summary
+        total_cost = response.total_cost
+        cost_per_sf = total_cost / request.square_footage if request.square_footage > 0 else 0
+        
+        logger.info(f"[COST ENGINE V2] Building Type: {building_type}")
+        logger.info(f"[COST ENGINE V2] Region: {region}")
+        logger.info(f"[COST ENGINE V2] Total Cost: ${total_cost:,.0f} (${cost_per_sf:.2f}/SF)")
+        
+        return response
+    
+    def _determine_building_type(self, request: ScopeRequest) -> str:
+        """Determine building type from request"""
+        # Check occupancy type first
+        if hasattr(request, 'occupancy_type') and request.occupancy_type:
+            occupancy_mapping = {
+                'warehouse': 'warehouse',
+                'office': 'office',
+                'retail': 'commercial',
+                'restaurant': 'restaurant',
+                'medical': 'healthcare',
+                'healthcare': 'healthcare',  # Support both 'medical' and 'healthcare'
+                'educational': 'educational',
+                'industrial': 'warehouse'
+            }
+            if request.occupancy_type.lower() in occupancy_mapping:
+                return occupancy_mapping[request.occupancy_type.lower()]
+        
+        # Check project type
+        if request.project_type == ProjectType.INDUSTRIAL:
+            return 'warehouse'
+        elif request.project_type == ProjectType.COMMERCIAL:
+            return 'commercial'
+        elif request.project_type == ProjectType.RESIDENTIAL:
+            return 'office'  # Use office as proxy for residential
+        elif request.project_type == ProjectType.MIXED_USE and request.building_mix:
+            # For mixed use, use the dominant type
+            max_percentage = 0
+            dominant_type = 'commercial'
+            for building_type, percentage in request.building_mix.items():
+                if percentage > max_percentage:
+                    max_percentage = percentage
+                    dominant_type = building_type
+            
+            # Map to our building types
+            type_mapping = {
+                'warehouse': 'warehouse',
+                'office': 'office',
+                'retail': 'commercial',
+                'restaurant': 'restaurant',
+                'industrial': 'warehouse'
+            }
+            return type_mapping.get(dominant_type, 'commercial')
+        
+        return 'commercial'  # Default
+    
+    def _extract_region_from_location(self, location: str) -> str:
+        """Extract state/region code from location string"""
+        if not location:
+            return "TX"  # Default
+        
+        location_upper = location.upper()
+        
+        # Check for state codes
+        import re
+        state_match = re.search(r'\b([A-Z]{2})\b', location_upper)
+        if state_match:
+            state_code = state_match.group(1)
+            # Verify it's a valid state code
+            valid_states = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", 
+                          "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+                          "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+                          "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+                          "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"]
+            if state_code in valid_states:
+                return state_code
+        
+        # Check for city names
+        city_to_state = {
+            "SAN FRANCISCO": "CA", "LOS ANGELES": "CA", "SAN DIEGO": "CA",
+            "SEATTLE": "WA", "PORTLAND": "OR", "AUSTIN": "TX",
+            "DALLAS": "TX", "HOUSTON": "TX", "MIAMI": "FL",
+            "DENVER": "CO", "NEW YORK": "NY", "BOSTON": "MA",
+            "CHICAGO": "IL", "ATLANTA": "GA", "PHOENIX": "AZ"
+        }
+        
+        for city, state in city_to_state.items():
+            if city in location_upper:
+                return state
+        
+        return "TX"  # Default
 
 
 engine = DeterministicScopeEngine()

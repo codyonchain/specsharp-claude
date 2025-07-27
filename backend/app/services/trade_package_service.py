@@ -16,6 +16,9 @@ from PIL import Image as PILImage
 import numpy as np
 from app.services.detailed_trade_service import detailed_trade_service
 from app.services.professional_trade_package import professional_trade_package_service
+from app.services.restaurant_finishes_items import get_restaurant_finishes_items, is_restaurant_project
+from app.services.restaurant_mechanical_items import get_restaurant_mechanical_items
+from app.services.restaurant_structural_items import get_restaurant_structural_items
 
 class TradePackageService:
     def __init__(self):
@@ -24,6 +27,7 @@ class TradePackageService:
             'Plumbing': '#4169E1',    # Royal Blue
             'Mechanical': '#FF4500',  # Orange Red (HVAC)
             'Structural': '#708090',  # Slate Gray
+            'Finishes': '#9370DB',    # Medium Purple
             'General': '#228B22'      # Forest Green
         }
         
@@ -93,7 +97,9 @@ class TradePackageService:
             'electrical': 'Electrical',
             'plumbing': 'Plumbing',
             'hvac': 'Mechanical',
+            'mechanical': 'Mechanical',
             'structural': 'Structural',
+            'finishes': 'Finishes',
             'general': None  # General contractor sees everything
         }
         
@@ -113,6 +119,99 @@ class TradePackageService:
                 cat_name_lower.startswith(f"{target_lower} -") or
                 cat_name_lower.startswith(f"{target_lower}:")):
                 filtered_categories.append(cat)
+        
+        # Special handling for restaurant finishes
+        if trade.lower() == 'finishes' and is_restaurant_project(project_data):
+            # Pass the filtered data with correct finishes budget
+            filtered_project_data = {
+                **project_data,
+                'categories': filtered_categories
+            }
+            # Replace generic finishes with restaurant-specific items
+            restaurant_items = get_restaurant_finishes_items(filtered_project_data)
+            
+            # Create a new finishes category with restaurant items
+            finishes_systems = []
+            for item in restaurant_items:
+                finishes_systems.append({
+                    'name': item['name'],
+                    'quantity': item['quantity'],
+                    'unit': item['unit'],
+                    'unit_cost': item['unit_cost'],
+                    'total_cost': item['total_cost'],
+                    'specifications': {
+                        'category': item.get('category', 'Finishes'),
+                        'description': item.get('description', '')
+                    }
+                })
+            
+            # Replace or add finishes category
+            filtered_categories = [{
+                'name': 'Finishes',
+                'systems': finishes_systems,
+                'subtotal': sum(item['total_cost'] for item in restaurant_items)
+            }]
+        
+        # Special handling for restaurant mechanical
+        if trade.lower() in ['mechanical', 'hvac'] and is_restaurant_project(project_data):
+            # Pass the filtered data with correct mechanical budget
+            filtered_project_data = {
+                **project_data,
+                'categories': filtered_categories
+            }
+            # Replace generic mechanical with restaurant-specific items
+            restaurant_items = get_restaurant_mechanical_items(filtered_project_data)
+            
+            # Create a new mechanical category with restaurant items
+            mechanical_systems = []
+            for item in restaurant_items:
+                mechanical_systems.append({
+                    'name': item['name'],
+                    'quantity': item['quantity'],
+                    'unit': item['unit'],
+                    'unit_cost': item['unit_cost'],
+                    'total_cost': item['total_cost'],
+                    'specifications': {
+                        'category': item.get('category', 'Mechanical'),
+                        'description': item.get('description', '')
+                    }
+                })
+            
+            # Replace or add mechanical category
+            filtered_categories = [{
+                'name': 'Mechanical',
+                'systems': mechanical_systems,
+                'subtotal': sum(item['total_cost'] for item in restaurant_items)
+            }]
+        
+        # Special handling for restaurant structural
+        if trade.lower() == 'structural' and is_restaurant_project(project_data):
+            # Pass the filtered data with correct structural budget
+            filtered_project_data = {
+                **project_data,
+                'categories': filtered_categories
+            }
+            # Replace generic structural with restaurant-specific items
+            restaurant_items = get_restaurant_structural_items(filtered_project_data)
+            
+            # Create a new structural category with restaurant items
+            structural_systems = []
+            for item in restaurant_items:
+                structural_systems.append({
+                    'name': item['name'],
+                    'quantity': item['quantity'],
+                    'unit': item['unit'],
+                    'unit_cost': item['unit_cost'],
+                    'total_cost': item['total_cost'],
+                    'description': item.get('description', '')
+                })
+            
+            # Replace the generic structural category
+            filtered_categories = [{
+                'name': 'Structural',
+                'systems': structural_systems,
+                'subtotal': sum(item['total_cost'] for item in restaurant_items)
+            }]
         
         # Calculate filtered totals
         subtotal = 0
@@ -444,6 +543,16 @@ class TradePackageService:
     
     def _generate_preview_data(self, filtered_data: Dict, trade: str, schematic_image: str) -> Dict:
         """Generate preview data for UI display"""
+        
+        # Check for required fields and add defaults if missing
+        if 'total_cost' not in filtered_data:
+            filtered_data['total_cost'] = 0
+        if 'subtotal' not in filtered_data:
+            filtered_data['subtotal'] = 0
+        if 'contingency_amount' not in filtered_data:
+            filtered_data['contingency_amount'] = 0
+        if 'categories' not in filtered_data:
+            filtered_data['categories'] = []
         
         return {
             'trade': trade,
