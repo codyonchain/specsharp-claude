@@ -26,6 +26,9 @@ class BuildingSystem(BaseModel):
     unit_cost: float = Field(ge=0)
     total_cost: float = Field(ge=0)
     specifications: Dict[str, Any] = {}
+    confidence_score: int = Field(default=95, ge=0, le=100)
+    confidence_label: str = Field(default="High")
+    confidence_factors: Optional[Dict[str, Any]] = None
     
     @validator('total_cost', always=True)
     def calculate_total_cost(cls, v, values):
@@ -48,6 +51,7 @@ class ScopeRequest(BaseModel):
     building_mix: Optional[Dict[str, float]] = None
     service_level: Optional[str] = None  # e.g., "full_service" for restaurants
     building_features: Optional[List[str]] = None  # e.g., ["commercial_kitchen", "full_bar"]
+    unit_mix: Optional[Dict[str, Any]] = None  # For multi-family residential
     
     @validator('building_mix')
     def validate_building_mix(cls, v, values):

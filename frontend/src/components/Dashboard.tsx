@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { scopeService, authService } from '../services/api';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Copy, Settings } from 'lucide-react';
+import { getDisplayBuildingType } from '../utils/buildingTypeDisplay';
+import MarkupSettings from './MarkupSettings';
 import './Dashboard.css';
 
 interface DashboardProps {
@@ -13,6 +15,7 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
   const [loading, setLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<{ projectId: string; name: string } | null>(null);
   const [deleteMessage, setDeleteMessage] = useState<string>('');
+  const [showMarkupSettings, setShowMarkupSettings] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -65,11 +68,36 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
     setDeleteConfirm(null);
   };
 
+  const handleDuplicateClick = async (e: React.MouseEvent, projectId: string, projectName: string) => {
+    e.stopPropagation(); // Prevent navigation to project detail
+    
+    try {
+      const duplicatedProject = await scopeService.duplicateProject(projectId);
+      setDeleteMessage(`Project "${projectName}" duplicated successfully`);
+      
+      // Reload projects
+      loadProjects();
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setDeleteMessage(''), 3000);
+    } catch (error) {
+      console.error('Failed to duplicate project:', error);
+      setDeleteMessage('Failed to duplicate project. Please try again.');
+      setTimeout(() => setDeleteMessage(''), 3000);
+    }
+  };
+
   return (
     <div className="dashboard">
       <header className="dashboard-header">
         <h1>SpecSharp Dashboard</h1>
-        <button onClick={handleLogout} className="logout-btn">Logout</button>
+        <div className="header-actions">
+          <button onClick={() => setShowMarkupSettings(true)} className="settings-btn">
+            <Settings size={20} />
+            Markup Settings
+          </button>
+          <button onClick={handleLogout} className="logout-btn">Logout</button>
+        </div>
       </header>
 
       <div className="dashboard-content">
@@ -102,18 +130,34 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
                   className="project-card"
                   onClick={() => navigate(`/project/${project.project_id}`)}
                 >
-                  <button
-                    className="delete-btn"
-                    onClick={(e) => handleDeleteClick(e, project.project_id, project.name)}
-                    title="Delete project"
-                  >
-                    <Trash2 size={18} />
-                  </button>
+                  <div className="project-actions">
+                    <button
+                      className="duplicate-btn"
+                      onClick={(e) => handleDuplicateClick(e, project.project_id, project.name)}
+                      title="Duplicate project"
+                    >
+                      <Copy size={18} />
+                    </button>
+                    <button
+                      className="delete-btn"
+                      onClick={(e) => handleDeleteClick(e, project.project_id, project.name)}
+                      title="Delete project"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                   <h3>{project.name}</h3>
+                  <p className="project-type">
+                    {getDisplayBuildingType(project.scope_data?.request_data || {
+                      project_type: project.project_type,
+                      occupancy_type: project.occupancy_type || project.building_type
+                    })}
+                  </p>
                   <p>{project.location}</p>
                   <p>{project.square_footage.toLocaleString()} sq ft</p>
                   <p className="project-cost">
                     ${project.total_cost.toLocaleString()}
+                    {project.cost_per_sqft && ` ($${project.cost_per_sqft}/SF)`}
                   </p>
                   <p className="project-date">
                     {new Date(project.created_at).toLocaleDateString()}
@@ -143,6 +187,16 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
           </div>
         </div>
       )}
+
+      {/* Markup Settings Modal */}
+      <MarkupSettings
+        isOpen={showMarkupSettings}
+        onClose={() => setShowMarkupSettings(false)}
+        onSave={() => {
+          // Optionally reload projects to reflect new markup calculations
+          loadProjects();
+        }}
+      />
     </div>
   );
 }

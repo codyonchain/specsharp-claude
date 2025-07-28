@@ -4,6 +4,7 @@ import base64
 from datetime import datetime
 import json
 import csv
+import asyncio
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, PageBreak, KeepTogether
@@ -18,6 +19,7 @@ from matplotlib.patches import Rectangle, FancyBboxPatch, Circle, Arc
 from matplotlib.lines import Line2D
 import numpy as np
 from PIL import Image as PILImage, ImageDraw, ImageFont
+from app.utils.building_type_display import get_display_building_type
 
 
 class ProfessionalTradePackageService:
@@ -29,6 +31,7 @@ class ProfessionalTradePackageService:
             'plumbing': '#4169E1',    # Royal Blue
             'mechanical': '#FF4500',  # Orange Red (HVAC)
             'structural': '#708090',  # Slate Gray
+            'finishes': '#9370DB',    # Medium Purple
             'general': '#228B22'      # Forest Green
         }
         
@@ -38,8 +41,21 @@ class ProfessionalTradePackageService:
             'mechanical': 'Mechanical (HVAC)',
             'hvac': 'Mechanical (HVAC)',
             'structural': 'Structural',
+            'finishes': 'Finishes',
             'general': 'General Contractor'
         }
+    
+    async def generate_professional_pdf_async(self, filtered_data: Dict, trade: str, 
+                                            project_data: Dict, schematic_image: str) -> io.BytesIO:
+        """Generate a professional PDF document asynchronously for the trade package"""
+        # Move CPU-intensive work to a thread pool
+        return await asyncio.to_thread(
+            self.generate_professional_pdf,
+            filtered_data,
+            trade,
+            project_data,
+            schematic_image
+        )
     
     def generate_professional_pdf(self, filtered_data: Dict, trade: str, 
                                  project_data: Dict, schematic_image: str) -> io.BytesIO:
@@ -220,7 +236,7 @@ class ProfessionalTradePackageService:
             [Paragraph("PROJECT INFORMATION", styles['InfoBoxHeading']), ""],
             ["Project Name:", project_data.get('project_name', 'N/A')],
             ["Location:", request_data.get('location', 'N/A')],
-            ["Building Type:", request_data.get('project_type', 'N/A').replace('_', ' ').title()],
+            ["Building Type:", get_display_building_type(request_data)],
             ["Square Footage:", f"{request_data.get('square_footage', 0):,} SF"],
             ["Number of Floors:", str(request_data.get('num_floors', 1))],
             ["", ""],
@@ -962,7 +978,7 @@ class ProfessionalTradePackageService:
             ],
             'plumbing': [
                 ('blue', 'Water Lines'),
-                ('light blue', 'Equipment'),
+                ('lightblue', 'Equipment'),
             ]
         }
         

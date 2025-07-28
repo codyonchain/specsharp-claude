@@ -2,7 +2,10 @@
 Centralized building type detection module
 Ensures consistent detection across backend services
 """
+from functools import lru_cache
 
+
+@lru_cache(maxsize=1000)
 def determine_building_type(description: str) -> str:
     """
     Determine building type from description using priority order.
@@ -12,7 +15,7 @@ def determine_building_type(description: str) -> str:
         description: Natural language description of the building
         
     Returns:
-        Building type: 'healthcare', 'educational', 'restaurant', 'warehouse', 'retail', or 'commercial'
+        Building type: 'multi_family_residential', 'healthcare', 'educational', 'restaurant', 'warehouse', 'retail', 'office', or 'commercial'
     """
     if not description:
         return 'commercial'
@@ -21,16 +24,37 @@ def determine_building_type(description: str) -> str:
     
     # Check in priority order - specific types BEFORE generic
     
-    # 1. Healthcare (FIRST PRIORITY)
+    # 1. Multi-family Residential (HIGHEST PRIORITY)
+    if any(term in description_lower for term in [
+        'apartment', 'apartments', 'condo', 'condominium', 'multi-family',
+        'multifamily', 'multi family', '1br', '2br', '3br',
+        'studio', 'loft', 'duplex', 'triplex', 'fourplex', 'townhome',
+        'townhouse', 'residential complex', 'housing complex', 'senior living',
+        'assisted living', 'affordable housing', 'mixed income', 'luxury rental',
+        'rental property', 'lease', 'amenity', 'amenities',
+        'clubhouse', 'leasing office', 'property management'
+    ]):
+        # Double-check it's not a single-family home or retail tenant
+        if not any(term in description_lower for term in [
+            'single family', 'single-family', 'detached home', 'sfh',
+            'retail tenant', 'strip center', 'strip mall', 'shopping'
+        ]):
+            return 'multi_family_residential'
+    
+    # 2. Healthcare
     if any(term in description_lower for term in [
         'hospital', 'medical', 'healthcare', 'health care', 'clinic', 
         'surgery center', 'surgery', 'surgical', 'patient', 'beds', 
         'operating room', 'or suite', 'emergency', 'emergency department',
-        'imaging', 'radiology', 'laboratory', 'lab', 'pharmacy', 
+        'imaging', 'radiology', 'laboratory', 'lab',
         'rehabilitation', 'rehab', 'urgent care', 'doctor', 'nurse',
         'icu', 'intensive care', 'recovery', 'treatment'
     ]):
-        return 'healthcare'
+        # Don't classify as healthcare if it's just a pharmacy in a retail store
+        if 'pharmacy' in description_lower and any(term in description_lower for term in ['grocery', 'supermarket', 'retail']):
+            pass  # Let it fall through to retail
+        else:
+            return 'healthcare'
     
     # 2. Educational
     if any(term in description_lower for term in [
@@ -41,7 +65,18 @@ def determine_building_type(description: str) -> str:
     ]):
         return 'educational'
     
-    # 3. Restaurant (but not if it's primarily something else)
+    # 3. Hospitality/Hotel
+    if any(term in description_lower for term in [
+        'hotel', 'motel', 'inn', 'resort', 'hospitality',
+        'guest room', 'guest rooms', 'guestroom', 'guestrooms',
+        'lodging', 'accommodation', 'suite', 'suites',
+        'room hotel', 'rooms hotel', 'bed hotel', 'beds hotel',
+        'extended stay', 'boutique hotel', 'conference hotel',
+        'business hotel', 'luxury hotel', 'budget hotel'
+    ]):
+        return 'hospitality'
+    
+    # 4. Restaurant (but not if it's primarily something else)
     # Skip if it's a mall/shopping center food court
     if 'mall' not in description_lower and 'shopping center' not in description_lower:
         if any(term in description_lower for term in [
@@ -59,23 +94,39 @@ def determine_building_type(description: str) -> str:
     ]):
         return 'restaurant'
     
-    # 4. Warehouse
+    # 5. Industrial (highest priority among industrial types)
+    if any(term in description_lower for term in [
+        'industrial', 'manufacturing', 'factory', 'plant',
+        'processing', 'assembly', 'production', 'fabrication',
+        'clean room', 'pharmaceutical', 'pharma', 'biotech',
+        'food processing', 'beverage', 'brewery', 'bottling',
+        'data center', 'server room', 'machine shop', 'foundry'
+    ]):
+        # Don't classify as industrial if it's a grocery/supermarket
+        if any(term in description_lower for term in ['grocery', 'supermarket']):
+            pass  # Let it fall through to retail
+        else:
+            return 'industrial'
+    
+    # 6. Warehouse (generic storage/distribution)
     if any(term in description_lower for term in [
         'warehouse', 'distribution', 'storage', 'logistics',
-        'fulfillment', 'industrial', 'manufacturing', 'factory',
-        'processing', 'assembly', 'production', 'depot'
+        'fulfillment', 'depot', 'distribution center'
     ]):
         return 'warehouse'
     
-    # 5. Retail
-    if any(term in description_lower for term in [
-        'retail', 'store', 'shop', 'mall', 'shopping',
-        'boutique', 'showroom', 'market', 'outlet', 'department store',
-        'convenience store', 'grocery', 'supermarket'
-    ]):
-        return 'retail'
+    # 7. Retail (but be careful with specific keywords)
+    # Skip if it's primarily a restaurant
+    if 'restaurant' not in description_lower:
+        if any(term in description_lower for term in [
+            'retail', 'store', 'shop', 'mall', 'shopping',
+            'boutique', 'showroom', 'market', 'outlet', 'department store',
+            'convenience store', 'grocery', 'supermarket', 'strip center',
+            'strip mall', 'shopping center', 'anchor', 'inline retail'
+        ]):
+            return 'retail'
     
-    # 6. Office (before defaulting to commercial)
+    # 8. Office (before defaulting to commercial)
     if any(term in description_lower for term in [
         'office', 'corporate', 'headquarters', 'workspace',
         'business center', 'professional', 'administrative'
@@ -86,6 +137,7 @@ def determine_building_type(description: str) -> str:
     return 'commercial'
 
 
+@lru_cache(maxsize=1000)
 def get_building_subtype(building_type: str, description: str) -> str:
     """
     Get more specific subtype based on building type and description
@@ -136,5 +188,45 @@ def get_building_subtype(building_type: str, description: str) -> str:
             return 'bar_tavern'
         else:
             return 'full_service'
+    
+    elif building_type == 'industrial':
+        if any(term in description_lower for term in ['clean room', 'pharma', 'pharmaceutical', 'biotech']):
+            return 'clean_room_pharma'
+        elif any(term in description_lower for term in ['food', 'beverage', 'brewery', 'bottling']):
+            return 'food_processing'
+        elif 'data center' in description_lower:
+            return 'data_center'
+        elif any(term in description_lower for term in ['machine shop', 'fabrication', 'metalwork']):
+            return 'machine_shop'
+        else:
+            return 'general_manufacturing'
+    
+    elif building_type == 'hospitality':
+        if any(term in description_lower for term in ['luxury', 'five star', '5 star', 'resort']):
+            return 'luxury_hotel'
+        elif any(term in description_lower for term in ['boutique', 'design hotel']):
+            return 'boutique_hotel'
+        elif any(term in description_lower for term in ['extended stay', 'residence inn']):
+            return 'extended_stay'
+        elif any(term in description_lower for term in ['budget', 'economy', 'motel']):
+            return 'budget_hotel'
+        elif any(term in description_lower for term in ['conference', 'business']):
+            return 'business_hotel'
+        else:
+            return 'standard_hotel'
+    
+    elif building_type == 'retail':
+        if any(term in description_lower for term in ['grocery', 'supermarket', 'food market']):
+            return 'grocery_store'
+        elif any(term in description_lower for term in ['strip center', 'strip mall', 'neighborhood center', 'inline retail']):
+            return 'strip_center'
+        elif any(term in description_lower for term in ['regional mall', 'shopping mall', 'mall']):
+            return 'shopping_mall'
+        elif any(term in description_lower for term in ['big box', 'anchor tenant', 'department store']):
+            return 'big_box'
+        elif any(term in description_lower for term in ['standalone', 'single tenant', 'pad site']):
+            return 'standalone_retail'
+        else:
+            return 'general_retail'
     
     return ''

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { scopeService } from '../services/api';
 import './ScopeGenerator.css';
+import { determineOccupancyType, getProjectTypeFromOccupancy } from '../utils/buildingTypeDetection';
 
 // Temporary type definition
 interface ScopeRequest {
@@ -59,9 +60,9 @@ function ScopeGenerator() {
     
     // First, try to match patterns like "industrial (80%)" or "60% retail"
     const percentagePatterns = [
-      /(warehouse|office|retail|residential|industrial|commercial|manufacturing|facility|restaurant|kitchen|dining)\s*\((\d+)%\)/gi,
-      /(\d+)%\s+(warehouse|office|retail|residential|industrial|commercial|manufacturing|restaurant|kitchen|dining)/gi,
-      /(warehouse|office|retail|residential|industrial|commercial|manufacturing|restaurant|kitchen|dining)\s+(\d+)%/gi
+      /(warehouse|office|retail|residential|industrial|commercial|manufacturing|facility|restaurant|kitchen|dining|school|educational|university|college)\s*\((\d+)%\)/gi,
+      /(\d+)%\s+(warehouse|office|retail|residential|industrial|commercial|manufacturing|restaurant|kitchen|dining|school|educational|university|college)/gi,
+      /(warehouse|office|retail|residential|industrial|commercial|manufacturing|restaurant|kitchen|dining|school|educational|university|college)\s+(\d+)%/gi
     ];
     
     let hasPercentages = false;
@@ -90,6 +91,11 @@ function ScopeGenerator() {
         if (type === 'kitchen' || type === 'dining') {
           type = 'restaurant';
         }
+        // Handle educational-related terms
+        if (type === 'school' || type === 'educational' || type === 'university' || 
+            type === 'college' || type === 'classroom' || type === 'academy') {
+          type = 'educational';
+        }
         
         buildingTypes[type] = percentage;
         totalPercentage += percentage;
@@ -112,6 +118,11 @@ function ScopeGenerator() {
         if (type === 'kitchen' || type === 'dining') {
           type = 'restaurant';
         }
+        // Handle educational-related terms
+        if (type === 'school' || type === 'educational' || type === 'university' || 
+            type === 'college' || type === 'classroom' || type === 'academy') {
+          type = 'educational';
+        }
         // If this type doesn't have a percentage assigned yet
         if (!buildingTypes[type]) {
           buildingTypes[type] = 100 - totalPercentage;
@@ -123,7 +134,7 @@ function ScopeGenerator() {
     
     // If no percentages found, look for building types without percentages
     if (!hasPercentages) {
-      const simpleTypePattern = /(warehouse|office|retail|residential|industrial|commercial|manufacturing|facility|restaurant|kitchen|dining)(?:\s+(?:space|building|area|room))?/gi;
+      const simpleTypePattern = /(warehouse|office|retail|residential|industrial|commercial|manufacturing|facility|restaurant|kitchen|dining|school|educational|university|college|classroom|academy)(?:\s+(?:space|building|area|room|facility))?/gi;
       let typeMatch;
       const foundTypes: string[] = [];
       
@@ -135,6 +146,11 @@ function ScopeGenerator() {
         // Handle restaurant-related terms
         if (type === 'kitchen' || type === 'dining') {
           type = 'restaurant';
+        }
+        // Handle educational-related terms
+        if (type === 'school' || type === 'educational' || type === 'university' || 
+            type === 'college' || type === 'classroom' || type === 'academy') {
+          type = 'educational';
         }
         if (!foundTypes.includes(type)) {
           foundTypes.push(type);
@@ -183,6 +199,7 @@ function ScopeGenerator() {
                             primaryType === 'industrial' ? 'industrial' :
                             primaryType === 'retail' ? 'commercial' :
                             primaryType === 'restaurant' ? 'commercial' :
+                            primaryType === 'educational' ? 'commercial' :
                             primaryType === 'residential' ? 'residential' :
                             'commercial';
         result.occupancy_type = primaryType;
@@ -269,10 +286,71 @@ function ScopeGenerator() {
       }
     }
     
-    // Parse floors
-    const floorMatch = input.match(/(\d+)\s*(floor|story|storey|level)/i);
-    if (floorMatch) {
-      result.num_floors = parseInt(floorMatch[1]);
+    // Parse floors with comprehensive patterns
+    const floorPatterns = [
+      // Pattern 1: "X stories" or "X story" or "X-story"
+      /(\d+)\s*stor(?:ies|ey|y)/i,
+      /(\d+)[-\s]stor(?:ies|ey|y)/i,
+      /(\d+)\s*floor\s*stor(?:ies|ey|y)/i,
+      // Pattern 2: "X floors" or "X floor" or "X-floor"
+      /(\d+)\s*floors?/i,
+      /(\d+)[-\s]floors?/i,
+      /(\d+)\s*floor\s*building/i,
+      // Pattern 3: "X levels" or "X-level"
+      /(\d+)\s*levels?/i,
+      /(\d+)[-\s]levels?/i,
+    ];
+    
+    let floorsFound = false;
+    for (const pattern of floorPatterns) {
+      const match = input.match(pattern);
+      if (match) {
+        result.num_floors = parseInt(match[1]);
+        floorsFound = true;
+        break;
+      }
+    }
+    
+    // Check for word numbers
+    if (!floorsFound) {
+      const wordToNumber: { [key: string]: number } = {
+        'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+        'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
+      };
+      
+      for (const [word, num] of Object.entries(wordToNumber)) {
+        const wordPatterns = [
+          new RegExp(`${word}\\s*stor(?:ies|ey|y)`, 'i'),
+          new RegExp(`${word}[-\\s]stor(?:ies|ey|y)`, 'i'),
+          new RegExp(`${word}\\s*floors?`, 'i'),
+          new RegExp(`${word}[-\\s]floors?`, 'i'),
+        ];
+        
+        for (const pattern of wordPatterns) {
+          if (pattern.test(input)) {
+            result.num_floors = num;
+            floorsFound = true;
+            break;
+          }
+        }
+        if (floorsFound) break;
+      }
+    }
+    
+    // Check for multi-story indicators
+    if (!floorsFound) {
+      const multiPatterns = ['multi-story', 'multistory', 'multi-floor', 'multilevel', 'multi-level'];
+      if (multiPatterns.some(term => input.toLowerCase().includes(term))) {
+        result.num_floors = 2; // Conservative default
+      }
+    }
+    
+    // Check for tall building indicators
+    if (!floorsFound) {
+      const tallPatterns = ['high-rise', 'highrise', 'tower', 'tall building', 'skyscraper'];
+      if (tallPatterns.some(term => input.toLowerCase().includes(term))) {
+        result.num_floors = input.toLowerCase().includes('office') ? 10 : 5;
+      }
     }
     
     // Parse restaurant service levels
@@ -330,6 +408,12 @@ function ScopeGenerator() {
 
   const handleNaturalLanguageSubmit = () => {
     const parsed = parseNaturalLanguage(naturalLanguageInput);
+    
+    // If no occupancy type was detected, use the building type detection utility
+    if (!parsed.occupancy_type) {
+      parsed.occupancy_type = determineOccupancyType(naturalLanguageInput);
+      console.log('Detected occupancy type:', parsed.occupancy_type);
+    }
     
     console.log('Natural language input:', naturalLanguageInput);
     console.log('Parsed result:', parsed);

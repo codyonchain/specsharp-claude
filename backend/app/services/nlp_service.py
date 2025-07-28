@@ -46,6 +46,12 @@ class NLPService:
             "budget": re.compile(r'\$\s*(\d+(?:,\d+)*(?:\.\d{2})?)', re.IGNORECASE),
             "ceiling_height": re.compile(r'(\d+(?:\.\d+)?)\s*(?:ft\.?|feet|foot)\s*(?:ceiling|height)', re.IGNORECASE),
             "room_count": re.compile(r'(\d+)\s*(?:room|office|space)s?', re.IGNORECASE),
+            # Unit mix patterns for multi-family residential
+            "unit_count": re.compile(r'(\d+)\s*(?:unit|apartment|condo|townhome|townhouse)s?', re.IGNORECASE),
+            "studio_units": re.compile(r'(\d+)\s*(?:studio|efficiency)', re.IGNORECASE),
+            "one_bedroom": re.compile(r'(\d+)\s*(?:1\s*br|1\s*bed|one\s*bed|1-bed)', re.IGNORECASE),
+            "two_bedroom": re.compile(r'(\d+)\s*(?:2\s*br|2\s*bed|two\s*bed|2-bed)', re.IGNORECASE),
+            "three_bedroom": re.compile(r'(\d+)\s*(?:3\s*br|3\s*bed|three\s*bed|3-bed)', re.IGNORECASE),
         }
     
     def _initialize_keywords(self) -> Dict[str, List[str]]:
@@ -201,12 +207,20 @@ class NLPService:
         if building_subtype:
             print(f"[NLP] Building subtype: {building_subtype}")
         
+        # Parse unit mix for multi-family residential
+        if occupancy_type == 'multi_family_residential':
+            unit_mix = self.parse_unit_mix(text)
+            extracted["unit_mix"] = unit_mix
+            print(f"[NLP] Parsed unit mix: {unit_mix}")
+        
         # Determine project type based on occupancy type
         if occupancy_type == 'warehouse':
             project_type = "industrial"
+        elif occupancy_type == 'multi_family_residential':
+            project_type = "commercial"  # Multi-family is considered commercial construction
         elif occupancy_type in ['healthcare', 'educational', 'restaurant', 'retail', 'office']:
             project_type = "commercial"
-        elif any(word in text.lower() for word in ["home", "house", "residential", "apartment"]):
+        elif any(word in text.lower() for word in ["home", "house", "single family"]):
             project_type = "residential"
         elif any(word in text.lower() for word in ["mixed", "multi-use"]):
             project_type = "mixed_use"
@@ -258,6 +272,10 @@ class NLPService:
         
         if building_features:
             result["building_features"] = building_features
+        
+        # Add unit mix data if available
+        if extracted.get("unit_mix"):
+            result["unit_mix"] = extracted["unit_mix"]
             
         return result
     
@@ -327,6 +345,136 @@ class NLPService:
             return specifications[system_key].get(quality_level, specifications[system_key]["standard"])
         
         return f"Standard {system_name} installation per local codes"
+    
+    def parse_unit_mix(self, text: str) -> Dict[str, Any]:
+        """
+        Parse unit mix information from natural language descriptions.
+        Examples:
+        - "120 units: 60 1BR, 40 2BR, 20 3BR"
+        - "100 apartments with 50 studios, 30 one-bedroom, 20 two-bedroom"
+        - "50 unit complex"
+        """
+        unit_mix = {
+            "total_units": 0,
+            "unit_breakdown": {},
+            "amenity_spaces": [],
+            "parking_spaces": 0,
+            "average_unit_size": None
+        }
+        
+        # Extract total unit count
+        unit_match = self.patterns["unit_count"].search(text)
+        if unit_match:
+            unit_mix["total_units"] = int(unit_match.group(1))
+        
+        # Extract specific unit types
+        unit_types = {
+            "studio": self.patterns["studio_units"],
+            "1BR": self.patterns["one_bedroom"],
+            "2BR": self.patterns["two_bedroom"],
+            "3BR": self.patterns["three_bedroom"]
+        }
+        
+        for unit_type, pattern in unit_types.items():
+            match = pattern.search(text)
+            if match:
+                count = int(match.group(1))
+                unit_mix["unit_breakdown"][unit_type] = count
+        
+        # Parse unit mix in format "X units: Y 1BR, Z 2BR"
+        mix_pattern = re.compile(r'(\d+)\s*units?[:\s]+(.+)', re.IGNORECASE)
+        mix_match = mix_pattern.search(text)
+        if mix_match:
+            total = int(mix_match.group(1))
+            unit_mix["total_units"] = total
+            breakdown_text = mix_match.group(2)
+            
+            # Parse breakdown like "60 1BR, 40 2BR, 20 3BR"
+            breakdown_pattern = re.compile(r'(\d+)\s*(?:x\s*)?(\w+)', re.IGNORECASE)
+            for match in breakdown_pattern.finditer(breakdown_text):
+                count = int(match.group(1))
+                unit_type = match.group(2).upper()
+                # Normalize unit type
+                if 'STUDIO' in unit_type or 'EFF' in unit_type:
+                    unit_type = 'studio'
+                elif '1' in unit_type or 'ONE' in unit_type:
+                    unit_type = '1BR'
+                elif '2' in unit_type or 'TWO' in unit_type:
+                    unit_type = '2BR'
+                elif '3' in unit_type or 'THREE' in unit_type:
+                    unit_type = '3BR'
+                elif '4' in unit_type or 'FOUR' in unit_type:
+                    unit_type = '4BR'
+                
+                if unit_type in ['studio', '1BR', '2BR', '3BR', '4BR']:
+                    unit_mix["unit_breakdown"][unit_type] = count
+        
+        # Extract parking information
+        parking_pattern = re.compile(r'(\d+)\s*(?:parking|space|stall)s?', re.IGNORECASE)
+        parking_match = parking_pattern.search(text)
+        if parking_match:
+            unit_mix["parking_spaces"] = int(parking_match.group(1))
+        
+        # Extract amenity spaces
+        amenities = []
+        amenity_keywords = {
+            "clubhouse": ["clubhouse", "club house", "community center"],
+            "fitness_center": ["gym", "fitness", "exercise", "workout"],
+            "pool": ["pool", "swimming"],
+            "business_center": ["business center", "office center", "co-working"],
+            "leasing_office": ["leasing office", "management office", "rental office"],
+            "laundry": ["laundry", "washer", "dryer"],
+            "storage": ["storage", "locker"],
+            "playground": ["playground", "play area"],
+            "dog_park": ["dog park", "pet area", "bark park"],
+            "lounge": ["lounge", "social room", "party room"],
+            "rooftop_deck": ["rooftop", "roof deck", "sky deck"]
+        }
+        
+        for amenity, keywords in amenity_keywords.items():
+            if any(keyword in text.lower() for keyword in keywords):
+                amenities.append(amenity)
+        
+        unit_mix["amenity_spaces"] = amenities
+        
+        # Calculate average unit size if not provided
+        if unit_mix["unit_breakdown"]:
+            # Default unit sizes (can be overridden by user input)
+            default_sizes = {
+                "studio": 500,
+                "1BR": 750,
+                "2BR": 1000,
+                "3BR": 1400,
+                "4BR": 1800
+            }
+            
+            total_sf = 0
+            total_units = 0
+            for unit_type, count in unit_mix["unit_breakdown"].items():
+                if unit_type in default_sizes:
+                    total_sf += default_sizes[unit_type] * count
+                    total_units += count
+            
+            if total_units > 0:
+                unit_mix["average_unit_size"] = total_sf // total_units
+        
+        # If we didn't get a unit breakdown but have total units, 
+        # assume a typical mix
+        if unit_mix["total_units"] > 0 and not unit_mix["unit_breakdown"]:
+            total = unit_mix["total_units"]
+            # Typical apartment mix: 20% studio, 40% 1BR, 30% 2BR, 10% 3BR
+            unit_mix["unit_breakdown"] = {
+                "studio": int(total * 0.2),
+                "1BR": int(total * 0.4),
+                "2BR": int(total * 0.3),
+                "3BR": int(total * 0.1)
+            }
+            # Adjust for rounding
+            calculated_total = sum(unit_mix["unit_breakdown"].values())
+            if calculated_total < total:
+                unit_mix["unit_breakdown"]["1BR"] += total - calculated_total
+        
+        return unit_mix
 
 
 nlp_service = NLPService()

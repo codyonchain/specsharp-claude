@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
-from app.api.endpoints import scope, cost, floor_plan, auth, trade_package, comparison
+from app.api.endpoints import scope, cost, floor_plan, auth, trade_package, comparison, markup, excel_export
 from app.db.database import engine, Base
 
 
@@ -33,6 +33,8 @@ app.include_router(cost.router, prefix="/api/v1/cost", tags=["cost"])
 app.include_router(floor_plan.router, prefix="/api/v1/floor-plan", tags=["floor-plan"])
 app.include_router(trade_package.router, prefix="/api/v1/trade-package", tags=["trade-package"])
 app.include_router(comparison.router, prefix="/api/v1/comparison", tags=["comparison"])
+app.include_router(markup.router, prefix="/api/v1/markup", tags=["markup"])
+app.include_router(excel_export.router, prefix="/api/v1/excel", tags=["excel"])
 
 
 @app.get("/")

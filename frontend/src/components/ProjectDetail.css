@@ -312,6 +312,60 @@
   margin-top: 2rem;
 }
 
+/* Excel Export Styles */
+.header-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.export-excel-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background-color: #10b981;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.export-excel-btn:hover {
+  background-color: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.trade-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.trade-excel-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background-color: #10b981;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.trade-excel-btn:hover {
+  background-color: #059669;
+  transform: translateY(-1px);
+}
+
 .trade-summaries {
   display: grid;
   gap: 1rem;
@@ -436,6 +490,35 @@
 .category-details td {
   padding: 0.5rem;
   border-bottom: 1px solid #f0f0f0;
+}
+
+/* Confidence Badges */
+.confidence-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  display: inline-block;
+  cursor: help;
+}
+
+.confidence-high {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #4caf50;
+}
+
+.confidence-medium {
+  background-color: #fff3e0;
+  color: #f57c00;
+  border: 1px solid #ff9800;
+}
+
+.confidence-low {
+  background-color: #ffebee;
+  color: #c62828;
+  border: 1px solid #f44336;
 }
 
 @media (max-width: 768px) {

@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { scopeService, costService } from '../services/api';
+import { scopeService, costService, excelService } from '../services/api';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import ArchitecturalFloorPlan from './ArchitecturalFloorPlan';
 import ProfessionalFloorPlan from './ProfessionalFloorPlan';
 import TradePackageModal from './TradePackageModal';
 import ComparisonTool from './ComparisonTool';
-import { Package, Sliders, ChevronDown, ChevronUp } from 'lucide-react';
+import { Package, Sliders, ChevronDown, ChevronUp, FileSpreadsheet, Download } from 'lucide-react';
+import { getDisplayBuildingType } from '../utils/buildingTypeDisplay';
 import './ProjectDetail.css';
 
 type TradeType = 'all' | 'structural' | 'mechanical' | 'electrical' | 'plumbing' | 'finishes' | 'general_conditions';
@@ -195,6 +196,47 @@ function ProgressiveProjectDetail() {
     setShowTradePackageModal(true);
   };
 
+  // Excel export handlers
+  const handleExportFullProject = async () => {
+    try {
+      const response = await excelService.exportProject(project.project_id);
+      const blob = new Blob([response.data], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${project.project_name.replace(/\s+/g, '_')}_estimate.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export Excel:', error);
+      alert('Failed to export Excel file. Please try again.');
+    }
+  };
+
+  const handleExportTrade = async (tradeName: string) => {
+    try {
+      const response = await excelService.exportTrade(project.project_id, tradeName);
+      const blob = new Blob([response.data], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${project.project_name.replace(/\s+/g, '_')}_${tradeName}_package.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export trade Excel:', error);
+      alert('Failed to export trade Excel file. Please try again.');
+    }
+  };
+
   if (loading) {
     return <div className="loading">Loading project details...</div>;
   }
@@ -214,13 +256,23 @@ function ProgressiveProjectDetail() {
           ← Back to Dashboard
         </button>
         <h1>{project.project_name}</h1>
-        <button 
-          className="compare-scenarios-btn"
-          onClick={() => setShowComparisonTool(true)}
-        >
-          <Sliders size={18} />
-          Compare Scenarios
-        </button>
+        <div className="header-actions">
+          <button 
+            className="export-excel-btn"
+            onClick={handleExportFullProject}
+            title="Export full project to Excel"
+          >
+            <FileSpreadsheet size={18} />
+            Export Excel
+          </button>
+          <button 
+            className="compare-scenarios-btn"
+            onClick={() => setShowComparisonTool(true)}
+          >
+            <Sliders size={18} />
+            Compare Scenarios
+          </button>
+        </div>
       </header>
 
       {project.floor_plan && (
@@ -260,13 +312,23 @@ function ProgressiveProjectDetail() {
             ))}
           </div>
           {selectedTrade !== 'all' && (
-            <button 
-              className="trade-package-btn"
-              onClick={() => openTradePackageModal(selectedTrade)}
-            >
-              <Package size={16} />
-              Generate {TRADE_DISPLAY_NAMES[selectedTrade]} Package
-            </button>
+            <div className="trade-actions">
+              <button 
+                className="trade-excel-btn"
+                onClick={() => handleExportTrade(selectedTrade)}
+                title="Export to Excel"
+              >
+                <FileSpreadsheet size={16} />
+                Excel
+              </button>
+              <button 
+                className="trade-package-btn"
+                onClick={() => openTradePackageModal(selectedTrade)}
+              >
+                <Package size={16} />
+                Generate {TRADE_DISPLAY_NAMES[selectedTrade]} Package
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -282,7 +344,7 @@ function ProgressiveProjectDetail() {
               </div>
               <div className="summary-item">
                 <label>Type</label>
-                <span>{project.request_data.project_type}</span>
+                <span>{getDisplayBuildingType(project.request_data)}</span>
               </div>
               <div className="summary-item">
                 <label>Square Footage</label>

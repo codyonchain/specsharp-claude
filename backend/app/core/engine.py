@@ -523,8 +523,8 @@ class DeterministicScopeEngine:
             occupancy_lower = request.occupancy_type.lower()
             logger.info(f"[SCOPE ENGINE] Occupancy type detected: {occupancy_lower}")
             
-            # Use V2 engine for educational, healthcare, and warehouse buildings
-            if occupancy_lower in ['educational', 'healthcare', 'warehouse']:
+            # Use V2 engine for educational, healthcare, warehouse, industrial, hospitality, retail, and multi-family residential buildings
+            if occupancy_lower in ['educational', 'healthcare', 'warehouse', 'industrial', 'multi_family_residential', 'hospitality', 'retail']:
                 logger.info(f"[SCOPE ENGINE] Using V2 engine for {occupancy_lower} building")
                 return self.generate_scope_v2(request)
         
@@ -1076,7 +1076,8 @@ class DeterministicScopeEngine:
                 building_type=building_type,
                 square_footage=request.square_footage,
                 region=region,
-                floors=request.num_floors or 1
+                floors=request.num_floors or 1,
+                location=location
             )
             
             # Add detailed mechanical items for specific building types
@@ -1103,7 +1104,10 @@ class DeterministicScopeEngine:
                     specifications={
                         'note': item.note,
                         'category': item.category
-                    }
+                    },
+                    confidence_score=item.confidence_score,
+                    confidence_label=item.confidence_label,
+                    confidence_factors=item.confidence_factors
                 )
                 building_systems.append(building_system)
                 all_scope_items.append(item)
@@ -1256,7 +1260,10 @@ class DeterministicScopeEngine:
                 'medical': 'healthcare',
                 'healthcare': 'healthcare',  # Support both 'medical' and 'healthcare'
                 'educational': 'educational',
-                'industrial': 'warehouse'
+                'industrial': 'industrial',
+                'multi_family_residential': 'multi_family_residential',
+                'hospitality': 'hospitality',
+                'retail': 'retail'
             }
             if request.occupancy_type.lower() in occupancy_mapping:
                 return occupancy_mapping[request.occupancy_type.lower()]

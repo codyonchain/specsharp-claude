@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard';
 import ScopeGenerator from './components/ScopeGenerator';
 import ProjectDetail from './components/ProjectDetail';
 import ProgressiveProjectDetail from './components/ProgressiveProjectDetail';
+import { HomePage } from './pages/HomePage';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -59,7 +60,18 @@ function App() {
               <Navigate to="/login" />
             } 
           />
-          <Route path="/" element={<Navigate to="/dashboard" />} />
+          {/* Public homepage */}
+          <Route path="/" element={<HomePage />} />
+          
+          {/* App routes - redirect to appropriate page based on auth */}
+          <Route 
+            path="/app" 
+            element={
+              isAuthenticated ? 
+              <Navigate to="/dashboard" /> : 
+              <Navigate to="/login" />
+            } 
+          />
         </Routes>
       </div>
     </Router>

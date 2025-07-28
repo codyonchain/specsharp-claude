@@ -8,7 +8,9 @@ import ProfessionalFloorPlan from './ProfessionalFloorPlan';
 import TradePackageModal from './TradePackageModal';
 import ComparisonTool from './ComparisonTool';
 import TradeSummary from './TradeSummary';
-import { Package, Sliders } from 'lucide-react';
+import { Package, Sliders, FileSpreadsheet, Download } from 'lucide-react';
+import { getDisplayBuildingType as getDisplayBuildingTypeUtil } from '../utils/buildingTypeDisplay';
+import { excelService } from '../services/api';
 import './ProjectDetail.css';
 
 type TradeType = 'electrical' | 'plumbing' | 'hvac' | 'structural' | 'general';
@@ -74,6 +76,45 @@ function ProjectDetail() {
     setShowTradePackageModal(true);
   };
 
+  // Excel export handlers
+  const handleExportFullProject = async () => {
+    try {
+      const response = await excelService.exportProject(project.project_id);
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${project.project_name}_estimate.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export Excel:', error);
+      alert('Failed to export Excel file. Please try again.');
+    }
+  };
+
+  const handleExportTrade = async (tradeName: string) => {
+    try {
+      const response = await excelService.exportTrade(project.project_id, tradeName);
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${project.project_name}_${tradeName}_package.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export trade Excel:', error);
+      alert('Failed to export trade Excel file. Please try again.');
+    }
+  };
+
   if (loading) {
     return <div className="loading">Loading project details...</div>;
   }
@@ -84,63 +125,7 @@ function ProjectDetail() {
 
   // Get display-friendly building type
   const getDisplayBuildingType = () => {
-    const requestData = project.request_data;
-    const occupancyType = requestData.occupancy_type?.toLowerCase();
-    
-    // For specific building types, always show their actual type
-    if (occupancyType === 'healthcare') {
-      return 'Healthcare';
-    }
-    
-    if (occupancyType === 'educational') {
-      return 'Educational';
-    }
-    
-    if (occupancyType === 'retail') {
-      return 'Retail';
-    }
-    
-    if (occupancyType === 'office') {
-      return 'Office';
-    }
-    
-    // Check if this is a restaurant
-    if (occupancyType === 'restaurant' || 
-        (requestData.building_mix && requestData.building_mix.restaurant >= 0.5)) {
-      // Get service level if available
-      const serviceLevel = requestData.service_level || 'full_service';
-      const displayLevel = serviceLevel.replace('_', ' ')
-        .split(' ')
-        .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
-      return `Restaurant - ${displayLevel}`;
-    }
-    
-    // For mixed use warehouse/office
-    if (occupancyType === 'warehouse' && requestData.building_mix && requestData.building_mix.office) {
-      const officePercent = Math.round(requestData.building_mix.office * 100);
-      const warehousePercent = 100 - officePercent;
-      return `Mixed Use (${warehousePercent}% Warehouse, ${officePercent}% Office)`;
-    }
-    
-    // For pure warehouse
-    if (occupancyType === 'warehouse') {
-      return 'Warehouse';
-    }
-    
-    // For mixed use projects
-    if (requestData.project_type === 'mixed_use' && requestData.building_mix) {
-      const types = Object.entries(requestData.building_mix)
-        .map(([type, percentage]) => `${Math.round(percentage * 100)}% ${type.charAt(0).toUpperCase() + type.slice(1)}`)
-        .join(', ');
-      return `Mixed Use (${types})`;
-    }
-    
-    // Default to formatted project type
-    return requestData.project_type.replace('_', ' ')
-      .split(' ')
-      .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
+    return getDisplayBuildingTypeUtil(project.request_data);
   };
 
   // Filter categories based on selected trade
@@ -198,13 +183,23 @@ function ProjectDetail() {
           ← Back to Dashboard
         </button>
         <h1>{project.project_name}</h1>
-        <button 
-          className="compare-scenarios-btn"
-          onClick={() => setShowComparisonTool(true)}
-        >
-          <Sliders size={18} />
-          Compare Scenarios
-        </button>
+        <div className="header-actions">
+          <button 
+            className="export-excel-btn"
+            onClick={handleExportFullProject}
+            title="Export full project to Excel"
+          >
+            <FileSpreadsheet size={18} />
+            Export Excel
+          </button>
+          <button 
+            className="compare-scenarios-btn"
+            onClick={() => setShowComparisonTool(true)}
+          >
+            <Sliders size={18} />
+            Compare Scenarios
+          </button>
+        </div>
       </header>
 
       {project.floor_plan && (
@@ -259,13 +254,23 @@ function ProjectDetail() {
             </button>
           </div>
           {selectedTrade !== 'general' && (
-            <button 
-              className="trade-package-btn"
-              onClick={() => openTradePackageModal(selectedTrade)}
-            >
-              <Package size={16} />
-              Generate {TRADE_CATEGORY_MAP[selectedTrade]} Package
-            </button>
+            <div className="trade-actions">
+              <button 
+                className="trade-excel-btn"
+                onClick={() => handleExportTrade(selectedTrade)}
+                title="Export to Excel"
+              >
+                <FileSpreadsheet size={16} />
+                Excel
+              </button>
+              <button 
+                className="trade-package-btn"
+                onClick={() => openTradePackageModal(selectedTrade)}
+              >
+                <Package size={16} />
+                Generate {TRADE_CATEGORY_MAP[selectedTrade]} Package
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -301,6 +306,19 @@ function ProjectDetail() {
             </div>
           </div>
         </div>
+
+        {/* Alert for multi-story buildings without elevators */}
+        {project.request_data.num_floors > 1 && 
+         project.request_data.occupancy_type === 'healthcare' &&
+         !project.categories.some((cat: any) => 
+           cat.name === 'Mechanical' && 
+           cat.systems.some((sys: any) => sys.name.toLowerCase().includes('elevator'))
+         ) && (
+          <div className="info-message" style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#fff3cd', border: '1px solid #ffeaa7', borderRadius: '4px' }}>
+            <strong>Note:</strong> This project was generated before elevator calculations were added. 
+            Consider regenerating the scope for updated mechanical systems including elevators.
+          </div>
+        )}
 
         <div className="cost-breakdown">
           <h2>Cost Breakdown</h2>
@@ -370,6 +388,7 @@ function ProjectDetail() {
                       <th>Unit</th>
                       <th>Unit Cost</th>
                       <th>Total Cost</th>
+                      <th>Confidence</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -380,6 +399,14 @@ function ProjectDetail() {
                         <td>{system.unit}</td>
                         <td>${system.unit_cost.toFixed(2)}</td>
                         <td>${system.total_cost.toLocaleString()}</td>
+                        <td>
+                          <span 
+                            className={`confidence-badge confidence-${system.confidence_label?.toLowerCase() || 'high'}`}
+                            title={`Confidence Score: ${system.confidence_score || 95}%`}
+                          >
+                            {system.confidence_label || 'High'}
+                          </span>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -402,6 +429,7 @@ function ProjectDetail() {
                       <th>Unit</th>
                       <th>Unit Cost</th>
                       <th>Total Cost</th>
+                      <th>Confidence</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -412,6 +440,14 @@ function ProjectDetail() {
                         <td>{system.unit}</td>
                         <td>${system.unit_cost.toFixed(2)}</td>
                         <td>${system.total_cost.toLocaleString()}</td>
+                        <td>
+                          <span 
+                            className={`confidence-badge confidence-${system.confidence_label?.toLowerCase() || 'high'}`}
+                            title={`Confidence Score: ${system.confidence_score || 95}%`}
+                          >
+                            {system.confidence_label || 'High'}
+                          </span>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -423,6 +459,18 @@ function ProjectDetail() {
 
         <div className="project-footer">
           <div className="footer-summary">
+            {project.markup_summary && (
+              <>
+                <div>
+                  <label>Base Cost:</label>
+                  <span>${project.markup_summary.total_base_cost?.toLocaleString() || project.base_subtotal?.toLocaleString() || filteredTotals.subtotal.toLocaleString()}</span>
+                </div>
+                <div>
+                  <label>Markup ({project.markup_summary.average_markup_percent?.toFixed(1) || 0}%):</label>
+                  <span>${project.markup_summary.total_markup?.toLocaleString() || 0}</span>
+                </div>
+              </>
+            )}
             <div>
               <label>Subtotal:</label>
               <span>${filteredTotals.subtotal.toLocaleString()}</span>

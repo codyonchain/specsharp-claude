@@ -8,6 +8,8 @@ from app.core.engine import engine as scope_engine
 from app.services.floor_plan_service import floor_plan_service
 from app.services.architectural_floor_plan_service import architectural_floor_plan_service
 from app.services.trade_summary_service import trade_summary_service
+from app.services.markup_service import markup_service
+from app.services.nlp_service import nlp_service
 from app.db.database import get_db
 from app.db.models import Project
 from app.api.endpoints.auth import get_current_user
@@ -26,6 +28,20 @@ async def generate_scope(
         logger = logging.getLogger(__name__)
         logger.error(f"=== SCOPE GENERATION STARTED ===")
         logger.error(f"Request data: {request.model_dump()}")
+        
+        # If occupancy_type is not set or is default, detect from special_requirements
+        if (request.occupancy_type == "office" or not request.occupancy_type) and request.special_requirements:
+            nlp_result = nlp_service._fallback_analysis(request.special_requirements)
+            detected_occupancy = nlp_result.get('occupancy_type')
+            if detected_occupancy and detected_occupancy != 'commercial':
+                request.occupancy_type = detected_occupancy
+                logger.error(f"[NLP] Updated occupancy_type to: {detected_occupancy}")
+                
+                # Also extract unit mix if multi-family residential
+                if detected_occupancy == 'multi_family_residential' and nlp_result.get('unit_mix'):
+                    # Store unit mix data in request for later use
+                    if not hasattr(request, 'unit_mix'):
+                        request.unit_mix = nlp_result['unit_mix']
         
         scope_response = scope_engine.generate_scope(request)
         
@@ -57,18 +73,31 @@ async def generate_scope(
         scope_response_dict = scope_response.model_dump()
         scope_response_dict['trade_summaries'] = scope_dict['trade_summaries']
         
+        # Apply markups to the scope
+        scope_response_dict = markup_service.apply_markup_to_scope(
+            scope_response_dict,
+            db,
+            current_user["id"],
+            None  # No project ID yet as we're creating new
+        )
+        
         # Always create a new project with unique ID
         db_project = Project(
             project_id=scope_response.project_id,
             name=request.project_name,
+            description=request.special_requirements,  # Store the original input description
             project_type=request.project_type.value,
+            building_type=request.occupancy_type,  # Store specific building type
+            occupancy_type=request.occupancy_type,
             square_footage=request.square_footage,
             location=request.location,
             climate_zone=request.climate_zone.value if request.climate_zone else None,
             num_floors=request.num_floors,
             ceiling_height=request.ceiling_height,
-            total_cost=scope_response.total_cost,
+            total_cost=scope_response_dict.get('total_cost', scope_response.total_cost),
+            cost_per_sqft=scope_response_dict.get('cost_per_sqft', scope_response.cost_per_sqft),
             scope_data=json.dumps(scope_response_dict, default=str),  # Save complete data including trade summaries
+            cost_data=json.dumps(scope_response.cost_breakdown, default=str) if hasattr(scope_response, 'cost_breakdown') else None,
             user_id=current_user["id"]
         )
         
@@ -104,10 +133,15 @@ async def list_projects(
             "project_id": p.project_id,
             "name": p.name,
             "project_type": p.project_type,
+            "building_type": p.building_type,
+            "occupancy_type": p.occupancy_type,
+            "description": p.description,
             "square_footage": p.square_footage,
             "location": p.location,
             "total_cost": p.total_cost,
-            "created_at": p.created_at
+            "cost_per_sqft": p.cost_per_sqft,
+            "created_at": p.created_at,
+            "scope_data": json.loads(p.scope_data) if p.scope_data else {}
         }
         for p in projects
     ]
@@ -235,6 +269,60 @@ async def recalculate_project(
     db.commit()
     
     return new_scope_response
+
+
+@router.post("/projects/{project_id}/duplicate")
+async def duplicate_project(
+    project_id: str,
+    duplicate_name: str = None,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Duplicate an existing project"""
+    # Find the original project
+    original_project = db.query(Project).filter(
+        Project.project_id == project_id,
+        Project.user_id == current_user["id"]
+    ).first()
+    
+    if not original_project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Generate a new unique project ID
+    import uuid
+    new_project_id = str(uuid.uuid4())[:8]
+    
+    # Create the duplicate
+    duplicate = Project(
+        project_id=new_project_id,
+        name=duplicate_name or f"{original_project.name} (Copy)",
+        description=original_project.description,
+        project_type=original_project.project_type,
+        building_type=original_project.building_type,
+        occupancy_type=original_project.occupancy_type,
+        square_footage=original_project.square_footage,
+        location=original_project.location,
+        climate_zone=original_project.climate_zone,
+        num_floors=original_project.num_floors,
+        ceiling_height=original_project.ceiling_height,
+        total_cost=original_project.total_cost,
+        cost_per_sqft=original_project.cost_per_sqft,
+        scope_data=original_project.scope_data,
+        cost_data=original_project.cost_data,
+        user_id=current_user["id"]
+    )
+    
+    db.add(duplicate)
+    db.commit()
+    db.refresh(duplicate)
+    
+    # Return the new project data
+    scope_data = json.loads(duplicate.scope_data)
+    # Update the project_id in the response
+    scope_data['project_id'] = new_project_id
+    scope_data['project_name'] = duplicate.name
+    
+    return scope_data
 
 
 @router.get("/debug/electrical/{project_id}")

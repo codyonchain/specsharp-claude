@@ -84,6 +84,13 @@ export const scopeService = {
     const response = await api.delete(`/scope/projects/${projectId}`);
     return response.data;
   },
+
+  duplicateProject: async (projectId: string, name?: string) => {
+    const response = await api.post(`/scope/projects/${projectId}/duplicate`, {
+      duplicate_name: name
+    });
+    return response.data;
+  },
 };
 
 export const costService = {
@@ -113,6 +120,55 @@ export const floorPlanService = {
   getFloorPlan: async (floorPlanId: string) => {
     const response = await api.get(`/floor-plan/plans/${floorPlanId}`);
     return response.data;
+  },
+};
+
+export const markupService = {
+  getUserSettings: async () => {
+    const response = await api.get('/markup/user/settings');
+    return response.data;
+  },
+
+  updateUserSettings: async (settings: any) => {
+    const response = await api.put('/markup/user/settings', settings);
+    return response.data;
+  },
+
+  getProjectOverrides: async (projectId: string) => {
+    const response = await api.get(`/markup/project/${projectId}/overrides`);
+    return response.data;
+  },
+
+  updateProjectOverrides: async (projectId: string, overrides: any) => {
+    const response = await api.put(`/markup/project/${projectId}/overrides`, overrides);
+    return response.data;
+  },
+
+  applyMarkupsToProject: async (projectId: string) => {
+    const response = await api.post(`/markup/project/${projectId}/apply-markups`);
+    return response.data;
+  },
+
+  getAvailableTrades: async () => {
+    const response = await api.get('/markup/trades');
+    return response.data;
+  },
+};
+
+export const excelService = {
+  exportProject: async (projectId: string, includeMarkups: boolean = true) => {
+    const response = await api.get(`/excel/project/${projectId}`, {
+      params: { include_markups: includeMarkups },
+      responseType: 'blob'
+    });
+    return response;
+  },
+
+  exportTrade: async (projectId: string, tradeName: string) => {
+    const response = await api.get(`/excel/project/${projectId}/trade/${tradeName}`, {
+      responseType: 'blob'
+    });
+    return response;
   },
 };
 

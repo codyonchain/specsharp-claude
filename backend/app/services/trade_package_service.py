@@ -4,6 +4,7 @@ import base64
 from datetime import datetime
 import json
 import csv
+import asyncio
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, PageBreak
@@ -13,6 +14,7 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from PIL import Image as PILImage
+from app.utils.building_type_display import get_display_building_type
 import numpy as np
 from app.services.detailed_trade_service import detailed_trade_service
 from app.services.professional_trade_package import professional_trade_package_service
@@ -31,6 +33,53 @@ class TradePackageService:
             'General': '#228B22'      # Forest Green
         }
         
+    async def generate_trade_package_async(self, project_data: Dict, trade: str) -> Dict[str, Any]:
+        """Generate a complete trade package with PDF, CSV, and schematic asynchronously"""
+        
+        try:
+            # Filter scope data for the specific trade
+            filtered_data = self._filter_scope_by_trade(project_data, trade)
+        except Exception as e:
+            print(f"[DEBUG] Error in _filter_scope_by_trade: {e}")
+            raise
+        
+        try:
+            # Generate improved trade-specific schematic
+            schematic_image = professional_trade_package_service.create_improved_schematic(
+                project_data.get('floor_plan', {}), 
+                trade,
+                project_data.get('request_data', {})
+            )
+        except Exception as e:
+            print(f"[DEBUG] Error in create_improved_schematic: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+        
+        try:
+            # Generate professional PDF document asynchronously
+            pdf_buffer = await professional_trade_package_service.generate_professional_pdf_async(
+                filtered_data, 
+                trade, 
+                project_data,
+                schematic_image
+            )
+        except Exception as e:
+            print(f"[DEBUG] Error in generate_professional_pdf_async: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+        
+        # Generate CSV file
+        csv_buffer = self._generate_csv(filtered_data, trade)
+        
+        return {
+            'pdf': pdf_buffer.getvalue(),
+            'csv': csv_buffer.getvalue(),
+            'schematic': schematic_image,
+            'summary': self._generate_summary(filtered_data)
+        }
+    
     def generate_trade_package(self, project_data: Dict, trade: str) -> Dict[str, Any]:
         """Generate a complete trade package with PDF, CSV, and schematic"""
         
@@ -424,7 +473,7 @@ class TradePackageService:
             ['Project Name:', project_data.get('project_name', 'N/A')],
             ['Location:', project_data.get('request_data', {}).get('location', 'N/A')],
             ['Total Square Footage:', f"{project_data.get('request_data', {}).get('square_footage', 0):,} sq ft"],
-            ['Building Type:', project_data.get('request_data', {}).get('project_type', 'N/A')],
+            ['Building Type:', get_display_building_type(project_data.get('request_data', {}))],
             ['Date Generated:', datetime.now().strftime('%B %d, %Y')],
             ['Trade Total Cost:', f"${filtered_data['total_cost']:,.2f}"]
         ]
