@@ -38,12 +38,14 @@ function ComparisonTool({ projectData, onClose }: ComparisonToolProps) {
   }, [projectData]);
 
   const initializeBaseScenario = () => {
-    const baseMix = projectData.request_data.building_mix || { warehouse: 0.7, office: 0.3 };
+    // Handle different data structures - projectData might have request_data or direct properties
+    const requestData = projectData.request_data || projectData;
+    const baseMix = requestData.building_mix || { warehouse: 0.7, office: 0.3 };
     
     const baseScenario: Scenario = {
       id: 'base',
       name: 'Current Design',
-      square_footage: projectData.request_data.square_footage,
+      square_footage: requestData.square_footage || projectData.square_footage || 0,
       building_mix: {
         warehouse: baseMix.warehouse || 0.7,
         office: baseMix.office || 0.3
@@ -55,7 +57,9 @@ function ComparisonTool({ projectData, onClose }: ComparisonToolProps) {
   };
 
   const extractFeaturesFromProject = (project: any) => {
-    const specialReqs = project.request_data.special_requirements || '';
+    // Handle different data structures
+    const requestData = project.request_data || project;
+    const specialReqs = requestData.special_requirements || project.description || '';
     const features: any = {};
 
     // Extract bathrooms
@@ -83,10 +87,11 @@ function ComparisonTool({ projectData, onClose }: ComparisonToolProps) {
       return;
     }
 
+    const requestData = projectData.request_data || projectData;
     const newScenario: Scenario = {
       id: `scenario_${Date.now()}`,
       name: `Scenario ${scenarios.length + 1}`,
-      square_footage: projectData.request_data.square_footage,
+      square_footage: requestData.square_footage || projectData.square_footage || 0,
       building_mix: {
         warehouse: 0.7,
         office: 0.3

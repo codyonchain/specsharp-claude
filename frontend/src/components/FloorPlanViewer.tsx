@@ -51,13 +51,18 @@ const FloorPlanViewer: React.FC<FloorPlanViewerProps> = ({ floorPlan, projectNam
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
-  // Constants - increased for better visibility
-  const PIXELS_PER_FOOT = 30; // Much larger for better readability
-  const EXTERIOR_WALL_WIDTH = 6;
-  const INTERIOR_WALL_WIDTH = 3;
-  const MIN_FONT_SIZE = 24; // Larger font size
-  const LABEL_FONT_SIZE = 20;
-  const EQUIPMENT_SIZE = 60; // Larger equipment icons
+  // Dynamic scaling based on building size
+  const buildingArea = floorPlan.building_dimensions.width * floorPlan.building_dimensions.length;
+  const isLargeBuilding = buildingArea > 20000; // Buildings over 20,000 sq ft
+  const isMediumBuilding = buildingArea > 5000; // Buildings 5,000-20,000 sq ft
+  
+  // Scale constants based on building size
+  const PIXELS_PER_FOOT = isLargeBuilding ? 8 : isMediumBuilding ? 15 : 30;
+  const EXTERIOR_WALL_WIDTH = isLargeBuilding ? 3 : isMediumBuilding ? 4 : 6;
+  const INTERIOR_WALL_WIDTH = isLargeBuilding ? 1.5 : isMediumBuilding ? 2 : 3;
+  const MIN_FONT_SIZE = isLargeBuilding ? 10 : isMediumBuilding ? 16 : 24;
+  const LABEL_FONT_SIZE = isLargeBuilding ? 8 : isMediumBuilding ? 12 : 20;
+  const EQUIPMENT_SIZE = isLargeBuilding ? 20 : isMediumBuilding ? 40 : 60;
   
   // State
   const [scale, setScale] = useState(1);
@@ -99,28 +104,33 @@ const FloorPlanViewer: React.FC<FloorPlanViewerProps> = ({ floorPlan, projectNam
     fire: '#f44336',
   };
   
-  // Calculate scale to fit building in viewport at 90% width
+  // Calculate scale to fit building in viewport
   useEffect(() => {
     if (containerRef.current && floorPlan) {
       const container = containerRef.current.getBoundingClientRect();
-      const targetWidthRatio = 0.9; // Fill 90% of container width
-      const targetHeightRatio = 0.85; // Fill 85% of container height
+      const targetWidthRatio = 0.95; // Fill 95% of container width for large buildings
+      const targetHeightRatio = 0.9; // Fill 90% of container height
       
       const buildingWidth = floorPlan.building_dimensions.width * PIXELS_PER_FOOT;
       const buildingLength = floorPlan.building_dimensions.length * PIXELS_PER_FOOT;
       
-      // Account for padding
-      const availableWidth = container.width - 80; // 40px padding on each side
-      const availableHeight = container.height - 80;
+      // Account for padding and sidebar
+      const sidebarWidth = sidebarCollapsed ? 50 : 300;
+      const availableWidth = container.width - sidebarWidth - 100;
+      const availableHeight = container.height - 100;
       
       // Calculate scale to fit
       const scaleX = (availableWidth * targetWidthRatio) / buildingWidth;
       const scaleY = (availableHeight * targetHeightRatio) / buildingLength;
-      const optimalScale = Math.min(scaleX, scaleY, 1.5); // Cap at 1.5x to prevent over-scaling
+      const optimalScale = Math.min(scaleX, scaleY);
       
-      setScale(optimalScale);
+      // Apply different max scales based on building size
+      const maxScale = isLargeBuilding ? 4 : isMediumBuilding ? 2 : 1.5;
+      const finalScale = Math.min(optimalScale, maxScale);
+      
+      setScale(finalScale);
     }
-  }, [floorPlan, PIXELS_PER_FOOT]);
+  }, [floorPlan, PIXELS_PER_FOOT, sidebarCollapsed, isLargeBuilding, isMediumBuilding]);
   
   // Zoom handlers only (no panning)
   const handleZoomIn = () => {
@@ -231,10 +241,10 @@ const FloorPlanViewer: React.FC<FloorPlanViewerProps> = ({ floorPlan, projectNam
         {layers.labels && (
           <g>
             <rect
-              x={x + width / 2 - 60}
-              y={y + height / 2 - 12}
-              width={120}
-              height={24}
+              x={x + width / 2 - (isLargeBuilding ? 40 : 60)}
+              y={y + height / 2 - (MIN_FONT_SIZE / 2)}
+              width={isLargeBuilding ? 80 : 120}
+              height={MIN_FONT_SIZE + 4}
               fill="white"
               opacity="0.9"
               rx="2"
@@ -306,7 +316,7 @@ const FloorPlanViewer: React.FC<FloorPlanViewerProps> = ({ floorPlan, projectNam
           y={y + EQUIPMENT_SIZE / 2}
           textAnchor="middle"
           dominantBaseline="middle"
-          fontSize="32"
+          fontSize={isLargeBuilding ? "12" : isMediumBuilding ? "20" : "32"}
           fill="white"
           fontWeight="bold"
           style={{ pointerEvents: 'none' }}
@@ -393,17 +403,33 @@ const FloorPlanViewer: React.FC<FloorPlanViewerProps> = ({ floorPlan, projectNam
   
   // Render scale indicator
   const renderScale = () => {
-    const scaleLength = 50 * PIXELS_PER_FOOT; // 50 feet in pixels
-    const y = floorPlan.building_dimensions.length * PIXELS_PER_FOOT - 60;
+    const scaleFeet = isLargeBuilding ? 100 : 50; // 100 ft for large buildings
+    const scaleLength = scaleFeet * PIXELS_PER_FOOT;
+    const y = floorPlan.building_dimensions.length * PIXELS_PER_FOOT - (isLargeBuilding ? 30 : 60);
     
     return (
-      <g className="scale-indicator" transform={`translate(60, ${y})`}>
-        <rect x={-15} y={-30} width={scaleLength + 30} height={50} fill="white" opacity="0.9" rx="6" />
-        <line x1={0} y1={0} x2={scaleLength} y2={0} stroke="#333" strokeWidth={4} />
-        <line x1={0} y1={-10} x2={0} y2={10} stroke="#333" strokeWidth={4} />
-        <line x1={scaleLength} y1={-10} x2={scaleLength} y2={10} stroke="#333" strokeWidth={4} />
-        <text x={scaleLength / 2} y={-15} textAnchor="middle" fontSize="20" fontWeight="600" fill="#333">
-          50 ft
+      <g className="scale-indicator" transform={`translate(${isLargeBuilding ? 30 : 60}, ${y})`}>
+        <rect 
+          x={-15} 
+          y={isLargeBuilding ? -20 : -30} 
+          width={scaleLength + 30} 
+          height={isLargeBuilding ? 35 : 50} 
+          fill="white" 
+          opacity="0.9" 
+          rx="6" 
+        />
+        <line x1={0} y1={0} x2={scaleLength} y2={0} stroke="#333" strokeWidth={isLargeBuilding ? 2 : 4} />
+        <line x1={0} y1={-10} x2={0} y2={10} stroke="#333" strokeWidth={isLargeBuilding ? 2 : 4} />
+        <line x1={scaleLength} y1={-10} x2={scaleLength} y2={10} stroke="#333" strokeWidth={isLargeBuilding ? 2 : 4} />
+        <text 
+          x={scaleLength / 2} 
+          y={isLargeBuilding ? -10 : -15} 
+          textAnchor="middle" 
+          fontSize={isLargeBuilding ? 12 : 20} 
+          fontWeight="600" 
+          fill="#333"
+        >
+          {scaleFeet} ft
         </text>
       </g>
     );

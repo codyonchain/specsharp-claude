@@ -60,6 +60,8 @@ class ExecutiveSummaryService:
                 "finishes_cost_per_sf": format_cost_per_sf(trade_totals.get('finishes', 0), square_footage)
             },
             
+            "developer_metrics": self._calculate_developer_metrics(project_data, total_cost),
+            
             "confidence_assessment": {
                 "overall_confidence": format_percentage(confidence_data['avg_confidence']),
                 "confidence_level": confidence_data['confidence_level'],
@@ -316,6 +318,79 @@ class ExecutiveSummaryService:
             next_steps.append("Review with educational facility requirements")
         
         return next_steps[:5]  # Top 5 most relevant
+    
+    def _calculate_developer_metrics(self, project_data: Dict[str, Any], total_cost: float) -> Dict[str, Any]:
+        """Calculate developer-specific metrics based on building type"""
+        request_data = project_data.get("request_data", {})
+        square_footage = request_data.get("square_footage", 0)
+        building_type = request_data.get("building_type", "").lower()
+        occupancy_type = request_data.get("occupancy_type", "").lower()
+        special_reqs = request_data.get("special_requirements", "")
+        
+        metrics = {}
+        
+        # Extract numbers from special requirements
+        def extract_number(pattern):
+            import re
+            match = re.search(pattern, special_reqs, re.IGNORECASE)
+            return int(match.group(1)) if match else None
+        
+        # Building-specific metrics
+        if building_type in ['hotel', 'hospitality'] or occupancy_type in ['hotel', 'hospitality']:
+            rooms = extract_number(r'(\d+)\s*(?:rooms?|guest\s*rooms?)')
+            if not rooms and square_footage > 0:
+                rooms = int(square_footage / 400)  # Estimate 400 SF per room
+            if rooms:
+                metrics['cost_per_room'] = format_currency(total_cost / rooms)
+                metrics['rooms_count'] = rooms
+                
+        elif building_type in ['medical', 'hospital', 'healthcare'] or occupancy_type in ['medical', 'hospital', 'healthcare']:
+            beds = extract_number(r'(\d+)\s*(?:beds?|patient\s*beds?)')
+            if not beds and square_footage > 0:
+                beds = int(square_footage / 800)  # Estimate 800 SF per bed
+            if beds:
+                metrics['cost_per_bed'] = format_currency(total_cost / beds)
+                metrics['beds_count'] = beds
+                
+        elif building_type in ['office', 'commercial'] or occupancy_type in ['office', 'commercial']:
+            rsf = square_footage * 0.87  # 87% efficiency
+            desks = int(rsf / 150)  # 150 SF per person
+            metrics['cost_per_rsf'] = format_cost_per_sf(total_cost, rsf)
+            metrics['rsf'] = format_square_feet(rsf)
+            if desks > 0:
+                metrics['cost_per_desk'] = format_currency(total_cost / desks)
+                metrics['desk_capacity'] = desks
+                
+        elif building_type in ['multifamily', 'multi-family', 'apartment', 'residential'] or \
+             occupancy_type in ['multifamily', 'multi-family', 'apartment', 'residential']:
+            units = extract_number(r'(\d+)\s*(?:units?|apartments?)')
+            if not units and square_footage > 0:
+                units = int(square_footage / 850)  # Estimate 850 SF per unit
+            if units:
+                metrics['cost_per_unit'] = format_currency(total_cost / units)
+                metrics['units_count'] = units
+                
+        elif building_type in ['school', 'education', 'educational'] or \
+             occupancy_type in ['school', 'education', 'educational']:
+            students = extract_number(r'(\d+)\s*(?:students?|pupils?)')
+            if not students and square_footage > 0:
+                students = int(square_footage / 100)  # Estimate 100 SF per student
+            if students:
+                metrics['cost_per_student'] = format_currency(total_cost / students)
+                metrics['student_capacity'] = students
+                
+        elif building_type in ['warehouse', 'industrial'] or occupancy_type in ['warehouse', 'industrial']:
+            clear_height = extract_number(r'(\d+)\s*(?:ft|foot|feet)\s*clear') or 24
+            dock_doors = extract_number(r'(\d+)\s*dock\s*doors?')
+            
+            metrics['clear_height'] = f"{clear_height} ft"
+            metrics['cost_per_cubic_ft'] = format_currency(total_cost / (square_footage * clear_height))
+            
+            if dock_doors:
+                metrics['cost_per_dock_door'] = format_currency(total_cost / dock_doors)
+                metrics['dock_doors_count'] = dock_doors
+        
+        return metrics
     
     def _identify_risk_factors(self, project_data: Dict[str, Any]) -> List[Dict[str, str]]:
         """Identify potential risk factors"""

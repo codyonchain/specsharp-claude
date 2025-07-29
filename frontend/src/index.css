@@ -30,3 +30,112 @@ a {
 button {
   cursor: pointer;
 }
+
+/* Global modal styles */
+.modal-overlay .modal-content,
+.team-settings-overlay .team-settings-modal,
+[class*="-overlay"] [class*="-modal"] {
+  position: relative;
+}
+
+/* Global modal close button styles */
+.modal-overlay .close-btn,
+.team-settings-overlay .close-btn,
+[class*="-overlay"] .close-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 40px;
+  height: 40px;
+  background: #ffffff;
+  border: 2px solid #374151;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #374151;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 0;
+}
+
+.modal-overlay .close-btn:hover,
+.team-settings-overlay .close-btn:hover,
+[class*="-overlay"] .close-btn:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+  color: #111827;
+  transform: scale(1.05);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+}
+
+.modal-overlay .close-btn:active,
+.team-settings-overlay .close-btn:active,
+[class*="-overlay"] .close-btn:active {
+  transform: scale(0.95);
+}
+
+.modal-overlay .close-btn svg,
+.team-settings-overlay .close-btn svg,
+[class*="-overlay"] .close-btn svg {
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+}
+
+/* Add a red tint on hover for better visibility */
+.modal-overlay .close-btn:hover svg,
+.team-settings-overlay .close-btn:hover svg,
+[class*="-overlay"] .close-btn:hover svg {
+  color: #ef4444;
+}
+
+/* Always show X icon as text content */
+.modal-overlay .close-btn::before,
+.team-settings-overlay .close-btn::before,
+[class*="-overlay"] .close-btn::before {
+  content: "✕";
+  font-size: 28px;
+  font-weight: bold;
+  line-height: 1;
+  color: #374151;
+  display: block;
+}
+
+/* Hide the fallback X if SVG is present */
+.modal-overlay .close-btn:has(svg)::before,
+.team-settings-overlay .close-btn:has(svg)::before,
+[class*="-overlay"] .close-btn:has(svg)::before {
+  display: none;
+}
+
+/* Add tooltip on hover */
+.modal-overlay .close-btn::after,
+.team-settings-overlay .close-btn::after,
+[class*="-overlay"] .close-btn::after {
+  content: "Close";
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: #1f2937;
+  color: white;
+  font-size: 12px;
+  border-radius: 4px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 1000;
+}
+
+.modal-overlay .close-btn:hover::after,
+.team-settings-overlay .close-btn:hover::after,
+[class*="-overlay"] .close-btn:hover::after {
+  opacity: 1;
+}

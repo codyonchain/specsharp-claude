@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { scopeService, authService, subscriptionService } from '../services/api';
-import { Trash2, Copy, Settings, Users } from 'lucide-react';
+import { Trash2, Copy, Settings, Users, Sliders, Edit2, Check, X } from 'lucide-react';
 import { getDisplayBuildingType } from '../utils/buildingTypeDisplay';
 import { formatCurrency, formatCurrencyPerSF, formatNumber } from '../utils/formatters';
+import { calculateDeveloperMetrics, formatMetricValue } from '../utils/developerMetrics';
 import MarkupSettings from './MarkupSettings';
 import OnboardingFlow from './OnboardingFlow';
 import PaymentWall from './PaymentWall';
@@ -25,6 +26,10 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
   const [showPaymentWall, setShowPaymentWall] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
   const [totalTimeSaved, setTotalTimeSaved] = useState(0);
+  const [selectedForComparison, setSelectedForComparison] = useState<string[]>([]);
+  const [isComparisonMode, setIsComparisonMode] = useState(false);
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [editingProjectName, setEditingProjectName] = useState<string>('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -133,6 +138,67 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
     await checkSubscriptionStatus();
   };
 
+  const toggleComparisonSelection = (projectId: string) => {
+    setSelectedForComparison(prev => {
+      if (prev.includes(projectId)) {
+        return prev.filter(id => id !== projectId);
+      } else if (prev.length < 3) {
+        return [...prev, projectId];
+      }
+      return prev;
+    });
+  };
+
+  const toggleComparisonMode = () => {
+    setIsComparisonMode(!isComparisonMode);
+    if (isComparisonMode) {
+      // Clear selections when exiting comparison mode
+      setSelectedForComparison([]);
+    }
+  };
+
+  const handleCompareProjects = () => {
+    if (selectedForComparison.length >= 2) {
+      // Navigate to comparison view with selected project IDs
+      navigate(`/compare?projects=${selectedForComparison.join(',')}`);
+    }
+  };
+
+  const handleEditProjectName = (e: React.MouseEvent, projectId: string, currentName: string) => {
+    e.stopPropagation();
+    setEditingProjectId(projectId);
+    setEditingProjectName(currentName);
+  };
+
+  const handleSaveProjectName = async (projectId: string) => {
+    if (!editingProjectName.trim()) {
+      // Reset to original name if empty
+      setEditingProjectId(null);
+      return;
+    }
+
+    try {
+      await scopeService.updateProjectName(projectId, editingProjectName.trim());
+      setDeleteMessage(`Project name updated successfully`);
+      setEditingProjectId(null);
+      
+      // Reload projects
+      loadProjects();
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setDeleteMessage(''), 3000);
+    } catch (error) {
+      console.error('Failed to update project name:', error);
+      setDeleteMessage('Failed to update project name. Please try again.');
+      setTimeout(() => setDeleteMessage(''), 3000);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingProjectId(null);
+    setEditingProjectName('');
+  };
+
   // Show onboarding flow for new users
   if (showOnboarding) {
     return (
@@ -179,6 +245,15 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
           >
             Create New Scope
           </button>
+          {projects.length >= 2 && (
+            <button
+              onClick={toggleComparisonMode}
+              className={`comparison-mode-btn ${isComparisonMode ? 'active' : ''}`}
+            >
+              <Sliders size={20} />
+              {isComparisonMode ? 'Exit Compare Mode' : 'Compare Projects'}
+            </button>
+          )}
         </div>
 
         {deleteMessage && (
@@ -194,30 +269,113 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
           ) : projects.length === 0 ? (
             <p>No projects yet. Create your first scope!</p>
           ) : (
-            <div className="projects-grid">
-              {projects.map((project) => (
-                <div 
-                  key={project.project_id} 
-                  className="project-card"
-                  onClick={() => navigate(`/project/${project.project_id}`)}
-                >
-                  <div className="project-actions">
-                    <button
-                      className="duplicate-btn"
-                      onClick={(e) => handleDuplicateClick(e, project.project_id, project.name)}
-                      title="Duplicate project"
+            <>
+              {isComparisonMode && (
+                <div className="comparison-bar">
+                  <p>
+                    {selectedForComparison.length === 0 
+                      ? 'Select 2-3 projects to compare' 
+                      : `${selectedForComparison.length} project${selectedForComparison.length > 1 ? 's' : ''} selected`}
+                  </p>
+                  <button 
+                    className="compare-btn"
+                    onClick={handleCompareProjects}
+                    disabled={selectedForComparison.length < 2}
+                  >
+                    View Comparison ({selectedForComparison.length}/3)
+                  </button>
+                </div>
+              )}
+              <div className="projects-grid">
+                {projects.map((project) => {
+                  const metrics = calculateDeveloperMetrics(project);
+                  const primaryMetric = metrics.find(m => m.label !== 'Cost per SF') || metrics[0];
+                  
+                  return (
+                    <div 
+                      key={project.project_id} 
+                      className={`project-card ${isComparisonMode && selectedForComparison.includes(project.project_id) ? 'selected-for-comparison' : ''} ${isComparisonMode ? 'comparison-mode' : ''}`}
+                      onClick={() => {
+                        if (isComparisonMode) {
+                          toggleComparisonSelection(project.project_id);
+                        } else {
+                          navigate(`/project/${project.project_id}`);
+                        }
+                      }}
                     >
-                      <Copy size={18} />
-                    </button>
-                    <button
-                      className="delete-btn"
-                      onClick={(e) => handleDeleteClick(e, project.project_id, project.name)}
-                      title="Delete project"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                      {isComparisonMode && (
+                        <div className="comparison-indicator">
+                          {selectedForComparison.includes(project.project_id) ? (
+                            <span className="check-icon">✓</span>
+                          ) : (
+                            <span className="plus-icon">+</span>
+                          )}
+                        </div>
+                      )}
+                      <div className="project-actions">
+                        <button
+                          className="duplicate-btn"
+                          onClick={(e) => handleDuplicateClick(e, project.project_id, project.name)}
+                          title="Create a copy of this project"
+                        >
+                          <Copy size={18} />
+                        </button>
+                        <button
+                          className="delete-btn"
+                          onClick={(e) => handleDeleteClick(e, project.project_id, project.name)}
+                          title="Delete project"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                  <div className="project-name-container">
+                    {editingProjectId === project.project_id ? (
+                      <div className="project-name-edit" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="text"
+                          value={editingProjectName}
+                          onChange={(e) => setEditingProjectName(e.target.value)}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                              handleSaveProjectName(project.project_id);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              handleCancelEdit();
+                            }
+                          }}
+                          autoFocus
+                          className="project-name-input"
+                        />
+                        <button
+                          className="save-btn"
+                          onClick={() => handleSaveProjectName(project.project_id)}
+                          title="Save"
+                        >
+                          <Check size={16} />
+                        </button>
+                        <button
+                          className="cancel-btn"
+                          onClick={handleCancelEdit}
+                          title="Cancel"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ) : (
+                      <h3 className="project-name">
+                        {project.name}
+                        <button
+                          className="edit-name-btn"
+                          onClick={(e) => handleEditProjectName(e, project.project_id, project.name)}
+                          title="Edit project name"
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                      </h3>
+                    )}
                   </div>
-                  <h3>{project.name}</h3>
                   <p className="project-type">
                     {getDisplayBuildingType(project.scope_data?.request_data || {
                       project_type: project.project_type,
@@ -230,6 +388,12 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
                     {formatCurrency(project.total_cost)}
                     {project.cost_per_sqft && ` (${formatCurrencyPerSF(project.cost_per_sqft)})`}
                   </p>
+                  {primaryMetric && (
+                    <div className="developer-metric">
+                      <span className="metric-label">{primaryMetric.label}:</span>
+                      <span className="metric-value">{formatMetricValue(primaryMetric.value)}{primaryMetric.unit}</span>
+                    </div>
+                  )}
                   <div className="project-meta">
                     <p className="project-date">
                       {new Date(project.created_at).toLocaleDateString()}
@@ -238,9 +402,11 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
                       <p className="project-creator">by {project.created_by}</p>
                     )}
                   </div>
-                </div>
-              ))}
-            </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
       </div>

@@ -149,16 +149,21 @@ class TradePackageService:
             'mechanical': 'Mechanical',
             'structural': 'Structural',
             'finishes': 'Finishes',
+            'general-conditions': 'General Conditions',
+            'general_conditions': 'General Conditions',
             'general': None  # General contractor sees everything
         }
         
+        print(f"[DEBUG] _filter_scope_by_trade: trade='{trade}', trade.lower()='{trade.lower()}'")
         target_category = trade_mapping.get(trade.lower())
+        print(f"[DEBUG] _filter_scope_by_trade: target_category='{target_category}'")
         
         if trade.lower() == 'general' or not target_category:
             return project_data
         
         # Filter categories - now handles both old and new category structures
         filtered_categories = []
+        print(f"[DEBUG] Available categories: {[cat['name'] for cat in project_data.get('categories', [])]}")
         for cat in project_data.get('categories', []):
             cat_name_lower = cat['name'].lower()
             target_lower = target_category.lower()

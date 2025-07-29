@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Clock, DollarSign, CheckCircle, Building, Calculator, TrendingUp, Users, FileText, Zap, Brain, Share2, Shield, Lock, Award } from 'lucide-react';
+import { ArrowRight, Clock, DollarSign, CheckCircle, Building, Calculator, TrendingUp, Users, FileText, Zap, Brain, Share2, Shield, Lock, Award, Hotel, Building2, Layers } from 'lucide-react';
 import { ROICalculator } from '../components/ROICalculator';
 import { Footer } from '../components/Footer';
 import { trackCTAClick, trackPageView, setupViewTracking } from '../utils/analytics';
@@ -8,6 +8,37 @@ import './HomePage.css';
 
 export const HomePage: React.FC = () => {
   const observerRef = useRef<IntersectionObserver | null>(null);
+  const [currentUseCaseIndex, setCurrentUseCaseIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const useCases = [
+    {
+      description: "Testing if a 150-room hotel pencils out in Nashville",
+      projectValue: "$35M+",
+      result: "Cost per room: $225K"
+    },
+    {
+      description: "Comparing office vs. mixed-use for downtown site",
+      projectValue: "$25M+",
+      result: "See best ROI"
+    },
+    {
+      description: "Quick estimate for warehouse-to-loft conversion",
+      projectValue: "$18M+",
+      result: "$95/SF"
+    },
+    {
+      description: "Validating 200-unit multifamily before design",
+      projectValue: "$40M+",
+      result: "$180K per unit"
+    },
+    {
+      description: "Medical office building feasibility check",
+      projectValue: "$28M+",
+      result: "$450K per bed"
+    }
+  ];
 
   useEffect(() => {
     trackPageView('Homepage');
@@ -36,11 +67,31 @@ export const HomePage: React.FC = () => {
     cards.forEach((card) => {
       observerRef.current?.observe(card);
     });
+    
+    // Set up use case rotation
+    if (!isPaused) {
+      intervalRef.current = setInterval(() => {
+        setCurrentUseCaseIndex((prev) => (prev + 1) % useCases.length);
+      }, 4000);
+    }
 
     return () => {
       observerRef.current?.disconnect();
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
     };
-  }, []);
+  }, [useCases.length, isPaused]);
+  
+  const handleUseCaseHover = (hovering: boolean) => {
+    setIsPaused(hovering);
+  };
+  
+  const handleDotClick = (index: number) => {
+    setCurrentUseCaseIndex(index);
+    setIsPaused(true);
+    setTimeout(() => setIsPaused(false), 5000); // Resume after 5 seconds
+  };
 
   const handleCTAClick = (button: string, location: string) => {
     trackCTAClick(button, location);
@@ -137,6 +188,9 @@ export const HomePage: React.FC = () => {
               <span className="mx-2">•</span>
               <span className="text-blue-200">Cancel anytime</span>
             </p>
+            <p className="mt-2 text-blue-200 text-sm" style={{opacity: 0.8}}>
+              Less than 2 hours of consultant time
+            </p>
           </div>
         </div>
       </section>
@@ -179,9 +233,58 @@ export const HomePage: React.FC = () => {
               </ul>
               <div className="example-box">
                 <p className="text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Common Use Case:</p>
-                <p className="text-sm text-gray-700 italic">"Testing if a 150-room hotel pencils out in Nashville"</p>
-                <div className="mt-3 pt-3 border-t border-gray-200">
-                  <p className="text-xs text-gray-500">Average project value: $25M+</p>
+                <div 
+                  className="use-case-rotator" 
+                  style={{minHeight: '4.5rem', position: 'relative'}}
+                  onMouseEnter={() => handleUseCaseHover(true)}
+                  onMouseLeave={() => handleUseCaseHover(false)}
+                  onTouchStart={() => handleUseCaseHover(true)}
+                  onTouchEnd={() => setTimeout(() => handleUseCaseHover(false), 3000)}
+                >
+                  {useCases.map((useCase, index) => (
+                    <div
+                      key={index}
+                      className="use-case-item"
+                      style={{
+                        opacity: currentUseCaseIndex === index ? 1 : 0,
+                        transform: `translateY(${currentUseCaseIndex === index ? '0' : '10px'})`,
+                        transition: 'all 0.2s ease-in-out',
+                        position: currentUseCaseIndex === index ? 'relative' : 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0
+                      }}
+                    >
+                      <p className="text-sm text-gray-700 italic mb-1">
+                        "{useCase.description}"
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Average project value: <span className="font-semibold">{useCase.projectValue}</span> | {useCase.result}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Progress Indicators */}
+                <div className="flex justify-center items-center gap-1.5 mt-3">
+                  {useCases.map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleDotClick(index)}
+                      className="use-case-dot"
+                      style={{
+                        width: currentUseCaseIndex === index ? '20px' : '6px',
+                        height: '6px',
+                        borderRadius: '3px',
+                        backgroundColor: currentUseCaseIndex === index ? '#3B60E4' : '#D1D5DB',
+                        transition: 'all 0.3s ease',
+                        border: 'none',
+                        padding: 0,
+                        cursor: 'pointer'
+                      }}
+                      aria-label={`Go to use case ${index + 1}`}
+                    />
+                  ))}
                 </div>
               </div>
             </div>
@@ -274,8 +377,8 @@ export const HomePage: React.FC = () => {
                 <p className="text-sm text-gray-600">Avg. Project Size</p>
               </div>
               <div>
-                <p className="text-3xl font-bold text-blue-600">24/7</p>
-                <p className="text-sm text-gray-600">Always Available</p>
+                <p className="text-3xl font-bold text-blue-600">$100K+</p>
+                <p className="text-sm text-gray-600">Avg. saved on dead-deal designs</p>
               </div>
             </div>
           </div>
@@ -447,12 +550,45 @@ export const HomePage: React.FC = () => {
           </div>
         </div>
       </section>
+      
+      {/* Scenario Comparison Section */}
+      <section className="scenario-comparison-section fade-in-section" style={{backgroundColor: 'white', padding: '60px 0'}}>
+        <div className="container mx-auto px-4">
+          <div className="max-w-4xl mx-auto text-center">
+            <h2 className="text-3xl font-bold mb-3 text-gray-800">Compare Multiple Scenarios Side-by-Side</h2>
+            <p className="text-xl text-gray-600 mb-8">Test hotels vs. offices vs. mixed-use in seconds</p>
+            <div className="flex justify-center items-center gap-8">
+              <div className="scenario-icon" style={{textAlign: 'center'}}>
+                <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mb-2 mx-auto">
+                  <Hotel className="w-10 h-10 text-blue-600" />
+                </div>
+                <p className="font-semibold text-gray-700">Hotel</p>
+              </div>
+              <ArrowRight className="text-gray-400" size={24} />
+              <div className="scenario-icon" style={{textAlign: 'center'}}>
+                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-2 mx-auto">
+                  <Building2 className="w-10 h-10 text-green-600" />
+                </div>
+                <p className="font-semibold text-gray-700">Office</p>
+              </div>
+              <ArrowRight className="text-gray-400" size={24} />
+              <div className="scenario-icon" style={{textAlign: 'center'}}>
+                <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mb-2 mx-auto">
+                  <Layers className="w-10 h-10 text-purple-600" />
+                </div>
+                <p className="font-semibold text-gray-700">Mixed-Use</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Logos Section */}
       <section className="trust-section fade-in-section" data-track-section="logos">
         <div className="container mx-auto px-4">
           <h2 className="text-center text-gray-800 mb-2 text-3xl font-bold">Trusted by 500+ Construction Professionals</h2>
-          <p className="text-center text-gray-600 mb-12 text-xl">From Fortune 500 developers to local contractors</p>
+          <p className="text-center text-gray-600 mb-2 text-xl">From Fortune 500 developers to local contractors</p>
+          <p className="text-center text-gray-500 mb-12 text-lg">Used on $2B+ in evaluated projects</p>
           <div className="trust-logos">
             {/* Using text placeholders for logos - replace with actual logo images */}
             <div className="trust-logo">Hines</div>

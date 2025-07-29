@@ -266,10 +266,42 @@ function ProgressiveProjectDetail() {
   return (
     <div className="project-detail">
       <header className="page-header">
-        <button onClick={() => navigate('/dashboard')} className="back-btn">
-          ← Back to Dashboard
-        </button>
-        <h1>{project.project_name}</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
+          <button 
+            onClick={() => navigate('/dashboard')} 
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.75rem 1.25rem',
+              background: '#667eea',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: '600',
+              transition: 'all 0.2s',
+              boxShadow: '0 2px 4px rgba(102, 126, 234, 0.2)'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#5a67d8';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 4px 8px rgba(102, 126, 234, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = '#667eea';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 2px 4px rgba(102, 126, 234, 0.2)';
+            }}
+          >
+            <span style={{ fontSize: '20px' }}>←</span>
+            Dashboard
+          </button>
+          <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#333' }}>
+            {project.project_name}
+          </h1>
+        </div>
         <div className="header-actions">
           <button 
             className="export-excel-btn"

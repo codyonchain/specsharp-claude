@@ -54,8 +54,13 @@ export const getDisplayBuildingType = (requestData: any): string => {
   }
   
   // Default to formatted project type
-  return requestData.project_type.replace('_', ' ')
-    .split(' ')
-    .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
+  if (requestData.project_type) {
+    return requestData.project_type.replace('_', ' ')
+      .split(' ')
+      .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }
+  
+  // Fallback if no type is found
+  return 'Commercial';
 };

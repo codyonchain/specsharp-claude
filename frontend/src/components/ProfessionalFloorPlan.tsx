@@ -97,7 +97,13 @@ const ProfessionalFloorPlan: React.FC<ProfessionalFloorPlanProps> = ({ floorPlan
   
   // Rooms are now properly configured
   
-  const SCALE = 8; // Pixels per foot
+  // Dynamic scaling based on building size
+  const buildingArea = buildingWidth * buildingLength;
+  const isLargeBuilding = buildingArea > 20000; // Buildings over 20,000 sq ft
+  const isMediumBuilding = buildingArea > 5000; // Buildings 5,000-20,000 sq ft
+  
+  // Adjust scale based on building size to fit better on screen
+  const SCALE = isLargeBuilding ? 3 : isMediumBuilding ? 5 : 8; // Pixels per foot
   
   // Room type colors for easy identification - stronger colors for better visibility
   const roomColors = {
@@ -111,13 +117,20 @@ const ProfessionalFloorPlan: React.FC<ProfessionalFloorPlanProps> = ({ floorPlan
   };
   
   return (
-    <div className="professional-floor-plan" style={{ padding: '20px' }}>
+    <div className="professional-floor-plan" style={{ padding: '20px', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ marginBottom: '20px' }}>
         <h3>{projectName} - Floor Plan</h3>
         <p>Building: {buildingWidth}' × {buildingLength}' ({totalSF.toLocaleString()} SF)</p>
       </div>
       
-      <div style={{ border: '2px solid #333', backgroundColor: 'white', display: 'inline-block' }}>
+      <div style={{ 
+        border: '2px solid #333', 
+        backgroundColor: 'white', 
+        display: 'inline-block',
+        maxWidth: '100%',
+        maxHeight: 'calc(100vh - 200px)',
+        overflow: 'auto'
+      }}>
         <svg 
           width={buildingWidth * SCALE + 100} 
           height={buildingLength * SCALE + 100}
@@ -184,7 +197,7 @@ const ProfessionalFloorPlan: React.FC<ProfessionalFloorPlanProps> = ({ floorPlan
                   x={x + width/2} 
                   y={y + height/2 - 10} 
                   textAnchor="middle" 
-                  fontSize="14" 
+                  fontSize={isLargeBuilding ? "10" : isMediumBuilding ? "12" : "14"} 
                   fontWeight="bold"
                   fill="black"
                 >
@@ -196,7 +209,7 @@ const ProfessionalFloorPlan: React.FC<ProfessionalFloorPlanProps> = ({ floorPlan
                   x={x + width/2} 
                   y={y + height/2 + 10} 
                   textAnchor="middle" 
-                  fontSize="12"
+                  fontSize={isLargeBuilding ? "8" : isMediumBuilding ? "10" : "12"}
                   fill="black"
                 >
                   {room.size.toLocaleString()} SF
@@ -221,7 +234,7 @@ const ProfessionalFloorPlan: React.FC<ProfessionalFloorPlanProps> = ({ floorPlan
             x={50 + buildingWidth * SCALE / 2} 
             y={40} 
             textAnchor="middle" 
-            fontSize="16" 
+            fontSize={isLargeBuilding ? "12" : isMediumBuilding ? "14" : "16"} 
             fontWeight="bold"
           >
             {buildingWidth}'-0"
@@ -230,7 +243,7 @@ const ProfessionalFloorPlan: React.FC<ProfessionalFloorPlanProps> = ({ floorPlan
             x={30} 
             y={50 + buildingLength * SCALE / 2} 
             textAnchor="middle" 
-            fontSize="16" 
+            fontSize={isLargeBuilding ? "12" : isMediumBuilding ? "14" : "16"} 
             fontWeight="bold"
             transform={`rotate(-90, 30, ${50 + buildingLength * SCALE / 2})`}
           >
@@ -241,21 +254,21 @@ const ProfessionalFloorPlan: React.FC<ProfessionalFloorPlanProps> = ({ floorPlan
           <g transform={`translate(${50 + buildingWidth * SCALE - 40}, 90)`}>
             <circle cx="0" cy="0" r="25" fill="white" stroke="black" strokeWidth="2"/>
             <path d="M 0,-18 L -6,8 L 0,4 L 6,8 Z" fill="black"/>
-            <text x="0" y="-22" textAnchor="middle" fontSize="12" fontWeight="bold">N</text>
+            <text x="0" y="-22" textAnchor="middle" fontSize={isLargeBuilding ? "8" : "12"} fontWeight="bold">N</text>
           </g>
           
           {/* Scale */}
           <g transform={`translate(70, ${50 + buildingLength * SCALE + 30})`}>
-            <line x1="0" y1="0" x2={40 * SCALE} y2="0" stroke="black" strokeWidth="2"/>
+            <line x1="0" y1="0" x2={(isLargeBuilding ? 100 : 40) * SCALE} y2="0" stroke="black" strokeWidth="2"/>
             <line x1="0" y1="-5" x2="0" y2="5" stroke="black" strokeWidth="2"/>
-            <line x1={40 * SCALE} y1="-5" x2={40 * SCALE} y2="5" stroke="black" strokeWidth="2"/>
-            <text x={20 * SCALE} y="-10" textAnchor="middle" fontSize="12">40 FEET</text>
+            <line x1={(isLargeBuilding ? 100 : 40) * SCALE} y1="-5" x2={(isLargeBuilding ? 100 : 40) * SCALE} y2="5" stroke="black" strokeWidth="2"/>
+            <text x={(isLargeBuilding ? 50 : 20) * SCALE} y="-10" textAnchor="middle" fontSize={isLargeBuilding ? "8" : "12"}>{isLargeBuilding ? "100 FEET" : "40 FEET"}</text>
           </g>
           
           {/* Title block */}
           <g transform={`translate(${50 + buildingWidth * SCALE - 200}, ${50 + buildingLength * SCALE - 80})`}>
             <rect x="0" y="0" width="180" height="60" fill="white" stroke="black" strokeWidth="2"/>
-            <text x="10" y="20" fontSize="14" fontWeight="bold">{projectName}</text>
+            <text x="10" y="20" fontSize={isLargeBuilding ? "10" : "14"} fontWeight="bold">{projectName}</text>
             <text x="10" y="35" fontSize="10">FLOOR PLAN</text>
             <text x="10" y="50" fontSize="10">SCALE: 1/8" = 1'-0"</text>
           </g>

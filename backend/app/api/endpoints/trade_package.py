@@ -26,7 +26,7 @@ async def generate_trade_package(
     
     try:
         # Validate trade
-        valid_trades = ['electrical', 'plumbing', 'hvac', 'mechanical', 'structural', 'finishes', 'general']
+        valid_trades = ['electrical', 'plumbing', 'hvac', 'mechanical', 'structural', 'finishes', 'general', 'general_conditions', 'general-conditions']
         if trade.lower() not in valid_trades:
             raise HTTPException(status_code=400, detail=f"Invalid trade. Must be one of: {', '.join(valid_trades)}")
         
@@ -103,7 +103,7 @@ async def preview_trade_package(
     
     try:
         # Validate trade
-        valid_trades = ['electrical', 'plumbing', 'hvac', 'mechanical', 'structural', 'finishes', 'general']
+        valid_trades = ['electrical', 'plumbing', 'hvac', 'mechanical', 'structural', 'finishes', 'general', 'general_conditions', 'general-conditions']
         if trade.lower() not in valid_trades:
             raise HTTPException(status_code=400, detail=f"Invalid trade. Must be one of: {', '.join(valid_trades)}")
         

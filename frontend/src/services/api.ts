@@ -7,6 +7,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Include cookies in requests
 });
 
 // Add auth token to requests
@@ -100,6 +101,13 @@ export const scopeService = {
   duplicateProject: async (projectId: string, name?: string) => {
     const response = await api.post(`/scope/projects/${projectId}/duplicate`, {
       duplicate_name: name
+    });
+    return response.data;
+  },
+
+  updateProjectName: async (projectId: string, name: string) => {
+    const response = await api.put(`/scope/projects/${projectId}`, {
+      project_name: name
     });
     return response.data;
   },

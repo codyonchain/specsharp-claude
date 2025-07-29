@@ -10,9 +10,10 @@ import ComparisonTool from './ComparisonTool';
 import ComparisonToolV2 from './ComparisonToolV2';
 import TradeSummary from './TradeSummary';
 import TimeSavedDisplay from './TimeSavedDisplay';
-import { Package, Sliders, FileSpreadsheet, Download, FileText, Share2 } from 'lucide-react';
+import { Package, Sliders, FileSpreadsheet, Download, FileText, Share2, ArrowLeft } from 'lucide-react';
 import { getDisplayBuildingType as getDisplayBuildingTypeUtil } from '../utils/buildingTypeDisplay';
 import { formatCurrency, formatNumber } from '../utils/formatters';
+import { calculateDeveloperMetrics, formatMetricValue } from '../utils/developerMetrics';
 import { excelService, pdfService, shareService } from '../services/api';
 import './ProjectDetail.css';
 
@@ -58,6 +59,7 @@ function ProjectDetail() {
     try {
       const projectData = await scopeService.getProject(projectId!);
       console.log('Project data loaded:', projectData);
+      console.log('Project name:', projectData.project_name);
       console.log('Trade summaries:', projectData.trade_summaries);
       setProject(projectData);
       
@@ -352,10 +354,39 @@ function ProjectDetail() {
     <div className="project-detail">
       
       <header className="page-header">
-        <button onClick={() => navigate('/dashboard')} className="back-btn">
-          ← Back to Dashboard
-        </button>
-        <h1>{project.project_name}</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <button
+            onClick={() => navigate('/dashboard')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.75rem 1.25rem',
+              background: '#667eea',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: '600',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#5a67d8';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = '#667eea';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+          >
+            <ArrowLeft size={20} />
+            Dashboard
+          </button>
+          <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#333' }}>
+            {project.project_name || 'Project Details'}
+          </h1>
+        </div>
         <div className="header-actions">
           <div className="export-menu-container">
             <button 
@@ -574,6 +605,24 @@ function ProjectDetail() {
               <label>Cost per Sq Ft</label>
               <span>${(filteredTotals.total / project.request_data.square_footage).toFixed(2)}</span>
             </div>
+          </div>
+        </div>
+
+        {/* Developer Metrics */}
+        <div className="developer-metrics-section">
+          <h3>Key Developer Metrics</h3>
+          <div className="metrics-grid">
+            {calculateDeveloperMetrics(project).map((metric, index) => (
+              <div key={index} className="metric-card">
+                <div className="metric-label">{metric.label}</div>
+                <div className="metric-value">
+                  {formatMetricValue(metric.value)}{metric.unit}
+                </div>
+                {metric.description && (
+                  <div className="metric-description">{metric.description}</div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
 

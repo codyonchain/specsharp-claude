@@ -1,6 +1,8 @@
 .project-detail {
   min-height: 100vh;
   background: #f7f7f7;
+  width: 100%;
+  position: relative;
 }
 
 .loading, .error {
@@ -49,7 +51,8 @@
 
 .project-summary,
 .cost-breakdown,
-.systems-detail {
+.systems-detail,
+.developer-metrics-section {
   background: white;
   padding: 2rem;
   border-radius: 8px;
@@ -275,15 +278,105 @@
 .page-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 1rem;
   margin-bottom: 2rem;
-  padding-bottom: 1rem;
+  padding: 2rem 2rem 1rem 2rem;
   border-bottom: 1px solid #e5e7eb;
+  position: relative;
+  background: white;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.back-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: white;
+  color: #667eea;
+  border: 2px solid #667eea;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.back-btn:hover {
+  background: #667eea;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
 }
 
 .page-header h1 {
   flex: 1;
   margin: 0;
+}
+
+.project-name-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  background: #667eea;
+  color: white;
+  border: 2px solid #667eea;
+  border-radius: 8px;
+  transition: all 0.2s;
+  text-decoration: none;
+  cursor: pointer;
+  position: relative;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+  font-weight: 600;
+}
+
+.project-name-wrapper::before {
+  content: "← Dashboard";
+  position: absolute;
+  left: -100px;
+  font-size: 14px;
+  color: #667eea;
+  font-weight: 600;
+  opacity: 0;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.project-name-wrapper:hover::before {
+  opacity: 1;
+}
+
+.project-name-wrapper:hover {
+  background: #5a67d8;
+  border-color: #5a67d8;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+}
+
+.project-name-wrapper:hover .back-arrow {
+  transform: translateX(-3px);
+}
+
+.project-name-wrapper:hover .project-name-header {
+  color: #5a67d8;
+}
+
+.back-arrow {
+  color: white;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.project-name-header {
+  color: white;
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+  transition: color 0.2s;
+  line-height: 1.2;
 }
 
 .compare-scenarios-btn {
@@ -722,6 +815,54 @@
 }
 
 /* Share modal styles */
+/* Developer Metrics Section */
+.developer-metrics-section h3 {
+  color: #333;
+  margin-bottom: 1.5rem;
+  font-size: 1.25rem;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.metric-card {
+  background: #f7faff;
+  padding: 1.25rem;
+  border-radius: 8px;
+  border: 1px solid #e0e7ff;
+  transition: all 0.2s;
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
+.metric-card .metric-label {
+  font-size: 0.875rem;
+  color: #4c51bf;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.metric-card .metric-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #667eea;
+  margin-bottom: 0.25rem;
+}
+
+.metric-card .metric-description {
+  font-size: 0.75rem;
+  color: #718096;
+  margin-top: 0.25rem;
+}
+
 .share-modal {
   max-width: 500px;
   padding: 2rem;

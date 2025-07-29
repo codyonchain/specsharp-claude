@@ -98,7 +98,7 @@ function TradeSummary({ tradeSummaries, onGeneratePackage, isReadOnly = false }:
                   )}
                 </button>
                 
-                {!isReadOnly && summary.trade !== 'General Conditions' && (
+                {!isReadOnly && (
                   <button 
                     className="generate-package-btn"
                     onClick={() => onGeneratePackage(tradeKey)}

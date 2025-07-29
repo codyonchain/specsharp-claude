@@ -1,257 +1,345 @@
-# SpecSharp - Construction Intelligence Tool
+# SpecSharp - AI-Powered Construction Cost Estimation Platform
 
-SpecSharp is a modern construction cost estimation platform that provides accurate, deterministic pricing for construction projects with support for mixed-use buildings and regional cost variations.
+SpecSharp is a modern web application that provides instant, deterministic construction cost estimates using AI-powered natural language processing. Built for general contractors, developers, and construction professionals, SpecSharp transforms project descriptions into detailed cost breakdowns in seconds.
 
-## 🚀 Key Features
+## 🚀 Features
 
-- **Natural Language Input**: Describe your project in plain English (e.g., "150x300 warehouse (70%) + office(30%) with HVAC in California")
-- **Mixed-Use Building Support**: Accurate calculations for buildings with multiple use types
-- **Regional Pricing**: City and state-specific cost multipliers for accurate local pricing
-- **Subcontractor View**: Filter costs by trade (Electrical, Plumbing, HVAC, etc.)
-- **Deterministic Pricing**: Same inputs always produce the same cost estimates
-- **Real-time Cost Breakdown**: Visual charts and detailed system-by-system pricing
-- **Professional Scope Generation**: Export-ready construction scope documents
+### Core Functionality
+- **Natural Language Processing**: Describe your project in plain English and get instant cost estimates
+- **Deterministic Pricing**: Consistent, rule-based pricing engine for reliable estimates
+- **Mixed-Use Support**: Handle complex projects with multiple building types (office, warehouse, restaurant, etc.)
+- **Regional Cost Adjustments**: Automatic price adjustments based on project location
+- **Professional Floor Plans**: AI-generated architectural floor plans with proper room layouts
 
-## Tech Stack
+### Advanced Features
+- **Trade Package Generation**: Create detailed PDF packages for electrical, mechanical, plumbing, structural, finishes, and general conditions trades
+- **Project Comparison Tool**: Compare multiple scenarios side-by-side with visual analytics
+- **Executive Summaries**: Generate professional reports with cost breakdowns and visualizations
+- **Team Collaboration**: Share projects with team members (OAuth integration)
+- **Export Options**: Download estimates as Excel spreadsheets or PDF reports
+- **Markup & Margin Settings**: Customize overhead and profit percentages by trade
+- **Real-time Cost Visualization**: Interactive charts showing cost distribution by trade
+
+## 🛠️ Technology Stack
 
 ### Backend
-- FastAPI (Python)
-- SQLAlchemy + SQLite/PostgreSQL
-- Pydantic for data validation
-- JWT authentication
-- Matplotlib for floor plan generation
+- **Framework**: FastAPI (Python 3.8+)
+- **Database**: SQLAlchemy with SQLite (dev) / PostgreSQL (production)
+- **Authentication**: JWT tokens with OAuth2 (Google)
+- **API Documentation**: OpenAPI/Swagger (accessible at `/docs`)
+- **PDF Generation**: ReportLab
+- **Excel Export**: XlsxWriter with custom formatting
 
 ### Frontend
-- React with TypeScript
-- Vite for fast development
-- Axios for API calls
-- Recharts for data visualization
-- React Router for navigation
+- **Framework**: React 18 with TypeScript
+- **Build Tool**: Vite for lightning-fast development
+- **Styling**: CSS Modules + Tailwind CSS utilities
+- **Charts**: Recharts for data visualization
+- **Icons**: Lucide React
+- **State Management**: React hooks and context
 
-## Quick Start
+## 📋 Prerequisites
 
-### Prerequisites
-- Python 3.12+
-- Node.js 18+
-- npm or yarn
+- Python 3.8 or higher
+- Node.js 16 or higher
+- Git
 
-### Option 1: Using startup scripts
+## 🚀 Quick Start
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd specsharp
-```
-
-2. Start the backend:
-```bash
-./start-backend.sh
-```
-
-3. In a new terminal, start the frontend:
-```bash
-./start-frontend.sh
-```
-
-### Option 2: Manual setup
-
-#### Backend Setup
-
-1. Navigate to the backend directory:
-```bash
-cd backend
-```
-
-2. Create a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Copy environment variables:
-```bash
-cp .env.example .env
-```
-
-5. Run the backend:
-```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-The API will be available at http://localhost:8000
-- API Documentation: http://localhost:8000/docs
-- Alternative API docs: http://localhost:8000/redoc
-
-#### Frontend Setup
-
-1. Navigate to the frontend directory:
-```bash
-cd frontend
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Start the development server:
-```bash
-npm run dev
-```
-
-The frontend will be available at http://localhost:3000
-
-## 🎯 Usage Examples
-
-### Natural Language Input Examples
-
-1. **Mixed-Use Building**:
-   ```
-   150x300 warehouse (70%) + office(30%) with HVAC and bathrooms in California
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/specsharp.git
+   cd specsharp
    ```
 
-2. **Simple Office Building**:
+2. **Set up environment variables**
+   ```bash
+   # Backend (.env in /backend)
+   DATABASE_URL=sqlite:///./specsharp.db
+   SECRET_KEY=your-secret-key-here-change-in-production
+   ALGORITHM=HS256
+   ACCESS_TOKEN_EXPIRE_MINUTES=30
+   GOOGLE_CLIENT_ID=your-google-oauth-client-id
+   GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
    ```
-   10000 SF office building in Seattle with 2 floors
+
+3. **Start the application**
+   ```bash
+   ./start-all.sh
    ```
 
-3. **Warehouse Project**:
-   ```
-   25000 sqft warehouse with minimal HVAC in Austin, TX
-   ```
+   This will start:
+   - Backend API on http://localhost:8001
+   - Frontend on http://localhost:3000
+   - API Documentation on http://localhost:8001/docs
 
-### Using the Application
+4. **Test credentials** (for development)
+   - Email: test2@example.com
+   - Password: password123
 
-1. **Login**: Use test credentials (test@example.com / password123) or register
-2. **Create Scope**: Toggle to natural language mode or use the form
-3. **View Results**: See detailed cost breakdown by system
-4. **Subcontractor Mode**: Toggle subcontractor view to filter by trade
-5. **Export**: Download or share your scope document
-
-## 📊 Cost Calculation Logic
-
-### Base Costs (National Average per SF)
-- Foundation: $12/SF
-- Framing: $18/SF
-- HVAC: $15/SF
-- Electrical: $10/SF
-- Plumbing: $6/SF
-- Finishes: $20/SF
-
-### Regional Multipliers
-- San Francisco: 1.45x
-- Los Angeles: 1.25x
-- Seattle: 1.20x
-- Austin: 0.95x
-- Miami: 1.05x
-- Denver: 1.10x
-
-### Building Type Adjustments
-- Warehouse: 50% of office costs
-- Mixed-use: Weighted average based on percentages
-
-## API Endpoints
-
-### Authentication
-- `POST /api/v1/auth/register` - Register new user
-- `POST /api/v1/auth/token` - Login and get access token
-
-### Scope Management
-- `POST /api/v1/scope/generate` - Generate new project scope
-- `GET /api/v1/scope/projects` - List user's projects
-- `GET /api/v1/scope/projects/{project_id}` - Get project details
-
-### Cost Services
-- `GET /api/v1/cost/regional-multipliers` - Get regional cost multipliers
-- `GET /api/v1/cost/materials` - Get material costs
-- `POST /api/v1/cost/calculate-breakdown` - Calculate cost breakdown
-
-### Floor Plans
-- `POST /api/v1/floor-plan/generate` - Generate floor plan
-- `GET /api/v1/floor-plan/plans/{floor_plan_id}` - Get floor plan details
-
-## Configuration
-
-### Environment Variables
-
-Create a `.env` file in the backend directory:
-
-```env
-DATABASE_URL=sqlite:///./specsharp.db
-SECRET_KEY=your-secret-key-here-change-in-production
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-OPENAI_API_KEY=your-openai-key-optional
-ANTHROPIC_API_KEY=your-anthropic-key-optional
-ENVIRONMENT=development
-```
-
-## Project Structure
+## 📁 Project Structure
 
 ```
 specsharp/
 ├── backend/
 │   ├── app/
-│   │   ├── api/         # API endpoints
-│   │   ├── core/        # Core configuration and engine
-│   │   ├── db/          # Database models and setup
-│   │   ├── models/      # Pydantic models
-│   │   └── services/    # Business logic services
-│   ├── tests/           # Test files
-│   └── requirements.txt # Python dependencies
+│   │   ├── api/          # API endpoints
+│   │   ├── core/         # Core business logic & pricing engine
+│   │   ├── db/           # Database models & migrations
+│   │   └── services/     # Business services
+│   ├── tests/            # Backend tests
+│   └── requirements.txt  # Python dependencies
 ├── frontend/
 │   ├── src/
-│   │   ├── components/  # React components
-│   │   ├── services/    # API service layer
-│   │   └── App.tsx      # Main application
-│   └── package.json     # Node dependencies
-└── README.md
+│   │   ├── components/   # React components
+│   │   ├── pages/        # Page components
+│   │   ├── services/     # API client services
+│   │   └── utils/        # Utility functions
+│   ├── public/           # Static assets
+│   └── package.json      # Node dependencies
+├── scripts/              # Utility scripts
+├── start-all.sh         # Start both services
+├── start-backend.sh     # Start backend only
+├── start-frontend.sh    # Start frontend only
+└── CLAUDE.md            # AI assistant instructions
 ```
 
-## Development
+## 🔧 Development
 
-### Adding New Features
+### Backend Development
 
-1. **Backend**: Add new endpoints in `app/api/endpoints/`
-2. **Frontend**: Create components in `src/components/`
-3. **Services**: Add business logic in `app/services/`
-
-### Testing
-
-Run backend tests:
 ```bash
 cd backend
+source venv/bin/activate  # Activate virtual environment
+pip install -r requirements.txt
+
+# Run with auto-reload
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+
+# Run tests
 pytest
+
+# Code formatting
+black .
+flake8
+mypy .
 ```
 
-### Code Style
+### Frontend Development
 
-- Backend: Follow PEP 8 guidelines
-- Frontend: Use ESLint and Prettier for consistent formatting
+```bash
+cd frontend
+npm install
 
-## Deployment
+# Development server with hot-reload
+npm run dev
 
-For production deployment:
+# Build for production
+npm run build
 
-1. Update `.env` with production values
-2. Use PostgreSQL instead of SQLite
-3. Set up proper CORS origins
-4. Use a production ASGI server (e.g., Gunicorn with Uvicorn workers)
-5. Build the React frontend for production: `npm run build`
+# Run linter
+npm run lint
+```
 
-## Contributing
+### Database Migrations
+
+```bash
+cd backend
+alembic revision --autogenerate -m "Description of changes"
+alembic upgrade head
+```
+
+## 🎯 Usage Examples
+
+### Natural Language Input Examples
+
+1. **Office Building**
+   ```
+   50,000 sq ft office building in Austin, TX with standard finishes
+   ```
+
+2. **Mixed-Use Project**
+   ```
+   100,000 sq ft mixed use: 60% office, 40% retail in Seattle
+   ```
+
+3. **Restaurant**
+   ```
+   5,000 sq ft full service restaurant in New York with commercial kitchen
+   ```
+
+4. **Warehouse**
+   ```
+   75,000 sq ft warehouse with 10% office space in Phoenix
+   ```
+
+### Using the Application
+
+1. **Create Project**: Use natural language or the detailed form
+2. **Review Estimate**: See cost breakdown by trade and system
+3. **Generate Trade Packages**: Create PDF packages for subcontractors
+4. **Compare Scenarios**: Evaluate different project configurations
+5. **Export Results**: Download Excel or PDF reports
+
+## 📊 Cost Calculation Logic
+
+SpecSharp uses a deterministic pricing engine based on:
+
+1. **Base Costs**: Per square foot rates for different building systems
+   - Foundation: $12-20/SF (varies by type)
+   - Structural: $18-35/SF (based on building type)
+   - HVAC: $15-25/SF (climate zone adjusted)
+   - Electrical: $10-20/SF (building use dependent)
+   - Plumbing: $6-30/SF (restaurant vs office)
+   - Finishes: $20-120/SF (quality level based)
+
+2. **Building Type Multipliers**
+   - Office: 1.0x (baseline)
+   - Warehouse: 0.5x (reduced systems)
+   - Restaurant: 1.5-2.0x (commercial kitchen requirements)
+   - Mixed-Use: Weighted average calculation
+
+3. **Regional Factors**
+   - Tier 1 Cities (SF, NYC): 1.35-1.45x
+   - Tier 2 Cities (Seattle, LA): 1.15-1.25x
+   - Tier 3 Cities (Austin, Denver): 0.95-1.10x
+   - Rural Areas: 0.85-0.95x
+
+4. **Trade Breakdowns**: Detailed costs for 15+ construction trades
+
+5. **Markups**: Configurable overhead (10%) and profit (10%) percentages
+
+## 🔐 Security
+
+- JWT-based authentication with secure token handling
+- OAuth2 integration for Google sign-in
+- Environment-based configuration for sensitive data
+- CORS protection with configurable origins
+- SQL injection protection via SQLAlchemy ORM
+- Input validation using Pydantic models
+
+## 🚀 Deployment
+
+### Production Considerations
+- Use PostgreSQL instead of SQLite
+- Set secure SECRET_KEY (use `openssl rand -hex 32`)
+- Configure proper CORS origins
+- Enable HTTPS with SSL certificates
+- Set up proper logging and monitoring
+- Use Gunicorn with Uvicorn workers
+
+### Environment Variables
+```bash
+DATABASE_URL=postgresql://user:password@host:port/dbname
+SECRET_KEY=your-secure-random-key
+GOOGLE_CLIENT_ID=your-oauth-client-id
+GOOGLE_CLIENT_SECRET=your-oauth-client-secret
+FRONTEND_URL=https://yourdomain.com
+ENVIRONMENT=production
+```
+
+### Docker Deployment (Coming Soon)
+```bash
+docker-compose up -d
+```
+
+## 🧪 Testing
+
+### Backend Tests
+```bash
+cd backend
+pytest -v
+pytest --cov=app tests/  # With coverage
+```
+
+### Frontend Tests
+```bash
+cd frontend
+npm test
+npm run test:coverage
+```
+
+### E2E Testing Flow
+1. Create projects with various building types
+2. Generate and verify trade packages
+3. Test export functionality
+4. Verify cost calculations
+5. Test user authentication flow
+
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Run tests and ensure they pass
+5. Commit your changes (`git commit -m 'Add amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
 
-## License
+### Code Style Guidelines
+- Backend: Follow PEP 8, use Black formatter
+- Frontend: ESLint + Prettier configuration
+- Commit messages: Use conventional commits format
 
-This project is licensed under the MIT License.
+## 📝 API Documentation
+
+### Core Endpoints
+
+#### Authentication
+- `POST /api/v1/auth/register` - Register new user
+- `POST /api/v1/auth/token` - Login
+- `GET /api/v1/oauth/login/google` - Google OAuth login
+
+#### Projects
+- `POST /api/v1/scope/generate` - Generate new project
+- `GET /api/v1/scope/projects` - List projects
+- `GET /api/v1/scope/projects/{id}` - Get project details
+- `DELETE /api/v1/scope/projects/{id}` - Delete project
+
+#### Trade Packages
+- `GET /api/v1/trade-package/preview/{project_id}/{trade}` - Preview package
+- `POST /api/v1/trade-package/generate/{project_id}/{trade}` - Generate package
+
+#### Exports
+- `POST /api/v1/excel/export/{project_id}` - Export to Excel
+- `POST /api/v1/pdf/export/{project_id}` - Export to PDF
+
+Full API documentation available at http://localhost:8001/docs when running locally.
+
+## 🐛 Known Issues & Troubleshooting
+
+### Common Issues
+1. **Port Conflicts**: If ports 8001 or 3000 are in use, modify the start scripts
+2. **Database Migrations**: Run `alembic upgrade head` if you see database errors
+3. **CORS Errors**: Check that frontend URL is in backend CORS allowed origins
+
+### Debug Mode
+Enable debug logging:
+```bash
+# Backend
+LOG_LEVEL=DEBUG uvicorn app.main:app --reload
+
+# Frontend
+VITE_DEBUG=true npm run dev
+```
+
+## 📄 License
+
+This project is proprietary software. All rights reserved.
+
+## 🆘 Support
+
+- Email: support@specsharp.ai
+- GitHub Issues: [Create an issue](https://github.com/yourusername/specsharp/issues)
+- Documentation: [Wiki](https://github.com/yourusername/specsharp/wiki)
+
+## 🙏 Acknowledgments
+
+- Built with ❤️ by the SpecSharp team
+- Special thanks to all contributors
+- Powered by OpenAI for natural language processing
+
+---
+
+**Current Version**: 1.0.0  
+**Last Updated**: July 2025

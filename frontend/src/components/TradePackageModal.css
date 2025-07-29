@@ -39,22 +39,7 @@
   color: #1a1a1a;
 }
 
-.close-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #666;
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: background-color 0.2s;
-}
-
-.close-btn:hover {
-  background-color: #f0f0f0;
-}
+/* Close button styles moved to global CSS in index.css */
 
 .modal-body {
   flex: 1;

@@ -7,6 +7,7 @@ import ScopeGenerator from './components/ScopeGenerator';
 import ProjectDetail from './components/ProjectDetail';
 import ProgressiveProjectDetail from './components/ProgressiveProjectDetail';
 import SharedProjectView from './components/SharedProjectView';
+import ComparisonPage from './pages/ComparisonPage';
 import { HomePage } from './pages/HomePage';
 import { DemoPage } from './pages/DemoPage';
 import { TermsOfService } from './pages/TermsOfService';
@@ -79,6 +80,14 @@ function App() {
             element={
               isAuthenticated ? 
               <ProgressiveProjectDetail /> : 
+              <Navigate to="/login" />
+            } 
+          />
+          <Route 
+            path="/compare" 
+            element={
+              isAuthenticated ? 
+              <ComparisonPage /> : 
               <Navigate to="/login" />
             } 
           />

@@ -32,19 +32,7 @@
   color: #2d3748;
 }
 
-.close-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #4a5568;
-  padding: 0.5rem;
-  border-radius: 4px;
-  transition: background 0.2s;
-}
-
-.close-btn:hover {
-  background: #f7fafc;
-}
+/* Close button styles moved to global CSS in index.css */
 
 .settings-section {
   margin-bottom: 2rem;

@@ -27,8 +27,9 @@
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  border-bottom: 1px solid #e0e0e0;
-  background-color: #f8f9fa;
+  border-bottom: 2px solid #e0e0e0;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .comparison-header h2 {
@@ -79,14 +80,32 @@
 }
 
 .template-btn {
-  padding: 10px 20px;
-  border: 1px solid #e0e0e0;
+  padding: 12px 24px;
+  border: 2px solid #e0e0e0;
   background: white;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s ease;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
+  position: relative;
+  overflow: hidden;
+}
+
+.template-btn::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 0;
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  transition: height 0.3s ease;
+  z-index: -1;
+}
+
+.template-btn:hover::before {
+  height: 100%;
 }
 
 .template-btn:hover {
@@ -119,16 +138,22 @@
 .add-scenario-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  background-color: #0066cc;
+  gap: 8px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
-  font-weight: 500;
-  transition: background-color 0.2s;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
+}
+
+.add-scenario-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(25, 118, 210, 0.4);
 }
 
 .add-scenario-btn:hover {
@@ -143,11 +168,29 @@
 }
 
 .scenario-card {
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 20px;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 24px;
   background: white;
-  transition: box-shadow 0.2s;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.scenario-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #6c757d 0%, #868e96 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.scenario-card:not(.base-scenario)::before {
+  opacity: 1;
 }
 
 .scenario-card:hover {
@@ -155,8 +198,9 @@
 }
 
 .base-scenario {
-  background-color: #f8f9fa;
-  border-color: #0066cc;
+  background: linear-gradient(135deg, #e3f2fd 0%, #f3f9ff 100%);
+  border: 2px solid #1976d2;
+  box-shadow: 0 0 0 1px rgba(25, 118, 210, 0.1);
 }
 
 .scenario-header {
@@ -262,15 +306,36 @@
 
 .compare-btn {
   width: 100%;
-  padding: 12px 24px;
-  background-color: #28a745;
+  padding: 14px 28px;
+  background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 16px rgba(76, 175, 80, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.compare-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.compare-btn:hover::before {
+  width: 300px;
+  height: 300px;
 }
 
 .compare-btn:hover:not(:disabled) {
@@ -336,9 +401,11 @@
 }
 
 .summary-card {
-  background-color: #f8f9fa;
-  border-radius: 8px;
-  padding: 24px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 28px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
 }
 
 .summary-card h4 {
@@ -354,10 +421,28 @@
 
 .metric-card {
   background: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 20px;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 24px;
   text-align: center;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  border-color: #1976d2;
+}
+
+.metric-card:first-child {
+  border-color: #1976d2;
+  background: linear-gradient(135deg, #f8fbff 0%, #eef6ff 100%);
+}
+
+.metric-card:first-child .metric-value {
+  color: #1976d2;
 }
 
 .metric-card h5 {
@@ -368,10 +453,12 @@
 }
 
 .metric-value {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: bold;
-  color: #0066cc;
-  margin-bottom: 4px;
+  color: #1976d2;
+  margin-bottom: 8px;
+  letter-spacing: -0.5px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .metric-label {
@@ -388,14 +475,35 @@
 }
 
 .recommendations {
-  background-color: #e8f4fd;
-  border-radius: 8px;
-  padding: 24px;
+  background: linear-gradient(135deg, #e8f5e9 0%, #f1f8e9 100%);
+  border: 2px solid #4caf50;
+  border-radius: 12px;
+  padding: 28px;
+  position: relative;
+}
+
+.recommendations::before {
+  content: '✓';
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  font-size: 24px;
+  color: #4caf50;
+  opacity: 0.3;
 }
 
 .recommendations h4 {
   margin: 0 0 16px 0;
-  color: #0066cc;
+  color: #2e7d32;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.recommendations h4::before {
+  content: '💡';
+  font-size: 24px;
 }
 
 .recommendations ul {
@@ -410,9 +518,20 @@
 }
 
 .deltas-section {
-  background-color: #f8f9fa;
-  border-radius: 8px;
-  padding: 24px;
+  background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+  border: 2px solid #ff9800;
+  border-radius: 12px;
+  padding: 28px;
+  position: relative;
+}
+
+.deltas-section::before {
+  content: '📊';
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  font-size: 24px;
+  opacity: 0.3;
 }
 
 .deltas-section h4 {
@@ -443,9 +562,218 @@
 }
 
 .delta-value.positive {
-  color: #dc3545;
+  color: #d32f2f;
+  background: #ffebee;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 16px;
+}
+
+.delta-value.positive::before {
+  content: '↑ ';
 }
 
 .delta-value.negative {
-  color: #28a745;
+  color: #388e3c;
+  background: #e8f5e9;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 16px;
+}
+
+.delta-value.negative::before {
+  content: '↓ ';
+}
+
+/* Loading state for scenarios */
+.scenario-card.loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.scenario-card.loading::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #1976d2;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Enhanced input styling */
+.control-group input[type="number"]:focus {
+  outline: none;
+  border-color: #1976d2;
+  box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1);
+}
+
+/* Visual indicators for value changes */
+.control-group {
+  position: relative;
+}
+
+.control-group.value-increased input {
+  border-color: #4caf50;
+  background-color: #f1f8f4;
+}
+
+.control-group.value-decreased input {
+  border-color: #f44336;
+  background-color: #fef5f4;
+}
+
+/* Scenario type badges */
+.scenario-card::after {
+  content: 'Alternative';
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 4px 12px;
+  background: #6c757d;
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.base-scenario::after {
+  content: 'Current Design';
+  background: #1976d2;
+}
+
+/* Enhanced hover effects */
+.scenario-card:hover {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+.base-scenario:hover {
+  box-shadow: 0 8px 32px rgba(25, 118, 210, 0.2);
+}
+
+/* Improved chart styling */
+.recharts-wrapper {
+  font-family: inherit !important;
+}
+
+.recharts-cartesian-axis-tick {
+  font-size: 12px;
+  fill: #666;
+}
+
+.recharts-bar {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+/* Cost difference indicators */
+.cost-difference-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 14px;
+  margin-left: 12px;
+}
+
+.cost-difference-badge.savings {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.cost-difference-badge.increase {
+  background: #ffebee;
+  color: #c62828;
+}
+
+/* Improved results section */
+.results-section {
+  animation: fadeInUp 0.5s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Enhanced metric cards */
+.metric-card {
+  background-size: 200% 200%;
+  background-position: 0% 0%;
+}
+
+.metric-card:hover {
+  background-position: 100% 100%;
+}
+
+/* Project overview table styling */
+.project-overview-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+}
+
+.project-overview-table th {
+  background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+  color: white;
+  padding: 16px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.project-overview-table td {
+  padding: 16px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 15px;
+}
+
+.project-overview-table tr:last-child td {
+  border-bottom: none;
+}
+
+.project-overview-table tr:hover td {
+  background-color: #f8fbff;
+}
+
+.project-overview-table .project-name {
+  font-weight: 600;
+  color: #1976d2;
+}
+
+.project-overview-table .location {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #666;
+}
+
+.project-overview-table .square-footage {
+  font-weight: 600;
+  color: #333;
 }

@@ -346,6 +346,50 @@ class ProfessionalPDFExportService:
         elements.append(Spacer(1, 0.3*inch))
         elements.append(trade_table)
         
+        # Developer-specific metrics
+        developer_metrics = executive_summary.get('developer_metrics', {})
+        if developer_metrics:
+            elements.append(Spacer(1, 0.3*inch))
+            elements.append(Paragraph("Developer Metrics", self.styles['SubsectionHeader']))
+            
+            # Create metrics table
+            metrics_data = []
+            if 'cost_per_room' in developer_metrics:
+                metrics_data.append(['Cost per Room:', developer_metrics['cost_per_room']])
+                metrics_data.append(['Total Rooms:', str(developer_metrics.get('rooms_count', 'N/A'))])
+            elif 'cost_per_bed' in developer_metrics:
+                metrics_data.append(['Cost per Bed:', developer_metrics['cost_per_bed']])
+                metrics_data.append(['Total Beds:', str(developer_metrics.get('beds_count', 'N/A'))])
+            elif 'cost_per_unit' in developer_metrics:
+                metrics_data.append(['Cost per Unit:', developer_metrics['cost_per_unit']])
+                metrics_data.append(['Total Units:', str(developer_metrics.get('units_count', 'N/A'))])
+            elif 'cost_per_student' in developer_metrics:
+                metrics_data.append(['Cost per Student:', developer_metrics['cost_per_student']])
+                metrics_data.append(['Student Capacity:', str(developer_metrics.get('student_capacity', 'N/A'))])
+            elif 'cost_per_rsf' in developer_metrics:
+                metrics_data.append(['Cost per RSF:', developer_metrics['cost_per_rsf']])
+                metrics_data.append(['Rentable SF:', developer_metrics.get('rsf', 'N/A')])
+                if 'cost_per_desk' in developer_metrics:
+                    metrics_data.append(['Cost per Desk:', developer_metrics['cost_per_desk']])
+                    metrics_data.append(['Desk Capacity:', str(developer_metrics.get('desk_capacity', 'N/A'))])
+            
+            if metrics_data:
+                dev_metrics_table = Table(metrics_data, colWidths=[3*inch, 3*inch])
+                dev_metrics_table.setStyle(TableStyle([
+                    ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                    ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 12),
+                    ('TEXTCOLOR', (1, 0), (1, -1), self.BRAND_ACCENT),
+                    ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+                    ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+                    ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F0F4F8')),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E2E8F0')),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ]))
+                
+                elements.append(dev_metrics_table)
+        
         return elements
     
     def _create_cost_breakdown_page(self, project_data: Dict) -> List:

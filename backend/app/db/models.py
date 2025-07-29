@@ -51,6 +51,7 @@ class Project(Base):
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(String, unique=True, index=True, nullable=False)
     name = Column(String, nullable=False)
+    scenario_name = Column(String, nullable=True)  # For scenario comparisons (e.g., "Conservative", "Aggressive")
     description = Column(Text, nullable=True)  # Original input description
     project_type = Column(String, nullable=False)
     building_type = Column(String, nullable=True)  # Specific building type (hospital, school, etc.)
