@@ -1,0 +1,32 @@
+<\!DOCTYPE html>
+<html>
+<head>
+    <title>Test Login</title>
+</head>
+<body>
+    <h1>Test Login Redirect</h1>
+    <button onclick="testLogin()">Test Google Login</button>
+    <div id="output"></div>
+    
+    <script>
+        function testLogin() {
+            const url = "http://localhost:8001/api/v1/oauth/login/google";
+            document.getElementById("output").innerHTML = "Redirecting to: " + url;
+            console.log("Redirecting to:", url);
+            
+            // Test if backend is accessible
+            fetch("http://localhost:8001/")
+                .then(r => r.text())
+                .then(data => {
+                    document.getElementById("output").innerHTML += "<br>Backend is accessible\!";
+                    setTimeout(() => {
+                        window.location.href = url;
+                    }, 1000);
+                })
+                .catch(err => {
+                    document.getElementById("output").innerHTML += "<br>ERROR: Backend not accessible: " + err;
+                });
+        }
+    </script>
+</body>
+</html>

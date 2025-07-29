@@ -1,9 +1,12 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
-from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy import or_
+from typing import List, Optional
 import json
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from fastapi_cache.decorator import cache
+from fastapi_cache import FastAPICache
 
 from app.models.scope import ScopeRequest, ScopeResponse
 from app.core.engine import engine as scope_engine
@@ -18,6 +21,16 @@ from app.api.endpoints.auth import get_current_user_with_cookie
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
+
+
+async def invalidate_project_cache(project_id: str, user_id: int):
+    """Helper to invalidate cache for a specific project"""
+    try:
+        # Clear the specific project cache
+        cache_key = f"specsharp-cache:get_project:{project_id}"
+        await FastAPICache.clear(namespace=cache_key)
+    except Exception as e:
+        print(f"Cache invalidation failed: {e}")
 
 
 @router.post("/generate", response_model=ScopeResponse)
@@ -152,18 +165,27 @@ async def generate_scope(
         raise HTTPException(status_code=500, detail=f"Error generating scope: {str(e)}")
 
 
-@router.get("/projects", response_model=List[dict])
+@router.get("/projects")
 async def list_projects(
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 20,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_with_cookie)
 ):
+    # Validate pagination parameters
+    if limit > 100:
+        limit = 100  # Max limit
+    if skip < 0:
+        skip = 0
+    
     # Get user's current team
     user = current_user  # current_user is already the User object
     
-    # Query projects - if user has a team, get all team projects
+    # Base query for projects - if user has a team, get all team projects
     if user.current_team_id:
+        base_query = db.query(Project).filter(
+            Project.team_id == user.current_team_id
+        )
         projects_query = db.query(Project, User.full_name.label('creator_name')).join(
             User, Project.created_by_id == User.id, isouter=True
         ).filter(
@@ -171,15 +193,22 @@ async def list_projects(
         )
     else:
         # Fallback to user's personal projects
+        base_query = db.query(Project).filter(
+            Project.user_id == current_user.id
+        )
         projects_query = db.query(Project, User.full_name.label('creator_name')).join(
             User, Project.created_by_id == User.id, isouter=True
         ).filter(
             Project.user_id == current_user.id
         )
     
-    projects = projects_query.offset(skip).limit(limit).all()
+    # Get total count
+    total = base_query.count()
     
-    return [
+    # Get paginated projects ordered by created_at descending
+    projects = projects_query.order_by(Project.created_at.desc()).offset(skip).limit(limit).all()
+    
+    items = [
         {
             "id": p.Project.id,
             "project_id": p.Project.project_id,
@@ -198,15 +227,123 @@ async def list_projects(
         }
         for p in projects
     ]
+    
+    return {
+        "items": items,
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
+
+
+@router.get("/projects/search")
+async def search_projects(
+    q: str,
+    skip: int = 0,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_with_cookie)
+):
+    """Search projects by name or description"""
+    # Validate pagination parameters
+    if limit > 100:
+        limit = 100  # Max limit
+    if skip < 0:
+        skip = 0
+    
+    # Get user's current team
+    user = current_user
+    
+    # Base query for search
+    search_term = f"%{q}%"
+    if user.current_team_id:
+        base_query = db.query(Project).filter(
+            Project.team_id == user.current_team_id,
+            or_(
+                Project.name.ilike(search_term),
+                Project.description.ilike(search_term),
+                Project.location.ilike(search_term)
+            )
+        )
+        projects_query = db.query(Project, User.full_name.label('creator_name')).join(
+            User, Project.created_by_id == User.id, isouter=True
+        ).filter(
+            Project.team_id == user.current_team_id,
+            or_(
+                Project.name.ilike(search_term),
+                Project.description.ilike(search_term),
+                Project.location.ilike(search_term)
+            )
+        )
+    else:
+        base_query = db.query(Project).filter(
+            Project.user_id == current_user.id,
+            or_(
+                Project.name.ilike(search_term),
+                Project.description.ilike(search_term),
+                Project.location.ilike(search_term)
+            )
+        )
+        projects_query = db.query(Project, User.full_name.label('creator_name')).join(
+            User, Project.created_by_id == User.id, isouter=True
+        ).filter(
+            Project.user_id == current_user.id,
+            or_(
+                Project.name.ilike(search_term),
+                Project.description.ilike(search_term),
+                Project.location.ilike(search_term)
+            )
+        )
+    
+    # Get total count
+    total = base_query.count()
+    
+    # Get paginated results ordered by created_at descending
+    projects = projects_query.order_by(Project.created_at.desc()).offset(skip).limit(limit).all()
+    
+    items = [
+        {
+            "id": p.Project.id,
+            "project_id": p.Project.project_id,
+            "name": p.Project.name,
+            "project_type": p.Project.project_type,
+            "building_type": p.Project.building_type,
+            "occupancy_type": p.Project.occupancy_type,
+            "description": p.Project.description,
+            "square_footage": p.Project.square_footage,
+            "location": p.Project.location,
+            "total_cost": p.Project.total_cost,
+            "cost_per_sqft": p.Project.cost_per_sqft,
+            "created_at": p.Project.created_at,
+            "created_by": p.creator_name or "Unknown",
+            "scope_data": json.loads(p.Project.scope_data) if p.Project.scope_data else {}
+        }
+        for p in projects
+    ]
+    
+    return {
+        "items": items,
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+        "query": q
+    }
 
 
 @router.get("/projects/{project_id}", response_model=ScopeResponse)
+@cache(expire=300)  # Cache for 5 minutes
 async def get_project(
     project_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_with_cookie)
 ):
-    project = db.query(Project).filter(
+    # Optimize query by selecting only needed columns
+    project = db.query(
+        Project.project_id,
+        Project.square_footage,
+        Project.project_type,
+        Project.scope_data
+    ).filter(
         Project.project_id == project_id,
         Project.user_id == current_user.id
     ).first()
@@ -214,7 +351,7 @@ async def get_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Parse stored scope data
+    # Parse stored scope data efficiently
     scope_data = json.loads(project.scope_data)
     
     # Check if floor plan already exists in stored data
@@ -264,6 +401,9 @@ async def delete_project(
     # Delete the project
     db.delete(project)
     db.commit()
+    
+    # Invalidate cache
+    await invalidate_project_cache(project_id, current_user.id)
     
     return {"message": "Project deleted successfully", "project_id": project_id}
 
@@ -320,6 +460,9 @@ async def recalculate_project(
     # Update the project in database
     project.scope_data = new_scope_response.model_dump_json()
     db.commit()
+    
+    # Invalidate cache
+    await invalidate_project_cache(project_id, current_user.id)
     
     return new_scope_response
 

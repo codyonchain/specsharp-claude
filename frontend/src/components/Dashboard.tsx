@@ -1,19 +1,47 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { scopeService, authService, subscriptionService } from '../services/api';
 import { Trash2, Copy, Settings, Users, Sliders, Edit2, Check, X } from 'lucide-react';
 import { getDisplayBuildingType } from '../utils/buildingTypeDisplay';
 import { formatCurrency, formatCurrencyPerSF, formatNumber } from '../utils/formatters';
 import { calculateDeveloperMetrics, formatMetricValue } from '../utils/developerMetrics';
-import MarkupSettings from './MarkupSettings';
-import OnboardingFlow from './OnboardingFlow';
-import PaymentWall from './PaymentWall';
-import TeamSettings from './TeamSettings';
 import './Dashboard.css';
+
+// Lazy load modal components (not immediately visible)
+const MarkupSettings = lazy(() => import('./MarkupSettings'));
+const OnboardingFlow = lazy(() => import('./OnboardingFlow'));
+const PaymentWall = lazy(() => import('./PaymentWall'));
+const TeamSettings = lazy(() => import('./TeamSettings'));
 
 interface DashboardProps {
   setIsAuthenticated: (value: boolean) => void;
 }
+
+// Loading component for lazy-loaded modals
+const ModalLoading = () => (
+  <div style={{
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999
+  }}>
+    <div style={{
+      backgroundColor: 'white',
+      padding: '40px',
+      borderRadius: '8px',
+      textAlign: 'center'
+    }}>
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
+      <p style={{ marginTop: '16px', color: '#666' }}>Loading...</p>
+    </div>
+  </div>
+);
 
 function Dashboard({ setIsAuthenticated }: DashboardProps) {
   const [projects, setProjects] = useState<any[]>([]);
@@ -202,21 +230,25 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
   // Show onboarding flow for new users
   if (showOnboarding) {
     return (
-      <OnboardingFlow 
-        onComplete={handleOnboardingComplete}
-        currentEstimateCount={subscriptionStatus?.estimate_count || 0}
-      />
+      <Suspense fallback={<ModalLoading />}>
+        <OnboardingFlow 
+          onComplete={handleOnboardingComplete}
+          currentEstimateCount={subscriptionStatus?.estimate_count || 0}
+        />
+      </Suspense>
     );
   }
 
   // Show payment wall if free limit reached
   if (showPaymentWall) {
     return (
-      <PaymentWall
-        totalTimeSaved={totalTimeSaved}
-        estimatesCreated={subscriptionStatus?.estimate_count || 3}
-        onPaymentSuccess={handlePaymentSuccess}
-      />
+      <Suspense fallback={<ModalLoading />}>
+        <PaymentWall
+          totalTimeSaved={totalTimeSaved}
+          estimatesCreated={subscriptionStatus?.estimate_count || 3}
+          onPaymentSuccess={handlePaymentSuccess}
+        />
+      </Suspense>
     );
   }
 
@@ -431,20 +463,28 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
       )}
 
       {/* Markup Settings Modal */}
-      <MarkupSettings
-        isOpen={showMarkupSettings}
-        onClose={() => setShowMarkupSettings(false)}
-        onSave={() => {
-          // Optionally reload projects to reflect new markup calculations
-          loadProjects();
-        }}
-      />
+      {showMarkupSettings && (
+        <Suspense fallback={<ModalLoading />}>
+          <MarkupSettings
+            isOpen={showMarkupSettings}
+            onClose={() => setShowMarkupSettings(false)}
+            onSave={() => {
+              // Optionally reload projects to reflect new markup calculations
+              loadProjects();
+            }}
+          />
+        </Suspense>
+      )}
 
       {/* Team Settings Modal */}
-      <TeamSettings
-        isOpen={showTeamSettings}
-        onClose={() => setShowTeamSettings(false)}
-      />
+      {showTeamSettings && (
+        <Suspense fallback={<ModalLoading />}>
+          <TeamSettings
+            isOpen={showTeamSettings}
+            onClose={() => setShowTeamSettings(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

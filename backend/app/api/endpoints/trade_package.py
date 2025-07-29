@@ -5,6 +5,7 @@ from app.api.endpoints.auth import get_current_user
 from app.api.endpoints.scope import get_project
 from app.db.database import get_db
 from sqlalchemy.orm import Session
+from fastapi_cache.decorator import cache
 import json
 import logging
 import traceback
@@ -93,6 +94,7 @@ async def generate_trade_package(
 
 
 @router.get("/preview/{project_id}/{trade}")
+@cache(expire=3600)  # Cache for 1 hour
 async def preview_trade_package(
     project_id: str,
     trade: str,

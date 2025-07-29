@@ -200,9 +200,10 @@ async def oauth_callback(request: Request, response: Response, db: Session = Dep
 
 
 @router.get("/user/info")
-async def get_user_info(current_user: dict = Depends(get_current_user_with_cookie), db: Session = Depends(get_db)):
+async def get_user_info(current_user: DBUser = Depends(get_current_user_with_cookie), db: Session = Depends(get_db)):
     """Get current user information including OAuth details"""
-    user = db.query(DBUser).filter(DBUser.id == current_user["id"]).first()
+    # current_user is already a User object from the dependency
+    user = current_user
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     

@@ -85,6 +85,10 @@ export const scopeService = {
 
   getProjects: async () => {
     const response = await api.get('/scope/projects');
+    // Handle new paginated response format
+    if (response.data && response.data.items) {
+      return response.data.items;
+    }
     return response.data;
   },
 

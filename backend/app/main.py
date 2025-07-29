@@ -1,14 +1,21 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from contextlib import asynccontextmanager
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.redis import RedisBackend
+from redis import asyncio as aioredis
+import logging
 
 from app.core.config import settings
 from app.api.endpoints import auth, oauth, scope, cost, floor_plan, trade_package, comparison, markup, excel_export, pdf_export, subscription, team, share, demo
 from app.db.database import engine, Base
+
+logger = logging.getLogger(__name__)
 
 
 # Initialize rate limiter
@@ -16,8 +23,25 @@ limiter = Limiter(key_func=get_remote_address)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Create database tables
     Base.metadata.create_all(bind=engine)
+    
+    # Initialize Redis cache
+    try:
+        redis_url = getattr(settings, 'redis_url', 'redis://localhost:6379')
+        redis = aioredis.from_url(redis_url, encoding="utf8", decode_responses=True)
+        FastAPICache.init(RedisBackend(redis), prefix="specsharp-cache:")
+        logger.info("✅ Redis cache initialized successfully")
+    except Exception as e:
+        logger.warning(f"⚠️ Redis cache initialization failed: {e}. Continuing without cache.")
+    
     yield
+    
+    # Cleanup
+    try:
+        await FastAPICache.clear()
+    except:
+        pass
 
 
 app = FastAPI(
@@ -31,6 +55,9 @@ app.state.limiter = limiter
 
 # Add rate limit exceeded handler
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Add GZip compression middleware (compress responses > 1KB)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.add_middleware(
     CORSMiddleware,

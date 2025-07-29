@@ -28,7 +28,13 @@ class Settings(BaseSettings):
     
     # Stripe settings (optional)
     stripe_secret_key: Optional[str] = None
+    
+    # Redis settings for caching
+    redis_url: str = "redis://localhost:6379"
     stripe_webhook_secret: Optional[str] = None
+    
+    # Logging
+    log_level: str = "INFO"
     
     class Config:
         env_file = ".env"
