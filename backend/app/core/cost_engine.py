@@ -541,6 +541,13 @@ REGIONAL_MULTIPLIERS = {
         "electrical": 0.99,
         "plumbing": 0.98,
         "finishes": 0.97
+    },
+    "TN": {
+        "structural": 0.98,  # Lower labor costs than Northeast
+        "mechanical": 0.99,  # Competitive HVAC market
+        "electrical": 0.97,  # Lower union presence
+        "plumbing": 0.98,   # Similar to other South states
+        "finishes": 0.96    # Lower labor costs
     }
 }
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Sliders, Plus, Trash2, Download } from 'lucide-react';
+import { formatCurrency } from '../utils/formatters';
 import './ComparisonTool.css';
 
 interface ComparisonToolProps {
@@ -390,7 +391,7 @@ function ComparisonTool({ projectData, onClose }: ComparisonToolProps) {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
                     <YAxis tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
-                    <Tooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
+                    <Tooltip formatter={(value: number) => formatCurrency(value)} />
                     <Bar dataKey="cost" fill="#0066cc" />
                   </BarChart>
                 </ResponsiveContainer>
@@ -400,10 +401,10 @@ function ComparisonTool({ projectData, onClose }: ComparisonToolProps) {
                 {comparisonResult.analysis.key_metrics.map((metric: any) => (
                   <div key={metric.scenario_id} className="metric-card">
                     <h5>{metric.scenario_name}</h5>
-                    <div className="metric-value">${metric.total_cost.toLocaleString()}</div>
+                    <div className="metric-value">{formatCurrency(metric.total_cost)}</div>
                     <div className="metric-label">Total Cost</div>
                     <div className="metric-secondary">
-                      ${metric.cost_per_sqft.toFixed(2)}/sq ft
+                      ${metric.cost_per_sqft.toFixed(2)}/SF
                     </div>
                   </div>
                 ))}

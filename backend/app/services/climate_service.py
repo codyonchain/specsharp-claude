@@ -33,6 +33,36 @@ class ClimateService:
                 "UT": {"zone": ClimateZone.COLD, "region": "Mountain"},
                 "ME": {"zone": ClimateZone.VERY_COLD, "region": "Northeast"},
                 "AK": {"zone": ClimateZone.VERY_COLD, "region": "Arctic"},
+                "NH": {"zone": ClimateZone.COLD, "region": "Northeast"},
+                "VT": {"zone": ClimateZone.COLD, "region": "Northeast"},
+                "CT": {"zone": ClimateZone.COLD, "region": "Northeast"},
+                "RI": {"zone": ClimateZone.COLD, "region": "Northeast"},
+                "NJ": {"zone": ClimateZone.COLD, "region": "Northeast"},
+                "DE": {"zone": ClimateZone.TEMPERATE, "region": "Mid-Atlantic"},
+                "MD": {"zone": ClimateZone.TEMPERATE, "region": "Mid-Atlantic"},
+                "VA": {"zone": ClimateZone.TEMPERATE, "region": "Mid-Atlantic"},
+                "WV": {"zone": ClimateZone.COLD, "region": "Mid-Atlantic"},
+                "KY": {"zone": ClimateZone.TEMPERATE, "region": "South"},
+                "TN": {"zone": ClimateZone.TEMPERATE, "region": "South"},
+                "SC": {"zone": ClimateZone.HOT_HUMID, "region": "Southeast"},
+                "AL": {"zone": ClimateZone.HOT_HUMID, "region": "Southeast"},
+                "MS": {"zone": ClimateZone.HOT_HUMID, "region": "Southeast"},
+                "LA": {"zone": ClimateZone.HOT_HUMID, "region": "South"},
+                "AR": {"zone": ClimateZone.HOT_HUMID, "region": "South"},
+                "OK": {"zone": ClimateZone.HOT_DRY, "region": "South Central"},
+                "KS": {"zone": ClimateZone.COLD, "region": "Midwest"},
+                "NE": {"zone": ClimateZone.COLD, "region": "Midwest"},
+                "SD": {"zone": ClimateZone.VERY_COLD, "region": "North Central"},
+                "ND": {"zone": ClimateZone.VERY_COLD, "region": "North Central"},
+                "WY": {"zone": ClimateZone.COLD, "region": "Mountain"},
+                "MT": {"zone": ClimateZone.COLD, "region": "Mountain"},
+                "ID": {"zone": ClimateZone.COLD, "region": "Mountain"},
+                "NM": {"zone": ClimateZone.HOT_DRY, "region": "Southwest"},
+                "HI": {"zone": ClimateZone.HOT_HUMID, "region": "Pacific"},
+                "IA": {"zone": ClimateZone.COLD, "region": "Midwest"},
+                "MO": {"zone": ClimateZone.TEMPERATE, "region": "Midwest"},
+                "IN": {"zone": ClimateZone.COLD, "region": "Midwest"},
+                "WI": {"zone": ClimateZone.COLD, "region": "North Central"},
             },
             "cities": {
                 "Miami": ClimateZone.HOT_HUMID,
@@ -163,12 +193,37 @@ class ClimateService:
             if city.lower() in location.lower():
                 return zone
         
+        # Check for state abbreviation
         state_match = re.search(r',\s*([A-Z]{2})', location)
         if state_match:
             state_code = state_match.group(1)
             state_data = self.climate_data["states"].get(state_code)
             if state_data:
                 return state_data["zone"]
+        
+        # Check for full state names
+        state_names = {
+            'alabama': 'AL', 'alaska': 'AK', 'arizona': 'AZ', 'arkansas': 'AR',
+            'california': 'CA', 'colorado': 'CO', 'connecticut': 'CT', 'delaware': 'DE',
+            'florida': 'FL', 'georgia': 'GA', 'hawaii': 'HI', 'idaho': 'ID',
+            'illinois': 'IL', 'indiana': 'IN', 'iowa': 'IA', 'kansas': 'KS',
+            'kentucky': 'KY', 'louisiana': 'LA', 'maine': 'ME', 'maryland': 'MD',
+            'massachusetts': 'MA', 'michigan': 'MI', 'minnesota': 'MN', 'mississippi': 'MS',
+            'missouri': 'MO', 'montana': 'MT', 'nebraska': 'NE', 'nevada': 'NV',
+            'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
+            'north carolina': 'NC', 'north dakota': 'ND', 'ohio': 'OH', 'oklahoma': 'OK',
+            'oregon': 'OR', 'pennsylvania': 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+            'south dakota': 'SD', 'tennessee': 'TN', 'texas': 'TX', 'utah': 'UT',
+            'vermont': 'VT', 'virginia': 'VA', 'washington': 'WA', 'west virginia': 'WV',
+            'wisconsin': 'WI', 'wyoming': 'WY'
+        }
+        
+        location_lower = location.lower()
+        for state_name, state_code in state_names.items():
+            if state_name in location_lower:
+                state_data = self.climate_data["states"].get(state_code)
+                if state_data:
+                    return state_data["zone"]
         
         return ClimateZone.TEMPERATE
     

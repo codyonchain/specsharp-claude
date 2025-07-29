@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.orm import Session
 from typing import List
 import json
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.models.scope import ScopeRequest, ScopeResponse
 from app.core.engine import engine as scope_engine
@@ -11,46 +13,70 @@ from app.services.trade_summary_service import trade_summary_service
 from app.services.markup_service import markup_service
 from app.services.nlp_service import nlp_service
 from app.db.database import get_db
-from app.db.models import Project
-from app.api.endpoints.auth import get_current_user
+from app.db.models import Project, User
+from app.api.endpoints.auth import get_current_user_with_cookie
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/generate", response_model=ScopeResponse)
+@limiter.limit("20/minute")
 async def generate_scope(
-    request: ScopeRequest,
+    request: Request,
+    scope_request: ScopeRequest,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_with_cookie)
 ):
+    import logging
+    import time
+    logger = logging.getLogger(__name__)
+    
     try:
-        import logging
-        logger = logging.getLogger(__name__)
+        # Check if user has reached free estimate limit
+        user = current_user  # current_user is now the actual User object
+        
+        # Check subscription status and estimate limit
+        # TEMPORARILY DISABLED FOR TESTING - Re-enable by uncommenting below
+        # FREE_ESTIMATE_LIMIT = 3
+        # if not user.is_subscribed and user.estimate_count >= FREE_ESTIMATE_LIMIT:
+        #     raise HTTPException(
+        #         status_code=403, 
+        #         detail={
+        #             "error": "Free estimate limit reached",
+        #             "message": "You've used all 3 free estimates. Please subscribe to continue.",
+        #             "estimate_count": user.estimate_count,
+        #             "limit": FREE_ESTIMATE_LIMIT
+        #         }
+        #     )
         logger.error(f"=== SCOPE GENERATION STARTED ===")
-        logger.error(f"Request data: {request.model_dump()}")
+        logger.error(f"Request data: {scope_request.model_dump()}")
+        
+        # Track generation time
+        start_time = time.time()
         
         # If occupancy_type is not set or is default, detect from special_requirements
-        if (request.occupancy_type == "office" or not request.occupancy_type) and request.special_requirements:
-            nlp_result = nlp_service._fallback_analysis(request.special_requirements)
+        if (scope_request.occupancy_type == "office" or not scope_request.occupancy_type) and scope_request.special_requirements:
+            nlp_result = nlp_service._fallback_analysis(scope_request.special_requirements)
             detected_occupancy = nlp_result.get('occupancy_type')
             if detected_occupancy and detected_occupancy != 'commercial':
-                request.occupancy_type = detected_occupancy
+                scope_request.occupancy_type = detected_occupancy
                 logger.error(f"[NLP] Updated occupancy_type to: {detected_occupancy}")
                 
                 # Also extract unit mix if multi-family residential
                 if detected_occupancy == 'multi_family_residential' and nlp_result.get('unit_mix'):
                     # Store unit mix data in request for later use
-                    if not hasattr(request, 'unit_mix'):
-                        request.unit_mix = nlp_result['unit_mix']
+                    if not hasattr(scope_request, 'unit_mix'):
+                        scope_request.unit_mix = nlp_result['unit_mix']
         
-        scope_response = scope_engine.generate_scope(request)
+        scope_response = scope_engine.generate_scope(scope_request)
         
         # Generate architectural floor plan with error handling
         try:
             floor_plan_data = architectural_floor_plan_service.generate_architectural_plan(
-                square_footage=request.square_footage,
-                project_type=request.project_type.value,
-                building_mix=getattr(request, 'building_mix', None)
+                square_footage=scope_request.square_footage,
+                project_type=scope_request.project_type.value,
+                building_mix=getattr(scope_request, 'building_mix', None)
             )
             scope_response.floor_plan = floor_plan_data
         except Exception as e:
@@ -59,9 +85,9 @@ async def generate_scope(
             traceback.print_exc()
             # Use old floor plan service as fallback
             floor_plan_data = floor_plan_service.generate_floor_plan(
-                square_footage=request.square_footage,
-                project_type=request.project_type.value,
-                building_mix=getattr(request, 'building_mix', None)
+                square_footage=scope_request.square_footage,
+                project_type=scope_request.project_type.value,
+                building_mix=getattr(scope_request, 'building_mix', None)
             )
             scope_response.floor_plan = floor_plan_data
         
@@ -77,31 +103,41 @@ async def generate_scope(
         scope_response_dict = markup_service.apply_markup_to_scope(
             scope_response_dict,
             db,
-            current_user["id"],
+            current_user.id,
             None  # No project ID yet as we're creating new
         )
+        
+        # Calculate generation time
+        generation_time = round(time.time() - start_time, 2)
+        scope_response_dict['generation_time_seconds'] = generation_time
         
         # Always create a new project with unique ID
         db_project = Project(
             project_id=scope_response.project_id,
-            name=request.project_name,
-            description=request.special_requirements,  # Store the original input description
-            project_type=request.project_type.value,
-            building_type=request.occupancy_type,  # Store specific building type
-            occupancy_type=request.occupancy_type,
-            square_footage=request.square_footage,
-            location=request.location,
-            climate_zone=request.climate_zone.value if request.climate_zone else None,
-            num_floors=request.num_floors,
-            ceiling_height=request.ceiling_height,
+            name=scope_request.project_name,
+            description=scope_request.special_requirements,  # Store the original input description
+            project_type=scope_request.project_type.value,
+            building_type=scope_request.occupancy_type,  # Store specific building type
+            occupancy_type=scope_request.occupancy_type,
+            square_footage=scope_request.square_footage,
+            location=scope_request.location,
+            climate_zone=scope_request.climate_zone.value if scope_request.climate_zone else None,
+            num_floors=scope_request.num_floors,
+            ceiling_height=scope_request.ceiling_height,
             total_cost=scope_response_dict.get('total_cost', scope_response.total_cost),
             cost_per_sqft=scope_response_dict.get('cost_per_sqft', scope_response.cost_per_sqft),
             scope_data=json.dumps(scope_response_dict, default=str),  # Save complete data including trade summaries
             cost_data=json.dumps(scope_response.cost_breakdown, default=str) if hasattr(scope_response, 'cost_breakdown') else None,
-            user_id=current_user["id"]
+            user_id=current_user.id,
+            created_by_id=current_user.id,
+            team_id=user.current_team_id  # Associate with user's current team
         )
         
         db.add(db_project)
+        
+        # Increment user's estimate count
+        user.estimate_count = (user.estimate_count or 0) + 1
+        
         db.commit()
         db.refresh(db_project)
         
@@ -121,27 +157,44 @@ async def list_projects(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_with_cookie)
 ):
-    projects = db.query(Project).filter(
-        Project.user_id == current_user["id"]
-    ).offset(skip).limit(limit).all()
+    # Get user's current team
+    user = current_user  # current_user is already the User object
+    
+    # Query projects - if user has a team, get all team projects
+    if user.current_team_id:
+        projects_query = db.query(Project, User.full_name.label('creator_name')).join(
+            User, Project.created_by_id == User.id, isouter=True
+        ).filter(
+            Project.team_id == user.current_team_id
+        )
+    else:
+        # Fallback to user's personal projects
+        projects_query = db.query(Project, User.full_name.label('creator_name')).join(
+            User, Project.created_by_id == User.id, isouter=True
+        ).filter(
+            Project.user_id == current_user.id
+        )
+    
+    projects = projects_query.offset(skip).limit(limit).all()
     
     return [
         {
-            "id": p.id,
-            "project_id": p.project_id,
-            "name": p.name,
-            "project_type": p.project_type,
-            "building_type": p.building_type,
-            "occupancy_type": p.occupancy_type,
-            "description": p.description,
-            "square_footage": p.square_footage,
-            "location": p.location,
-            "total_cost": p.total_cost,
-            "cost_per_sqft": p.cost_per_sqft,
-            "created_at": p.created_at,
-            "scope_data": json.loads(p.scope_data) if p.scope_data else {}
+            "id": p.Project.id,
+            "project_id": p.Project.project_id,
+            "name": p.Project.name,
+            "project_type": p.Project.project_type,
+            "building_type": p.Project.building_type,
+            "occupancy_type": p.Project.occupancy_type,
+            "description": p.Project.description,
+            "square_footage": p.Project.square_footage,
+            "location": p.Project.location,
+            "total_cost": p.Project.total_cost,
+            "cost_per_sqft": p.Project.cost_per_sqft,
+            "created_at": p.Project.created_at,
+            "created_by": p.creator_name or "Unknown",
+            "scope_data": json.loads(p.Project.scope_data) if p.Project.scope_data else {}
         }
         for p in projects
     ]
@@ -151,11 +204,11 @@ async def list_projects(
 async def get_project(
     project_id: str,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_with_cookie)
 ):
     project = db.query(Project).filter(
         Project.project_id == project_id,
-        Project.user_id == current_user["id"]
+        Project.user_id == current_user.id
     ).first()
     
     if not project:
@@ -197,12 +250,12 @@ async def get_project(
 async def delete_project(
     project_id: str,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_with_cookie)
 ):
     """Delete a project by ID"""
     project = db.query(Project).filter(
         Project.project_id == project_id,
-        Project.user_id == current_user["id"]
+        Project.user_id == current_user.id
     ).first()
     
     if not project:
@@ -219,12 +272,12 @@ async def delete_project(
 async def recalculate_project(
     project_id: str,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_with_cookie)
 ):
     """Recalculate an existing project with the latest pricing engine"""
     project = db.query(Project).filter(
         Project.project_id == project_id,
-        Project.user_id == current_user["id"]
+        Project.user_id == current_user.id
     ).first()
     
     if not project:
@@ -276,13 +329,13 @@ async def duplicate_project(
     project_id: str,
     duplicate_name: str = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_with_cookie)
 ):
     """Duplicate an existing project"""
     # Find the original project
     original_project = db.query(Project).filter(
         Project.project_id == project_id,
-        Project.user_id == current_user["id"]
+        Project.user_id == current_user.id
     ).first()
     
     if not original_project:
@@ -309,7 +362,7 @@ async def duplicate_project(
         cost_per_sqft=original_project.cost_per_sqft,
         scope_data=original_project.scope_data,
         cost_data=original_project.cost_data,
-        user_id=current_user["id"]
+        user_id=current_user.id
     )
     
     db.add(duplicate)
@@ -329,7 +382,7 @@ async def duplicate_project(
 async def debug_electrical(
     project_id: str,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_with_cookie)
 ):
     """Debug endpoint to verify electrical calculations"""
     from app.services.electrical_standards_service import electrical_standards_service

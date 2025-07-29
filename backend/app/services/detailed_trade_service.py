@@ -53,8 +53,8 @@ class DetailedTradeService:
         is_restaurant = (
             restaurant_sf > 0 or 
             occupancy_type == 'restaurant' or
-            'restaurant' in special_requirements.lower() or
-            'commercial kitchen' in special_requirements.lower()
+            (special_requirements and 'restaurant' in special_requirements.lower()) or
+            (special_requirements and 'commercial kitchen' in special_requirements.lower())
         )
         
         hvac_items = []

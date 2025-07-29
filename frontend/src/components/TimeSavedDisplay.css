@@ -1,0 +1,191 @@
+.time-saved-container {
+  margin: 2rem 0;
+}
+
+.time-saved-card {
+  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+  border: 2px solid #4caf50;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.15);
+  animation: slideIn 0.5s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.time-saved-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.time-saved-header h3 {
+  margin: 0;
+  color: #2e7d32;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.time-icon {
+  color: #2e7d32;
+}
+
+.time-saved-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.time-comparison {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 8px;
+}
+
+.time-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.time-item.manual .time-value {
+  color: #666;
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.time-item.actual .time-value {
+  color: #2e7d32;
+  font-weight: 700;
+  font-size: 1.25rem;
+}
+
+.time-label {
+  font-size: 0.875rem;
+  color: #555;
+  font-weight: 500;
+}
+
+.time-value {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.time-arrow {
+  font-size: 1.5rem;
+  color: #4caf50;
+  font-weight: bold;
+}
+
+.savings-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  padding: 1.25rem;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.savings-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+}
+
+.savings-label {
+  font-size: 0.875rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.savings-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.savings-value.time {
+  color: #2e7d32;
+}
+
+.savings-value.money {
+  color: #2e7d32;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.dollar-icon {
+  color: #2e7d32;
+  position: absolute;
+  left: -24px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.savings-rate {
+  font-size: 0.75rem;
+  color: #666;
+  font-style: italic;
+}
+
+.savings-divider {
+  width: 1px;
+  height: 60px;
+  background: #e0e0e0;
+}
+
+.time-saved-footer {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(76, 175, 80, 0.3);
+  text-align: center;
+  font-size: 1rem;
+  color: #2e7d32;
+  font-weight: 500;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .time-comparison {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .time-arrow {
+    transform: rotate(90deg);
+  }
+  
+  .savings-summary {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .savings-divider {
+    width: 80px;
+    height: 1px;
+  }
+  
+  .dollar-icon {
+    position: static;
+    transform: none;
+  }
+}

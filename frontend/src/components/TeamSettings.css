@@ -1,0 +1,548 @@
+.team-settings-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.team-settings-modal {
+  background: white;
+  border-radius: 12px;
+  max-width: 800px;
+  width: 100%;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+}
+
+.team-settings-header {
+  padding: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.team-settings-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #1f2937;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  padding: 8px;
+  cursor: pointer;
+  color: #6b7280;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+/* Team Summary */
+.team-summary {
+  padding: 20px 24px;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.team-summary h3 {
+  margin: 0 0 8px 0;
+  color: #1f2937;
+}
+
+.seat-usage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #6b7280;
+  font-size: 0.95rem;
+}
+
+.seats-available {
+  color: #10b981;
+  font-weight: 500;
+}
+
+/* Tabs */
+.team-tabs {
+  display: flex;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 0 24px;
+}
+
+.team-tabs .tab {
+  padding: 12px 20px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #6b7280;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.team-tabs .tab:hover {
+  color: #1f2937;
+}
+
+.team-tabs .tab.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+}
+
+/* Messages */
+.error-message,
+.success-message {
+  margin: 16px 24px 0;
+  padding: 12px 16px;
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.error-message {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.success-message {
+  background: #d1fae5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.error-message button,
+.success-message button {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  opacity: 0.6;
+}
+
+/* Tab Content */
+.members-tab,
+.billing-tab {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Invite Form */
+.invite-form {
+  background: #f9fafb;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+.invite-form h4 {
+  margin: 0 0 16px 0;
+  color: #1f2937;
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.form-row input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+
+.form-row select {
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+}
+
+.invite-btn {
+  padding: 8px 20px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.invite-btn:hover:not(:disabled) {
+  background: #5a67d8;
+}
+
+.invite-btn:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.no-seats-warning {
+  margin: 12px 0 0;
+  color: #dc2626;
+  font-size: 0.9rem;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: #667eea;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* Members List */
+.members-list {
+  margin-top: 24px;
+}
+
+.members-list h4 {
+  margin: 0 0 16px 0;
+  color: #1f2937;
+}
+
+.member-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.member-info {
+  flex: 1;
+}
+
+.member-name {
+  font-weight: 500;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.owner-icon {
+  color: #fbbf24;
+}
+
+.member-email {
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.member-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.role-select {
+  padding: 4px 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  background: white;
+  font-size: 0.9rem;
+}
+
+.role-badge {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.role-badge.admin {
+  background: #ddd6fe;
+  color: #6d28d9;
+}
+
+/* Billing Tab */
+.subscription-info {
+  background: #f9fafb;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+.subscription-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+}
+
+.subscription-item label {
+  color: #6b7280;
+}
+
+.subscription-item span {
+  font-weight: 500;
+  color: #1f2937;
+}
+
+.subscription-item.total {
+  border-top: 1px solid #e5e7eb;
+  margin-top: 8px;
+  padding-top: 16px;
+  font-size: 1.1rem;
+}
+
+.subscription-item.total span {
+  color: #667eea;
+}
+
+/* Add Seats Section */
+.add-seats-section {
+  background: #f9fafb;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+.add-seats-section h4 {
+  margin: 0 0 8px 0;
+  color: #1f2937;
+}
+
+.pricing-info {
+  color: #6b7280;
+  margin: 0 0 16px 0;
+  font-size: 0.9rem;
+}
+
+.add-seats-form {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.seat-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.seat-selector button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e5e7eb;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.seat-selector button:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.seat-selector button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.seat-selector input {
+  width: 60px;
+  text-align: center;
+  padding: 6px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+}
+
+.add-cost {
+  font-weight: 500;
+  color: #1f2937;
+}
+
+.add-seats-btn {
+  padding: 8px 20px;
+  background: #10b981;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.add-seats-btn:hover:not(:disabled) {
+  background: #059669;
+}
+
+.add-seats-btn:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+/* Billing Note */
+.billing-note {
+  padding: 20px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.billing-note p {
+  margin: 0 0 12px 0;
+  color: #6b7280;
+}
+
+.portal-link {
+  background: none;
+  border: 1px solid #667eea;
+  color: #667eea;
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.portal-link:hover {
+  background: #667eea;
+  color: white;
+}
+
+/* Loading State */
+.loading-state {
+  padding: 60px;
+  text-align: center;
+  color: #6b7280;
+}
+
+/* Coming Soon Section */
+.coming-soon-section {
+  margin-top: 24px;
+  padding: 24px;
+  background: #f9fafb;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+}
+
+.coming-soon-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.coming-soon-header h4 {
+  margin: 0;
+  color: #1f2937;
+  font-size: 1.1rem;
+}
+
+.info-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+}
+
+.info-icon {
+  color: #3b82f6;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.info-box div p {
+  margin: 0 0 8px 0;
+  color: #1e40af;
+  line-height: 1.5;
+}
+
+.info-box div p:last-child {
+  margin-bottom: 0;
+}
+
+.info-box a {
+  color: #3b82f6;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.info-box a:hover {
+  text-decoration: underline;
+}
+
+.portal-link {
+  background: none;
+  border: 1px solid #667eea;
+  color: #667eea;
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .team-settings-modal {
+    max-height: 100vh;
+    height: 100vh;
+    border-radius: 0;
+  }
+  
+  .form-row {
+    flex-direction: column;
+  }
+  
+  .add-seats-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .seat-selector {
+    justify-content: center;
+  }
+  
+  .add-cost {
+    text-align: center;
+  }
+}

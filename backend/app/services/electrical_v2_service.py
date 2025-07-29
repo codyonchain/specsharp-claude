@@ -580,7 +580,7 @@ class ElectricalV2Service:
         total_cost += self.special_systems['surge_protection']['cost']
         
         # Check for generator requirements
-        if 'generator' in special_requirements.lower() or 'backup power' in special_requirements.lower():
+        if special_requirements and ('generator' in special_requirements.lower() or 'backup power' in special_requirements.lower()):
             # Size generator at 30W/SF for critical loads
             generator_kw = math.ceil(total_sf * 30 / 1000)
             generator_cost = generator_kw * self.special_systems['generator_per_kw']['cost']

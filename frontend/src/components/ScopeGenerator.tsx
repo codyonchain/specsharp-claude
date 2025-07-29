@@ -19,6 +19,7 @@ interface ScopeRequest {
   building_mix?: { [key: string]: number };
   service_level?: string;
   building_features?: string[];
+  finish_level?: 'basic' | 'standard' | 'premium';
 }
 
 function ScopeGenerator() {
@@ -37,6 +38,7 @@ function ScopeGenerator() {
     ceiling_height: 9,
     occupancy_type: 'office',
     special_requirements: '',
+    finish_level: 'standard',
   });
 
   // Natural language parser
@@ -223,32 +225,103 @@ function ScopeGenerator() {
       'wisconsin': 'WI', 'wyoming': 'WY', 'district of columbia': 'DC', 'dc': 'DC'
     };
     
-    // Look for state names
+    // Look for state names with potential city
     for (const [stateName, stateCode] of Object.entries(stateMap)) {
       if (input.toLowerCase().includes(stateName)) {
-        result.location = `${stateName.charAt(0).toUpperCase() + stateName.slice(1)}, ${stateCode}`;
+        // Try multiple patterns to extract city name
+        const patterns = [
+          // Pattern 1: "in [city], [state]" (with comma)
+          new RegExp(`\\bin\\s+([A-Za-z\\s]+?),\\s*${stateName.replace(/\s+/g, '\\s+')}`, 'i'),
+          // Pattern 2: "in [city] [state]" (without comma)
+          new RegExp(`\\bin\\s+([A-Za-z\\s]+?)\\s+${stateName.replace(/\s+/g, '\\s+')}`, 'i'),
+        ];
+        
+        let cityMatch = null;
+        for (const pattern of patterns) {
+          const match = pattern.exec(input);
+          if (match && match[1].trim()) {
+            const cityPart = match[1].trim();
+            // More strict validation - exclude common building-related words
+            const excludeWords = /\b(sf|sqft|square|feet|floor|story|building|restaurant|office|warehouse|retail|commercial|industrial|residential|kitchen|dining|room|space|with|and|or)\b/i;
+            // Split by spaces and filter out building-related words
+            const words = cityPart.split(/\s+/).filter(word => !excludeWords.test(word));
+            if (words.length > 0 && !/\d/.test(words.join(' '))) {
+              cityMatch = words.join(' ');
+              break;
+            }
+          }
+        }
+        
+        if (cityMatch) {
+          // Capitalize the city properly
+          const formattedCity = cityMatch.split(' ').map(word => 
+            word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+          ).join(' ');
+          result.location = `${formattedCity}, ${stateCode}`;
+        } else {
+          // No city found, just use state with proper capitalization
+          const formattedState = stateName.split(' ').map(word => 
+            word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+          ).join(' ');
+          result.location = `${formattedState}, ${stateCode}`;
+        }
         break;
       }
     }
     
-    // Look for city, state pattern
-    const cityStateMatch = input.match(/in\s+([A-Za-z\s]+),\s*([A-Z]{2})/);
-    if (cityStateMatch && !result.location) {
-      result.location = `${cityStateMatch[1].trim()}, ${cityStateMatch[2]}`;
-    }
-    
-    // Look for state codes (e.g., "in NH" or "NH location")
+    // Look for city, state code pattern (e.g., "in Boston, MA")
     if (!result.location) {
-      const stateCodeMatch = input.match(/\b([A-Z]{2})\b/);
-      if (stateCodeMatch) {
-        const stateCode = stateCodeMatch[1];
+      const cityStateCodeMatch = input.match(/\bin\s+([A-Za-z][A-Za-z\s]*?),\s*([A-Z]{2})\b/);
+      if (cityStateCodeMatch) {
+        const city = cityStateCodeMatch[1].trim();
+        const stateCode = cityStateCodeMatch[2];
         // Verify it's a valid state code
         const validStateCodes = Object.values(stateMap);
         if (validStateCodes.includes(stateCode)) {
-          // Find the full state name
-          const stateName = Object.entries(stateMap).find(([name, code]) => code === stateCode)?.[0];
-          if (stateName) {
-            result.location = `${stateName.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}, ${stateCode}`;
+          result.location = `${city}, ${stateCode}`;
+        }
+      }
+    }
+    
+    // Look for state codes with optional city (e.g., "Portland OR", "in TX")
+    if (!result.location) {
+      // First try: "[city] [state code]" pattern
+      const cityStateCodePattern = /\b([A-Za-z][A-Za-z\s]*?)\s+([A-Z]{2})\b/;
+      const cityStateMatch = cityStateCodePattern.exec(input);
+      if (cityStateMatch) {
+        const potentialCity = cityStateMatch[1].trim();
+        const stateCode = cityStateMatch[2];
+        const validStateCodes = Object.values(stateMap);
+        if (validStateCodes.includes(stateCode)) {
+          // Check if potential city is not a building-related term
+          const excludeWords = /^(sf|sqft|square|feet|floor|story|building|restaurant|office|warehouse|retail|commercial|industrial|residential|kitchen|dining|room|space|with|and|or|in)$/i;
+          const cityWords = potentialCity.split(/\s+/).filter(word => !excludeWords.test(word));
+          if (cityWords.length > 0 && !/\d/.test(cityWords.join(' '))) {
+            const city = cityWords.join(' ');
+            result.location = `${city.split(' ').map(word => 
+              word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+            ).join(' ')}, ${stateCode}`;
+          } else {
+            // Just state code, no valid city
+            const stateName = Object.entries(stateMap).find(([name, code]) => code === stateCode)?.[0];
+            if (stateName) {
+              result.location = `${stateName.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}, ${stateCode}`;
+            }
+          }
+        }
+      }
+      
+      // Fallback: just state code with "in" prefix
+      if (!result.location) {
+        const stateCodeMatch = input.match(/\bin\s+([A-Z]{2})\b/);
+        if (stateCodeMatch) {
+          const stateCode = stateCodeMatch[1];
+          const validStateCodes = Object.values(stateMap);
+          if (validStateCodes.includes(stateCode)) {
+            const stateName = Object.entries(stateMap).find(([name, code]) => code === stateCode)?.[0];
+            if (stateName) {
+              result.location = `${stateName.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}, ${stateCode}`;
+            }
           }
         }
       }
@@ -283,6 +356,25 @@ function ScopeGenerator() {
         result.special_requirements = existingReqs 
           ? `${existingReqs}. ${requirements.join(', ')}`
           : requirements.join(', ');
+      }
+    }
+    
+    // Ensure location is properly set and not the full input
+    if (!result.location || result.location.toLowerCase() === input.toLowerCase()) {
+      // If no location was found or it's the full input, try to extract just city and state
+      const cityStatePattern = /(?:in\s+)?([A-Za-z\s]+?),?\s*(Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming|AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)/i;
+      const locationMatch = cityStatePattern.exec(input);
+      if (locationMatch) {
+        const city = locationMatch[1].trim();
+        const state = locationMatch[2];
+        // Get state code if full state name provided
+        const stateCode = stateMap[state.toLowerCase()] || state;
+        result.location = `${city.split(' ').map(word => 
+          word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+        ).join(' ')}, ${stateCode}`;
+      } else {
+        // Clear location if it was set to the full input
+        result.location = '';
       }
     }
     
@@ -403,6 +495,20 @@ function ScopeGenerator() {
       result.project_name = `${result.project_type.charAt(0).toUpperCase() + result.project_type.slice(1)} Building Project`;
     }
     
+    // Parse finish level
+    if (input.toLowerCase().includes('basic finish') || 
+        input.toLowerCase().includes('economy') || 
+        input.toLowerCase().includes('budget finish')) {
+      result.finish_level = 'basic';
+    } else if (input.toLowerCase().includes('premium finish') || 
+               input.toLowerCase().includes('luxury') || 
+               input.toLowerCase().includes('high-end finish') ||
+               input.toLowerCase().includes('high end finish')) {
+      result.finish_level = 'premium';
+    } else if (input.toLowerCase().includes('standard finish')) {
+      result.finish_level = 'standard';
+    }
+    
     return result;
   };
 
@@ -417,6 +523,7 @@ function ScopeGenerator() {
     
     console.log('Natural language input:', naturalLanguageInput);
     console.log('Parsed result:', parsed);
+    console.log('Parsed location specifically:', parsed.location);
     
     // Merge with form data
     const updatedFormData = {
@@ -424,9 +531,19 @@ function ScopeGenerator() {
       ...parsed,
       // Ensure required fields have values
       project_name: parsed.project_name || formData.project_name || 'New Project',
-      location: parsed.location || formData.location || 'Seattle, WA',
+      location: parsed.location || formData.location || 'Nashville, Tennessee',
       square_footage: parsed.square_footage || formData.square_footage || 10000,
     };
+    
+    // Safety check: ensure location is not the full input
+    if (updatedFormData.location && 
+        (updatedFormData.location.toLowerCase().includes('restaurant') ||
+         updatedFormData.location.toLowerCase().includes('building') ||
+         updatedFormData.location.toLowerCase().includes('kitchen') ||
+         updatedFormData.location.length > 50)) {
+      console.warn('Location appears to contain full description, clearing it');
+      updatedFormData.location = '';
+    }
     
     console.log('Updated form data:', updatedFormData);
     
@@ -448,10 +565,20 @@ function ScopeGenerator() {
     setLoading(true);
     setError('');
 
-    console.log('Submitting form data:', formData);
+    // Parse building mix from special requirements if it's a mixed_use project
+    let finalFormData = { ...formData };
+    if (formData.project_type === 'mixed_use' && formData.special_requirements && !formData.building_mix) {
+      const parsedData = parseNaturalLanguage(formData.special_requirements);
+      if (parsedData.building_mix) {
+        finalFormData.building_mix = parsedData.building_mix;
+        console.log('Extracted building mix from special requirements:', parsedData.building_mix);
+      }
+    }
+
+    console.log('Submitting form data:', finalFormData);
 
     try {
-      const response = await scopeService.generate(formData);
+      const response = await scopeService.generate(finalFormData);
       navigate(`/project/${response.project_id}`);
     } catch (err: any) {
       console.error('Scope generation error:', err);
@@ -521,18 +648,19 @@ function ScopeGenerator() {
             <h2>Describe Your Project</h2>
             <p className="help-text">
               Describe your building project in natural language. For example:
-              <br />• "150x300 warehouse (70%) + office(30%) with HVAC and bathrooms in California"
-              <br />• "10000 SF office with HVAC and bathrooms in Texas"
-              <br />• "50000 square feet mixed commercial and retail space in Seattle"
-              <br />• "4000 sf full-service restaurant with commercial kitchen and dining room in New Hampshire"
-              <br />• "20000 sf mixed office (60%) + restaurant (40%) in Boston"
+              <br />• "4000 sf full-service restaurant with commercial kitchen and dining room in Manchester, New Hampshire"
+              <br />• "75000 sf medical office building with surgery center in Nashua, New Hampshire"
+              <br />• "25000 sf K-12 school with gymnasium in Concord, New Hampshire"
+              <br />• "200 room hotel with conference center in Nashville, Tennessee"
+              <br />• "60000 sf corporate headquarters 3 stories in Nashville, Tennessee"
+              <br />• "150x300 warehouse (70%) + office(30%) with HVAC and bathrooms in Sacramento, California"
             </p>
             
             <div className="form-group">
               <textarea
                 value={naturalLanguageInput}
                 onChange={(e) => setNaturalLanguageInput(e.target.value)}
-                placeholder="Describe your construction project..."
+                placeholder="Example: 50,000 sf office building in Manchester, New Hampshire"
                 rows={6}
                 className="natural-language-input"
                 required
@@ -592,7 +720,7 @@ function ScopeGenerator() {
                 type="text"
                 value={formData.location}
                 onChange={handleChange}
-                placeholder="e.g., Seattle, WA"
+                placeholder="e.g., Nashville, Tennessee"
                 required
               />
             </div>
@@ -667,6 +795,24 @@ function ScopeGenerator() {
                 rows={3}
                 placeholder="e.g., LEED certification, clean rooms, special HVAC requirements"
               />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="finish_level">Finish Level</label>
+              <select
+                id="finish_level"
+                name="finish_level"
+                value={formData.finish_level}
+                onChange={handleChange}
+                required
+              >
+                <option value="basic">Basic (-15%)</option>
+                <option value="standard">Standard (baseline)</option>
+                <option value="premium">Premium (+25%)</option>
+              </select>
+              <p className="help-text">
+                Affects quality of materials and finishes across all trades
+              </p>
             </div>
 
             <div className="form-group">

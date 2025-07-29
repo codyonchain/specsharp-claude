@@ -200,9 +200,8 @@ function ProgressiveProjectDetail() {
   const handleExportFullProject = async () => {
     try {
       const response = await excelService.exportProject(project.project_id);
-      const blob = new Blob([response.data], { 
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-      });
+      // response.data is already a blob when responseType is 'blob'
+      const blob = response.data;
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -211,18 +210,33 @@ function ProgressiveProjectDetail() {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to export Excel:', error);
-      alert('Failed to export Excel file. Please try again.');
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        projectId: project.project_id
+      });
+      
+      let errorMessage = 'Failed to export Excel file. Please try again.';
+      if (error.response?.status === 404) {
+        errorMessage = 'Project not found. Please refresh and try again.';
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Session expired. Please log in again.';
+      } else if (error.response?.data?.detail) {
+        errorMessage = `Export failed: ${error.response.data.detail}`;
+      }
+      
+      alert(errorMessage);
     }
   };
 
   const handleExportTrade = async (tradeName: string) => {
     try {
       const response = await excelService.exportTrade(project.project_id, tradeName);
-      const blob = new Blob([response.data], { 
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-      });
+      // response.data is already a blob when responseType is 'blob'
+      const blob = response.data;
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;

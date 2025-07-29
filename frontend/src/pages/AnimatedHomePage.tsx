@@ -82,10 +82,10 @@ export const AnimatedHomePage: React.FC = () => {
               transition={{ duration: 0.6, delay: 0.6 }}
             >
               <Link
-                to="/app"
+                to="/demo"
                 className="bg-yellow-400 text-blue-900 px-8 py-4 rounded-lg font-bold text-lg hover:bg-yellow-300 transition-all duration-300 inline-flex items-center justify-center hover:scale-105 transform"
               >
-                Start Free Trial <ArrowRight className="ml-2" />
+                Try It Now - No Signup Required <ArrowRight className="ml-2" />
               </Link>
               <a
                 href="#roi-calculator"
@@ -235,14 +235,14 @@ export const AnimatedHomePage: React.FC = () => {
                     Describe Your Project
                   </h3>
                   <p className="text-gray-600 mb-3">
-                    Type something like "150,000 sf hospital 4 stories with emergency department in Dallas"
+                    Type something like "100,000 sf medical office building with surgery center in Nashua, New Hampshire"
                   </p>
                   <motion.div 
                     className="bg-gray-100 p-4 rounded-lg font-mono text-sm"
                     whileHover={{ scale: 1.02 }}
                     transition={{ type: "spring", stiffness: 300 }}
                   >
-                    "200 room hotel with conference center and restaurant in Austin Texas"
+                    "200 room hotel with conference center and restaurant in Nashville, Tennessee"
                   </motion.div>
                 </div>
               </motion.div>
@@ -407,10 +407,10 @@ export const AnimatedHomePage: React.FC = () => {
             whileTap={{ scale: 0.95 }}
           >
             <Link
-              to="/app"
+              to="/demo"
               className="bg-yellow-400 text-gray-900 px-8 py-4 rounded-lg font-bold text-lg hover:bg-yellow-300 transition-colors inline-flex items-center"
             >
-              Start Your Free Trial <ArrowRight className="ml-2" />
+              Try Demo Now - No Signup Required <ArrowRight className="ml-2" />
             </Link>
           </motion.div>
           <motion.p 

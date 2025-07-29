@@ -76,23 +76,24 @@ def determine_building_type(description: str) -> str:
     ]):
         return 'hospitality'
     
-    # 4. Restaurant (but not if it's primarily something else)
-    # Skip if it's a mall/shopping center food court
+    # 4. Restaurant (but be more restrictive to avoid false positives)
+    # Skip if it's a mall/shopping center food court or part of another building type
     if 'mall' not in description_lower and 'shopping center' not in description_lower:
+        # Check for explicit restaurant keywords
         if any(term in description_lower for term in [
-            'restaurant', 'dining', 'food service', 'cafe',
-            'cafeteria', 'food court', 'bar', 'brewery', 'bistro',
-            'grill', 'diner', 'tavern', 'pub', 'eatery', 'pizzeria',
-            'steakhouse', 'buffet', 'catering'
+            'restaurant', 'bistro', 'diner', 'tavern', 'pub', 
+            'pizzeria', 'steakhouse', 'brewery', 'buffet'
         ]):
+            # Double-check it's not part of a larger facility
+            if not any(term in description_lower for term in [
+                'office building', 'apartment', 'hotel', 'hospital', 
+                'school', 'warehouse', 'industrial'
+            ]):
+                return 'restaurant'
+        
+        # Only consider broader terms if there are strong restaurant indicators
+        elif any(term in description_lower for term in ['commercial kitchen', 'food service facility', 'full-service dining']):
             return 'restaurant'
-    
-    # Also check for standalone restaurant keywords
-    if any(term in description_lower for term in [
-        'restaurant', 'bistro', 'diner', 'tavern', 'pub', 
-        'pizzeria', 'steakhouse'
-    ]):
-        return 'restaurant'
     
     # 5. Industrial (highest priority among industrial types)
     if any(term in description_lower for term in [

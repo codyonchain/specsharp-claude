@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { scopeService, authService } from '../services/api';
-import { Trash2, Copy, Settings } from 'lucide-react';
+import { scopeService, authService, subscriptionService } from '../services/api';
+import { Trash2, Copy, Settings, Users } from 'lucide-react';
 import { getDisplayBuildingType } from '../utils/buildingTypeDisplay';
+import { formatCurrency, formatCurrencyPerSF, formatNumber } from '../utils/formatters';
 import MarkupSettings from './MarkupSettings';
+import OnboardingFlow from './OnboardingFlow';
+import PaymentWall from './PaymentWall';
+import TeamSettings from './TeamSettings';
 import './Dashboard.css';
 
 interface DashboardProps {
@@ -16,10 +20,16 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
   const [deleteConfirm, setDeleteConfirm] = useState<{ projectId: string; name: string } | null>(null);
   const [deleteMessage, setDeleteMessage] = useState<string>('');
   const [showMarkupSettings, setShowMarkupSettings] = useState(false);
+  const [showTeamSettings, setShowTeamSettings] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showPaymentWall, setShowPaymentWall] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
+  const [totalTimeSaved, setTotalTimeSaved] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
     loadProjects();
+    checkSubscriptionStatus();
   }, []);
 
   const loadProjects = async () => {
@@ -87,11 +97,72 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
     }
   };
 
+  const checkSubscriptionStatus = async () => {
+    try {
+      const status = await subscriptionService.getStatus();
+      setSubscriptionStatus(status);
+      
+      // Check if user should see onboarding
+      if (!status.has_completed_onboarding && status.estimate_count === 0) {
+        setShowOnboarding(true);
+      }
+      
+      // Check if user has hit free limit and needs to pay
+      // TEMPORARILY DISABLED FOR TESTING - Re-enable by uncommenting below
+      // if (!status.is_subscribed && status.estimate_count >= 3) {
+      //   // Calculate total time saved (3 hours per estimate)
+      //   setTotalTimeSaved(status.estimate_count * 3);
+      //   setShowPaymentWall(true);
+      // }
+    } catch (error) {
+      console.error('Failed to check subscription status:', error);
+    }
+  };
+
+  const handleOnboardingComplete = async () => {
+    setShowOnboarding(false);
+    // Check if payment wall should be shown after onboarding
+    await checkSubscriptionStatus();
+    // Reload projects to show the newly created ones
+    await loadProjects();
+  };
+
+  const handlePaymentSuccess = async () => {
+    setShowPaymentWall(false);
+    // Refresh subscription status
+    await checkSubscriptionStatus();
+  };
+
+  // Show onboarding flow for new users
+  if (showOnboarding) {
+    return (
+      <OnboardingFlow 
+        onComplete={handleOnboardingComplete}
+        currentEstimateCount={subscriptionStatus?.estimate_count || 0}
+      />
+    );
+  }
+
+  // Show payment wall if free limit reached
+  if (showPaymentWall) {
+    return (
+      <PaymentWall
+        totalTimeSaved={totalTimeSaved}
+        estimatesCreated={subscriptionStatus?.estimate_count || 3}
+        onPaymentSuccess={handlePaymentSuccess}
+      />
+    );
+  }
+
   return (
     <div className="dashboard">
       <header className="dashboard-header">
         <h1>SpecSharp Dashboard</h1>
         <div className="header-actions">
+          <button onClick={() => setShowTeamSettings(true)} className="team-btn">
+            <Users size={20} />
+            Team
+          </button>
           <button onClick={() => setShowMarkupSettings(true)} className="settings-btn">
             <Settings size={20} />
             Markup Settings
@@ -154,14 +225,19 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
                     })}
                   </p>
                   <p>{project.location}</p>
-                  <p>{project.square_footage.toLocaleString()} sq ft</p>
+                  <p>{formatNumber(project.square_footage)} sq ft</p>
                   <p className="project-cost">
-                    ${project.total_cost.toLocaleString()}
-                    {project.cost_per_sqft && ` ($${project.cost_per_sqft}/SF)`}
+                    {formatCurrency(project.total_cost)}
+                    {project.cost_per_sqft && ` (${formatCurrencyPerSF(project.cost_per_sqft)})`}
                   </p>
-                  <p className="project-date">
-                    {new Date(project.created_at).toLocaleDateString()}
-                  </p>
+                  <div className="project-meta">
+                    <p className="project-date">
+                      {new Date(project.created_at).toLocaleDateString()}
+                    </p>
+                    {project.created_by && (
+                      <p className="project-creator">by {project.created_by}</p>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -196,6 +272,12 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
           // Optionally reload projects to reflect new markup calculations
           loadProjects();
         }}
+      />
+
+      {/* Team Settings Modal */}
+      <TeamSettings
+        isOpen={showTeamSettings}
+        onClose={() => setShowTeamSettings(false)}
       />
     </div>
   );

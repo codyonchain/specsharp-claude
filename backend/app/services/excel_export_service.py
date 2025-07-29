@@ -27,6 +27,7 @@ class ExcelExportService:
     
     def _init_styles(self):
         """Initialize reusable styles"""
+        self.brand_color = "667EEA"  # SpecSharp brand color
         self.styles = {
             'header': {
                 'font': Font(bold=True, size=14, color="FFFFFF"),
@@ -88,6 +89,34 @@ class ExcelExportService:
         output.seek(0)
         
         return output
+    
+    def _add_branding_footer(self, ws, current_row: int, start_col: int = 1, end_col: int = 8):
+        """Add SpecSharp branding to worksheet"""
+        branding_row = current_row + 2
+        
+        # Merge cells for branding
+        ws.merge_cells(start_row=branding_row, start_column=start_col, 
+                      end_row=branding_row, end_column=end_col)
+        
+        # Add branding text
+        branding_cell = ws.cell(row=branding_row, column=start_col)
+        branding_cell.value = "Powered by SpecSharp • Professional Estimates in 90 Seconds • specsharp.ai"
+        branding_cell.font = Font(size=10, bold=True, italic=True, color=self.brand_color)
+        branding_cell.alignment = Alignment(horizontal="center", vertical="center")
+        branding_cell.fill = PatternFill(start_color="F3F4F6", end_color="F3F4F6", fill_type="solid")
+        
+        # Add border
+        thin_border = Side(style='thin', color="E5E7EB")
+        for col in range(start_col, end_col + 1):
+            cell = ws.cell(row=branding_row, column=col)
+            cell.border = Border(
+                top=thin_border,
+                bottom=thin_border,
+                left=thin_border if col == start_col else None,
+                right=thin_border if col == end_col else None
+            )
+        
+        return branding_row
     
     def _create_summary_sheet(self, wb: Workbook, project_data: Dict):
         """Create executive summary sheet"""
@@ -212,6 +241,9 @@ class ExcelExportService:
             pie.height = 10
             pie.width = 15
             ws.add_chart(pie, "G3")
+        
+        # Add SpecSharp branding
+        self._add_branding_footer(ws, row + 3, 1, 5)
         
         # Adjust column widths
         self._adjust_column_widths(ws, {
@@ -558,7 +590,17 @@ class ExcelExportService:
         ws['A1'].alignment = self.styles['title']['alignment']
         
         # Get trade summaries
-        trade_summaries = project_data.get('trade_summaries', {})
+        trade_summaries = project_data.get('trade_summaries', [])
+        
+        # If no trade summaries, generate from categories
+        if not trade_summaries:
+            categories = project_data.get('categories', [])
+            trade_summaries = []
+            for category in categories:
+                trade_summaries.append({
+                    'trade': category.get('name', 'Unknown'),
+                    'total_cost': category.get('subtotal', 0)
+                })
         
         # Headers
         row = 3
@@ -574,42 +616,87 @@ class ExcelExportService:
         start_row = row
         total_project_cost = project_data.get('total_cost', 0)
         
-        for trade_name, trade_data in trade_summaries.items():
-            if isinstance(trade_data, dict) and 'total' in trade_data:
-                ws[f'A{row}'] = trade_data.get('displayName', trade_name.title())
-                
-                # Calculate base cost and markup
-                trade_total = trade_data['total']
-                
-                # Find markup percentage for this trade
-                markup_percent = 0
-                for category in project_data.get('categories', []):
-                    if category['name'].lower() in trade_name.lower():
-                        if 'markup_details' in category:
-                            markup_percent = category['markup_details']['effective_markup_percent']
-                        break
-                
-                base_cost = trade_total / (1 + markup_percent/100) if markup_percent > 0 else trade_total
-                
-                ws[f'B{row}'] = base_cost
-                ws[f'C{row}'] = markup_percent / 100
-                ws[f'D{row}'] = trade_total
-                ws[f'E{row}'] = f'=D{row}/{total_project_cost}'
-                
-                # Apply formats
-                ws[f'B{row}'].number_format = self.styles['currency']['number_format']
-                ws[f'C{row}'].number_format = self.styles['percentage']['number_format']
-                ws[f'D{row}'].number_format = self.styles['currency']['number_format']
-                ws[f'E{row}'].number_format = self.styles['percentage']['number_format']
-                
-                row += 1
+        # Handle trade_summaries as a list (new format)
+        if isinstance(trade_summaries, list):
+            for trade_summary in trade_summaries:
+                if isinstance(trade_summary, dict) and 'trade' in trade_summary:
+                    trade_name = trade_summary.get('trade', 'Unknown')
+                    total_cost = trade_summary.get('total_cost', 0)
+                    
+                    ws[f'A{row}'] = trade_name
+                    
+                    # Calculate base cost and markup
+                    trade_total = total_cost
+                    
+                    # Find markup percentage for this trade
+                    markup_percent = 0
+                    for category in project_data.get('categories', []):
+                        if category['name'].lower() in trade_name.lower():
+                            if 'markup_details' in category:
+                                markup_percent = category['markup_details'].get('markup_percent', 0)
+                                break
+                    
+                    base_cost = trade_total / (1 + markup_percent / 100) if markup_percent > 0 else trade_total
+                    markup_amount = trade_total - base_cost
+                    
+                    ws[f'B{row}'] = f"${base_cost:,.2f}"
+                    ws[f'C{row}'] = f"{markup_percent:.1f}%"
+                    ws[f'D{row}'] = f"${trade_total:,.2f}"
+                    
+                    # Calculate percentage
+                    percentage = (trade_total / total_project_cost * 100) if total_project_cost > 0 else 0
+                    ws[f'E{row}'] = f"{percentage:.1f}%"
+                    
+                    # Apply styling
+                    for col in range(1, 6):
+                        ws.cell(row=row, column=col).alignment = Alignment(horizontal="right" if col > 1 else "left")
+                    
+                    row += 1
+        elif isinstance(trade_summaries, dict):
+            # Handle old format (dict) for backward compatibility
+            for trade_name, trade_data in trade_summaries.items():
+                if isinstance(trade_data, dict) and 'total' in trade_data:
+                    ws[f'A{row}'] = trade_data.get('displayName', trade_name.title())
+                    
+                    # Calculate base cost and markup
+                    trade_total = trade_data['total']
+                    
+                    # Find markup percentage for this trade
+                    markup_percent = 0
+                    for category in project_data.get('categories', []):
+                        if category['name'].lower() in trade_name.lower():
+                            if 'markup_details' in category:
+                                markup_percent = category['markup_details']['effective_markup_percent']
+                            break
+                    
+                    base_cost = trade_total / (1 + markup_percent/100) if markup_percent > 0 else trade_total
+                    
+                    ws[f'B{row}'] = base_cost
+                    ws[f'C{row}'] = markup_percent / 100
+                    ws[f'D{row}'] = trade_total
+                    ws[f'E{row}'] = f'=D{row}/{total_project_cost}'
+                    
+                    # Apply formats
+                    ws[f'B{row}'].number_format = self.styles['currency']['number_format']
+                    ws[f'C{row}'].number_format = self.styles['percentage']['number_format']
+                    ws[f'D{row}'].number_format = self.styles['currency']['number_format']
+                    ws[f'E{row}'].number_format = self.styles['percentage']['number_format']
+                    
+                    row += 1
         
         # Add total
         total_row = row + 1
         ws[f'A{total_row}'] = "TOTAL"
-        ws[f'B{total_row}'] = f'=SUM(B{start_row}:B{row-1})'
-        ws[f'D{total_row}'] = f'=SUM(D{start_row}:D{row-1})'
-        ws[f'E{total_row}'] = "100.0%"
+        
+        # Calculate totals manually if we have data
+        if row > start_row:
+            ws[f'B{total_row}'] = f'=SUM(B{start_row}:B{row-1})'
+            ws[f'D{total_row}'] = f'=SUM(D{start_row}:D{row-1})'
+            ws[f'E{total_row}'] = "100.0%"
+        else:
+            # No data, use project totals
+            ws[f'D{total_row}'] = f"${total_project_cost:,.2f}"
+            ws[f'E{total_row}'] = "100.0%"
         
         # Apply total styling
         for col in range(1, 6):

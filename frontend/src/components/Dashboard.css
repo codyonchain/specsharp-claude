@@ -23,7 +23,8 @@
   align-items: center;
 }
 
-.settings-btn {
+.settings-btn,
+.team-btn {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -37,7 +38,8 @@
   transition: background 0.2s;
 }
 
-.settings-btn:hover {
+.settings-btn:hover,
+.team-btn:hover {
   background: #5a67d8;
 }
 
@@ -172,9 +174,24 @@
   margin-top: 0.5rem !important;
 }
 
+.project-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
 .project-date {
   font-size: 0.875rem;
   color: #999;
+}
+
+.project-creator {
+  font-size: 0.75rem;
+  color: #718096;
+  margin: 0;
+  font-style: normal;
+  opacity: 0.8;
 }
 
 .view-controls {

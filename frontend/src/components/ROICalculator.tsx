@@ -220,7 +220,7 @@ export const ROICalculator: React.FC = () => {
               Ready to save ${Math.round(metrics.moneySaved).toLocaleString()} per month?
             </p>
             <button className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors">
-              Start Your Free Trial
+              Get SpecSharp Now
             </button>
           </div>
         </div>

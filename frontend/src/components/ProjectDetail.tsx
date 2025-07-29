@@ -7,10 +7,13 @@ import FloorPlanViewer from './FloorPlanViewer';
 import ProfessionalFloorPlan from './ProfessionalFloorPlan';
 import TradePackageModal from './TradePackageModal';
 import ComparisonTool from './ComparisonTool';
+import ComparisonToolV2 from './ComparisonToolV2';
 import TradeSummary from './TradeSummary';
-import { Package, Sliders, FileSpreadsheet, Download } from 'lucide-react';
+import TimeSavedDisplay from './TimeSavedDisplay';
+import { Package, Sliders, FileSpreadsheet, Download, FileText, Share2 } from 'lucide-react';
 import { getDisplayBuildingType as getDisplayBuildingTypeUtil } from '../utils/buildingTypeDisplay';
-import { excelService } from '../services/api';
+import { formatCurrency, formatNumber } from '../utils/formatters';
+import { excelService, pdfService, shareService } from '../services/api';
 import './ProjectDetail.css';
 
 type TradeType = 'electrical' | 'plumbing' | 'hvac' | 'structural' | 'general';
@@ -34,6 +37,16 @@ function ProjectDetail() {
   const [selectedTradePackage, setSelectedTradePackage] = useState<TradeType>('general');
   const [showComparisonTool, setShowComparisonTool] = useState(false);
   const [selectedTrade, setSelectedTrade] = useState<TradeType>('general');
+  const [exportingExcel, setExportingExcel] = useState(false);
+  const [exportingPDF, setExportingPDF] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [projectFinishLevel, setProjectFinishLevel] = useState<'basic' | 'standard' | 'premium'>('standard');
+  const [tradeFinishOverrides, setTradeFinishOverrides] = useState<Record<string, 'basic' | 'standard' | 'premium'>>({});
+  const [showFinishImpact, setShowFinishImpact] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareLink, setShareLink] = useState<string>('');
+  const [isGeneratingShare, setIsGeneratingShare] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
 
   useEffect(() => {
     if (projectId) {
@@ -47,6 +60,11 @@ function ProjectDetail() {
       console.log('Project data loaded:', projectData);
       console.log('Trade summaries:', projectData.trade_summaries);
       setProject(projectData);
+      
+      // Set finish level from project data
+      if (projectData.request_data?.finish_level) {
+        setProjectFinishLevel(projectData.request_data.finish_level);
+      }
       
       const breakdown = await costService.calculateBreakdown(projectData);
       setCostBreakdown(breakdown);
@@ -76,13 +94,46 @@ function ProjectDetail() {
     setShowTradePackageModal(true);
   };
 
+  // Calculate cost impact of finish level changes
+  const calculateFinishImpact = (finishLevel: 'basic' | 'standard' | 'premium') => {
+    const multipliers = {
+      basic: 0.85,
+      standard: 1.0,
+      premium: 1.25
+    };
+    
+    const currentMultiplier = multipliers[projectFinishLevel];
+    const newMultiplier = multipliers[finishLevel];
+    const impactPercentage = ((newMultiplier / currentMultiplier) - 1) * 100;
+    
+    return {
+      percentage: impactPercentage,
+      newTotal: project?.total_cost ? project.total_cost * (newMultiplier / currentMultiplier) : 0
+    };
+  };
+
   // Excel export handlers
   const handleExportFullProject = async () => {
     try {
+      setExportingExcel(true);
+      console.log('Starting Excel export for project:', project.project_id);
       const response = await excelService.exportProject(project.project_id);
       
-      // Create download link
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      // Check if response has data
+      if (!response.data) {
+        throw new Error('No data received from server');
+      }
+      
+      // Check blob size
+      console.log('Received blob size:', response.data.size);
+      
+      if (response.data.size === 0) {
+        throw new Error('Received empty file from server');
+      }
+      
+      // response.data is already a blob when responseType is 'blob'
+      const blob = response.data;
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `${project.project_name}_estimate.xlsx`);
@@ -90,9 +141,70 @@ function ProjectDetail() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-    } catch (error) {
+      
+      console.log('Excel export completed successfully');
+    } catch (error: any) {
       console.error('Failed to export Excel:', error);
-      alert('Failed to export Excel file. Please try again.');
+      console.error('Error response:', error.response);
+      
+      let errorMessage = 'Failed to export Excel file. Please try again.';
+      
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        if (error.response.status === 401) {
+          errorMessage = 'Authentication failed. Please log in again.';
+          // Optionally redirect to login
+          // navigate('/login');
+        } else if (error.response.status === 404) {
+          errorMessage = 'Project not found or you do not have access to it.';
+        } else if (error.response.status === 500) {
+          errorMessage = 'Server error. Please try again later.';
+        } else if (error.response.data?.detail) {
+          errorMessage = error.response.data.detail;
+        }
+      } else if (error.request) {
+        // The request was made but no response was received
+        errorMessage = 'No response from server. Please check your connection.';
+      }
+      
+      alert(`Export Error: ${errorMessage}`);
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
+  // PDF export handler
+  const handleExportPDF = async (clientName?: string) => {
+    try {
+      setExportingPDF(true);
+      console.log('Starting PDF export for project:', project.project_id);
+      const response = await pdfService.exportProject(project.project_id, clientName);
+      
+      // Check if response has data
+      if (!response.data) {
+        throw new Error('No data received from server');
+      }
+      
+      // response.data is already a blob when responseType is 'blob'
+      const blob = response.data;
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${project.project_name}_professional_estimate.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      console.log('PDF export completed successfully');
+    } catch (error: any) {
+      console.error('Failed to export PDF:', error);
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to export PDF file';
+      alert(`Export Error: ${errorMessage}`);
+    } finally {
+      setExportingPDF(false);
+      setShowExportMenu(false);
     }
   };
 
@@ -100,8 +212,9 @@ function ProjectDetail() {
     try {
       const response = await excelService.exportTrade(project.project_id, tradeName);
       
-      // Create download link
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      // response.data is already a blob when responseType is 'blob'
+      const blob = response.data;
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `${project.project_name}_${tradeName}_package.xlsx`);
@@ -112,6 +225,66 @@ function ProjectDetail() {
     } catch (error) {
       console.error('Failed to export trade Excel:', error);
       alert('Failed to export trade Excel file. Please try again.');
+    }
+  };
+
+  const handleExtractTrade = async (tradeName: string) => {
+    try {
+      setExportingExcel(true);
+      console.log('Extracting trade for subs:', tradeName);
+      
+      const response = await excelService.extractForSubs(project.project_id, tradeName);
+      console.log('Extract response:', response);
+      
+      // Create blob and download
+      const blob = response.data;
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${project.project_name}_${tradeName}_Scope_for_Subs.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error: any) {
+      console.error('Failed to extract trade for subs:', error);
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to extract trade data';
+      alert(`Extract Error: ${errorMessage}`);
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
+  const handleShareProject = async () => {
+    try {
+      setIsGeneratingShare(true);
+      const response = await shareService.createShareLink(project.project_id);
+      setShareLink(response.share_url);
+      setShowShareModal(true);
+    } catch (error: any) {
+      console.error('Failed to create share link:', error);
+      alert('Failed to create share link. Please try again.');
+    } finally {
+      setIsGeneratingShare(false);
+    }
+  };
+
+  const handleCopyShareLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = shareLink;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
     }
   };
 
@@ -184,20 +357,87 @@ function ProjectDetail() {
         </button>
         <h1>{project.project_name}</h1>
         <div className="header-actions">
-          <button 
-            className="export-excel-btn"
-            onClick={handleExportFullProject}
-            title="Export full project to Excel"
-          >
-            <FileSpreadsheet size={18} />
-            Export Excel
-          </button>
+          <div className="export-menu-container">
+            <button 
+              className="export-btn"
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              disabled={exportingExcel || exportingPDF}
+              title="Export options"
+            >
+              <Download size={18} />
+              Export
+              <span className="dropdown-arrow">▼</span>
+            </button>
+            
+            {showExportMenu && (
+              <div className="export-dropdown">
+                <button 
+                  className="export-option"
+                  onClick={handleExportFullProject}
+                  disabled={exportingExcel}
+                >
+                  <FileSpreadsheet size={16} />
+                  Standard Excel
+                </button>
+                <button 
+                  className="export-option premium"
+                  onClick={() => {
+                    const clientName = prompt('Enter client name (optional):');
+                    handleExportPDF(clientName || undefined);
+                  }}
+                  disabled={exportingPDF}
+                >
+                  <FileText size={16} />
+                  Professional PDF
+                  <span className="premium-badge">Premium</span>
+                </button>
+                <button 
+                  className="export-option premium"
+                  onClick={() => {
+                    const clientName = prompt('Enter client name (optional):');
+                    excelService.exportProfessional(project.project_id, clientName || undefined)
+                      .then(response => {
+                        const blob = response.data;
+                        const url = window.URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.setAttribute('download', `${project.project_name}_professional.xlsx`);
+                        document.body.appendChild(link);
+                        link.click();
+                        link.remove();
+                        window.URL.revokeObjectURL(url);
+                      })
+                      .catch(error => {
+                        console.error('Failed to export professional Excel:', error);
+                        alert('Failed to export professional Excel file');
+                      })
+                      .finally(() => setShowExportMenu(false));
+                  }}
+                  disabled={exportingExcel}
+                >
+                  <FileSpreadsheet size={16} />
+                  Professional Excel
+                  <span className="premium-badge">Premium</span>
+                </button>
+              </div>
+            )}
+          </div>
+          
           <button 
             className="compare-scenarios-btn"
             onClick={() => setShowComparisonTool(true)}
           >
             <Sliders size={18} />
             Compare Scenarios
+          </button>
+          
+          <button 
+            className="share-btn"
+            onClick={handleShareProject}
+            disabled={isGeneratingShare}
+          >
+            <Share2 size={18} />
+            Share
           </button>
         </div>
       </header>
@@ -297,8 +537,38 @@ function ProjectDetail() {
               <span>{project.request_data.num_floors}</span>
             </div>
             <div className="summary-item">
+              <label>Project Finish Level</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <select 
+                  value={projectFinishLevel} 
+                  onChange={(e) => {
+                    const newLevel = e.target.value as 'basic' | 'standard' | 'premium';
+                    setProjectFinishLevel(newLevel);
+                    setShowFinishImpact(true);
+                    setTimeout(() => setShowFinishImpact(false), 3000);
+                  }}
+                  onFocus={() => setShowFinishImpact(true)}
+                  onBlur={() => setTimeout(() => setShowFinishImpact(false), 300)}
+                  style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #ddd' }}
+                >
+                  <option value="basic">Basic (-15%)</option>
+                  <option value="standard">Standard</option>
+                  <option value="premium">Premium (+25%)</option>
+                </select>
+                {showFinishImpact && projectFinishLevel !== 'standard' && (
+                  <span style={{ 
+                    fontSize: '0.85em', 
+                    color: projectFinishLevel === 'basic' ? '#dc3545' : '#28a745',
+                    fontWeight: 'bold'
+                  }}>
+                    {projectFinishLevel === 'basic' ? '-15%' : '+25%'} impact
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="summary-item">
               <label>{selectedTrade !== 'general' ? `${TRADE_CATEGORY_MAP[selectedTrade]} Cost` : 'Total Cost'}</label>
-              <span className="highlight">${filteredTotals.total.toLocaleString()}</span>
+              <span className="highlight">{formatCurrency(filteredTotals.total)}</span>
             </div>
             <div className="summary-item">
               <label>Cost per Sq Ft</label>
@@ -306,6 +576,12 @@ function ProjectDetail() {
             </div>
           </div>
         </div>
+
+        {/* Time Saved Display */}
+        <TimeSavedDisplay 
+          generationTimeSeconds={project.generation_time_seconds}
+          hourlyRate={75}
+        />
 
         {/* Alert for multi-story buildings without elevators */}
         {project.request_data.num_floors > 1 && 
@@ -340,7 +616,7 @@ function ProjectDetail() {
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
+                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
@@ -359,7 +635,7 @@ function ProjectDetail() {
                   {filteredCostBreakdown.map((item, index) => (
                     <tr key={index}>
                       <td>{item.category}</td>
-                      <td>${item.subtotal.toLocaleString()}</td>
+                      <td>{formatCurrency(item.subtotal)}</td>
                       <td>{(selectedTrade !== 'general' ? 100 : item.percentage_of_total).toFixed(1)}%</td>
                     </tr>
                   ))}
@@ -379,7 +655,17 @@ function ProjectDetail() {
             <h2>{TRADE_CATEGORY_MAP[selectedTrade]} Details</h2>
             {filteredCategories.map((category: any) => (
               <div key={category.name} className="category-section">
-                <h3>{category.name}</h3>
+                <div className="category-header">
+                  <h3>{category.name}</h3>
+                  <button
+                    className="extract-btn"
+                    onClick={() => handleExtractTrade(category.name)}
+                    title="Download scope for subcontractor"
+                  >
+                    <Download size={16} />
+                    Extract for Subs
+                  </button>
+                </div>
                 <table>
                   <thead>
                     <tr>
@@ -388,27 +674,58 @@ function ProjectDetail() {
                       <th>Unit</th>
                       <th>Unit Cost</th>
                       <th>Total Cost</th>
+                      <th>Finish Level</th>
                       <th>Confidence</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {category.systems.map((system: any, index: number) => (
-                      <tr key={index}>
-                        <td>{system.name}</td>
-                        <td>{system.quantity.toLocaleString()}</td>
-                        <td>{system.unit}</td>
-                        <td>${system.unit_cost.toFixed(2)}</td>
-                        <td>${system.total_cost.toLocaleString()}</td>
-                        <td>
-                          <span 
-                            className={`confidence-badge confidence-${system.confidence_label?.toLowerCase() || 'high'}`}
-                            title={`Confidence Score: ${system.confidence_score || 95}%`}
-                          >
-                            {system.confidence_label || 'High'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {category.systems.map((system: any, index: number) => {
+                      const systemKey = `${category.name}-${system.name}`;
+                      const finishLevel = tradeFinishOverrides[systemKey] || projectFinishLevel;
+                      return (
+                        <tr key={index}>
+                          <td>{system.name}</td>
+                          <td>{system.quantity.toLocaleString()}</td>
+                          <td>{system.unit}</td>
+                          <td>${system.unit_cost.toFixed(2)}</td>
+                          <td>{formatCurrency(system.total_cost)}</td>
+                          <td>
+                            <select
+                              value={finishLevel}
+                              onChange={(e) => {
+                                const newOverrides = { ...tradeFinishOverrides };
+                                if (e.target.value === projectFinishLevel) {
+                                  delete newOverrides[systemKey];
+                                } else {
+                                  newOverrides[systemKey] = e.target.value as 'basic' | 'standard' | 'premium';
+                                }
+                                setTradeFinishOverrides(newOverrides);
+                              }}
+                              style={{ 
+                                padding: '2px 4px', 
+                                fontSize: '0.9em',
+                                backgroundColor: finishLevel !== 'standard' ? 
+                                  (finishLevel === 'basic' ? '#ffe6e6' : '#e6ffe6') : 'white',
+                                border: `1px solid ${finishLevel !== 'standard' ? 
+                                  (finishLevel === 'basic' ? '#ffcccc' : '#ccffcc') : '#ddd'}`
+                              }}
+                            >
+                              <option value="basic">Basic</option>
+                              <option value="standard">Standard</option>
+                              <option value="premium">Premium</option>
+                            </select>
+                          </td>
+                          <td>
+                            <span 
+                              className={`confidence-badge confidence-${system.confidence_label?.toLowerCase() || 'high'}`}
+                              title={`Confidence Score: ${system.confidence_score || 95}%`}
+                            >
+                              {system.confidence_label || 'High'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -420,7 +737,17 @@ function ProjectDetail() {
             <p className="info-message">Trade summaries are being generated...</p>
             {project.categories && project.categories.map((category: any) => (
               <div key={category.name} className="category-section">
-                <h3>{category.name}</h3>
+                <div className="category-header">
+                  <h3>{category.name}</h3>
+                  <button
+                    className="extract-btn"
+                    onClick={() => handleExtractTrade(category.name)}
+                    title="Download scope for subcontractor"
+                  >
+                    <Download size={16} />
+                    Extract for Subs
+                  </button>
+                </div>
                 <table>
                   <thead>
                     <tr>
@@ -429,27 +756,58 @@ function ProjectDetail() {
                       <th>Unit</th>
                       <th>Unit Cost</th>
                       <th>Total Cost</th>
+                      <th>Finish Level</th>
                       <th>Confidence</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {category.systems.map((system: any, index: number) => (
-                      <tr key={index}>
-                        <td>{system.name}</td>
-                        <td>{system.quantity.toLocaleString()}</td>
-                        <td>{system.unit}</td>
-                        <td>${system.unit_cost.toFixed(2)}</td>
-                        <td>${system.total_cost.toLocaleString()}</td>
-                        <td>
-                          <span 
-                            className={`confidence-badge confidence-${system.confidence_label?.toLowerCase() || 'high'}`}
-                            title={`Confidence Score: ${system.confidence_score || 95}%`}
-                          >
-                            {system.confidence_label || 'High'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {category.systems.map((system: any, index: number) => {
+                      const systemKey = `${category.name}-${system.name}`;
+                      const finishLevel = tradeFinishOverrides[systemKey] || projectFinishLevel;
+                      return (
+                        <tr key={index}>
+                          <td>{system.name}</td>
+                          <td>{system.quantity.toLocaleString()}</td>
+                          <td>{system.unit}</td>
+                          <td>${system.unit_cost.toFixed(2)}</td>
+                          <td>{formatCurrency(system.total_cost)}</td>
+                          <td>
+                            <select
+                              value={finishLevel}
+                              onChange={(e) => {
+                                const newOverrides = { ...tradeFinishOverrides };
+                                if (e.target.value === projectFinishLevel) {
+                                  delete newOverrides[systemKey];
+                                } else {
+                                  newOverrides[systemKey] = e.target.value as 'basic' | 'standard' | 'premium';
+                                }
+                                setTradeFinishOverrides(newOverrides);
+                              }}
+                              style={{ 
+                                padding: '2px 4px', 
+                                fontSize: '0.9em',
+                                backgroundColor: finishLevel !== 'standard' ? 
+                                  (finishLevel === 'basic' ? '#ffe6e6' : '#e6ffe6') : 'white',
+                                border: `1px solid ${finishLevel !== 'standard' ? 
+                                  (finishLevel === 'basic' ? '#ffcccc' : '#ccffcc') : '#ddd'}`
+                              }}
+                            >
+                              <option value="basic">Basic</option>
+                              <option value="standard">Standard</option>
+                              <option value="premium">Premium</option>
+                            </select>
+                          </td>
+                          <td>
+                            <span 
+                              className={`confidence-badge confidence-${system.confidence_label?.toLowerCase() || 'high'}`}
+                              title={`Confidence Score: ${system.confidence_score || 95}%`}
+                            >
+                              {system.confidence_label || 'High'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -463,30 +821,35 @@ function ProjectDetail() {
               <>
                 <div>
                   <label>Base Cost:</label>
-                  <span>${project.markup_summary.total_base_cost?.toLocaleString() || project.base_subtotal?.toLocaleString() || filteredTotals.subtotal.toLocaleString()}</span>
+                  <span>{formatCurrency(project.markup_summary.total_base_cost || project.base_subtotal || filteredTotals.subtotal)}</span>
                 </div>
                 <div>
                   <label>Markup ({project.markup_summary.average_markup_percent?.toFixed(1) || 0}%):</label>
-                  <span>${project.markup_summary.total_markup?.toLocaleString() || 0}</span>
+                  <span>{formatCurrency(project.markup_summary.total_markup || 0)}</span>
                 </div>
               </>
             )}
             <div>
               <label>Subtotal:</label>
-              <span>${filteredTotals.subtotal.toLocaleString()}</span>
+              <span>{formatCurrency(filteredTotals.subtotal)}</span>
             </div>
             <div>
               <label>Contingency ({project.contingency_percentage}%):</label>
-              <span>${filteredTotals.contingencyAmount.toLocaleString()}</span>
+              <span>{formatCurrency(filteredTotals.contingencyAmount)}</span>
             </div>
             <div className="total">
               <label>{selectedTrade !== 'general' ? `${TRADE_CATEGORY_MAP[selectedTrade]} Total Cost:` : 'Total Project Cost:'}</label>
-              <span>${filteredTotals.total.toLocaleString()}</span>
+              <span>{formatCurrency(filteredTotals.total)}</span>
             </div>
           </div>
         </div>
       </div>
       ) : (
+        // DEBUG: Check what's happening with floor plan rendering
+        console.log('🏗️ FLOOR PLAN TAB ACTIVE!'),
+        console.log('📊 Floor plan data:', project.floor_plan),
+        console.log('🏛️ Has walls?', project.floor_plan && project.floor_plan.walls),
+        
         project.floor_plan && project.floor_plan.walls ? (
           <ArchitecturalFloorPlan 
             floorPlan={project.floor_plan} 
@@ -511,10 +874,49 @@ function ProjectDetail() {
       )}
 
       {showComparisonTool && (
-        <ComparisonTool
+        <ComparisonToolV2
           projectData={project}
           onClose={() => setShowComparisonTool(false)}
         />
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <div className="modal-overlay" onClick={() => setShowShareModal(false)}>
+          <div className="modal-content share-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Share Project</h3>
+            <p>Share this read-only view with clients or partners:</p>
+            
+            <div className="share-link-container">
+              <input 
+                type="text" 
+                value={shareLink} 
+                readOnly 
+                className="share-link-input"
+              />
+              <button 
+                className="copy-btn"
+                onClick={handleCopyShareLink}
+              >
+                {shareCopied ? '✓ Copied!' : 'Copy Link'}
+              </button>
+            </div>
+            
+            <p className="share-info">
+              <span className="info-icon">ℹ️</span>
+              This link will expire in 30 days
+            </p>
+            
+            <div className="modal-actions">
+              <button 
+                onClick={() => setShowShareModal(false)} 
+                className="close-btn"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

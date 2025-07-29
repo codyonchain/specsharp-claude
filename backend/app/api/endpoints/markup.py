@@ -33,10 +33,10 @@ class ProjectMarkupOverridesUpdate(BaseModel):
 @router.get("/user/settings")
 async def get_user_markup_settings(
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """Get current user's markup settings"""
-    settings = markup_service.get_user_markup_settings(db, current_user["id"])
+    settings = markup_service.get_user_markup_settings(db, current_user.id)
     return {
         "global_overhead_percent": settings.global_overhead_percent,
         "global_profit_percent": settings.global_profit_percent,
@@ -52,11 +52,11 @@ async def get_user_markup_settings(
 async def update_user_markup_settings(
     settings_update: UserMarkupSettingsUpdate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """Update user's markup settings"""
     update_dict = settings_update.dict(exclude_unset=True)
-    settings = markup_service.update_user_markup_settings(db, current_user["id"], update_dict)
+    settings = markup_service.update_user_markup_settings(db, current_user.id, update_dict)
     
     return {
         "message": "Settings updated successfully",
@@ -76,14 +76,14 @@ async def update_user_markup_settings(
 async def get_project_markup_overrides(
     project_id: str,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """Get project-specific markup overrides"""
     # First verify the user owns this project
     from app.db.models import Project
     project = db.query(Project).filter(
         Project.project_id == project_id,
-        Project.user_id == current_user["id"]
+        Project.user_id == current_user.id
     ).first()
     
     if not project:
@@ -115,14 +115,14 @@ async def update_project_markup_overrides(
     project_id: str,
     overrides_update: ProjectMarkupOverridesUpdate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """Update project-specific markup overrides"""
     # First verify the user owns this project
     from app.db.models import Project
     project = db.query(Project).filter(
         Project.project_id == project_id,
-        Project.user_id == current_user["id"]
+        Project.user_id == current_user.id
     ).first()
     
     if not project:
@@ -148,7 +148,7 @@ async def update_project_markup_overrides(
 async def apply_markups_to_project(
     project_id: str,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """Apply current markup settings to a project and return the marked up scope"""
     # First verify the user owns this project
@@ -157,7 +157,7 @@ async def apply_markups_to_project(
     
     project = db.query(Project).filter(
         Project.project_id == project_id,
-        Project.user_id == current_user["id"]
+        Project.user_id == current_user.id
     ).first()
     
     if not project:
@@ -170,7 +170,7 @@ async def apply_markups_to_project(
     marked_up_scope = markup_service.apply_markup_to_scope(
         scope_data,
         db,
-        current_user["id"],
+        current_user.id,
         project.id
     )
     

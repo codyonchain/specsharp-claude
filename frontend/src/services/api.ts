@@ -18,16 +18,24 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-export interface LoginCredentials {
-  username: string;
-  password: string;
-}
+// Add response interceptor to handle blob errors
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    // If we expected a blob but got an error, try to parse the JSON error message
+    if (error.response && error.config.responseType === 'blob' && error.response.data instanceof Blob) {
+      try {
+        const text = await error.response.data.text();
+        const json = JSON.parse(text);
+        error.response.data = json;
+      } catch (e) {
+        // If parsing fails, keep the original error
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
-export interface RegisterData {
-  email: string;
-  full_name: string;
-  password: string;
-}
 
 export interface ScopeRequest {
   project_name: string;
@@ -40,27 +48,31 @@ export interface ScopeRequest {
   occupancy_type?: string;
   special_requirements?: string;
   budget_constraint?: number;
+  building_mix?: { [key: string]: number };
+  service_level?: string;
+  building_features?: string[];
+  finish_level?: 'basic' | 'standard' | 'premium';
 }
 
 export const authService = {
-  login: async (credentials: LoginCredentials) => {
-    const formData = new FormData();
-    formData.append('username', credentials.username);
-    formData.append('password', credentials.password);
-    const response = await api.post('/auth/token', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    localStorage.setItem('token', response.data.access_token);
-    return response.data;
-  },
-
-  register: async (data: RegisterData) => {
-    const response = await api.post('/auth/register', data);
-    return response.data;
-  },
-
-  logout: () => {
+  logout: async () => {
+    // Call backend logout to clear cookies
+    try {
+      await api.post('/auth/logout');
+    } catch (error) {
+      // Still clear local storage even if backend call fails
+    }
     localStorage.removeItem('token');
+  },
+
+  isAuthenticated: () => {
+    // Check for token in localStorage or cookie presence
+    return !!localStorage.getItem('token') || document.cookie.includes('access_token');
+  },
+
+  getCurrentUser: async () => {
+    const response = await api.get('/oauth/user/info');
+    return response.data;
   },
 };
 
@@ -123,6 +135,46 @@ export const floorPlanService = {
   },
 };
 
+export const demoService = {
+  generateDemoScope: async (data: { description: string; is_demo: boolean }) => {
+    // Create a separate axios instance without auth headers for demo
+    const demoApi = axios.create({
+      baseURL: API_BASE_URL,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      withCredentials: true
+    });
+    
+    const response = await demoApi.post('/demo/generate', data);
+    return response.data;
+  },
+  
+  quickSignup: async (data: { email?: string; password?: string; demo_project_id?: string }) => {
+    // Create a separate axios instance without auth headers for demo signup
+    const demoApi = axios.create({
+      baseURL: API_BASE_URL,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      withCredentials: true
+    });
+    
+    const response = await demoApi.post('/demo/quick-signup', data);
+    
+    // Store the token
+    if (response.data.access_token) {
+      localStorage.setItem('token', response.data.access_token);
+    }
+    
+    return response.data;
+  },
+};
+
+// Add to scopeService for demo compatibility
+scopeService.generateDemoScope = demoService.generateDemoScope;
+scopeService.quickSignup = demoService.quickSignup;
+
 export const markupService = {
   getUserSettings: async () => {
     const response = await api.get('/markup/user/settings');
@@ -164,11 +216,124 @@ export const excelService = {
     return response;
   },
 
+  exportProfessional: async (projectId: string, clientName?: string) => {
+    const response = await api.get(`/excel/project/${projectId}/excel-pro`, {
+      params: { client_name: clientName },
+      responseType: 'blob'
+    });
+    return response;
+  },
+
   exportTrade: async (projectId: string, tradeName: string) => {
     const response = await api.get(`/excel/project/${projectId}/trade/${tradeName}`, {
       responseType: 'blob'
     });
     return response;
+  },
+
+  extractForSubs: async (projectId: string, tradeName: string) => {
+    const response = await api.get(`/excel/extract/${projectId}/${tradeName}`, {
+      responseType: 'blob'
+    });
+    return response;
+  },
+};
+
+export const pdfService = {
+  exportProject: async (projectId: string, clientName?: string) => {
+    const response = await api.get(`/pdf/project/${projectId}/pdf`, {
+      params: { client_name: clientName },
+      responseType: 'blob'
+    });
+    return response;
+  },
+};
+
+export const subscriptionService = {
+  getStatus: async () => {
+    const response = await api.get('/subscription/status');
+    return response.data;
+  },
+
+  createSubscription: async () => {
+    const response = await api.post('/subscription/create');
+    return response.data;
+  },
+
+  confirmSubscription: async (subscriptionId: string) => {
+    const response = await api.post('/subscription/confirm', { subscription_id: subscriptionId });
+    return response.data;
+  },
+
+  cancelSubscription: async () => {
+    const response = await api.post('/subscription/cancel');
+    return response.data;
+  },
+};
+
+export const teamService = {
+  createTeam: async (name: string) => {
+    const response = await api.post('/team/create', null, { params: { name } });
+    return response.data;
+  },
+
+  getCurrentTeam: async () => {
+    const response = await api.get('/team/current');
+    return response.data;
+  },
+
+  getTeamMembers: async () => {
+    const response = await api.get('/team/members');
+    return response.data;
+  },
+
+  inviteTeamMember: async (email: string, role: 'admin' | 'member' = 'member') => {
+    const response = await api.post('/team/invite', null, { 
+      params: { email, role } 
+    });
+    return response.data;
+  },
+
+  acceptInvitation: async (token: string) => {
+    const response = await api.post(`/team/accept-invitation/${token}`);
+    return response.data;
+  },
+
+  updateMemberRole: async (memberId: number, newRole: 'admin' | 'member') => {
+    const response = await api.put(`/team/members/${memberId}/role`, null, {
+      params: { new_role: newRole }
+    });
+    return response.data;
+  },
+
+  addSeats: async (seatsToAdd: number) => {
+    const response = await api.post('/team/add-seats', null, {
+      params: { seats_to_add: seatsToAdd }
+    });
+    return response.data;
+  },
+};
+
+export const shareService = {
+  createShareLink: async (projectId: string) => {
+    const response = await api.post(`/project/${projectId}/share`);
+    return response.data;
+  },
+
+  getSharedProject: async (shareId: string) => {
+    // This endpoint doesn't require auth, so we make a direct request
+    const response = await axios.get(`${API_BASE_URL}/share/${shareId}`);
+    return response.data;
+  },
+
+  listProjectShares: async (projectId: string) => {
+    const response = await api.get(`/project/${projectId}/shares`);
+    return response.data;
+  },
+
+  deactivateShare: async (shareId: string) => {
+    const response = await api.delete(`/share/${shareId}`);
+    return response.data;
   },
 };
 

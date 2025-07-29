@@ -2,6 +2,9 @@ from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKe
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
+from app.db.team_models import team_members
+# Import markup models to ensure they're loaded
+from app.db.markup_models import UserMarkupSettings, ProjectMarkupOverrides
 
 
 class User(Base):
@@ -10,12 +13,35 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=False)
-    hashed_password = Column(String, nullable=False)
+    hashed_password = Column(String, nullable=True)  # Nullable for OAuth users
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    projects = relationship("Project", back_populates="user")
+    # OAuth fields
+    oauth_provider = Column(String, nullable=True)  # 'google'
+    oauth_id = Column(String, nullable=True)  # Unique ID from OAuth provider
+    profile_picture = Column(String, nullable=True)  # Profile picture URL
+    
+    # Team association
+    current_team_id = Column(Integer, ForeignKey("teams.id"), nullable=True)
+    
+    # Personal subscription (legacy - will migrate to team-based)
+    estimate_count = Column(Integer, default=0)
+    is_subscribed = Column(Boolean, default=False)
+    subscription_status = Column(String, default="trial")  # trial, active, cancelled, expired
+    stripe_customer_id = Column(String, nullable=True)
+    stripe_subscription_id = Column(String, nullable=True)
+    subscription_started_at = Column(DateTime(timezone=True), nullable=True)
+    subscription_ends_at = Column(DateTime(timezone=True), nullable=True)
+    has_completed_onboarding = Column(Boolean, default=False)
+    
+    # Relationships
+    projects = relationship("Project", back_populates="user", foreign_keys="Project.user_id")
+    current_team = relationship("Team", foreign_keys=[current_team_id])
+    owned_teams = relationship("Team", back_populates="owner", foreign_keys="Team.owner_id")
+    teams = relationship("Team", secondary=team_members, back_populates="members")
+    created_projects = relationship("Project", back_populates="created_by", foreign_keys="Project.created_by_id")
     markup_settings = relationship("UserMarkupSettings", back_populates="user", uselist=False)
 
 
@@ -39,11 +65,20 @@ class Project(Base):
     scope_data = Column(Text, nullable=False)  # Full scope response JSON
     cost_data = Column(Text, nullable=True)  # Detailed cost breakdown JSON
     
+    # Legacy user association (for migration)
     user_id = Column(Integer, ForeignKey("users.id"))
+    
+    # Team associations
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=True)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    user = relationship("User", back_populates="projects")
+    # Relationships
+    user = relationship("User", back_populates="projects", foreign_keys=[user_id])
+    team = relationship("Team", back_populates="projects")
+    created_by = relationship("User", back_populates="created_projects", foreign_keys=[created_by_id])
     floor_plans = relationship("FloorPlan", back_populates="project")
     markup_overrides = relationship("ProjectMarkupOverrides", back_populates="project", uselist=False)
 

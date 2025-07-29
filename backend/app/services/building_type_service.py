@@ -251,16 +251,16 @@ class BuildingTypeService:
         # Base costs by state and service level
         base_costs = {
             'NH': {
-                'quick_service': 225,
-                'casual_dining': 300,
-                'full_service': 400,
-                'fine_dining': 525
-            },
-            'MA': {
                 'quick_service': 250,
                 'casual_dining': 325,
-                'full_service': 425,
+                'full_service': 425,  # Increased from 400 to match expectations
                 'fine_dining': 550
+            },
+            'MA': {
+                'quick_service': 275,
+                'casual_dining': 350,
+                'full_service': 450,
+                'fine_dining': 575
             },
             'NY': {
                 'quick_service': 275,
@@ -276,10 +276,10 @@ class BuildingTypeService:
             },
             # Default for other states
             'default': {
-                'quick_service': 225,
-                'casual_dining': 300,
-                'full_service': 400,
-                'fine_dining': 525
+                'quick_service': 250,
+                'casual_dining': 325,
+                'full_service': 425,  # Increased to match NH base
+                'fine_dining': 550
             }
         }
         

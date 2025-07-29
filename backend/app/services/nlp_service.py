@@ -42,6 +42,7 @@ class NLPService:
     def _initialize_patterns(self) -> Dict[str, re.Pattern]:
         return {
             "square_footage": re.compile(r'(\d+(?:,\d+)?)\s*(?:sq\.?\s*ft\.?|square\s*feet|sf)', re.IGNORECASE),
+            "dimensions": re.compile(r'(\d+)\s*x\s*(\d+)', re.IGNORECASE),  # For "150x300" format
             "floors": re.compile(r'(\d+)\s*(?:floor|story|storey|level)s?', re.IGNORECASE),
             "budget": re.compile(r'\$\s*(\d+(?:,\d+)*(?:\.\d{2})?)', re.IGNORECASE),
             "ceiling_height": re.compile(r'(\d+(?:\.\d+)?)\s*(?:ft\.?|feet|foot)\s*(?:ceiling|height)', re.IGNORECASE),
@@ -80,16 +81,22 @@ class NLPService:
         for field, pattern in self.patterns.items():
             match = pattern.search(text)
             if match:
-                value = match.group(1).replace(',', '')
-                if field in ["square_footage", "room_count"]:
-                    extracted[field] = int(value)
-                elif field == "floors":
-                    # Skip pattern matching for floors - use dedicated parser below
-                    continue
-                elif field == "budget":
-                    extracted[field] = float(value)
-                elif field == "ceiling_height":
-                    extracted[field] = float(value)
+                if field == "dimensions":
+                    # Calculate square footage from dimensions
+                    width = int(match.group(1))
+                    length = int(match.group(2))
+                    extracted["square_footage"] = width * length
+                else:
+                    value = match.group(1).replace(',', '')
+                    if field in ["square_footage", "room_count"]:
+                        extracted[field] = int(value)
+                    elif field == "floors":
+                        # Skip pattern matching for floors - use dedicated parser below
+                        continue
+                    elif field == "budget":
+                        extracted[field] = float(value)
+                    elif field == "ceiling_height":
+                        extracted[field] = float(value)
         
         # Use dedicated floor parser for better accuracy
         floors = extract_floors(text)
@@ -134,6 +141,22 @@ class NLPService:
         
         if climate_features:
             extracted["climate_features"] = climate_features
+        
+        # Extract location
+        location = self._extract_location(text)
+        if location:
+            extracted["location"] = location
+            print(f"[NLP] Extracted location: '{location}' from text: '{text}'")
+        
+        # Extract building type using the centralized detector
+        building_type = determine_building_type(text)
+        if building_type and building_type != 'commercial':  # Don't return generic 'commercial'
+            extracted["building_type"] = building_type
+        
+        # Extract building mix for mixed-use projects
+        building_mix = self._extract_building_mix(text)
+        if building_mix:
+            extracted["building_mix"] = building_mix
         
         return extracted
     
@@ -475,6 +498,294 @@ class NLPService:
                 unit_mix["unit_breakdown"]["1BR"] += total - calculated_total
         
         return unit_mix
+    
+    def _extract_location(self, text: str) -> Optional[str]:
+        """
+        Extract location from text.
+        Looks for patterns like:
+        - "in [City], [State]"
+        - "in [City] [State]"
+        - "in [State]"
+        - "[City], [State] at the end"
+        """
+        # US states mapping
+        states = {
+            'alabama': 'Alabama', 'al': 'Alabama',
+            'alaska': 'Alaska', 'ak': 'Alaska',
+            'arizona': 'Arizona', 'az': 'Arizona',
+            'arkansas': 'Arkansas', 'ar': 'Arkansas',
+            'california': 'California', 'ca': 'California',
+            'colorado': 'Colorado', 'co': 'Colorado',
+            'connecticut': 'Connecticut', 'ct': 'Connecticut',
+            'delaware': 'Delaware', 'de': 'Delaware',
+            'florida': 'Florida', 'fl': 'Florida',
+            'georgia': 'Georgia', 'ga': 'Georgia',
+            'hawaii': 'Hawaii', 'hi': 'Hawaii',
+            'idaho': 'Idaho', 'id': 'Idaho',
+            'illinois': 'Illinois', 'il': 'Illinois',
+            'indiana': 'Indiana', 'in': 'Indiana',
+            'iowa': 'Iowa', 'ia': 'Iowa',
+            'kansas': 'Kansas', 'ks': 'Kansas',
+            'kentucky': 'Kentucky', 'ky': 'Kentucky',
+            'louisiana': 'Louisiana', 'la': 'Louisiana',
+            'maine': 'Maine', 'me': 'Maine',
+            'maryland': 'Maryland', 'md': 'Maryland',
+            'massachusetts': 'Massachusetts', 'ma': 'Massachusetts',
+            'michigan': 'Michigan', 'mi': 'Michigan',
+            'minnesota': 'Minnesota', 'mn': 'Minnesota',
+            'mississippi': 'Mississippi', 'ms': 'Mississippi',
+            'missouri': 'Missouri', 'mo': 'Missouri',
+            'montana': 'Montana', 'mt': 'Montana',
+            'nebraska': 'Nebraska', 'ne': 'Nebraska',
+            'nevada': 'Nevada', 'nv': 'Nevada',
+            'new hampshire': 'New Hampshire', 'nh': 'New Hampshire',
+            'new jersey': 'New Jersey', 'nj': 'New Jersey',
+            'new mexico': 'New Mexico', 'nm': 'New Mexico',
+            'new york': 'New York', 'ny': 'New York',
+            'north carolina': 'North Carolina', 'nc': 'North Carolina',
+            'north dakota': 'North Dakota', 'nd': 'North Dakota',
+            'ohio': 'Ohio', 'oh': 'Ohio',
+            'oklahoma': 'Oklahoma', 'ok': 'Oklahoma',
+            'oregon': 'Oregon', 'or': 'Oregon',
+            'pennsylvania': 'Pennsylvania', 'pa': 'Pennsylvania',
+            'rhode island': 'Rhode Island', 'ri': 'Rhode Island',
+            'south carolina': 'South Carolina', 'sc': 'South Carolina',
+            'south dakota': 'South Dakota', 'sd': 'South Dakota',
+            'tennessee': 'Tennessee', 'tn': 'Tennessee',
+            'texas': 'Texas', 'tx': 'Texas',
+            'utah': 'Utah', 'ut': 'Utah',
+            'vermont': 'Vermont', 'vt': 'Vermont',
+            'virginia': 'Virginia', 'va': 'Virginia',
+            'washington': 'Washington', 'wa': 'Washington',
+            'west virginia': 'West Virginia', 'wv': 'West Virginia',
+            'wisconsin': 'Wisconsin', 'wi': 'Wisconsin',
+            'wyoming': 'Wyoming', 'wy': 'Wyoming'
+        }
+        
+        # City to default state mappings for ambiguous cities
+        city_state_defaults = {
+            'portland': 'Oregon',  # Portland, OR is much larger than Portland, ME
+            'springfield': None,   # Too many Springfields - no default
+            'washington': 'Washington',  # Washington state vs DC - context dependent
+            'columbus': 'Ohio',    # Columbus, OH is largest
+            'birmingham': 'Alabama',
+            'richmond': 'Virginia',
+            'jackson': 'Mississippi',
+            'albany': 'New York',
+            'concord': 'New Hampshire',
+            'bristol': 'Tennessee'
+        }
+        
+        # Common cities
+        major_cities = [
+            'New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix', 'Philadelphia',
+            'San Antonio', 'San Diego', 'Dallas', 'San Jose', 'Austin', 'Jacksonville',
+            'Fort Worth', 'Columbus', 'San Francisco', 'Charlotte', 'Indianapolis',
+            'Seattle', 'Denver', 'Washington', 'Boston', 'Nashville', 'Baltimore',
+            'Oklahoma City', 'Las Vegas', 'Portland', 'Detroit', 'Memphis', 'Louisville',
+            'Milwaukee', 'Albuquerque', 'Tucson', 'Fresno', 'Mesa', 'Sacramento',
+            'Atlanta', 'Kansas City', 'Colorado Springs', 'Miami', 'Raleigh', 'Omaha',
+            'Long Beach', 'Virginia Beach', 'Oakland', 'Minneapolis', 'Tulsa', 'Arlington',
+            'Tampa', 'New Orleans', 'Wichita', 'Cleveland', 'Bakersfield', 'Aurora',
+            'Anchorage', 'Honolulu', 'Anaheim', 'Santa Ana', 'Corpus Christi', 'Riverside',
+            'Lexington', 'St. Louis', 'Stockton', 'Pittsburgh', 'Cincinnati', 'Saint Paul',
+            'Greensboro', 'Lincoln', 'Orlando', 'Irvine', 'Newark', 'Durham', 'Chula Vista',
+            'Fort Wayne', 'Jersey City', 'St. Petersburg', 'Laredo', 'Buffalo', 'Madison'
+        ]
+        
+        text_lower = text.lower()
+        
+        # Try to find "in [location]" pattern
+        in_pattern = re.compile(r'\bin\s+([A-Za-z\s,]+?)(?:\.|$|\s+\d)', re.IGNORECASE)
+        match = in_pattern.search(text)
+        if match:
+            location_str = match.group(1).strip().rstrip(',')
+            
+            # Check if it's an exact state match first
+            for state_key, state_name in states.items():
+                if state_key == location_str.lower() or state_name.lower() == location_str.lower():
+                    return state_name
+            
+            # Check for city, state format (explicit comma separation)
+            parts = location_str.split(',')
+            if len(parts) == 2:
+                city_part = parts[0].strip()
+                state_part = parts[1].strip()
+                
+                # Find the state
+                matched_state = None
+                for state_key, state_name in states.items():
+                    if state_key == state_part.lower() or state_name.lower() == state_part.lower():
+                        matched_state = state_name
+                        break
+                
+                if matched_state:
+                    return f"{city_part.title()}, {matched_state}"
+            
+            # Check if it's a known major city (before doing substring state matching)
+            for city in major_cities:
+                if city.lower() == location_str.lower():
+                    # Check if this city has a default state
+                    default_state = city_state_defaults.get(city.lower())
+                    if default_state:
+                        return f"{city}, {default_state}"
+                    else:
+                        return city
+            
+            # Check for multi-word state names first (e.g., "New Hampshire", "New York")
+            location_lower = location_str.lower()
+            for state_key, state_name in states.items():
+                state_lower = state_name.lower()
+                if state_lower in location_lower:
+                    # Found a state name, extract the city part
+                    city_part = location_lower.replace(state_lower, '').strip()
+                    if city_part:
+                        # Capitalize properly
+                        city = ' '.join(word.capitalize() for word in city_part.split())
+                        return f"{city}, {state_name}"
+                    else:
+                        return state_name
+            
+            # If no multi-word state match, check individual words
+            location_words = location_str.lower().split()
+            for word in location_words:
+                for state_key, state_name in states.items():
+                    if state_key == word:
+                        # Found a state abbreviation, try to extract city
+                        remaining_words = [w for w in location_words if w != word]
+                        if remaining_words:
+                            city = ' '.join(remaining_words).title()
+                            return f"{city}, {state_name}"
+                        else:
+                            return state_name
+        
+        # Try to find state at the end of text
+        for state_key, state_name in states.items():
+            if text_lower.endswith(' ' + state_key) or text_lower.endswith(' ' + state_name.lower()):
+                # Check if there's a city before it
+                city_state_pattern = re.compile(rf'([A-Za-z\s]+)[,\s]+{re.escape(state_name)}$', re.IGNORECASE)
+                match = city_state_pattern.search(text)
+                if match:
+                    city = match.group(1).strip().rstrip(',').title()
+                    if city and len(city) > 2:  # Avoid matching single letters
+                        return f"{city}, {state_name}"
+                return state_name
+        
+        # Check for major cities
+        for city in major_cities:
+            if city.lower() in text_lower:
+                # Try to find associated state
+                city_pattern = re.compile(rf'{re.escape(city)}[,\s]+([A-Za-z\s]+)', re.IGNORECASE)
+                match = city_pattern.search(text)
+                if match:
+                    potential_state = match.group(1).strip()
+                    for state_key, state_name in states.items():
+                        if state_key == potential_state.lower() or state_name.lower() == potential_state.lower():
+                            return f"{city}, {state_name}"
+                
+                # No state found, use default if available
+                default_state = city_state_defaults.get(city.lower())
+                if default_state:
+                    return f"{city}, {default_state}"
+                else:
+                    return city
+        
+        return None
+    
+    def _extract_building_mix(self, text: str) -> Optional[Dict[str, float]]:
+        """
+        Extract building mix percentages from text.
+        Looks for patterns like:
+        - "warehouse (70%) + office (30%)"
+        - "60% office, 40% retail"
+        - "warehouse 70% office 30%"
+        - "150x300 warehouse (70%) + office(30%)"
+        """
+        # Skip building mix extraction for pure restaurant descriptions
+        # Restaurant components (kitchen, dining, bar) are not separate building types
+        restaurant_keywords = ['restaurant', 'dining', 'kitchen', 'bar', 'cafe', 'bistro']
+        if any(keyword in text.lower() for keyword in restaurant_keywords):
+            # Check if this is just a restaurant (not mixed with office, retail, etc.)
+            mixed_indicators = ['office', 'retail', 'residential', 'warehouse', 'industrial']
+            has_percentage = re.search(r'\d+\s*%', text)
+            has_mixed_types = any(indicator in text.lower() for indicator in mixed_indicators)
+            
+            # If no percentages and no mixed-use indicators, it's just a restaurant
+            if not has_percentage and not has_mixed_types:
+                return None
+        
+        # Common building types to look for
+        building_types = [
+            'warehouse', 'office', 'retail', 'restaurant', 'residential',
+            'industrial', 'manufacturing', 'storage', 'distribution'
+        ]
+        
+        # Pattern 1: "type (XX%)" or "type XX%"
+        pattern1 = re.compile(r'(\w+)\s*[\(\[]?\s*(\d+)\s*%\s*[\)\]]?', re.IGNORECASE)
+        
+        # Pattern 2: "XX% type"
+        pattern2 = re.compile(r'(\d+)\s*%\s*(\w+)', re.IGNORECASE)
+        
+        # Find all matches
+        building_mix = {}
+        
+        # Try pattern 1
+        for match in pattern1.finditer(text):
+            building_type = match.group(1).lower()
+            percentage = int(match.group(2))
+            
+            # Normalize building type
+            if building_type in building_types:
+                building_mix[building_type] = percentage / 100.0
+        
+        # Try pattern 2 if no matches found
+        if not building_mix:
+            for match in pattern2.finditer(text):
+                percentage = int(match.group(1))
+                building_type = match.group(2).lower()
+                
+                # Normalize building type
+                if building_type in building_types:
+                    building_mix[building_type] = percentage / 100.0
+        
+        # Special case: "mixed use" or "mixed-use" without specific percentages
+        if not building_mix and ('mixed use' in text.lower() or 'mixed-use' in text.lower()):
+            # Look for building types mentioned
+            mentioned_types = []
+            for btype in building_types:
+                if btype in text.lower():
+                    mentioned_types.append(btype)
+            
+            # If we found exactly 2 types, assume 50/50
+            if len(mentioned_types) == 2:
+                building_mix[mentioned_types[0]] = 0.5
+                building_mix[mentioned_types[1]] = 0.5
+            # If we found more, distribute evenly
+            elif len(mentioned_types) > 2:
+                share = 1.0 / len(mentioned_types)
+                for btype in mentioned_types:
+                    building_mix[btype] = share
+        
+        # Validate percentages sum to approximately 100%
+        if building_mix:
+            total = sum(building_mix.values())
+            if 0.95 <= total <= 1.05:  # Allow small rounding errors
+                # Normalize to exactly 100%
+                for key in building_mix:
+                    building_mix[key] = building_mix[key] / total
+                return building_mix
+            elif total < 0.95:
+                # If total is less than 95%, it might be incomplete
+                print(f"[NLP] Warning: Building mix percentages sum to {total*100}%, which is less than 95%")
+                return building_mix
+            else:
+                print(f"[NLP] Warning: Building mix percentages sum to {total*100}%, which exceeds 105%")
+                # Normalize anyway
+                for key in building_mix:
+                    building_mix[key] = building_mix[key] / total
+                return building_mix
+        
+        return None
 
 
 nlp_service = NLPService()

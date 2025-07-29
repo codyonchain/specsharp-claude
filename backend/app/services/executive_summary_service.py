@@ -19,10 +19,11 @@ class ExecutiveSummaryService:
         """
         # Extract basic project info
         project_name = project_data.get("project_name", "New Construction Project")
-        square_footage = project_data.get("square_footage", 0)
-        location = project_data.get("location", "Not specified")
-        building_type = project_data.get("building_type", "Commercial")
-        floors = project_data.get("floors", 1)
+        request_data = project_data.get("request_data", {})
+        square_footage = request_data.get("square_footage", 0)
+        location = request_data.get("location", "Not specified")
+        building_type = request_data.get("building_type", "Commercial")
+        floors = request_data.get("num_floors", 1)
         
         # Calculate totals
         total_cost = self._calculate_total_cost(project_data)
@@ -101,6 +102,11 @@ class ExecutiveSummaryService:
     
     def _calculate_total_cost(self, project_data: Dict[str, Any]) -> float:
         """Calculate total project cost including all trades"""
+        # First try to get the pre-calculated total
+        if "total_cost" in project_data:
+            return project_data["total_cost"]
+        
+        # Otherwise calculate from categories
         total = 0
         categories = project_data.get("categories", [])
         
@@ -108,7 +114,9 @@ class ExecutiveSummaryService:
             for system in category.get("systems", []):
                 total += system.get("total_cost", 0)
         
-        return total
+        # Add contingency if present
+        contingency = project_data.get("contingency_amount", 0)
+        return total + contingency
     
     def _calculate_trade_totals(self, project_data: Dict[str, Any]) -> Dict[str, float]:
         """Calculate totals by trade"""
@@ -141,9 +149,16 @@ class ExecutiveSummaryService:
         """Format major systems with costs and percentages"""
         systems = []
         
+        # Calculate the sum of all trade totals to ensure percentages add up correctly
+        trade_sum = sum(trade_totals.values())
+        
+        # Use trade_sum for percentage calculation if it's significantly different from total_cost
+        # This handles cases where total_cost includes markups or other adjustments
+        percentage_base = trade_sum if abs(trade_sum - total_cost) > (total_cost * 0.1) else total_cost
+        
         for trade, amount in sorted(trade_totals.items(), key=lambda x: x[1], reverse=True):
             if amount > 0:
-                percentage = (amount / total_cost * 100) if total_cost > 0 else 0
+                percentage = (amount / percentage_base * 100) if percentage_base > 0 else 0
                 systems.append({
                     "system": self._format_trade_name(trade),
                     "cost": format_currency(amount),
@@ -225,8 +240,9 @@ class ExecutiveSummaryService:
         assumptions = []
         
         # Location-based assumption
-        location = project_data.get("location", "")
-        if location:
+        request_data = project_data.get("request_data", {})
+        location = request_data.get("location", "") or project_data.get("location", "")
+        if location and location.strip() and location != "Unknown":
             assumptions.append(f"Pricing based on {location} regional costs and labor rates")
         else:
             assumptions.append("National average pricing used (location not specified)")

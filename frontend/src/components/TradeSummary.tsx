@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Package } from 'lucide-react';
+import { formatCurrency } from '../utils/formatters';
 import './TradeSummary.css';
 
 interface KeyMetric {
@@ -19,9 +20,10 @@ interface TradeSummaryData {
 interface TradeSummaryProps {
   tradeSummaries: TradeSummaryData[];
   onGeneratePackage: (trade: string) => void;
+  isReadOnly?: boolean;
 }
 
-function TradeSummary({ tradeSummaries, onGeneratePackage }: TradeSummaryProps) {
+function TradeSummary({ tradeSummaries, onGeneratePackage, isReadOnly = false }: TradeSummaryProps) {
   const [expandedTrades, setExpandedTrades] = useState<Set<string>>(new Set());
 
   const toggleExpanded = (trade: string) => {
@@ -45,14 +47,6 @@ function TradeSummary({ tradeSummaries, onGeneratePackage }: TradeSummaryProps) 
     return icons[trade] || '📦';
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
 
   return (
     <div className="trade-summary">
@@ -104,7 +98,7 @@ function TradeSummary({ tradeSummaries, onGeneratePackage }: TradeSummaryProps) 
                   )}
                 </button>
                 
-                {summary.trade !== 'General Conditions' && (
+                {!isReadOnly && summary.trade !== 'General Conditions' && (
                   <button 
                     className="generate-package-btn"
                     onClick={() => onGeneratePackage(tradeKey)}
@@ -134,7 +128,7 @@ function TradeSummary({ tradeSummaries, onGeneratePackage }: TradeSummaryProps) 
                           <td className="text-right">{system.quantity.toLocaleString()}</td>
                           <td className="text-center">{system.unit}</td>
                           <td className="text-right">${system.unit_cost.toFixed(2)}</td>
-                          <td className="text-right">${system.total_cost.toLocaleString()}</td>
+                          <td className="text-right">{formatCurrency(system.total_cost)}</td>
                         </tr>
                       ))}
                     </tbody>

@@ -18,6 +18,11 @@ build/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.*.local
+backend/.env
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
 
 # Database
 *.db

@@ -2,6 +2,7 @@ from typing import List, Dict, Any, Tuple, Optional
 import hashlib
 import json
 import logging
+from functools import lru_cache
 from app.models.scope import (
     ScopeRequest, ScopeResponse, ScopeCategory,
     BuildingSystem, ProjectType, ClimateZone
@@ -12,6 +13,7 @@ import re
 from app.services.detailed_trade_service import detailed_trade_service
 from app.services.building_type_service import building_type_service
 from app.services.restaurant_scope_service import restaurant_scope_service
+from app.services.regional_requirements_service import regional_requirements_service
 from app.core.cost_engine import (
     calculate_trade_cost,
     add_building_specific_items,
@@ -122,6 +124,9 @@ class DeterministicScopeEngine:
             "NY": 1.50,  # New York
             "MA": 1.40,  # Massachusetts
             "CT": 1.35,  # Connecticut
+            "NH": 1.05,  # New Hampshire
+            "VT": 1.10,  # Vermont
+            "ME": 1.00,  # Maine
             
             # Midwest
             "IL": 1.10,  # Illinois
@@ -154,6 +159,7 @@ class DeterministicScopeEngine:
             "chicago": 1.15,
         }
     
+    @lru_cache(maxsize=256)
     def _get_location_multiplier(self, location: str) -> float:
         """Extract state and city from location string and return appropriate multiplier"""
         if not location:
@@ -350,8 +356,19 @@ class DeterministicScopeEngine:
         # For mixed use, calculate weighted average
         if request.project_type == ProjectType.MIXED_USE and request.building_mix:
             weighted_multiplier = 0
+            # Map building types to their appropriate project type multipliers
+            building_to_project_type = {
+                'warehouse': ProjectType.INDUSTRIAL,  # Use industrial multiplier (0.5) for warehouses
+                'office': ProjectType.COMMERCIAL,     # Use commercial multiplier (1.0) for offices
+                'retail': ProjectType.COMMERCIAL,
+                'restaurant': ProjectType.COMMERCIAL,
+                'residential': ProjectType.RESIDENTIAL,
+                'multi_family_residential': ProjectType.RESIDENTIAL,
+                'industrial': ProjectType.INDUSTRIAL,
+                'light_industrial': ProjectType.INDUSTRIAL
+            }
             for building_type, percentage in request.building_mix.items():
-                type_enum = ProjectType(building_type) if building_type in ['residential', 'commercial', 'industrial'] else ProjectType.COMMERCIAL
+                type_enum = building_to_project_type.get(building_type, ProjectType.COMMERCIAL)
                 weighted_multiplier += self.cost_multipliers["project_type"].get(type_enum, 1.0) * percentage
             multiplier *= weighted_multiplier
         else:
@@ -369,6 +386,16 @@ class DeterministicScopeEngine:
         
         height_multiplier = 1.0 + (request.ceiling_height - 9) * 0.05
         multiplier *= height_multiplier
+        
+        # Apply finish level multiplier
+        finish_level = getattr(request, 'finish_level', 'standard')
+        finish_multipliers = {
+            'basic': 0.85,     # -15% for basic finishes
+            'standard': 1.0,   # baseline
+            'premium': 1.25    # +25% for premium finishes
+        }
+        finish_multiplier = finish_multipliers.get(finish_level, 1.0)
+        multiplier *= finish_multiplier
         
         return round(multiplier, 3)
     
@@ -519,7 +546,8 @@ class DeterministicScopeEngine:
         cost_multiplier = self._calculate_multiplier(request)
         
         # Check if we should use V2 engine for specific building types
-        if hasattr(request, 'occupancy_type') and request.occupancy_type:
+        # Skip V2 for mixed-use buildings - they need the weighted calculation logic
+        if hasattr(request, 'occupancy_type') and request.occupancy_type and request.project_type != ProjectType.MIXED_USE:
             occupancy_lower = request.occupancy_type.lower()
             logger.info(f"[SCOPE ENGINE] Occupancy type detected: {occupancy_lower}")
             
@@ -550,6 +578,11 @@ class DeterministicScopeEngine:
                 )
             
             building_systems = []
+            # DEBUG: Log systems for finishes
+            if category_name == "finishes":
+                logger.debug(f"[FINISHES DEBUG] Processing {len(systems)} systems for finishes")
+                logger.debug(f"[FINISHES DEBUG] Project type: {request.project_type}, Building mix: {request.building_mix}")
+            
             for system in systems:
                 # Create a copy to avoid mutating the original
                 system_copy = system.copy()
@@ -582,20 +615,33 @@ class DeterministicScopeEngine:
                 elif request.project_type == ProjectType.MIXED_USE and request.building_mix:
                     # Calculate weighted average cost based on space mix
                     weighted_rate = 0
+                    logger.info(f"[MIXED-USE] Processing {category_name} for building mix: {request.building_mix}")
+                    
                     for space_type, percentage in request.building_mix.items():
                         if space_type in self.space_type_rates:
                             space_rates = self.space_type_rates[space_type]
                             if category_name in space_rates:
-                                weighted_rate += space_rates[category_name] * percentage
+                                rate = space_rates[category_name]
+                                weighted_rate += rate * percentage
+                                logger.info(f"[MIXED-USE] {space_type} ({percentage*100}%): ${rate}/SF * {percentage} = ${rate * percentage}/SF")
+                            else:
+                                logger.warning(f"[MIXED-USE] Category '{category_name}' not found in space rates for '{space_type}'")
+                        else:
+                            logger.warning(f"[MIXED-USE] Space type '{space_type}' not found in space_type_rates")
                     
                     # If we calculated a weighted rate, use it
                     if weighted_rate > 0:
+                        logger.info(f"[MIXED-USE] Total weighted rate for {category_name}: ${weighted_rate:.2f}/SF")
+                        
                         # Distribute the weighted rate across all systems in the category
                         num_systems = len([s for s in systems if s["base_cost_per_sqft"] > 0])
                         if num_systems > 0:
                             system_copy["base_cost_per_sqft"] = weighted_rate / num_systems
-                    
-                    elif category_name == "plumbing" and system_copy["name"] == "Fixtures":
+                            logger.info(f"[MIXED-USE] {system_copy['name']}: ${system_copy['base_cost_per_sqft']:.2f}/SF (${weighted_rate:.2f} / {num_systems} systems)")
+                    else:
+                        logger.warning(f"[MIXED-USE] No weighted rate calculated for {category_name}")
+                
+                elif category_name == "plumbing" and system_copy["name"] == "Fixtures" and request.project_type == ProjectType.MIXED_USE and request.building_mix:
                         mixed_reqs = self._calculate_mixed_use_requirements(request, "plumbing")
                         if "bathrooms_per_sqft" in mixed_reqs:
                             # Adjust plumbing fixtures based on bathroom requirements
@@ -604,7 +650,7 @@ class DeterministicScopeEngine:
                             adjustment_factor = mixed_reqs["bathrooms_per_sqft"] / base_bathrooms_per_sqft
                             system_copy["base_cost_per_sqft"] = system_copy["base_cost_per_sqft"] * adjustment_factor
                     
-                    elif category_name == "electrical" and "Power" in system_copy["name"]:
+                elif category_name == "electrical" and "Power" in system_copy["name"] and request.project_type == ProjectType.MIXED_USE and request.building_mix:
                         mixed_reqs = self._calculate_mixed_use_requirements(request, "electrical")
                         if "watts_per_sqft" in mixed_reqs:
                             # Adjust electrical based on power requirements
@@ -629,7 +675,41 @@ class DeterministicScopeEngine:
                         request, category_name, system_copy["base_cost_per_sqft"]
                     )
                 
-                unit_cost = round(adjusted_cost_per_sqft * cost_multiplier, 2)
+                # Apply category-specific finish level adjustments
+                category_cost_multiplier = cost_multiplier
+                if category_name == "finishes":
+                    # Finishes category can have up to +35% for premium
+                    finish_level = getattr(request, 'finish_level', 'standard')
+                    if finish_level == 'premium':
+                        # Remove the standard premium multiplier (1.25) and apply the higher one (1.35)
+                        # cost_multiplier already includes 1.25, so we adjust by 1.35/1.25 = 1.08
+                        category_cost_multiplier = cost_multiplier * 1.08
+                
+                unit_cost = round(adjusted_cost_per_sqft * category_cost_multiplier, 2)
+                
+                # DEBUG: Log finishes calculation
+                if category_name == "finishes":
+                    logger.debug(f"[FINISHES DEBUG] System: {system_copy['name']}")
+                    logger.debug(f"[FINISHES DEBUG]   Base cost/SF: ${system_copy.get('base_cost_per_sqft', 0):.2f}")
+                    logger.debug(f"[FINISHES DEBUG]   Adjusted cost/SF: ${adjusted_cost_per_sqft:.2f}")
+                    logger.debug(f"[FINISHES DEBUG]   Multiplier: {category_cost_multiplier:.2f}")
+                    logger.debug(f"[FINISHES DEBUG]   Final unit cost: ${unit_cost:.2f}")
+                    logger.debug(f"[FINISHES DEBUG]   Quantity: {quantity}")
+                    logger.debug(f"[FINISHES DEBUG]   Total: ${quantity * unit_cost:.2f}")
+                
+                # Adjust confidence score based on finish level
+                confidence_score = 95  # Default high confidence
+                confidence_label = "High"
+                finish_level = getattr(request, 'finish_level', 'standard')
+                
+                if finish_level == 'premium' and category_name == "finishes":
+                    # Premium finishes have more variability
+                    confidence_score = 85
+                    confidence_label = "Medium"
+                elif finish_level == 'basic':
+                    # Basic finishes are more predictable
+                    confidence_score = 98
+                    confidence_label = "Very High"
                 
                 building_system = BuildingSystem(
                     name=system_copy["name"],
@@ -637,10 +717,13 @@ class DeterministicScopeEngine:
                     unit=system_copy["unit"],
                     unit_cost=unit_cost,
                     total_cost=round(quantity * unit_cost, 2),
+                    confidence_score=confidence_score,
+                    confidence_label=confidence_label,
                     specifications={
                         "base_rate": system_copy["base_cost_per_sqft"],
                         "multiplier": cost_multiplier,
-                        "climate_adjusted": request.climate_zone is not None
+                        "climate_adjusted": request.climate_zone is not None,
+                        "finish_level": finish_level
                     }
                 )
                 building_systems.append(building_system)
@@ -775,7 +858,75 @@ class DeterministicScopeEngine:
                     name=category_name.title(),
                     systems=building_systems
                 )
+                # DEBUG: Log finishes category
+                if category_name == "finishes":
+                    logger.debug(f"[FINISHES DEBUG] Created category with {len(building_systems)} systems")
+                    for sys in building_systems:
+                        logger.debug(f"[FINISHES DEBUG]   {sys.name}: ${sys.total_cost:.2f}")
+                    total = sum(sys.total_cost for sys in building_systems)
+                    logger.debug(f"[FINISHES DEBUG] Total finishes: ${total:.2f}")
                 categories.append(category)
+        
+        # Add Regional Requirements (NH and TN specific)
+        regional_items = regional_requirements_service.get_regional_requirements(
+            location=request.location,
+            square_footage=request.square_footage,
+            building_type=getattr(request, 'occupancy_type', request.project_type.value),
+            num_floors=request.num_floors
+        )
+        
+        if regional_items:
+            # Group regional items by category
+            regional_by_category = {}
+            for item in regional_items:
+                if item.category not in regional_by_category:
+                    regional_by_category[item.category] = []
+                regional_by_category[item.category].append(item)
+            
+            # Create categories for regional requirements
+            for category_name, items in regional_by_category.items():
+                # Check if we need to add to existing category or create new
+                existing_category = None
+                for cat in categories:
+                    if cat.name == category_name:
+                        existing_category = cat
+                        break
+                
+                if existing_category:
+                    # Add to existing category
+                    for item in items:
+                        building_system = BuildingSystem(
+                            name=item.name,
+                            quantity=item.quantity,
+                            unit=item.unit,
+                            unit_cost=item.unit_cost,
+                            total_cost=item.total_cost,
+                            confidence_score=95,
+                            confidence_label="High",
+                            specifications={'note': item.note}
+                        )
+                        existing_category.systems.append(building_system)
+                else:
+                    # Create new category
+                    building_systems = []
+                    for item in items:
+                        building_system = BuildingSystem(
+                            name=item.name,
+                            quantity=item.quantity,
+                            unit=item.unit,
+                            unit_cost=item.unit_cost,
+                            total_cost=item.total_cost,
+                            confidence_score=95,
+                            confidence_label="High",
+                            specifications={'note': item.note}
+                        )
+                        building_systems.append(building_system)
+                    
+                    category = ScopeCategory(
+                        name=category_name,
+                        systems=building_systems
+                    )
+                    categories.append(category)
         
         # Add General Conditions as a percentage of trade costs
         trade_subtotal = sum(
@@ -990,6 +1141,67 @@ class DeterministicScopeEngine:
             )
             categories.append(category)
         
+        # Add Regional Requirements (NH and TN specific) for restaurants
+        regional_items = regional_requirements_service.get_regional_requirements(
+            location=request.location,
+            square_footage=request.square_footage,
+            building_type="restaurant",
+            num_floors=request.num_floors
+        )
+        
+        if regional_items:
+            # Group regional items by category
+            regional_by_category = {}
+            for item in regional_items:
+                if item.category not in regional_by_category:
+                    regional_by_category[item.category] = []
+                regional_by_category[item.category].append(item)
+            
+            # Create categories for regional requirements
+            for category_name, items in regional_by_category.items():
+                # Check if we need to add to existing category or create new
+                existing_category = None
+                for cat in categories:
+                    if cat.name == category_name:
+                        existing_category = cat
+                        break
+                
+                if existing_category:
+                    # Add to existing category
+                    for item in items:
+                        building_system = BuildingSystem(
+                            name=item.name,
+                            quantity=item.quantity,
+                            unit=item.unit,
+                            unit_cost=round(item.unit_cost * cost_multiplier, 2),
+                            total_cost=round(item.total_cost * cost_multiplier, 2),
+                            confidence_score=95,
+                            confidence_label="High",
+                            specifications={'note': item.note}
+                        )
+                        existing_category.systems.append(building_system)
+                else:
+                    # Create new category
+                    building_systems = []
+                    for item in items:
+                        building_system = BuildingSystem(
+                            name=item.name,
+                            quantity=item.quantity,
+                            unit=item.unit,
+                            unit_cost=round(item.unit_cost * cost_multiplier, 2),
+                            total_cost=round(item.total_cost * cost_multiplier, 2),
+                            confidence_score=95,
+                            confidence_label="High",
+                            specifications={'note': item.note}
+                        )
+                        building_systems.append(building_system)
+                    
+                    category = ScopeCategory(
+                        name=category_name,
+                        systems=building_systems
+                    )
+                    categories.append(category)
+        
         # Create response
         contingency = self._calculate_contingency_percentage(request)
         
@@ -1165,6 +1377,67 @@ class DeterministicScopeEngine:
                     )
                     categories.append(category)
         
+        # Add Regional Requirements (NH and TN specific) for V2 engine
+        regional_items = regional_requirements_service.get_regional_requirements(
+            location=request.location,
+            square_footage=request.square_footage,
+            building_type=building_type,
+            num_floors=request.num_floors
+        )
+        
+        if regional_items:
+            # Group regional items by category
+            regional_by_category = {}
+            for item in regional_items:
+                if item.category not in regional_by_category:
+                    regional_by_category[item.category] = []
+                regional_by_category[item.category].append(item)
+            
+            # Create categories for regional requirements
+            for category_name, items in regional_by_category.items():
+                # Check if we need to add to existing category or create new
+                existing_category = None
+                for cat in categories:
+                    if cat.name == category_name:
+                        existing_category = cat
+                        break
+                
+                if existing_category:
+                    # Add to existing category
+                    for item in items:
+                        building_system = BuildingSystem(
+                            name=item.name,
+                            quantity=item.quantity,
+                            unit=item.unit,
+                            unit_cost=item.unit_cost,
+                            total_cost=item.total_cost,
+                            confidence_score=95,
+                            confidence_label="High",
+                            specifications={'note': item.note}
+                        )
+                        existing_category.systems.append(building_system)
+                else:
+                    # Create new category
+                    building_systems = []
+                    for item in items:
+                        building_system = BuildingSystem(
+                            name=item.name,
+                            quantity=item.quantity,
+                            unit=item.unit,
+                            unit_cost=item.unit_cost,
+                            total_cost=item.total_cost,
+                            confidence_score=95,
+                            confidence_label="High",
+                            specifications={'note': item.note}
+                        )
+                        building_systems.append(building_system)
+                    
+                    category = ScopeCategory(
+                        name=category_name,
+                        systems=building_systems
+                    )
+                    categories.append(category)
+        
         # Add General Conditions
         trade_subtotal = sum(
             sum(system.total_cost for system in category.systems)
@@ -1296,6 +1569,7 @@ class DeterministicScopeEngine:
         
         return 'commercial'  # Default
     
+    @lru_cache(maxsize=128)
     def _extract_region_from_location(self, location: str) -> str:
         """Extract state/region code from location string"""
         if not location:

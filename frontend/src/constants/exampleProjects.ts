@@ -8,146 +8,146 @@ export interface ExampleProject {
 }
 
 export const EXAMPLE_PROJECTS: ExampleProject[] = [
-  // Healthcare
+  // Healthcare - New Hampshire Focus
   {
-    description: "100,000 sf hospital 4 stories with emergency department in Houston, Texas",
+    description: "100,000 sf medical office building with surgery center in Nashua, New Hampshire",
     squareFootage: 100000,
     floors: 4,
-    location: "Houston, TX",
+    location: "Nashua, NH",
     buildingType: "healthcare",
     category: "Healthcare"
   },
   {
-    description: "25,000 sf medical office building with surgery center in Dallas, Texas",
-    squareFootage: 25000,
-    floors: 2,
-    location: "Dallas, TX",
+    description: "75,000 sf outpatient clinic with imaging center in Manchester, New Hampshire",
+    squareFootage: 75000,
+    floors: 3,
+    location: "Manchester, NH",
     buildingType: "healthcare",
     category: "Healthcare"
   },
   
-  // Educational
+  // Educational - New Hampshire Focus
   {
-    description: "45,000 sf elementary school with 30 classrooms in Dallas, Texas",
+    description: "45,000 sf K-12 school with gymnasium in Concord, New Hampshire",
     squareFootage: 45000,
     floors: 2,
-    location: "Dallas, TX",
+    location: "Concord, NH",
     buildingType: "educational",
     category: "Educational"
   },
   {
-    description: "120,000 sf high school with gymnasium and cafeteria in Austin, Texas",
-    squareFootage: 120000,
+    description: "85,000 sf high school with cafeteria and auditorium in Portsmouth, New Hampshire",
+    squareFootage: 85000,
     floors: 3,
-    location: "Austin, TX",
+    location: "Portsmouth, NH",
     buildingType: "educational",
     category: "Educational"
   },
   
-  // Hospitality
+  // Hospitality - Nashville Focus
   {
-    description: "150 room hotel with conference center in Austin, Texas",
-    squareFootage: 67500,
-    floors: 5,
-    location: "Austin, TX",
+    description: "200 room hotel with conference center in Nashville, Tennessee",
+    squareFootage: 90000,
+    floors: 6,
+    location: "Nashville, TN",
     buildingType: "hospitality",
     category: "Hospitality"
   },
   {
-    description: "75 room extended stay hotel in San Antonio, Texas",
-    squareFootage: 33750,
+    description: "125 room extended stay hotel in Franklin, Tennessee",
+    squareFootage: 56250,
     floors: 4,
-    location: "San Antonio, TX",
+    location: "Franklin, TN",
     buildingType: "hospitality",
     category: "Hospitality"
   },
   
-  // Retail
+  // Retail - Mixed NH and Nashville
   {
-    description: "25,000 sf strip center with 5 tenant spaces in San Antonio, Texas",
+    description: "50,000 sf mixed-use retail and office in Portsmouth, New Hampshire",
+    squareFootage: 50000,
+    floors: 3,
+    location: "Portsmouth, NH",
+    buildingType: "retail",
+    category: "Retail"
+  },
+  {
+    description: "25,000 sf grocery store with pharmacy in Franklin, Tennessee",
     squareFootage: 25000,
     floors: 1,
-    location: "San Antonio, TX",
-    buildingType: "retail",
-    category: "Retail"
-  },
-  {
-    description: "50,000 sf grocery store with pharmacy in Houston, Texas",
-    squareFootage: 50000,
-    floors: 1,
-    location: "Houston, TX",
+    location: "Franklin, TN",
     buildingType: "retail",
     category: "Retail"
   },
   
-  // Office
+  // Office - Mixed NH and Nashville
   {
-    description: "75,000 sf office building 5 stories in downtown Dallas, Texas",
+    description: "75,000 sf office building 4 stories in downtown Manchester, New Hampshire",
     squareFootage: 75000,
-    floors: 5,
-    location: "Dallas, TX",
-    buildingType: "office",
-    category: "Office"
-  },
-  {
-    description: "30,000 sf corporate headquarters 3 stories in Austin, Texas",
-    squareFootage: 30000,
-    floors: 3,
-    location: "Austin, TX",
-    buildingType: "office",
-    category: "Office"
-  },
-  
-  // Restaurant
-  {
-    description: "6,000 sf full service restaurant with bar in Houston, Texas",
-    squareFootage: 6000,
-    floors: 1,
-    location: "Houston, TX",
-    buildingType: "restaurant",
-    category: "Restaurant"
-  },
-  {
-    description: "3,500 sf quick service restaurant with drive-thru in San Antonio, Texas",
-    squareFootage: 3500,
-    floors: 1,
-    location: "San Antonio, TX",
-    buildingType: "restaurant",
-    category: "Restaurant"
-  },
-  
-  // Multi-Family
-  {
-    description: "200 unit luxury apartment complex 4 stories in Austin, Texas",
-    squareFootage: 250000,
     floors: 4,
-    location: "Austin, TX",
+    location: "Manchester, NH",
+    buildingType: "office",
+    category: "Office"
+  },
+  {
+    description: "60,000 sf corporate headquarters 3 stories in Nashville, Tennessee",
+    squareFootage: 60000,
+    floors: 3,
+    location: "Nashville, TN",
+    buildingType: "office",
+    category: "Office"
+  },
+  
+  // Restaurant - New Hampshire Focus
+  {
+    description: "4,000 sf full-service restaurant with commercial kitchen in Manchester, New Hampshire",
+    squareFootage: 4000,
+    floors: 1,
+    location: "Manchester, NH",
+    buildingType: "restaurant",
+    category: "Restaurant"
+  },
+  {
+    description: "3,000 sf casual dining restaurant with bar in Nashua, New Hampshire",
+    squareFootage: 3000,
+    floors: 1,
+    location: "Nashua, NH",
+    buildingType: "restaurant",
+    category: "Restaurant"
+  },
+  
+  // Multi-Family - Mixed Focus
+  {
+    description: "150 unit luxury apartment complex 4 stories in Manchester, New Hampshire",
+    squareFootage: 187500,
+    floors: 4,
+    location: "Manchester, NH",
     buildingType: "multi_family_residential",
     category: "Multi-Family"
   },
   {
-    description: "100 unit apartment building with amenities in Dallas, Texas",
-    squareFootage: 100000,
-    floors: 3,
-    location: "Dallas, TX",
+    description: "200 unit apartment building with amenities in Nashville, Tennessee",
+    squareFootage: 250000,
+    floors: 5,
+    location: "Nashville, TN",
     buildingType: "multi_family_residential",
     category: "Multi-Family"
   },
   
-  // Industrial/Warehouse
+  // Industrial/Warehouse - Mixed Focus
   {
-    description: "100,000 sf distribution center with 20 loading docks in Houston, Texas",
-    squareFootage: 100000,
+    description: "75,000 sf warehouse distribution center in Nashville, Tennessee",
+    squareFootage: 75000,
     floors: 1,
-    location: "Houston, TX",
+    location: "Nashville, TN",
     buildingType: "warehouse",
     category: "Industrial"
   },
   {
-    description: "50,000 sf manufacturing facility with clean rooms in Austin, Texas",
-    squareFootage: 50000,
+    description: "40,000 sf manufacturing facility with office space in Salem, New Hampshire",
+    squareFootage: 40000,
     floors: 1,
-    location: "Austin, TX",
+    location: "Salem, NH",
     buildingType: "industrial",
     category: "Industrial"
   }

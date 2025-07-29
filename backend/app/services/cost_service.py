@@ -399,22 +399,95 @@ class CostService:
         if not location:
             return "TX"  # Default
         
-        # Common state codes
-        state_codes = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", 
-                      "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
-                      "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
-                      "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
-                      "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"]
-        
         location_upper = location.upper()
         
-        # Check if any state code appears in the location
-        for code in state_codes:
-            if code in location_upper:
-                return code
+        # State abbreviations to full names mapping
+        state_mapping = {
+            'AL': 'AL', 'ALABAMA': 'AL',
+            'AK': 'AK', 'ALASKA': 'AK',
+            'AZ': 'AZ', 'ARIZONA': 'AZ',
+            'AR': 'AR', 'ARKANSAS': 'AR',
+            'CA': 'CA', 'CALIFORNIA': 'CA',
+            'CO': 'CO', 'COLORADO': 'CO',
+            'CT': 'CT', 'CONNECTICUT': 'CT',
+            'DE': 'DE', 'DELAWARE': 'DE',
+            'FL': 'FL', 'FLORIDA': 'FL',
+            'GA': 'GA', 'GEORGIA': 'GA',
+            'HI': 'HI', 'HAWAII': 'HI',
+            'ID': 'ID', 'IDAHO': 'ID',
+            'IL': 'IL', 'ILLINOIS': 'IL',
+            'IN': 'IN', 'INDIANA': 'IN',
+            'IA': 'IA', 'IOWA': 'IA',
+            'KS': 'KS', 'KANSAS': 'KS',
+            'KY': 'KY', 'KENTUCKY': 'KY',
+            'LA': 'LA', 'LOUISIANA': 'LA',
+            'ME': 'ME', 'MAINE': 'ME',
+            'MD': 'MD', 'MARYLAND': 'MD',
+            'MA': 'MA', 'MASSACHUSETTS': 'MA',
+            'MI': 'MI', 'MICHIGAN': 'MI',
+            'MN': 'MN', 'MINNESOTA': 'MN',
+            'MS': 'MS', 'MISSISSIPPI': 'MS',
+            'MO': 'MO', 'MISSOURI': 'MO',
+            'MT': 'MT', 'MONTANA': 'MT',
+            'NE': 'NE', 'NEBRASKA': 'NE',
+            'NV': 'NV', 'NEVADA': 'NV',
+            'NH': 'NH', 'NEW HAMPSHIRE': 'NH',
+            'NJ': 'NJ', 'NEW JERSEY': 'NJ',
+            'NM': 'NM', 'NEW MEXICO': 'NM',
+            'NY': 'NY', 'NEW YORK': 'NY',
+            'NC': 'NC', 'NORTH CAROLINA': 'NC',
+            'ND': 'ND', 'NORTH DAKOTA': 'ND',
+            'OH': 'OH', 'OHIO': 'OH',
+            'OK': 'OK', 'OKLAHOMA': 'OK',
+            'OR': 'OR', 'OREGON': 'OR',
+            'PA': 'PA', 'PENNSYLVANIA': 'PA',
+            'RI': 'RI', 'RHODE ISLAND': 'RI',
+            'SC': 'SC', 'SOUTH CAROLINA': 'SC',
+            'SD': 'SD', 'SOUTH DAKOTA': 'SD',
+            'TN': 'TN', 'TENNESSEE': 'TN',
+            'TX': 'TX', 'TEXAS': 'TX',
+            'UT': 'UT', 'UTAH': 'UT',
+            'VT': 'VT', 'VERMONT': 'VT',
+            'VA': 'VA', 'VIRGINIA': 'VA',
+            'WA': 'WA', 'WASHINGTON': 'WA',
+            'WV': 'WV', 'WEST VIRGINIA': 'WV',
+            'WI': 'WI', 'WISCONSIN': 'WI',
+            'WY': 'WY', 'WYOMING': 'WY'
+        }
         
-        # Check for city names and map to states
+        # First, try to extract state from "City, State" format
+        if ', ' in location:
+            parts = location.split(', ')
+            if len(parts) >= 2:
+                state_part = parts[-1].strip().upper()
+                if state_part in state_mapping:
+                    return state_mapping[state_part]
+        
+        # Check for exact state name matches (word boundaries)
+        location_words = location_upper.replace(',', ' ').split()
+        for word in location_words:
+            if word in state_mapping:
+                return state_mapping[word]
+        
+        # Check for multi-word state names
+        for state_name, state_code in state_mapping.items():
+            if len(state_name.split()) > 1:  # Multi-word states
+                if state_name in location_upper:
+                    return state_code
+        
+        # City-specific mappings for our primary markets
         city_to_state = {
+            "MANCHESTER": "NH",  # New Hampshire (primary market)
+            "NASHUA": "NH",
+            "CONCORD": "NH", 
+            "PORTSMOUTH": "NH",
+            "SALEM": "NH",
+            "NASHVILLE": "TN",  # Tennessee (primary market)
+            "FRANKLIN": "TN",   # Franklin, TN (Nashville suburb)
+            "MURFREESBORO": "TN",
+            "KNOXVILLE": "TN",
+            "MEMPHIS": "TN",
+            # Other major cities
             "SAN FRANCISCO": "CA",
             "LOS ANGELES": "CA",
             "SAN DIEGO": "CA",
@@ -426,7 +499,6 @@ class CostService:
             "HOUSTON": "TX",
             "MIAMI": "FL",
             "DENVER": "CO",
-            "NEW YORK": "NY",
             "BOSTON": "MA",
             "CHICAGO": "IL",
             "ATLANTA": "GA",
@@ -435,6 +507,7 @@ class CostService:
             "PHILADELPHIA": "PA"
         }
         
+        # Check for city matches
         for city, state in city_to_state.items():
             if city in location_upper:
                 return state

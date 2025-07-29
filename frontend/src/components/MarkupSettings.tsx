@@ -109,11 +109,12 @@ function MarkupSettings({ isOpen, onClose, onSave }: MarkupSettingsProps) {
           </button>
         </div>
 
-        {loading ? (
-          <div className="loading">Loading settings...</div>
-        ) : (
-          <>
-            <div className="settings-section">
+        <div className="modal-body">
+          {loading ? (
+            <div className="loading">Loading settings...</div>
+          ) : (
+            <>
+              <div className="settings-section">
               <h3>Global Markups</h3>
               <div className="setting-group">
                 <label>
@@ -257,18 +258,19 @@ function MarkupSettings({ isOpen, onClose, onSave }: MarkupSettingsProps) {
                 </label>
               </div>
             </div>
-
-            <div className="modal-actions">
-              <button className="secondary-btn" onClick={onClose}>
-                Cancel
-              </button>
-              <button className="primary-btn" onClick={handleSave} disabled={saving}>
-                <Save size={16} />
-                {saving ? 'Saving...' : 'Save Settings'}
-              </button>
-            </div>
           </>
-        )}
+          )}
+        </div>
+
+        <div className="modal-actions">
+          <button className="secondary-btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="primary-btn" onClick={handleSave} disabled={saving}>
+            <Save size={16} />
+            {saving ? 'Saving...' : 'Save Settings'}
+          </button>
+        </div>
       </div>
     </div>
   );
