@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
+import os
 
 
 class Settings(BaseSettings):
@@ -15,8 +16,15 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
     
-    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:3001", "http://localhost:5173"]
-    frontend_url: str = "http://localhost:3000"
+    # CORS origins - can be overridden by environment variable
+    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:3001", "http://localhost:5173", "https://specsharp.ai", "https://www.specsharp.ai"]
+    
+    # Frontend URL - automatically set based on environment
+    @property
+    def frontend_url(self) -> str:
+        if self.environment == "production":
+            return os.getenv("FRONTEND_URL", "https://specsharp.ai")
+        return os.getenv("FRONTEND_URL", "http://localhost:3000")
     
     # OAuth settings
     google_client_id: str = ""
