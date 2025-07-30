@@ -319,3 +319,77 @@
 .download-all-btn:hover {
   background-color: #218838;
 }
+/* Mobile responsive styles for trade package modal */
+@media (max-width: 768px) {
+  .trade-package-modal {
+    width: 95%;
+    max-width: none;
+    margin: 1rem;
+    min-height: auto;
+    max-height: calc(100vh - 2rem);
+  }
+  
+  .modal-header {
+    padding: 1rem;
+  }
+  
+  .modal-header h2 {
+    font-size: 1.25rem;
+  }
+  
+  .modal-body {
+    padding: 1rem;
+  }
+  
+  .preview-summary {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 1rem;
+  }
+  
+  .summary-item .value {
+    font-size: 1.25rem;
+  }
+  
+  .category-preview {
+    padding: 1rem;
+  }
+  
+  .category-preview h4 {
+    font-size: 1rem;
+  }
+  
+  .download-options {
+    grid-template-columns: 1fr;
+  }
+  
+  .download-btn {
+    flex-direction: row;
+    justify-content: center;
+    padding: 1rem;
+  }
+  
+  .error-message {
+    padding: 1rem;
+  }
+  
+  .close-btn {
+    padding: 0.5rem;
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-content {
+    border-radius: 0;
+    height: 100vh;
+    width: 100vw;
+    margin: 0;
+    max-height: 100vh;
+  }
+  
+  .modal-overlay {
+    align-items: stretch;
+  }
+}

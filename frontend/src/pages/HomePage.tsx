@@ -10,6 +10,7 @@ export const HomePage: React.FC = () => {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const [currentUseCaseIndex, setCurrentUseCaseIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const useCases = [
@@ -140,12 +141,75 @@ export const HomePage: React.FC = () => {
             </Link>
           </div>
           {/* Mobile menu button */}
-          <button className="md:hidden p-2">
+          <button 
+            className="md:hidden p-2 hover:bg-gray-100 rounded-md transition-colors"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label="Toggle mobile menu"
+          >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              {isMobileMenuOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              )}
             </svg>
           </button>
         </div>
+        
+        {/* Mobile Navigation Menu */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden bg-white border-t border-gray-200 shadow-lg">
+            <div className="px-4 py-3 space-y-3">
+              <a 
+                href="#how-it-works" 
+                className="block py-2 text-gray-700 hover:text-blue-600 transition-colors"
+                onClick={(e) => {
+                  e.preventDefault();
+                  document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                How It Works
+              </a>
+              <a 
+                href="#roi-calculator" 
+                className="block py-2 text-gray-700 hover:text-blue-600 transition-colors"
+                onClick={(e) => {
+                  e.preventDefault();
+                  document.getElementById('roi-calculator')?.scrollIntoView({ behavior: 'smooth' });
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                ROI Calculator
+              </a>
+              <Link 
+                to="/pricing" 
+                className="block py-2 text-gray-700 hover:text-blue-600 transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Pricing
+              </Link>
+              <Link 
+                to="/login" 
+                className="block py-2 text-blue-600 hover:text-blue-700 transition-colors font-medium"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Login
+              </Link>
+              <Link 
+                to="/demo" 
+                className="block w-full text-center btn-primary"
+                style={{backgroundColor: '#3B60E4', color: 'white', padding: '12px 24px'}}
+                onClick={() => {
+                  handleCTAClick('Try It Now - No Signup', 'mobile-navigation');
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                Try It Now - No Signup
+              </Link>
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* Hero Section */}
