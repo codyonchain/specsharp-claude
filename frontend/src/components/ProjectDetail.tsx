@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { scopeService, costService } from '../services/api';
+import { scopeService, costService, tradePackageService } from '../services/api';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import ArchitecturalFloorPlan from './ArchitecturalFloorPlan';
 import FloorPlanViewer from './FloorPlanViewer';
@@ -81,51 +81,9 @@ function ProjectDetail() {
     console.log(`[TradePackage] Starting generation for trade: ${trade}, project: ${projectId}`);
     
     try {
-      console.log(`[TradePackage] Making API call to: /api/v1/trade-package/generate/${projectId}/${trade}`);
-      
-      // Use the same API URL as the main API service
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
-      
-      const response = await fetch(`${API_BASE_URL}/api/v1/trade-package/generate/${projectId}/${trade}`, {
-        method: 'POST',
-        credentials: 'include', // Include cookies for authentication
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      console.log(`[TradePackage] Response status: ${response.status}`);
-      
-      // Get response text first to help with debugging
-      const responseText = await response.text();
-      console.log(`[TradePackage] Response text: ${responseText.substring(0, 200)}...`);
-      
-      if (!response.ok) {
-        let errorMessage = `Failed to generate trade package (${response.status})`;
-        try {
-          const errorData = JSON.parse(responseText);
-          errorMessage = errorData.detail || errorData.message || errorMessage;
-        } catch (e) {
-          // If response isn't JSON, use the text directly if it's short
-          if (responseText.length < 200) {
-            errorMessage = responseText || errorMessage;
-          }
-        }
-        throw new Error(errorMessage);
-      }
-      
-      // Parse JSON response
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (e) {
-        console.error('[TradePackage] Failed to parse response as JSON:', e);
-        throw new Error('Invalid response format from server');
-      }
-      
+      const data = await tradePackageService.generate(projectId, trade);
       console.log('[TradePackage] Successfully generated package:', data);
       return data;
-      
     } catch (error) {
       console.error('[TradePackage] Error generating package:', error);
       throw error;

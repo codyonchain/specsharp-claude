@@ -359,4 +359,16 @@ export const shareService = {
   },
 };
 
+export const tradePackageService = {
+  getPreview: async (projectId: string, trade: string) => {
+    const response = await api.get(`/trade-package/preview/${projectId}/${trade}`);
+    return response.data;
+  },
+  
+  generate: async (projectId: string, trade: string) => {
+    const response = await api.post(`/trade-package/generate/${projectId}/${trade}`);
+    return response.data;
+  }
+};
+
 export default api;

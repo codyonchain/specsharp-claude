@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Download, FileText, FileSpreadsheet, Image as ImageIcon } from 'lucide-react';
+import { tradePackageService } from '../services/api';
 import './TradePackageModal.css';
 
 interface TradePackageModalProps {
@@ -28,56 +29,31 @@ function TradePackageModal({ isOpen, onClose, projectId, trade, onGenerate }: Tr
       setError('');
       console.log(`[TradePackageModal] Loading preview for trade: ${trade}, project: ${projectId}`);
       
-      // Use the same API URL as the main API service
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
-      
-      const response = await fetch(`${API_BASE_URL}/api/v1/trade-package/preview/${projectId}/${trade}`, {
-        method: 'GET',
-        credentials: 'include', // Include cookies for authentication
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
-      });
-      
-      console.log(`[TradePackageModal] Preview response status: ${response.status}`);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[TradePackageModal] Preview error response: ${errorText}`);
-        let errorMessage = 'Failed to load preview';
-        
-        // Check if we got an HTML error page (common for 404s)
-        if (errorText.includes('<!DOCTYPE') || errorText.includes('<html')) {
-          if (response.status === 404) {
-            errorMessage = 'Trade package feature is not available yet. Please check back later.';
-          } else {
-            errorMessage = `Server error (${response.status}). Please try again later.`;
-          }
-        } else {
-          try {
-            const errorData = JSON.parse(errorText);
-            errorMessage = errorData.detail || errorData.message || errorMessage;
-          } catch (e) {
-            if (errorText.length < 200) {
-              errorMessage = errorText || errorMessage;
-            }
-          }
-        }
-        throw new Error(errorMessage);
-      }
-      
-      const data = await response.json();
+      const data = await tradePackageService.getPreview(projectId, trade);
       console.log(`[TradePackageModal] Preview loaded successfully:`, data);
       setPreview(data.preview);
     } catch (err: any) {
       console.error('[TradePackageModal] Error loading preview:', err);
-      // Handle CORS errors specifically
-      if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
-        setError('Unable to connect to the server. This feature may not be deployed yet.');
-      } else {
-        setError(err.message || 'Failed to load preview');
+      
+      let errorMessage = 'Failed to load preview';
+      
+      if (err.response) {
+        // The request was made and the server responded with a status code
+        if (err.response.status === 404) {
+          errorMessage = 'Trade package feature is not available yet. Please check back later.';
+        } else if (err.response.status === 401) {
+          errorMessage = 'Authentication required. Please log in again.';
+        } else if (err.response.data?.detail) {
+          errorMessage = err.response.data.detail;
+        } else {
+          errorMessage = `Server error (${err.response.status}). Please try again later.`;
+        }
+      } else if (err.request) {
+        // The request was made but no response was received
+        errorMessage = 'Unable to connect to the server. Please check your connection.';
       }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
