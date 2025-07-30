@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { scopeService, costService, excelService } from '../services/api';
+import { scopeService, costService, excelService, tradePackageService } from '../services/api';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import ArchitecturalFloorPlan from './ArchitecturalFloorPlan';
 import ProfessionalFloorPlan from './ProfessionalFloorPlan';
@@ -178,17 +178,13 @@ function ProgressiveProjectDetail() {
   };
 
   const handleGenerateTradePackage = async (projectId: string, trade: string) => {
-    const response = await fetch(`http://localhost:8001/api/v1/trade-package/generate/${projectId}/${trade}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    });
-    
-    if (!response.ok) throw new Error('Failed to generate trade package');
-    
-    const data = await response.json();
-    return data;
+    try {
+      const data = await tradePackageService.generate(projectId, trade);
+      return data;
+    } catch (error) {
+      console.error('[TradePackage] Error generating package:', error);
+      throw error;
+    }
   };
 
   const openTradePackageModal = (trade: string) => {
