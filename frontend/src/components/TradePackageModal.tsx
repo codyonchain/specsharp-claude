@@ -48,12 +48,22 @@ function TradePackageModal({ isOpen, onClose, projectId, trade, onGenerate }: Tr
         const errorText = await response.text();
         console.error(`[TradePackageModal] Preview error response: ${errorText}`);
         let errorMessage = 'Failed to load preview';
-        try {
-          const errorData = JSON.parse(errorText);
-          errorMessage = errorData.detail || errorData.message || errorMessage;
-        } catch (e) {
-          if (errorText.length < 200) {
-            errorMessage = errorText || errorMessage;
+        
+        // Check if we got an HTML error page (common for 404s)
+        if (errorText.includes('<!DOCTYPE') || errorText.includes('<html')) {
+          if (response.status === 404) {
+            errorMessage = 'Trade package feature is not available yet. Please check back later.';
+          } else {
+            errorMessage = `Server error (${response.status}). Please try again later.`;
+          }
+        } else {
+          try {
+            const errorData = JSON.parse(errorText);
+            errorMessage = errorData.detail || errorData.message || errorMessage;
+          } catch (e) {
+            if (errorText.length < 200) {
+              errorMessage = errorText || errorMessage;
+            }
           }
         }
         throw new Error(errorMessage);
@@ -64,7 +74,12 @@ function TradePackageModal({ isOpen, onClose, projectId, trade, onGenerate }: Tr
       setPreview(data.preview);
     } catch (err: any) {
       console.error('[TradePackageModal] Error loading preview:', err);
-      setError(err.message || 'Failed to load preview');
+      // Handle CORS errors specifically
+      if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+        setError('Unable to connect to the server. This feature may not be deployed yet.');
+      } else {
+        setError(err.message || 'Failed to load preview');
+      }
     } finally {
       setLoading(false);
     }
