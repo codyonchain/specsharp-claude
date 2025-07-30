@@ -12,4 +12,4 @@ fi
 
 # Start the development server
 echo "Starting React development server..."
-npm run dev
+npm run dev -- --port 3000

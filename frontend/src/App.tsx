@@ -73,7 +73,15 @@ function App() {
       logger.log('Token received from OAuth callback');
       // Store the token and remove it from URL
       localStorage.setItem('token', tokenFromUrl);
-      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Check if we should redirect to a specific page
+      const redirectTo = urlParams.get('redirect');
+      if (redirectTo === 'dashboard') {
+        window.location.href = '/dashboard';
+      } else {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+      
       setIsAuthenticated(true);
       setLoading(false);
       return;

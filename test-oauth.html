@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OAuth Test</title>
+</head>
+<body>
+    <h1>OAuth Test</h1>
+    <p>Click the button below to test OAuth directly:</p>
+    <a href="http://localhost:8001/api/v1/oauth/login/google" style="display: inline-block; padding: 10px 20px; background: #4285F4; color: white; text-decoration: none; border-radius: 5px;">
+        Test OAuth Login
+    </a>
+    
+    <h2>Expected redirect_uri:</h2>
+    <code>http://localhost:8001/api/v1/oauth/callback/google</code>
+    
+    <h2>Configured in Google Console:</h2>
+    <ul>
+        <li>http://localhost:8001/api/v1/oauth/callback/google</li>
+        <li>https://api.specsharp.ai/api/v1/oauth/callback/google</li>
+    </ul>
+</body>
+</html>

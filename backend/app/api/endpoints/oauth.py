@@ -174,7 +174,8 @@ async def oauth_callback(request: Request, response: Response, db: Session = Dep
         
         # For development, pass token in URL since cookies don't work cross-origin
         # In production with same domain, use httpOnly cookies
-        redirect_url = f"{settings.frontend_url}/dashboard?token={access_token}"
+        # Redirect to root path to avoid Vercel routing issues
+        redirect_url = f"{settings.frontend_url}/?token={access_token}&redirect=dashboard"
         response = RedirectResponse(url=redirect_url)
         
         # Also set cookie for backend API calls

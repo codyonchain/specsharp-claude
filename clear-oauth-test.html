@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear OAuth and Test</title>
+</head>
+<body>
+    <h1>OAuth Fresh Test</h1>
+    <p>This will open the OAuth flow in a new incognito/private window to avoid any cached sessions.</p>
+    
+    <button onclick="testOAuth()" style="padding: 10px 20px; background: #4285F4; color: white; border: none; border-radius: 5px; cursor: pointer;">
+        Test OAuth in Private Window
+    </button>
+    
+    <h2>Instructions:</h2>
+    <ol>
+        <li>Click the button above</li>
+        <li>A new private/incognito window will open</li>
+        <li>Complete the Google sign-in</li>
+        <li>You should be redirected to http://localhost:3000/dashboard?token=...</li>
+    </ol>
+    
+    <script>
+    function testOAuth() {
+        // Clear localStorage and sessionStorage
+        localStorage.clear();
+        sessionStorage.clear();
+        
+        // Open in new window (user needs to make it incognito manually)
+        alert('Please open http://localhost:3000 in a new incognito/private browser window to test OAuth with a clean session.');
+        
+        // Also provide direct link
+        const link = 'http://localhost:8001/api/v1/oauth/login/google';
+        console.log('Direct OAuth URL:', link);
+        window.open(link, '_blank');
+    }
+    </script>
+</body>
+</html>

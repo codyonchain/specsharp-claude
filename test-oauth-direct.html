@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Direct OAuth Test</title>
+</head>
+<body>
+    <h1>Direct OAuth Test</h1>
+    <p>This tests OAuth with the exact parameters being used:</p>
+    
+    <h2>Current Configuration:</h2>
+    <ul>
+        <li>Client ID: 1072123305615-n2inm0l8t62lp9n1gjb70hn2otb9b4u5.apps.googleusercontent.com</li>
+        <li>Redirect URI: http://localhost:8001/api/v1/oauth/callback/google</li>
+    </ul>
+    
+    <h2>Test Links:</h2>
+    <ol>
+        <li><a href="http://localhost:8001/api/v1/oauth/login/google" target="_blank">Test with localhost:8001</a></li>
+        <li><a href="http://127.0.0.1:8001/api/v1/oauth/login/google" target="_blank">Test with 127.0.0.1:8001</a></li>
+    </ol>
+    
+    <h2>Manual OAuth URL:</h2>
+    <p>Try this direct Google OAuth URL:</p>
+    <a href="https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=1072123305615-n2inm0l8t62lp9n1gjb70hn2otb9b4u5.apps.googleusercontent.com&redirect_uri=http://localhost:8001/api/v1/oauth/callback/google&scope=openid+email+profile&state=test123&access_type=offline&prompt=consent" target="_blank">
+        Direct Google OAuth (with prompt=consent)
+    </a>
+    
+    <h2>Debugging Steps:</h2>
+    <ol>
+        <li>Open Chrome DevTools Network tab</li>
+        <li>Click one of the test links above</li>
+        <li>Look for the exact error in the redirect</li>
+        <li>Check if the redirect_uri in the URL matches what's in Google Console</li>
+    </ol>
+</body>
+</html>
