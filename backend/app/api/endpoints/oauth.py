@@ -95,8 +95,17 @@ async def oauth_login(request: Request):
         logger.info("Starting Google OAuth login flow")
         client = oauth.create_client('google')
         
-        # Build redirect URI manually since we're using specific path
-        redirect_uri = str(request.base_url).rstrip('/') + '/api/v1/oauth/callback/google'
+        # Use different redirect URI based on environment
+        if settings.environment == "development":
+            # Check if request is from 127.0.0.1 or localhost
+            host = request.headers.get("host", "localhost:8001")
+            if "127.0.0.1" in host:
+                redirect_uri = "http://127.0.0.1:8001/api/v1/oauth/callback/google"
+            else:
+                redirect_uri = "http://localhost:8001/api/v1/oauth/callback/google"
+        else:
+            redirect_uri = "https://api.specsharp.ai/api/v1/oauth/callback/google"
+        
         logger.info(f"OAuth redirect URI: {redirect_uri}")
         
         # Let authlib handle state generation internally
@@ -117,6 +126,7 @@ async def oauth_callback(request: Request, response: Response, db: Session = Dep
     
     try:
         client = oauth.create_client('google')
+        # Authlib automatically uses the redirect_uri from the session
         token = await client.authorize_access_token(request)
         
         # Get user info from Google
@@ -216,3 +226,31 @@ async def get_user_info(current_user: DBUser = Depends(get_current_user_with_coo
         "is_active": user.is_active,
         "created_at": user.created_at
     }
+
+
+@router.post("/logout")
+async def oauth_logout(request: Request, response: Response):
+    """Clear OAuth session and cookies"""
+    # Clear all session data
+    request.session.clear()
+    
+    # Clear the access token cookie
+    response.delete_cookie(key="access_token")
+    response.delete_cookie(key="csrf_token")
+    
+    return {"message": "Logged out successfully"}
+
+
+@router.get("/clear-session")
+async def clear_oauth_session(request: Request, response: Response):
+    """Clear all OAuth session data - use this to fix stuck sessions"""
+    # Clear ALL session data
+    request.session.clear()
+    
+    # Also clear any cookies
+    response.delete_cookie(key="access_token")
+    response.delete_cookie(key="csrf_token")
+    response.delete_cookie(key="session")
+    
+    # Return a redirect to login
+    return RedirectResponse(url=settings.frontend_url + "/login?session_cleared=true")

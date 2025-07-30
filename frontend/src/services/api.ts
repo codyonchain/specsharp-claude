@@ -59,13 +59,20 @@ export interface ScopeRequest {
 
 export const authService = {
   logout: async () => {
-    // Call backend logout to clear cookies
-    try {
-      await api.post('/auth/logout');
-    } catch (error) {
-      // Still clear local storage even if backend call fails
-    }
+    // Clear local storage first
     localStorage.removeItem('token');
+    
+    // Call backend logout to clear cookies and OAuth session
+    try {
+      await api.post('/oauth/logout');
+    } catch (error) {
+      // Try auth logout as fallback
+      try {
+        await api.post('/auth/logout');
+      } catch (fallbackError) {
+        // Still continue even if backend calls fail
+      }
+    }
   },
 
   isAuthenticated: () => {
