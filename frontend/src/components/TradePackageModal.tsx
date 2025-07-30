@@ -28,12 +28,10 @@ function TradePackageModal({ isOpen, onClose, projectId, trade, onGenerate }: Tr
       setError('');
       console.log(`[TradePackageModal] Loading preview for trade: ${trade}, project: ${projectId}`);
       
-      // Use the API URL from the current window location (production) or environment variable
-      const apiUrl = window.location.origin.includes('localhost') 
-        ? (import.meta.env.VITE_API_URL || 'http://localhost:8001')
-        : window.location.origin;
+      // Use the same API URL as the main API service
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
       
-      const response = await fetch(`${apiUrl}/api/v1/trade-package/preview/${projectId}/${trade}`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/trade-package/preview/${projectId}/${trade}`, {
         method: 'GET',
         credentials: 'include', // Include cookies for authentication
         headers: {

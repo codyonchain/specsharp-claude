@@ -83,12 +83,10 @@ function ProjectDetail() {
     try {
       console.log(`[TradePackage] Making API call to: /api/v1/trade-package/generate/${projectId}/${trade}`);
       
-      // Use the API URL from the current window location (production) or environment variable
-      const apiUrl = window.location.origin.includes('localhost') 
-        ? (import.meta.env.VITE_API_URL || 'http://localhost:8001')
-        : window.location.origin;
+      // Use the same API URL as the main API service
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
       
-      const response = await fetch(`${apiUrl}/api/v1/trade-package/generate/${projectId}/${trade}`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/trade-package/generate/${projectId}/${trade}`, {
         method: 'POST',
         credentials: 'include', // Include cookies for authentication
         headers: {
