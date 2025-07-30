@@ -1,82 +1,107 @@
-# SpecSharp Production Deployment Guide
+# SpecSharp Deployment Guide
 
-## Pre-Deployment Checklist
+## Current Production URLs
 
-### 1. Environment Variables
-- [ ] Copy `.env.production.example` files and fill in real values
-- [ ] Set strong SECRET_KEY (use: `openssl rand -hex 32`)
-- [ ] Update OAuth redirect URLs in Google Console
-- [ ] Set production database URL
+- **Frontend**: https://specsharp.ai (and https://www.specsharp.ai)
+- **Backend API**: https://api.specsharp.ai
 
-### 2. Security Checks
-- [ ] Run `npm run lint` in frontend
-- [ ] Run `black .` and `mypy .` in backend
-- [ ] All console.log statements removed
-- [ ] API URLs use environment variables
-- [ ] Error messages are user-friendly
+## OAuth Configuration
 
-### 3. Testing
-- [ ] Run frontend tests: `npm test`
-- [ ] Run backend tests: `pytest`
-- [ ] Test with production environment locally
-- [ ] Test error scenarios
-- [ ] Test authentication flows
+### Google OAuth Credentials
+- **Client ID**: 1072123305615-n2inm0l8t62lp9n1gjb70hn2otb9b4u5.apps.googleusercontent.com
+- **Client Secret**: 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
 
-## Deployment Steps
+### Required Redirect URIs in Google Console
+1. http://localhost:3000 (frontend local)
+2. http://localhost:8001/api/v1/oauth/callback/google (backend local)
+3. https://api.specsharp.ai/api/v1/oauth/callback/google (backend prod)
+4. https://specsharp.ai (frontend prod)
+5. https://www.specsharp.ai (frontend prod with www)
 
-### Frontend (Vercel)
+## Frontend Deployment (Vercel)
+
+### Environment Variables
+Set these in Vercel dashboard:
+```
+VITE_API_URL=https://api.specsharp.ai
+VITE_GOOGLE_CLIENT_ID=1072123305615-n2inm0l8t62lp9n1gjb70hn2otb9b4u5.apps.googleusercontent.com
+VITE_ENVIRONMENT=production
+```
+
+### Build Settings
+- Framework Preset: Vite
+- Build Command: `npm run build:prod`
+- Output Directory: `dist`
+- Root Directory: `frontend`
+
+### Deployment Steps
+1. Push changes to GitHub
+2. Vercel will auto-deploy from main branch
+3. Verify environment variables are set in Vercel dashboard
+4. Test OAuth login flow
+
+## Backend Deployment (Railway)
+
+### Environment Variables
+Ensure these are set in your backend deployment:
+```
+GOOGLE_CLIENT_ID=1072123305615-n2inm0l8t62lp9n1gjb70hn2otb9b4u5.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=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
+FRONTEND_URL=https://specsharp.ai
+DATABASE_URL=<your-database-url>
+SECRET_KEY=<your-secret-key>
+```
+
+### CORS Configuration
+Backend should allow origins:
+- http://localhost:3000
+- https://specsharp.ai
+- https://www.specsharp.ai
+
+## Testing Production
+
+1. **OAuth Flow**:
+   - Visit https://specsharp.ai
+   - Click "Login" in the navigation bar
+   - Click "Continue with Google"
+   - Should redirect to Google, then back to app authenticated
+
+2. **API Connection**:
+   - Check browser console for any API errors
+   - Verify requests go to https://api.specsharp.ai
+
+## Troubleshooting
+
+### OAuth Issues
+- Verify redirect URIs match exactly in Google Console
+- Check backend logs for OAuth errors
+- Ensure CORS allows frontend domain
+
+### API Connection Issues
+- Check if backend is running
+- Verify VITE_API_URL in Vercel environment variables
+- Check browser console for CORS errors
+
+## Local Development
+
+### Frontend
 ```bash
 cd frontend
-npm run build
-vercel --prod
+npm install
+npm run dev
 ```
 
-### Backend (Railway/Render/AWS)
+### Backend
 ```bash
 cd backend
-# Ensure requirements.txt is up to date
-pip freeze > requirements.txt
-
-# Deploy with your platform's CLI
-# Example for Railway:
-railway up
+source venv/bin/activate
+uvicorn app.main:app --reload --port 8001
 ```
 
-### Database Migration
-```bash
-cd backend
-alembic upgrade head
-```
+## Recent Fixes Applied
 
-## Post-Deployment
-
-1. **Verify Services**
-   - [ ] Frontend loads correctly
-   - [ ] API health check passes
-   - [ ] Authentication works
-   - [ ] Can create/view projects
-
-2. **Monitor Logs**
-   - Check for any errors in first hour
-   - Monitor response times
-   - Check for failed requests
-
-3. **Security Headers**
-   - Verify CORS is properly configured
-   - Check CSP headers
-   - Ensure HTTPS is enforced
-
-## Rollback Plan
-
-If issues occur:
-1. Revert to previous deployment
-2. Check logs for root cause
-3. Fix in staging environment
-4. Re-deploy when verified
-
-## Support
-
-For deployment issues:
-- Check logs first
-- Review this guide
-- Contact team if needed
+1. **Environment Variables**: Migrated from NEXT_PUBLIC_* to VITE_* format
+2. **TypeScript**: Re-enabled strict mode and fixed all type errors
+3. **Logger**: Updated to use import.meta.env for Vite compatibility
+4. **Missing Modules**: Created useLocalStorage hook and CommonSizes constants
+5. **Production Build**: Configured for minified production deployment
