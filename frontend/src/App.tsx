@@ -45,11 +45,32 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // OAuth callback debug logging
+    logger.log('=== OAuth Callback Debug ===');
+    logger.log('Current URL:', window.location.href);
+    logger.log('URL Search params:', window.location.search);
+    logger.log('Stored OAuth debug:', sessionStorage.getItem('oauth_debug'));
+    
     // Check for OAuth token in URL
     const urlParams = new URLSearchParams(window.location.search);
     const tokenFromUrl = urlParams.get('token');
+    const errorFromUrl = urlParams.get('error');
+    const errorDescription = urlParams.get('error_description');
+    
+    // Log all URL parameters
+    logger.log('All URL parameters:');
+    urlParams.forEach((value, key) => {
+      logger.log(`  ${key}: ${value}`);
+    });
+    
+    if (errorFromUrl) {
+      logger.error('OAuth error:', errorFromUrl);
+      logger.error('Error description:', errorDescription);
+      // You might want to show this error to the user
+    }
     
     if (tokenFromUrl) {
+      logger.log('Token received from OAuth callback');
       // Store the token and remove it from URL
       localStorage.setItem('token', tokenFromUrl);
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -65,6 +86,7 @@ function App() {
     setLoading(false);
     logger.log('App loaded, authenticated:', !!token || hasCookie);
     logger.log('Current path:', window.location.pathname);
+    logger.log('===========================');
   }, []);
 
   if (loading) {
