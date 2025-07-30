@@ -17,7 +17,15 @@ class Settings(BaseSettings):
     anthropic_api_key: Optional[str] = None
     
     # CORS origins - can be overridden by environment variable
-    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:3001", "http://localhost:5173", "https://specsharp.ai", "https://www.specsharp.ai"]
+    cors_origins: list[str] = [
+        "http://localhost:3000", 
+        "http://localhost:3001", 
+        "http://localhost:5173", 
+        "https://specsharp.ai", 
+        "https://www.specsharp.ai",
+        "https://specsharp.vercel.app",  # Vercel preview URLs
+        "https://*.vercel.app"  # All Vercel preview deployments
+    ]
     
     # Frontend URL - automatically set based on environment
     @property
