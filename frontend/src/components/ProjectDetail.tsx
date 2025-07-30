@@ -117,7 +117,10 @@ function ProjectDetail() {
   const handleExportFullProject = async () => {
     try {
       setExportingExcel(true);
+      setShowExportMenu(false); // Close menu immediately
       console.log('Starting Excel export for project:', project.project_id);
+      console.log('Excel service:', excelService);
+      console.log('Export function:', excelService.exportProject);
       const response = await excelService.exportProject(project.project_id);
       
       // Check if response has data
@@ -403,11 +406,17 @@ function ProjectDetail() {
               <div className="export-dropdown">
                 <button 
                   className="export-option"
-                  onClick={handleExportFullProject}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Excel button clicked!');
+                    handleExportFullProject();
+                  }}
                   disabled={exportingExcel}
                 >
                   <FileSpreadsheet size={16} />
                   Standard Excel
+                  {exportingExcel && <span> (Loading...)</span>}
                 </button>
                 <button 
                   className="export-option premium"
