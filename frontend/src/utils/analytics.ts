@@ -17,7 +17,7 @@ export const trackEvent = (eventName: string, properties?: Record<string, any>) 
   };
 
   // Log to console in development
-  if (process.env.NODE_ENV === 'development') {
+  if (import.meta.env.DEV) {
     console.log('📊 Track Event:', event);
   }
 
