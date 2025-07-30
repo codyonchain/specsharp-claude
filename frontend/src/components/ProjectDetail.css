@@ -566,6 +566,201 @@
   align-items: center;
 }
 
+/* Mobile Responsive Styles */
+@media (max-width: 767px) {
+  .page-header {
+    flex-direction: column;
+    padding: 1rem;
+    gap: 0.75rem;
+    align-items: stretch;
+  }
+  
+  .page-header > div:first-child {
+    width: 100%;
+  }
+  
+  .back-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .page-header h1 {
+    font-size: 1.25rem;
+    text-align: center;
+    margin-bottom: 0.5rem;
+  }
+  
+  .header-actions {
+    width: 100%;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .export-menu-container {
+    width: 100%;
+  }
+  
+  .export-btn,
+  .compare-btn {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    font-size: 0.875rem;
+    justify-content: center;
+    min-height: 48px;
+  }
+  
+  .export-dropdown {
+    left: 0;
+    right: 0;
+    width: calc(100% - 2rem);
+    margin: 0.5rem 1rem;
+  }
+  
+  /* Trade Tabs Mobile */
+  .project-tabs {
+    padding: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  
+  .project-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .tab {
+    padding: 0.875rem 1rem;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    min-width: fit-content;
+    flex-shrink: 0;
+  }
+  
+  /* Trade Filter Tabs Mobile */
+  .filter-tabs {
+    padding: 0.5rem;
+    gap: 0.5rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    margin-bottom: 1rem;
+  }
+  
+  .filter-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .filter-tab {
+    padding: 0.625rem 1rem;
+    font-size: 0.813rem;
+    white-space: nowrap;
+    min-width: fit-content;
+    flex-shrink: 0;
+    min-height: 44px;
+  }
+  
+  /* Content Areas Mobile */
+  .project-content {
+    padding: 0 1rem;
+    margin: 1rem auto;
+  }
+  
+  .project-summary,
+  .cost-breakdown,
+  .systems-detail,
+  .developer-metrics-section {
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+  }
+  
+  .summary-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .breakdown-content {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .chart-container {
+    margin-bottom: 1rem;
+  }
+  
+  /* Tables Mobile */
+  .breakdown-table,
+  .systems-detail {
+    overflow-x: auto;
+  }
+  
+  .breakdown-table table,
+  .systems-detail table {
+    min-width: 300px;
+  }
+  
+  .breakdown-table th,
+  .breakdown-table td,
+  .systems-detail th,
+  .systems-detail td {
+    padding: 0.5rem;
+    font-size: 0.875rem;
+  }
+  
+  /* Developer Metrics Mobile */
+  .metrics-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  
+  .metric-card {
+    padding: 1rem;
+  }
+  
+  .metric-value {
+    font-size: 1.5rem;
+  }
+  
+  .metric-label {
+    font-size: 0.75rem;
+  }
+  
+  /* Trade Actions Mobile */
+  .trade-excel-btn {
+    padding: 0.625rem 1rem;
+    font-size: 0.813rem;
+  }
+  
+  .trade-excel-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+  
+  /* Modal Mobile */
+  .share-modal {
+    margin: 1rem;
+    width: calc(100% - 2rem);
+    max-width: none;
+  }
+  
+  /* Footer Mobile */
+  .project-footer {
+    padding: 1.25rem;
+  }
+  
+  .footer-summary {
+    align-items: stretch;
+  }
+  
+  /* Ensure proper spacing at bottom for mobile nav */
+  .project-detail {
+    padding-bottom: 80px;
+  }
+}
+
 .trade-excel-btn {
   display: flex;
   align-items: center;
