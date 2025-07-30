@@ -59,6 +59,11 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # Add GZip compression middleware (compress responses > 1KB)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+# Log CORS configuration for debugging
+logger.info(f"CORS Origins configured: {settings.cors_origins}")
+logger.info(f"Environment: {settings.environment}")
+logger.info(f"Frontend URL: {settings.frontend_url}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -96,4 +101,15 @@ async def root():
         "message": f"Welcome to {settings.app_name}",
         "version": settings.app_version,
         "docs": "/docs"
+    }
+
+
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "service": "SpecSharp API",
+        "cors_origins": settings.cors_origins,
+        "environment": settings.environment,
+        "frontend_url": settings.frontend_url
     }
