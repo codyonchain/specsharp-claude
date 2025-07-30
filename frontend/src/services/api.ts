@@ -13,14 +13,13 @@ const api = axios.create({
 });
 
 // Add auth token to requests
-// Commented out - using cookie-based authentication instead
-// api.interceptors.request.use((config) => {
-//   const token = localStorage.getItem('token');
-//   if (token) {
-//     config.headers.Authorization = `Bearer ${token}`;
-//   }
-//   return config;
-// });
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
 // Add response interceptor to handle blob errors
 api.interceptors.response.use(
