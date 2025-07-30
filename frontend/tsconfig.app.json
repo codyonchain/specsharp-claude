@@ -19,8 +19,7 @@
     "verbatimModuleSyntax": false,
     "paths": {
       "@/*": ["./src/*"]
-    },
-    "types": ["node"]
+    }
   },
   "include": ["src"]
 }
