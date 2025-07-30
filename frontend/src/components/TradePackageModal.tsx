@@ -28,14 +28,17 @@ function TradePackageModal({ isOpen, onClose, projectId, trade, onGenerate }: Tr
       setError('');
       console.log(`[TradePackageModal] Loading preview for trade: ${trade}, project: ${projectId}`);
       
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('Authentication token not found. Please log in again.');
-      }
+      // Use the API URL from the current window location (production) or environment variable
+      const apiUrl = window.location.origin.includes('localhost') 
+        ? (import.meta.env.VITE_API_URL || 'http://localhost:8001')
+        : window.location.origin;
       
-      const response = await fetch(`http://localhost:8001/api/v1/trade-package/preview/${projectId}/${trade}`, {
+      const response = await fetch(`${apiUrl}/api/v1/trade-package/preview/${projectId}/${trade}`, {
+        method: 'GET',
+        credentials: 'include', // Include cookies for authentication
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         }
       });
       

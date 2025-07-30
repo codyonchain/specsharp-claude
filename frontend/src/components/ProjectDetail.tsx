@@ -81,17 +81,17 @@ function ProjectDetail() {
     console.log(`[TradePackage] Starting generation for trade: ${trade}, project: ${projectId}`);
     
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('Authentication token not found. Please log in again.');
-      }
-      
       console.log(`[TradePackage] Making API call to: /api/v1/trade-package/generate/${projectId}/${trade}`);
       
-      const response = await fetch(`http://localhost:8001/api/v1/trade-package/generate/${projectId}/${trade}`, {
+      // Use the API URL from the current window location (production) or environment variable
+      const apiUrl = window.location.origin.includes('localhost') 
+        ? (import.meta.env.VITE_API_URL || 'http://localhost:8001')
+        : window.location.origin;
+      
+      const response = await fetch(`${apiUrl}/api/v1/trade-package/generate/${projectId}/${trade}`, {
         method: 'POST',
+        credentials: 'include', // Include cookies for authentication
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
