@@ -26,17 +26,41 @@ function TradePackageModal({ isOpen, onClose, projectId, trade, onGenerate }: Tr
     try {
       setLoading(true);
       setError('');
+      console.log(`[TradePackageModal] Loading preview for trade: ${trade}, project: ${projectId}`);
+      
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication token not found. Please log in again.');
+      }
+      
       const response = await fetch(`http://localhost:8001/api/v1/trade-package/preview/${projectId}/${trade}`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         }
       });
       
-      if (!response.ok) throw new Error('Failed to load preview');
+      console.log(`[TradePackageModal] Preview response status: ${response.status}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[TradePackageModal] Preview error response: ${errorText}`);
+        let errorMessage = 'Failed to load preview';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch (e) {
+          if (errorText.length < 200) {
+            errorMessage = errorText || errorMessage;
+          }
+        }
+        throw new Error(errorMessage);
+      }
       
       const data = await response.json();
+      console.log(`[TradePackageModal] Preview loaded successfully:`, data);
       setPreview(data.preview);
     } catch (err: any) {
+      console.error('[TradePackageModal] Error loading preview:', err);
       setError(err.message || 'Failed to load preview');
     } finally {
       setLoading(false);
@@ -47,9 +71,31 @@ function TradePackageModal({ isOpen, onClose, projectId, trade, onGenerate }: Tr
     try {
       setLoading(true);
       setError('');
-      const data = await onGenerate(projectId, trade);
-      setPackageData(data.package);
+      console.log(`[TradePackageModal] Starting package generation...`);
+      
+      // Set a timeout for the generation
+      const timeoutId = setTimeout(() => {
+        setError('Package generation is taking longer than expected. Please try again.');
+        setLoading(false);
+      }, 30000); // 30 seconds timeout
+      
+      try {
+        const data = await onGenerate(projectId, trade);
+        clearTimeout(timeoutId);
+        
+        console.log(`[TradePackageModal] Package generated successfully:`, data);
+        
+        if (!data || !data.package) {
+          throw new Error('Invalid response format - missing package data');
+        }
+        
+        setPackageData(data.package);
+      } catch (err) {
+        clearTimeout(timeoutId);
+        throw err;
+      }
     } catch (err: any) {
+      console.error('[TradePackageModal] Error generating package:', err);
       setError(err.message || 'Failed to generate package');
     } finally {
       setLoading(false);
@@ -115,13 +161,24 @@ function TradePackageModal({ isOpen, onClose, projectId, trade, onGenerate }: Tr
             <div className="loading-state">
               <div className="spinner"></div>
               <p>Preparing trade package...</p>
+              <p className="loading-hint">This may take up to 30 seconds</p>
             </div>
           )}
 
           {error && (
             <div className="error-message">
-              <p>{error}</p>
-              <button onClick={loadPreview}>Retry</button>
+              <p className="error-text">{error}</p>
+              <div className="error-actions">
+                <button className="retry-btn" onClick={() => {
+                  setError('');
+                  if (!preview) {
+                    loadPreview();
+                  } else if (!packageData) {
+                    handleGenerate();
+                  }
+                }}>Retry</button>
+                <button className="cancel-btn" onClick={onClose}>Cancel</button>
+              </div>
             </div>
           )}
 
