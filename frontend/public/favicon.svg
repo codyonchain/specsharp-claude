@@ -1,14 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-  <!-- Blue background matching SpecSharp brand -->
-  <rect width="512" height="512" rx="64" fill="#2563EB"/>
+  <!-- Blue background with rounded corners matching the logo -->
+  <rect width="512" height="512" rx="102" fill="#3366FF"/>
   
-  <!-- White S with bracket design -->
+  <!-- White design -->
   <g fill="white">
-    <!-- Left bracket -->
-    <path d="M 100 150 L 100 362 L 180 362 L 180 340 L 120 340 L 120 172 L 180 172 L 180 150 L 100 150 Z" fill="white"/>
+    <!-- Left bracket [ -->
+    <rect x="100" y="140" width="40" height="232" fill="white"/>
+    <rect x="100" y="340" width="120" height="32" fill="white"/>
     
-    <!-- S letterform -->
-    <path d="M 220 180 L 340 180 Q 380 180 380 220 L 380 230 Q 380 270 340 270 L 260 270 Q 220 270 220 310 L 220 320 Q 220 360 260 360 L 380 360 L 380 340 L 260 340 Q 240 340 240 320 L 240 310 Q 240 290 260 290 L 340 290 Q 400 290 400 230 L 400 220 Q 400 160 340 160 L 220 160 L 220 180 Z" fill="white"/>
+    <!-- S letter -->
+    <!-- Top horizontal -->
+    <rect x="240" y="140" width="180" height="40" rx="20" fill="white"/>
+    
+    <!-- Top right vertical -->
+    <rect x="380" y="140" width="40" height="80" fill="white"/>
+    
+    <!-- Middle horizontal -->
+    <rect x="260" y="236" width="140" height="40" rx="20" fill="white"/>
+    
+    <!-- Bottom left vertical -->
+    <rect x="260" y="236" width="40" height="80" fill="white"/>
+    
+    <!-- Bottom horizontal -->
+    <rect x="260" y="292" width="180" height="40" rx="20" fill="white"/>
+    
+    <!-- Bottom bracket line -->
+    <rect x="100" y="340" width="360" height="32" fill="white"/>
   </g>
 </svg>
