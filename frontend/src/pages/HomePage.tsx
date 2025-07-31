@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Clock, DollarSign, CheckCircle, Building, Calculator, TrendingUp, Users, FileText, Zap, Brain, Share2, Shield, Lock, Award, Hotel, Building2, Layers } from 'lucide-react';
+import { ArrowRight, Clock, DollarSign, CheckCircle, Building, Calculator, TrendingUp, Users, FileText, Zap, Brain, Share2, Shield, Lock, Award, Hotel, Building2, Layers, HardHat } from 'lucide-react';
 import { ROICalculator } from '../components/ROICalculator';
 import { Footer } from '../components/Footer';
 import { trackCTAClick, trackPageView, setupViewTracking } from '../utils/analytics';
@@ -269,7 +269,7 @@ export const HomePage: React.FC = () => {
             {/* Developers & Owners */}
             <div className="audience-card" data-card="1">
               <div className="audience-icon bg-blue-100">
-                <TrendingUp className="w-10 h-10 text-blue-600" />
+                <Building2 className="w-10 h-10 text-blue-600" />
               </div>
               <h3 className="text-xl font-bold mb-3">Developers & Owners</h3>
               <p className="text-base font-semibold text-blue-600 mb-4">"Validate Before You Design"</p>
@@ -356,7 +356,7 @@ export const HomePage: React.FC = () => {
             {/* General Contractors */}
             <div className="audience-card" data-card="2">
               <div className="audience-icon bg-green-100">
-                <Users className="w-10 h-10 text-green-600" />
+                <HardHat className="w-10 h-10 text-green-600" />
               </div>
               <h3 className="text-xl font-bold mb-3">General Contractors</h3>
               <p className="text-base font-semibold text-green-600 mb-4">"Bid More. Win More."</p>
@@ -391,7 +391,7 @@ export const HomePage: React.FC = () => {
             {/* Subcontractors */}
             <div className="audience-card" data-card="3">
               <div className="audience-icon bg-purple-100">
-                <FileText className="w-10 h-10 text-purple-600" />
+                <Layers className="w-10 h-10 text-purple-600" />
               </div>
               <h3 className="text-xl font-bold mb-3">Subcontractors</h3>
               <p className="text-base font-semibold text-purple-600 mb-4">"Never Get Burned on Scope"</p>
