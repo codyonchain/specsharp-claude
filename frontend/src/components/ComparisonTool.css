@@ -777,3 +777,288 @@
   font-weight: 600;
   color: #333;
 }
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  .comparison-tool {
+    width: 100%;
+    max-width: none;
+  }
+
+  .comparison-header {
+    padding: 16px;
+    flex-direction: row;
+    gap: 12px;
+  }
+
+  .comparison-header h2 {
+    font-size: 18px;
+    gap: 8px;
+  }
+
+  .close-btn {
+    font-size: 24px;
+    width: 36px;
+    height: 36px;
+  }
+
+  .comparison-body {
+    padding: 16px;
+  }
+
+  /* Templates section */
+  .template-buttons {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .template-btn {
+    padding: 10px 16px;
+    font-size: 13px;
+    flex: 1;
+    min-width: 120px;
+  }
+
+  /* Scenarios section */
+  .scenarios-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .add-scenario-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .scenarios-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .scenario-card {
+    padding: 20px;
+  }
+
+  .scenario-card::after {
+    font-size: 10px;
+    padding: 3px 10px;
+  }
+
+  /* Form controls */
+  .control-group label {
+    font-size: 11px;
+  }
+
+  .control-group input[type="number"] {
+    padding: 8px 10px;
+    font-size: 14px;
+  }
+
+  .compare-btn {
+    padding: 12px 20px;
+    font-size: 15px;
+  }
+
+  /* Results section */
+  .results-header {
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .results-header h3 {
+    font-size: 20px;
+  }
+
+  .download-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .metric-card {
+    padding: 20px;
+  }
+
+  .metric-value {
+    font-size: 28px;
+  }
+
+  .metric-label {
+    font-size: 11px;
+  }
+
+  .metric-secondary {
+    font-size: 14px;
+  }
+
+  /* Summary cards */
+  .summary-card {
+    padding: 20px;
+  }
+
+  .summary-card h4 {
+    font-size: 18px;
+    margin-bottom: 16px;
+  }
+
+  /* Recommendations */
+  .recommendations {
+    padding: 20px;
+  }
+
+  .recommendations h4 {
+    font-size: 18px;
+  }
+
+  .recommendations::before {
+    font-size: 20px;
+    top: 16px;
+    right: 16px;
+  }
+
+  /* Deltas section */
+  .deltas-section {
+    padding: 20px;
+  }
+
+  .deltas-section::before {
+    font-size: 20px;
+    top: 16px;
+    right: 16px;
+  }
+
+  .delta-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 16px 0;
+  }
+
+  .delta-value {
+    font-size: 16px;
+  }
+
+  .delta-value.positive,
+  .delta-value.negative {
+    font-size: 14px;
+    padding: 3px 10px;
+  }
+
+  /* Table responsive */
+  .project-overview-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .project-overview-table th,
+  .project-overview-table td {
+    padding: 12px;
+    font-size: 13px;
+  }
+
+  .project-overview-table th {
+    font-size: 12px;
+  }
+
+  /* Chart container */
+  .recharts-wrapper {
+    font-size: 12px !important;
+  }
+
+  .recharts-cartesian-axis-tick {
+    font-size: 10px;
+  }
+}
+
+/* Extra small devices */
+@media (max-width: 480px) {
+  .comparison-header {
+    padding: 12px;
+  }
+
+  .comparison-header h2 {
+    font-size: 16px;
+  }
+
+  .comparison-body {
+    padding: 12px;
+  }
+
+  .scenario-card {
+    padding: 16px;
+  }
+
+  .scenario-name {
+    font-size: 14px;
+  }
+
+  .control-group input[type="number"] {
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+
+  .compare-btn {
+    padding: 10px 16px;
+    font-size: 14px;
+  }
+
+  .metric-value {
+    font-size: 24px;
+  }
+
+  .summary-card {
+    padding: 16px;
+  }
+
+  .summary-card h4 {
+    font-size: 16px;
+  }
+
+  .recommendations,
+  .deltas-section {
+    padding: 16px;
+  }
+
+  .recommendations h4,
+  .deltas-section h4 {
+    font-size: 16px;
+  }
+
+  .project-overview-table th,
+  .project-overview-table td {
+    padding: 10px;
+    font-size: 12px;
+  }
+}
+
+/* iPhone SE and similar small screens */
+@media (max-width: 375px) {
+  .comparison-header h2 {
+    font-size: 15px;
+  }
+
+  .template-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .add-scenario-btn {
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+
+  .metric-value {
+    font-size: 22px;
+  }
+
+  .control-group label {
+    font-size: 10px;
+  }
+}

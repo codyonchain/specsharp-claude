@@ -393,21 +393,193 @@
     flex-direction: column;
     gap: 1rem;
     align-items: stretch;
+    padding: 1.5rem 1rem;
+  }
+
+  .comparison-header h1 {
+    font-size: 1.5rem;
+    text-align: center;
+    margin: 0.5rem 0;
+  }
+
+  .back-btn {
+    align-self: flex-start;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
   }
 
   .header-actions {
     justify-content: center;
+    margin-top: 0.5rem;
   }
 
+  .download-btn {
+    padding: 0.5rem 1.25rem;
+    font-size: 0.875rem;
+    width: auto;
+    min-width: 140px;
+  }
+
+  .comparison-content {
+    padding: 1rem;
+  }
+
+  /* Fix project overview section */
+  .projects-overview {
+    padding: 1.5rem 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .projects-overview h2 {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+  }
+
+  /* Make table scrollable on mobile */
   .projects-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -1rem;
+    padding: 0 1rem;
+  }
+
+  .projects-table table {
+    min-width: 700px;
     font-size: 0.875rem;
   }
 
-  .metrics-comparison-grid {
-    grid-template-columns: 1fr;
+  .projects-table th,
+  .projects-table td {
+    padding: 0.75rem 0.5rem;
+    white-space: nowrap;
   }
 
+  .projects-table td.cost {
+    font-size: 0.875rem;
+  }
+
+  /* Fix comparison sections */
+  .comparison-section {
+    padding: 1.5rem 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .comparison-section h2 {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+  }
+
+  .comparison-section h2::before {
+    font-size: 1rem;
+  }
+
+  /* Fix chart containers */
+  .chart-container {
+    height: 300px;
+    margin: 0 -0.5rem;
+  }
+
+  /* Fix metrics grid */
+  .metrics-comparison-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .metric-comparison-card {
+    padding: 1.25rem;
+  }
+
+  .metric-comparison-card h4 {
+    font-size: 0.95rem;
+  }
+
+  .metric-value {
+    font-size: 1rem;
+  }
+
+  /* Fix findings grid */
   .findings-grid {
     grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .finding-card {
+    padding: 1.5rem;
+  }
+
+  .finding-card h4 {
+    font-size: 0.85rem;
+  }
+
+  .finding-value {
+    font-size: 1.75rem;
+  }
+
+  /* Fix detailed cost breakdown table */
+  .cost-breakdown-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -1rem;
+    padding: 0 1rem;
+  }
+
+  .cost-breakdown-table table {
+    min-width: 500px;
+  }
+}
+
+/* Additional mobile breakpoints for smaller screens */
+@media (max-width: 480px) {
+  .comparison-header {
+    padding: 1rem;
+  }
+
+  .comparison-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .back-btn {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+    gap: 0.25rem;
+  }
+
+  .download-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+  }
+
+  .projects-table th,
+  .projects-table td {
+    padding: 0.5rem 0.25rem;
+    font-size: 0.75rem;
+  }
+
+  .comparison-section {
+    padding: 1.25rem 0.75rem;
+  }
+
+  .metric-comparison-card {
+    padding: 1rem;
+  }
+
+  .finding-card {
+    padding: 1.25rem;
+  }
+
+  .finding-value {
+    font-size: 1.5rem;
+  }
+}
+
+/* Fix for specific mobile sizes */
+@media (max-width: 390px) {
+  .comparison-content {
+    padding: 0.75rem;
+  }
+
+  .projects-overview,
+  .comparison-section {
+    border-radius: 8px;
   }
 }

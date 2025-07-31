@@ -95,20 +95,64 @@ function TradePackageModal({ isOpen, onClose, projectId, trade, onGenerate }: Tr
   };
 
   const downloadFile = (base64Data: string, filename: string, mimeType: string) => {
-    const byteCharacters = atob(base64Data);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    try {
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: mimeType });
+      
+      const url = URL.createObjectURL(blob);
+      
+      // Check if we're on a mobile device
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      
+      if (isMobile) {
+        // Mobile-specific handling
+        if (mimeType === 'application/pdf') {
+          // For PDFs, open in a new window/tab which allows viewing and saving
+          const newWindow = window.open(url, '_blank');
+          if (!newWindow) {
+            // Fallback if popup blocked
+            window.location.href = url;
+          }
+        } else {
+          // For other files, create a link and use different click method
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = filename;
+          link.style.display = 'none';
+          document.body.appendChild(link);
+          
+          // Use dispatchEvent for better mobile compatibility
+          const clickEvent = new MouseEvent('click', {
+            view: window,
+            bubbles: true,
+            cancelable: false
+          });
+          link.dispatchEvent(clickEvent);
+          
+          document.body.removeChild(link);
+        }
+      } else {
+        // Desktop browser - use standard method
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+      
+      // Clean up the object URL after a delay
+      setTimeout(() => URL.revokeObjectURL(url), 250);
+    } catch (error) {
+      console.error('[TradePackageModal] Download failed:', error);
+      alert(`Failed to download ${filename}. Please try again.`);
     }
-    const byteArray = new Uint8Array(byteNumbers);
-    const blob = new Blob([byteArray], { type: mimeType });
-    
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   const handleDownloadPDF = () => {
@@ -130,10 +174,22 @@ function TradePackageModal({ isOpen, onClose, projectId, trade, onGenerate }: Tr
     }
   };
 
-  const handleDownloadAll = () => {
-    handleDownloadPDF();
-    handleDownloadCSV();
-    handleDownloadSchematic();
+  const handleDownloadAll = async () => {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    
+    if (isMobile) {
+      // On mobile, add delays between downloads to ensure they process correctly
+      handleDownloadPDF();
+      await new Promise(resolve => setTimeout(resolve, 500));
+      handleDownloadCSV();
+      await new Promise(resolve => setTimeout(resolve, 500));
+      handleDownloadSchematic();
+    } else {
+      // On desktop, download all at once
+      handleDownloadPDF();
+      handleDownloadCSV();
+      handleDownloadSchematic();
+    }
   };
 
   if (!isOpen) return null;

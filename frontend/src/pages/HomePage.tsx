@@ -375,10 +375,6 @@ export const HomePage: React.FC = () => {
                 </li>
                 <li className="flex items-start">
                   <CheckCircle className="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700 text-sm">Win more work with quick turnarounds</span>
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle className="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
                   <span className="text-gray-700 text-sm">Integrate with existing workflows</span>
                 </li>
               </ul>
@@ -402,7 +398,7 @@ export const HomePage: React.FC = () => {
                 </li>
                 <li className="flex items-start">
                   <CheckCircle className="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700">Verify GC scope documents</span>
+                  <span className="text-gray-700">Produce common scope requirements for various project types</span>
                 </li>
                 <li className="flex items-start">
                   <CheckCircle className="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
@@ -410,7 +406,7 @@ export const HomePage: React.FC = () => {
                 </li>
                 <li className="flex items-start">
                   <CheckCircle className="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700">Know exactly what's included</span>
+                  <span className="text-gray-700">Quickly generate client requested pricing</span>
                 </li>
               </ul>
               <div className="example-box">
