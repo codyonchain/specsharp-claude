@@ -177,7 +177,7 @@ function SharedProjectView() {
               </div>
               <div className="summary-item">
                 <label>Cost per SF</label>
-                <span>{formatCurrencyPerSF(projectData.cost_per_sqft || 0)}</span>
+                <span>{formatCurrencyPerSF(projectData.request_data?.square_footage ? projectData.total_cost / projectData.request_data.square_footage : 0)}</span>
               </div>
             </div>
           </div>

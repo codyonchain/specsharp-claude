@@ -421,7 +421,7 @@ export const DemoPage: React.FC = () => {
               <div className="total-cost">
                 <label>Total Project Cost</label>
                 <div className="cost-value">{formatCurrency(generatedProject.total_cost || 0)}</div>
-                <div className="cost-per-sf">{formatCurrencyPerSF(generatedProject.cost_per_sqft || 0)}</div>
+                <div className="cost-per-sf">{formatCurrencyPerSF(generatedProject.request_data?.square_footage ? generatedProject.total_cost / generatedProject.request_data.square_footage : 0)}</div>
               </div>
               <div className="cost-note">
                 <small>

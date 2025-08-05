@@ -321,7 +321,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, currentEsti
                   <div className="metric">
                     <span className="metric-label">Cost per Sq Ft</span>
                     <span className="metric-value">
-                      {formatCurrencyPerSF(lastGeneratedProject?.cost_per_sqft || 0)}
+                      {formatCurrencyPerSF(lastGeneratedProject?.request_data?.square_footage ? lastGeneratedProject.total_cost / lastGeneratedProject.request_data.square_footage : 0)}
                     </span>
                   </div>
                   <div className="metric">

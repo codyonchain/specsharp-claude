@@ -126,7 +126,7 @@ const ComparisonToolV2: React.FC<ComparisonToolV2Props> = ({ projectData, onClos
 
   const renderScenarioCard = (scenario: ComparisonScenario, isBase: boolean) => {
     const totalCost = scenario.data?.total_cost || 0;
-    const costPerSqFt = scenario.data?.cost_per_sqft || 0;
+    const costPerSqFt = scenario.square_footage > 0 ? totalCost / scenario.square_footage : 0;
 
     return (
       <div className={`scenario-card ${isBase ? 'base-scenario' : 'compare-scenario'}`}>

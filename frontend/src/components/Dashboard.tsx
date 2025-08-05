@@ -418,7 +418,7 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
                   <p>{formatNumber(project.square_footage)} sq ft</p>
                   <p className="project-cost">
                     {formatCurrency(project.total_cost)}
-                    {project.cost_per_sqft && ` (${formatCurrencyPerSF(project.cost_per_sqft)})`}
+                    {project.square_footage && ` (${formatCurrencyPerSF(project.total_cost / project.square_footage)})`}
                   </p>
                   {primaryMetric && (
                     <div className="developer-metric">
