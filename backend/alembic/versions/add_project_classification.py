@@ -17,10 +17,14 @@ depends_on = None
 
 
 def upgrade():
+    # Create the enum type first for PostgreSQL
+    project_classification_enum = sa.Enum('ground_up', 'addition', 'renovation', name='project_classification_enum')
+    project_classification_enum.create(op.get_bind(), checkfirst=True)
+    
     # Add project_classification column with default value 'ground_up'
     op.add_column('projects', 
         sa.Column('project_classification', 
-                  sa.Enum('ground_up', 'addition', 'renovation', name='project_classification_enum'),
+                  sa.String(),  # Use String instead of Enum for compatibility
                   nullable=False,
                   server_default='ground_up')
     )
