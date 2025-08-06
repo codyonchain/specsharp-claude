@@ -44,7 +44,7 @@ class BuildingSystem(BaseModel):
 
 
 class ScopeRequest(BaseModel):
-    project_name: str = Field(..., min_length=1, max_length=200)
+    project_name: Optional[str] = Field(None, min_length=1, max_length=200)
     project_type: ProjectType
     project_classification: ProjectClassification = Field(default=ProjectClassification.GROUND_UP)
     square_footage: float = Field(..., gt=0, le=1000000)

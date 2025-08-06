@@ -152,6 +152,24 @@ async def generate_scope(
                 scope_request.project_classification = ProjectClassification(detected_classification)
                 logger.error(f"[NLP] Detected project classification: {detected_classification}")
         
+        # Auto-generate project name if not provided
+        if not scope_request.project_name:
+            # Use special requirements or build a description from the request data
+            description = scope_request.special_requirements or f"{scope_request.square_footage} sf {scope_request.occupancy_type} in {scope_request.location}"
+            
+            # Extract details for name generation
+            parsed_data = {
+                "occupancy_type": scope_request.occupancy_type,
+                "location": scope_request.location,
+                "square_footage": scope_request.square_footage,
+                "project_classification": getattr(scope_request, 'project_classification', 'ground_up')
+            }
+            
+            # Generate smart project name
+            generated_name = nlp_service.generate_project_name(description, parsed_data)
+            scope_request.project_name = generated_name
+            logger.info(f"[NLP] Auto-generated project name: {generated_name}")
+        
         scope_response = scope_engine.generate_scope(scope_request)
         
         # Generate architectural floor plan with error handling
