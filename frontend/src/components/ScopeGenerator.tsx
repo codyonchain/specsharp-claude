@@ -31,6 +31,7 @@ function ScopeGenerator() {
   const [error, setError] = useState('');
   const [inputMode, setInputMode] = useState<'natural' | 'form'>('natural');
   const [naturalLanguageInput, setNaturalLanguageInput] = useState('');
+  const [classificationAutoSelected, setClassificationAutoSelected] = useState(false);
   const [formData, setFormData] = useState<ScopeRequest>({
     project_name: '',
     project_type: 'commercial',
@@ -47,6 +48,72 @@ function ScopeGenerator() {
   // Natural language parser
   const parseNaturalLanguage = (input: string): Partial<ScopeRequest> => {
     const result: Partial<ScopeRequest> = {};
+    
+    // Parse project classification (ground_up, addition, renovation)
+    const detectProjectClassification = (text: string): 'ground_up' | 'addition' | 'renovation' => {
+      const textLower = text.toLowerCase();
+      
+      // Check renovation keywords first (most specific)
+      const renovationKeywords = [
+        'renovate', 'renovation', 'remodel', 'retrofit', 'modernize',
+        'update existing', 'gut renovation', 'tenant improvement',
+        'ti ', ' ti,', ' ti.', 'refresh', 'refurbish', 'rehabilitate',
+        'restore', 'convert', 'conversion', 'transform existing',
+        'upgrade existing', 'existing space', 'existing building',
+        'build-out', 'buildout', 'makeover', 'redesign', 'rehab'
+      ];
+      
+      // Check addition keywords
+      const additionKeywords = [
+        'addition', 'expansion', 'extend', 'extension', 'add on',
+        'add-on', 'add to existing', 'enlarge', 'expand existing',
+        'expand', 'new wing', 'wing', 'building extension', 
+        'square footage addition', 'add sf', 'connect to existing', 
+        'attached to existing', 'annex', 'expanding'
+      ];
+      
+      // Check ground-up keywords
+      const groundUpKeywords = [
+        'ground up', 'ground-up', 'new construction', 'new build',
+        'empty lot', 'vacant lot', 'greenfield', 'from scratch',
+        'new development', 'new building', 'construct new',
+        'brand new', 'undeveloped'
+      ];
+      
+      // Check for explicit keyword matches
+      for (const keyword of renovationKeywords) {
+        if (textLower.includes(keyword)) {
+          return 'renovation';
+        }
+      }
+      
+      for (const keyword of additionKeywords) {
+        if (textLower.includes(keyword)) {
+          return 'addition';
+        }
+      }
+      
+      for (const keyword of groundUpKeywords) {
+        if (textLower.includes(keyword)) {
+          return 'ground_up';
+        }
+      }
+      
+      // Context-based inference if no explicit keywords found
+      if (textLower.includes('existing') && !textLower.includes('add') && !textLower.includes('expand')) {
+        // "existing" without "add" or "expand" suggests renovation
+        return 'renovation';
+      } else if (textLower.includes('new') && !textLower.includes('existing')) {
+        // "new" without "existing" suggests ground-up
+        return 'ground_up';
+      }
+      
+      // Default to ground_up if uncertain
+      return 'ground_up';
+    };
+    
+    // Detect and set project classification
+    result.project_classification = detectProjectClassification(input);
     
     // Parse dimensions (e.g., "150x300" or "10000 SF" or "10,000 square feet")
     const dimensionMatch = input.match(/(\d+)\s*x\s*(\d+)/i);
@@ -527,6 +594,7 @@ function ScopeGenerator() {
     console.log('Natural language input:', naturalLanguageInput);
     console.log('Parsed result:', parsed);
     console.log('Parsed location specifically:', parsed.location);
+    console.log('Detected project classification:', parsed.project_classification);
     
     // Merge with form data
     const updatedFormData = {
@@ -551,6 +619,13 @@ function ScopeGenerator() {
     console.log('Updated form data:', updatedFormData);
     
     setFormData(updatedFormData);
+    
+    // Trigger visual feedback for auto-selected classification
+    if (parsed.project_classification) {
+      setClassificationAutoSelected(true);
+      // Remove highlight after animation
+      setTimeout(() => setClassificationAutoSelected(false), 3000);
+    }
     
     // Switch to form mode to show parsed results
     setInputMode('form');
@@ -695,10 +770,16 @@ function ScopeGenerator() {
       ) : (
         <form onSubmit={handleSubmit} className="scope-form">
           {/* Project Classification - Most Important, at the top */}
+          {classificationAutoSelected && (
+            <div className="auto-detect-message">
+              ✓ Project type automatically detected from your description
+            </div>
+          )}
           <ProjectTypeSelector
             value={formData.project_classification || 'ground_up'}
             onChange={(value) => setFormData({...formData, project_classification: value as 'ground_up' | 'addition' | 'renovation'})}
             required={true}
+            autoSelected={classificationAutoSelected}
           />
           
           <div className="form-section">

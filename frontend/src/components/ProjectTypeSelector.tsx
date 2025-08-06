@@ -6,6 +6,7 @@ interface ProjectTypeSelectorProps {
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
+  autoSelected?: boolean;
 }
 
 interface TypeOption {
@@ -47,7 +48,8 @@ const projectTypes: TypeOption[] = [
 const ProjectTypeSelector: React.FC<ProjectTypeSelectorProps> = ({ 
   value, 
   onChange, 
-  required = false 
+  required = false,
+  autoSelected = false 
 }) => {
   return (
     <div className="project-type-selector">
@@ -64,7 +66,7 @@ const ProjectTypeSelector: React.FC<ProjectTypeSelectorProps> = ({
         {projectTypes.map((type) => (
           <div
             key={type.value}
-            className={`type-card ${value === type.value ? 'selected' : ''}`}
+            className={`type-card ${value === type.value ? 'selected' : ''} ${value === type.value && autoSelected ? 'auto-selected' : ''}`}
             onClick={() => onChange(type.value)}
             style={{ borderColor: value === type.value ? type.color : undefined }}
           >

@@ -55,6 +55,64 @@ class NLPService:
             "three_bedroom": re.compile(r'(\d+)\s*(?:3\s*br|3\s*bed|three\s*bed|3-bed)', re.IGNORECASE),
         }
     
+    def detect_project_classification(self, text: str) -> str:
+        """
+        Detect project classification from natural language description.
+        Returns: 'ground_up', 'addition', or 'renovation'
+        """
+        text_lower = text.lower()
+        
+        # Check renovation keywords first (most specific)
+        renovation_keywords = [
+            'renovate', 'renovation', 'remodel', 'retrofit', 'modernize',
+            'update existing', 'gut renovation', 'tenant improvement',
+            'ti ', ' ti,', ' ti.', 'refresh', 'refurbish', 'rehabilitate', 
+            'restore', 'convert', 'conversion', 'transform existing', 
+            'upgrade existing', 'existing space', 'existing building',
+            'build-out', 'buildout', 'makeover', 'redesign', 'rehab'
+        ]
+        
+        # Check addition keywords
+        addition_keywords = [
+            'addition', 'expansion', 'extend', 'extension', 'add on',
+            'add-on', 'add to existing', 'enlarge', 'expand existing',
+            'expand', 'new wing', 'wing', 'building extension',
+            'square footage addition', 'add sf', 'connect to existing', 
+            'attached to existing', 'annex', 'expanding'
+        ]
+        
+        # Check ground-up keywords
+        ground_up_keywords = [
+            'ground up', 'ground-up', 'new construction', 'new build',
+            'empty lot', 'vacant lot', 'greenfield', 'from scratch',
+            'new development', 'new building', 'construct new',
+            'brand new', 'undeveloped'
+        ]
+        
+        # Check for explicit keyword matches
+        for keyword in renovation_keywords:
+            if keyword in text_lower:
+                return 'renovation'
+        
+        for keyword in addition_keywords:
+            if keyword in text_lower:
+                return 'addition'
+        
+        for keyword in ground_up_keywords:
+            if keyword in text_lower:
+                return 'ground_up'
+        
+        # Context-based inference if no explicit keywords found
+        if 'existing' in text_lower and 'add' not in text_lower and 'expand' not in text_lower:
+            # "existing" without "add" or "expand" suggests renovation
+            return 'renovation'
+        elif 'new' in text_lower and 'existing' not in text_lower:
+            # "new" without "existing" suggests ground-up
+            return 'ground_up'
+        
+        # Default to ground_up if uncertain
+        return 'ground_up'
+    
     def _initialize_keywords(self) -> Dict[str, List[str]]:
         return {
             "sustainable": ["leed", "green", "sustainable", "eco-friendly", "energy efficient", "solar"],
@@ -120,11 +178,10 @@ class NLPService:
                         extracted["service_level"] = service_level
                         break
             elif category == "project_classification":
-                # Handle project classification (ground_up, addition, renovation)
-                for classification, class_keywords in keywords.items():
-                    if any(kw in text.lower() for kw in class_keywords):
-                        extracted["project_classification"] = classification
-                        break
+                # Handle project classification with improved detection
+                classification = self.detect_project_classification(text)
+                if classification:
+                    extracted["project_classification"] = classification
             elif any(keyword in text.lower() for keyword in keywords):
                 if category == "special_systems":
                     extracted["special_requirements"] = extracted.get("special_requirements", [])

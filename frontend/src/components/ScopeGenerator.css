@@ -3,6 +3,33 @@
   background: #f7f7f7;
 }
 
+/* Auto-detection message styling */
+.auto-detect-message {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  margin: 1rem auto 1rem auto;
+  max-width: 800px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  animation: slideInFade 0.5s ease-in-out;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+
+@keyframes slideInFade {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .page-header {
   background: white;
   padding: 1rem 2rem;

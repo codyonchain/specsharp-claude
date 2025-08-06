@@ -73,6 +73,24 @@
   font-weight: bold;
 }
 
+/* Auto-selected animation */
+.type-card.selected.auto-selected {
+  animation: pulseHighlight 0.6s ease-in-out 2;
+}
+
+@keyframes pulseHighlight {
+  0% {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0.2), 0 4px 12px rgba(0, 0, 0, 0.15);
+    transform: scale(1.03);
+  }
+  100% {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+}
+
 .card-icon {
   margin-bottom: 1rem;
   display: flex;
