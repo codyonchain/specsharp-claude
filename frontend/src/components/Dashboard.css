@@ -512,6 +512,37 @@
   border: 1px solid #e0e7ff;
 }
 
+.project-classification {
+  margin-bottom: 0.5rem;
+}
+
+.classification-tag {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid;
+}
+
+.classification-tag.ground-up {
+  background: #d1fae5;
+  color: #065f46;
+  border-color: #a7f3d0;
+}
+
+.classification-tag.addition {
+  background: #dbeafe;
+  color: #1e3a8a;
+  border-color: #93c5fd;
+}
+
+.classification-tag.renovation {
+  background: #fed7aa;
+  color: #92400e;
+  border-color: #fb923c;
+}
+
 .project-card p {
   margin: 0.5rem 0;
   color: #4a5568;

@@ -5,7 +5,7 @@ import logging
 from functools import lru_cache
 from app.models.scope import (
     ScopeRequest, ScopeResponse, ScopeCategory,
-    BuildingSystem, ProjectType, ClimateZone
+    BuildingSystem, ProjectType, ClimateZone, ProjectClassification
 )
 from datetime import datetime
 import uuid
@@ -79,6 +79,11 @@ class DeterministicScopeEngine:
                 ProjectType.INDUSTRIAL: 0.5,  # Warehouses are much cheaper
                 ProjectType.MIXED_USE: 1.0,   # Will be calculated based on mix
             },
+            "project_classification": {
+                "ground_up": 1.0,     # Base cost for new construction
+                "addition": 1.15,     # 15% premium for tie-ins, protection, limited access
+                "renovation": 1.35,   # 35% premium for demo, unknowns, phased work
+            },
             "climate_zone": {
                 ClimateZone.HOT_HUMID: 1.1,
                 ClimateZone.HOT_DRY: 1.05,
@@ -112,6 +117,7 @@ class DeterministicScopeEngine:
             
             # Southwest/South
             "TX": 0.90,  # Texas
+            "TN": 1.10,  # Tennessee (Nashville market - adjusted for restaurants)
             "AZ": 0.95,  # Arizona
             "NV": 1.05,  # Nevada
             "FL": 0.95,  # Florida
@@ -384,7 +390,9 @@ class DeterministicScopeEngine:
         )
         multiplier *= floor_multiplier
         
-        height_multiplier = 1.0 + (request.ceiling_height - 9) * 0.05
+        # More reasonable ceiling height adjustment - cap at 20% increase
+        height_adjustment = min((request.ceiling_height - 9) * 0.02, 0.20)  # 2% per foot, max 20%
+        height_multiplier = 1.0 + height_adjustment
         multiplier *= height_multiplier
         
         # Apply finish level multiplier
@@ -396,6 +404,14 @@ class DeterministicScopeEngine:
         }
         finish_multiplier = finish_multipliers.get(finish_level, 1.0)
         multiplier *= finish_multiplier
+        
+        # Apply project classification multiplier (ground-up, addition, renovation)
+        project_classification = getattr(request, 'project_classification', 'ground_up')
+        classification_multiplier = self.cost_multipliers["project_classification"].get(
+            project_classification.value if hasattr(project_classification, 'value') else project_classification, 
+            1.0
+        )
+        multiplier *= classification_multiplier
         
         return round(multiplier, 3)
     
@@ -1022,6 +1038,11 @@ class DeterministicScopeEngine:
         )
         categories.append(gc_category)
         
+        # Add project classification specific items (demolition, tie-ins, etc.)
+        classification_items = self._generate_classification_specific_items(request, trade_subtotal)
+        if classification_items:
+            categories.append(classification_items)
+        
         contingency = self._calculate_contingency_percentage(request)
         
         response = ScopeResponse(
@@ -1258,6 +1279,107 @@ class DeterministicScopeEngine:
             logger.warning(f"Cost validation warning: ${cost_per_sf:.2f}/SF is outside restaurant range $300-$600/SF")
         
         return response
+    
+    def _generate_classification_specific_items(self, request: ScopeRequest, trade_subtotal: float) -> Optional[ScopeCategory]:
+        """Generate project classification specific items (demolition, tie-ins, etc.)"""
+        classification = getattr(request, 'project_classification', 'ground_up')
+        
+        if classification == 'renovation':
+            # Add demolition and renovation specific items
+            demo_cost = trade_subtotal * 0.04  # 4% for demolition
+            protection_cost = trade_subtotal * 0.02  # 2% for protection
+            hazmat_cost = trade_subtotal * 0.025  # 2.5% for hazmat allowance
+            phasing_cost = trade_subtotal * 0.015  # 1.5% for phasing premium
+            
+            systems = [
+                BuildingSystem(
+                    name="Selective Demolition",
+                    quantity=1,
+                    unit="LS",
+                    unit_cost=demo_cost,
+                    total_cost=demo_cost,
+                    specifications={"description": "Remove existing finishes, MEP systems as required"}
+                ),
+                BuildingSystem(
+                    name="Dust Protection & Barriers",
+                    quantity=1,
+                    unit="LS",
+                    unit_cost=protection_cost,
+                    total_cost=protection_cost,
+                    specifications={"description": "Temporary walls, plastic barriers, air scrubbers"}
+                ),
+                BuildingSystem(
+                    name="Hazardous Material Allowance",
+                    quantity=1,
+                    unit="LS",
+                    unit_cost=hazmat_cost,
+                    total_cost=hazmat_cost,
+                    specifications={"description": "Asbestos, lead paint abatement allowance"}
+                ),
+                BuildingSystem(
+                    name="Phased Construction Premium",
+                    quantity=1,
+                    unit="LS",
+                    unit_cost=phasing_cost,
+                    total_cost=phasing_cost,
+                    specifications={"description": "Additional labor for occupied space work"}
+                )
+            ]
+            
+            return ScopeCategory(
+                name="Renovation Specific Costs",
+                systems=systems
+            )
+            
+        elif classification == 'addition':
+            # Add addition specific items
+            tie_in_cost = trade_subtotal * 0.025  # 2.5% for structural tie-ins
+            weather_cost = trade_subtotal * 0.01  # 1% for weather protection
+            protection_cost = trade_subtotal * 0.015  # 1.5% for existing building protection
+            access_cost = trade_subtotal * 0.01  # 1% for limited access premium
+            
+            systems = [
+                BuildingSystem(
+                    name="Structural Tie-Ins",
+                    quantity=1,
+                    unit="LS",
+                    unit_cost=tie_in_cost,
+                    total_cost=tie_in_cost,
+                    specifications={"description": "Connect new structure to existing, reinforcement"}
+                ),
+                BuildingSystem(
+                    name="Weather Protection at Connections",
+                    quantity=1,
+                    unit="LS", 
+                    unit_cost=weather_cost,
+                    total_cost=weather_cost,
+                    specifications={"description": "Temporary roofing, wall protection during construction"}
+                ),
+                BuildingSystem(
+                    name="Existing Building Protection",
+                    quantity=1,
+                    unit="LS",
+                    unit_cost=protection_cost,
+                    total_cost=protection_cost,
+                    specifications={"description": "Protection of adjacent spaces, finishes"}
+                ),
+                BuildingSystem(
+                    name="Limited Access Premium",
+                    quantity=1,
+                    unit="LS",
+                    unit_cost=access_cost,
+                    total_cost=access_cost,
+                    specifications={"description": "Additional equipment, labor for constrained site"}
+                )
+            ]
+            
+            return ScopeCategory(
+                name="Addition Specific Costs",
+                systems=systems
+            )
+        
+        # Ground-up construction doesn't need special items
+        return None
     
     def _calculate_contingency_percentage(self, request: ScopeRequest) -> float:
         # Standardized 10% contingency for construction documents phase

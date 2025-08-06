@@ -82,6 +82,15 @@ async def generate_scope(
                     if not hasattr(scope_request, 'unit_mix'):
                         scope_request.unit_mix = nlp_result['unit_mix']
         
+        # Detect project classification from special requirements if not explicitly set
+        if scope_request.special_requirements and hasattr(scope_request, 'project_classification'):
+            nlp_result = nlp_service.extract_project_details(scope_request.special_requirements)
+            detected_classification = nlp_result.get('project_classification')
+            if detected_classification:
+                from app.models.scope import ProjectClassification
+                scope_request.project_classification = ProjectClassification(detected_classification)
+                logger.error(f"[NLP] Detected project classification: {detected_classification}")
+        
         scope_response = scope_engine.generate_scope(scope_request)
         
         # Generate architectural floor plan with error handling
@@ -130,6 +139,7 @@ async def generate_scope(
             name=scope_request.project_name,
             description=scope_request.special_requirements,  # Store the original input description
             project_type=scope_request.project_type.value,
+            project_classification=scope_request.project_classification.value if hasattr(scope_request, 'project_classification') else 'ground_up',
             building_type=scope_request.occupancy_type,  # Store specific building type
             occupancy_type=scope_request.occupancy_type,
             square_footage=scope_request.square_footage,

@@ -11,6 +11,12 @@ class ProjectType(str, Enum):
     MIXED_USE = "mixed_use"
 
 
+class ProjectClassification(str, Enum):
+    GROUND_UP = "ground_up"
+    ADDITION = "addition"
+    RENOVATION = "renovation"
+
+
 class ClimateZone(str, Enum):
     HOT_HUMID = "hot_humid"
     HOT_DRY = "hot_dry"
@@ -40,6 +46,7 @@ class BuildingSystem(BaseModel):
 class ScopeRequest(BaseModel):
     project_name: str = Field(..., min_length=1, max_length=200)
     project_type: ProjectType
+    project_classification: ProjectClassification = Field(default=ProjectClassification.GROUND_UP)
     square_footage: float = Field(..., gt=0, le=1000000)
     location: str = Field(..., min_length=1)
     climate_zone: Optional[ClimateZone] = None

@@ -82,6 +82,16 @@
   color: #333;
 }
 
+.classification-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+  border: 1px solid #d1d5db;
+  font-weight: 600;
+  font-size: 0.95rem !important;
+}
+
 .highlight {
   color: #667eea !important;
   font-weight: bold;

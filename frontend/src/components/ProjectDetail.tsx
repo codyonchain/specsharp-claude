@@ -568,6 +568,15 @@ function ProjectDetail() {
               <span>{getDisplayBuildingType()}</span>
             </div>
             <div className="summary-item">
+              <label>Project Classification</label>
+              <span className="classification-badge">
+                {project.request_data.project_classification === 'ground_up' && '🏗️ Ground-Up'}
+                {project.request_data.project_classification === 'addition' && '🏠➕ Addition'}
+                {project.request_data.project_classification === 'renovation' && '🔨 Renovation'}
+                {!project.request_data.project_classification && '🏗️ Ground-Up'}
+              </span>
+            </div>
+            <div className="summary-item">
               <label>Square Footage</label>
               <span>{project.request_data.square_footage.toLocaleString()} sq ft</span>
             </div>

@@ -146,8 +146,22 @@
 .help-text {
   color: #666;
   margin-bottom: 1.5rem;
-  line-height: 1.6;
+  line-height: 1.8;
   font-size: 0.95rem;
+  background: #f8f9fa;
+  padding: 1.25rem;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.help-text strong {
+  color: #1f2937;
+  font-weight: 600;
+  display: inline-block;
+  margin-top: 0.25rem;
+  font-size: 0.98rem;
+  border-bottom: 2px solid #667eea;
+  padding-bottom: 2px;
 }
 
 .natural-language-input {

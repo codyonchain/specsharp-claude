@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { scopeService } from '../services/api';
 import './ScopeGenerator.css';
 import { determineOccupancyType, getProjectTypeFromOccupancy } from '../utils/buildingTypeDetection';
+import ProjectTypeSelector from './ProjectTypeSelector';
 
 // Temporary type definition
 interface ScopeRequest {
   project_name: string;
   project_type: 'residential' | 'commercial' | 'industrial' | 'mixed_use';
+  project_classification?: 'ground_up' | 'addition' | 'renovation';
   square_footage: number;
   location: string;
   climate_zone?: string;
@@ -32,6 +34,7 @@ function ScopeGenerator() {
   const [formData, setFormData] = useState<ScopeRequest>({
     project_name: '',
     project_type: 'commercial',
+    project_classification: 'ground_up',
     square_footage: 10000,
     location: '',
     num_floors: 1,
@@ -647,13 +650,23 @@ function ScopeGenerator() {
           <div className="form-section">
             <h2>Describe Your Project</h2>
             <p className="help-text">
-              Describe your building project in natural language. For example:
-              <br />• "4000 sf full-service restaurant with commercial kitchen and dining room in Manchester, New Hampshire"
-              <br />• "75000 sf medical office building with surgery center in Nashua, New Hampshire"
-              <br />• "25000 sf K-12 school with gymnasium in Concord, New Hampshire"
-              <br />• "200 room hotel with conference center in Nashville, Tennessee"
-              <br />• "60000 sf corporate headquarters 3 stories in Nashville, Tennessee"
-              <br />• "150x300 warehouse (70%) + office(30%) with HVAC and bathrooms in Sacramento, California"
+              Describe your building project in natural language. Include whether it's new construction, renovation, or addition:
+              <br />
+              <br /><strong>New Construction (Ground-Up):</strong>
+              <br />• "New 4000 sf restaurant on empty lot in Nashville, TN"
+              <br />• "Ground-up construction of 75000 sf medical office building in Manchester, NH"
+              <br />• "Build new 25000 sf school from scratch in Concord, NH"
+              <br />
+              <br /><strong>Renovations (Existing Buildings):</strong>
+              <br />• "Renovate existing 10000 sf office space in downtown Nashville"
+              <br />• "Remodel 5000 sf restaurant, full gut renovation in Manchester, NH"
+              <br />• "Tenant improvement for 8000 sf retail space in Sacramento, CA"
+              <br />• "Modernize existing 20000 sf warehouse, convert to mixed-use"
+              <br />
+              <br /><strong>Additions (Expanding Buildings):</strong>
+              <br />• "Add 3000 sf addition to existing restaurant in Nashville"
+              <br />• "Expand hospital with new 50000 sf wing in Manchester, NH"
+              <br />• "Building extension adding 15000 sf to existing office"
             </p>
             
             <div className="form-group">
@@ -681,6 +694,13 @@ function ScopeGenerator() {
         </form>
       ) : (
         <form onSubmit={handleSubmit} className="scope-form">
+          {/* Project Classification - Most Important, at the top */}
+          <ProjectTypeSelector
+            value={formData.project_classification || 'ground_up'}
+            onChange={(value) => setFormData({...formData, project_classification: value as 'ground_up' | 'addition' | 'renovation'})}
+            required={true}
+          />
+          
           <div className="form-section">
             <h2>Project Information</h2>
             

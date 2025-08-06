@@ -414,6 +414,11 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
                       occupancy_type: project.occupancy_type || project.building_type
                     })}
                   </p>
+                  <div className="project-classification">
+                    {project.project_classification === 'addition' && <span className="classification-tag addition">➕ Addition</span>}
+                    {project.project_classification === 'renovation' && <span className="classification-tag renovation">🔨 Renovation</span>}
+                    {(!project.project_classification || project.project_classification === 'ground_up') && <span className="classification-tag ground-up">🏗️ Ground-Up</span>}
+                  </div>
                   <p>{project.location}</p>
                   <p>{formatNumber(project.square_footage)} sq ft</p>
                   <p className="project-cost">

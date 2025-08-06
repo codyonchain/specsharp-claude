@@ -73,6 +73,15 @@ class NLPService:
                 "full_service": ["full service", "full-service", "sit-down", "table service"],
                 "fine_dining": ["fine dining", "upscale", "high-end dining", "white tablecloth", "gourmet"]
             },
+            "project_classification": {
+                "ground_up": ["new construction", "new build", "ground up", "ground-up", "empty lot", 
+                             "greenfield", "vacant lot", "undeveloped", "from scratch", "brand new"],
+                "addition": ["addition", "expansion", "extension", "add on", "add-on", "enlargement",
+                           "expanding", "annex", "wing", "building addition"],
+                "renovation": ["renovation", "remodel", "retrofit", "modernize", "update", "refurbish",
+                             "rehab", "redesign", "makeover", "restoration", "conversion", "tenant improvement",
+                             "TI", "build-out", "buildout", "existing space", "existing building"]
+            },
         }
     
     def extract_project_details(self, text: str) -> Dict[str, Any]:
@@ -109,6 +118,12 @@ class NLPService:
                 for service_level, level_keywords in keywords.items():
                     if any(kw in text.lower() for kw in level_keywords):
                         extracted["service_level"] = service_level
+                        break
+            elif category == "project_classification":
+                # Handle project classification (ground_up, addition, renovation)
+                for classification, class_keywords in keywords.items():
+                    if any(kw in text.lower() for kw in class_keywords):
+                        extracted["project_classification"] = classification
                         break
             elif any(keyword in text.lower() for keyword in keywords):
                 if category == "special_systems":
