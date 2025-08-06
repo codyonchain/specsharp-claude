@@ -641,11 +641,14 @@ function ScopeGenerator() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // If in natural language mode, parse and get the updated form data
-    let submitData = formData;
+    // If in natural language mode, just parse and switch to form view
     if (inputMode === 'natural' && naturalLanguageInput) {
-      submitData = handleNaturalLanguageSubmit(true) || formData;
+      handleNaturalLanguageSubmit(false);
+      return; // Don't submit yet, let user review the form
     }
+    
+    // We're in form mode, proceed with submission
+    let submitData = formData;
     
     setLoading(true);
     setError('');
