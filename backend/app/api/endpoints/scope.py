@@ -263,7 +263,7 @@ async def list_projects(
                 "project_id": p.Project.project_id,
                 "name": p.Project.name,
                 "project_type": p.Project.project_type,
-                "project_classification": p.Project.project_classification,  # Add this field
+                "project_classification": getattr(p.Project, 'project_classification', 'ground_up'),  # Handle missing column
                 "building_type": p.Project.building_type,
                 "occupancy_type": p.Project.occupancy_type,
                 "description": p.Project.description,
