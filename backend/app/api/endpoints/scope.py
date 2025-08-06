@@ -139,7 +139,7 @@ async def generate_scope(
             name=scope_request.project_name,
             description=scope_request.special_requirements,  # Store the original input description
             project_type=scope_request.project_type.value,
-            project_classification=scope_request.project_classification.value if hasattr(scope_request, 'project_classification') else 'ground_up',
+            project_classification=scope_request.project_classification.value,  # This is always present with default
             building_type=scope_request.occupancy_type,  # Store specific building type
             occupancy_type=scope_request.occupancy_type,
             square_footage=scope_request.square_footage,
@@ -224,6 +224,7 @@ async def list_projects(
             "project_id": p.Project.project_id,
             "name": p.Project.name,
             "project_type": p.Project.project_type,
+            "project_classification": p.Project.project_classification,  # Add this field
             "building_type": p.Project.building_type,
             "occupancy_type": p.Project.occupancy_type,
             "description": p.Project.description,
@@ -317,6 +318,7 @@ async def search_projects(
             "project_id": p.Project.project_id,
             "name": p.Project.name,
             "project_type": p.Project.project_type,
+            "project_classification": p.Project.project_classification,  # Add this field
             "building_type": p.Project.building_type,
             "occupancy_type": p.Project.occupancy_type,
             "description": p.Project.description,

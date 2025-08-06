@@ -126,13 +126,45 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 
 The application uses deterministic pricing based on:
 - Base costs per square foot for different systems (foundation, framing, HVAC, etc.)
-- Regional multipliers for different cities
+- Regional multipliers for different cities (Based on RSMeans 2024 Q2 data)
 - Building type adjustments (warehouse costs 50% of office)
 - Mixed-use weighted averages
 - **Project Classification Multipliers**:
   - Ground-Up: 1.0x (base cost)
   - Addition: 1.15x (includes tie-ins, protection, limited access)
   - Renovation: 1.35x (includes demolition, unknowns, phased work)
+
+### Regional Cost Multipliers (2024 Q2)
+- **Tennessee**:
+  - Nashville: 1.02 (2% above national average)
+  - Franklin: 1.03
+  - Murfreesboro: 1.01
+- **New Hampshire**:
+  - Manchester: 0.99 (1% below national average)
+  - Nashua: 0.98
+  - Concord: 0.97
+- **Massachusetts**:
+  - Boston: 1.00 (at national average)
+- **Major Markets**:
+  - New York, NY: 1.25
+  - San Francisco, CA: 1.22
+  - Chicago, IL: 1.08
+  - Dallas, TX: 0.95
+  - Atlanta, GA: 0.94
+
+### Base Construction Costs (per SF - National Average)
+- **Restaurant Types**:
+  - Quick Service: $300/SF
+  - Casual Dining: $375/SF
+  - Full-Service: $425/SF
+  - Fine Dining: $550/SF
+- **Commercial**:
+  - Office: $250/SF
+  - Retail: $200/SF
+  - Medical: $350/SF
+- **Industrial**:
+  - Warehouse: $150/SF
+  - Light Industrial: $175/SF
 
 ### Project Classification Details
 

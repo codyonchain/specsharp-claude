@@ -108,61 +108,76 @@ class DeterministicScopeEngine:
         }
     
     def _initialize_regional_multipliers(self) -> Dict[str, float]:
-        """Regional cost multipliers for different states/regions"""
+        """Regional cost multipliers for different states/regions - Based on RSMeans 2024 Q2"""
         return {
             # West Coast
-            "CA": 1.30,  # California premium (matches V2 engine)
-            "WA": 1.15,  # Washington
-            "OR": 1.10,  # Oregon
+            "CA": 1.22,  # California - San Francisco/LA average
+            "WA": 1.08,  # Washington - Seattle market
+            "OR": 1.05,  # Oregon - Portland market
             
             # Southwest/South
-            "TX": 0.90,  # Texas
-            "TN": 1.10,  # Tennessee (Nashville market - adjusted for restaurants)
-            "AZ": 0.95,  # Arizona
-            "NV": 1.05,  # Nevada
-            "FL": 0.95,  # Florida
+            "TX": 0.95,  # Texas - Dallas/Houston average
+            "TN": 1.02,  # Tennessee - Nashville market (2% above national)
+            "AZ": 0.96,  # Arizona - Phoenix market
+            "NV": 1.02,  # Nevada - Las Vegas market
+            "FL": 0.97,  # Florida - Miami/Orlando average
             
             # Mountain/Central
-            "CO": 1.05,  # Colorado
-            "UT": 1.00,  # Utah
+            "CO": 1.00,  # Colorado - Denver market
+            "UT": 0.98,  # Utah - Salt Lake City
             
             # Northeast
-            "NY": 1.50,  # New York
-            "MA": 1.40,  # Massachusetts
-            "CT": 1.35,  # Connecticut
-            "NH": 1.05,  # New Hampshire
-            "VT": 1.10,  # Vermont
-            "ME": 1.00,  # Maine
+            "NY": 1.25,  # New York - NYC market
+            "MA": 1.00,  # Massachusetts - Boston (at national average)
+            "CT": 1.05,  # Connecticut - Hartford market
+            "NH": 0.99,  # New Hampshire - Manchester (1% below national)
+            "VT": 1.01,  # Vermont - Burlington market
+            "ME": 0.98,  # Maine - Portland market
             
             # Midwest
-            "IL": 1.10,  # Illinois
-            "OH": 0.95,  # Ohio
-            "MI": 1.00,  # Michigan
+            "IL": 1.08,  # Illinois - Chicago market
+            "OH": 0.94,  # Ohio - Cleveland/Cincinnati average
+            "MI": 0.96,  # Michigan - Detroit market
+            "GA": 0.94,  # Georgia - Atlanta market
         }
     
     def _initialize_city_multipliers(self) -> Dict[str, float]:
-        """City-specific cost multipliers (applied on top of regional)"""
+        """City-specific cost multipliers (overrides state multiplier) - Based on RSMeans 2024 Q2"""
         return {
             # California cities
-            "san francisco": 1.45,
-            "san jose": 1.40,
-            "oakland": 1.35,
-            "los angeles": 1.25,
-            "san diego": 1.20,
-            "sacramento": 1.15,
-            "fresno": 1.05,
+            "san francisco": 1.22,
+            "san jose": 1.20,
+            "oakland": 1.18,
+            "los angeles": 1.15,
+            "san diego": 1.12,
+            "sacramento": 1.08,
+            "fresno": 1.02,
+            
+            # Tennessee cities
+            "nashville": 1.02,  # Nashville, TN - 2% above national
+            "franklin": 1.03,   # Franklin, TN (Nashville suburb)
+            "murfreesboro": 1.01,  # Murfreesboro, TN
+            "memphis": 0.98,
+            "knoxville": 0.97,
+            
+            # New Hampshire cities
+            "manchester": 0.99,  # Manchester, NH - 1% below national
+            "nashua": 0.98,      # Nashua, NH - RSMeans shows -1.63% variance
+            "concord": 0.97,     # Concord, NH
+            "portsmouth": 1.01,  # Portsmouth, NH (coastal premium)
             
             # Other major cities
-            "seattle": 1.20,
-            "portland": 1.15,
-            "austin": 0.95,
-            "dallas": 0.90,
-            "houston": 0.90,
-            "miami": 1.05,
-            "denver": 1.10,
-            "new york": 1.60,
-            "boston": 1.45,
-            "chicago": 1.15,
+            "seattle": 1.08,
+            "portland": 1.05,
+            "austin": 0.96,
+            "dallas": 0.95,
+            "houston": 0.94,
+            "miami": 1.02,
+            "denver": 1.00,
+            "new york": 1.25,
+            "boston": 1.00,  # Boston at national average
+            "chicago": 1.08,
+            "atlanta": 0.94,
         }
     
     @lru_cache(maxsize=256)

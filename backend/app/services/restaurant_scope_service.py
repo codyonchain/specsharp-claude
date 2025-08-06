@@ -7,19 +7,33 @@ class RestaurantScopeService:
     """Generate restaurant-specific scope with correct items and trade allocations"""
     
     def __init__(self):
-        # Restaurant base costs by state and service level
+        # Restaurant base costs by state and service level (Based on RSMeans 2024)
+        # These are base costs BEFORE regional multipliers
         self.base_costs = {
             'NH': {
-                'quick_service': 250,
-                'casual_dining': 325,
-                'full_service': 425,  # Increased from 400 to match expectations
-                'fine_dining': 550
+                'quick_service': 300,   # QSR/Fast food base
+                'casual_dining': 375,   # Casual dining base
+                'full_service': 425,    # Full-service restaurant base
+                'fine_dining': 550      # High-end restaurant base
             },
             'MA': {
-                'quick_service': 275,
-                'casual_dining': 350,
-                'full_service': 450,
-                'fine_dining': 575
+                'quick_service': 300,   # Same base as NH (multiplier handles difference)
+                'casual_dining': 375,
+                'full_service': 425,
+                'fine_dining': 550
+            },
+            'TN': {
+                'quick_service': 300,
+                'casual_dining': 375,
+                'full_service': 425,
+                'fine_dining': 550
+            },
+            # Default for all other states (use base national average)
+            'default': {
+                'quick_service': 300,
+                'casual_dining': 375,
+                'full_service': 425,
+                'fine_dining': 550
             }
         }
         
@@ -43,7 +57,7 @@ class RestaurantScopeService:
         service_level = project_data.get('service_level', 'full_service')
         
         # Get base cost and calculate total project cost
-        base_cost_per_sf = self.base_costs.get(state, self.base_costs['NH']).get(service_level, 400)
+        base_cost_per_sf = self.base_costs.get(state, self.base_costs['default']).get(service_level, 425)
         total_project_cost = base_cost_per_sf * square_footage
         
         # Get trade allocations
