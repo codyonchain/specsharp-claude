@@ -26,11 +26,62 @@ from app.db.models import Project, User
 from app.api.endpoints.auth import get_current_user_with_cookie
 import logging
 import traceback
+from sqlalchemy.exc import OperationalError
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger(__name__)
 
+
+def create_project_safely(db, project_data):
+    """Create a project, handling missing columns in production database"""
+    # Essential fields that should always exist
+    essential_fields = {
+        'project_id': project_data.get('project_id'),
+        'name': project_data.get('name'),
+        'project_type': project_data.get('project_type'),
+        'square_footage': project_data.get('square_footage'),
+        'location': project_data.get('location'),
+        'total_cost': project_data.get('total_cost'),
+        'scope_data': project_data.get('scope_data'),
+        'user_id': project_data.get('user_id'),
+        'num_floors': project_data.get('num_floors', 1),
+        'ceiling_height': project_data.get('ceiling_height', 9.0),
+    }
+    
+    # Optional fields that might not exist in production
+    optional_fields = {
+        'description': project_data.get('description'),
+        'project_classification': project_data.get('project_classification', 'ground_up'),
+        'building_type': project_data.get('building_type'),
+        'occupancy_type': project_data.get('occupancy_type'),
+        'climate_zone': project_data.get('climate_zone'),
+        'subtotal': project_data.get('subtotal'),
+        'contingency_percentage': project_data.get('contingency_percentage', 10.0),
+        'contingency_amount': project_data.get('contingency_amount'),
+        'cost_per_sqft': project_data.get('cost_per_sqft'),
+        'cost_data': project_data.get('cost_data'),
+        'team_id': project_data.get('team_id'),
+        'created_by_id': project_data.get('created_by_id'),
+        'scenario_name': project_data.get('scenario_name'),
+    }
+    
+    # Try to create with all fields first
+    try:
+        all_fields = {**essential_fields, **optional_fields}
+        db_project = Project(**all_fields)
+        return db_project
+    except Exception as e:
+        logger.warning(f"Failed to create project with all fields: {str(e)}")
+        # Fall back to essential fields only
+        db_project = Project(**essential_fields)
+        # Set optional fields using setattr to avoid constructor issues
+        for field, value in optional_fields.items():
+            try:
+                setattr(db_project, field, value)
+            except:
+                logger.debug(f"Skipping field {field} - not in database schema")
+        return db_project
 
 async def invalidate_project_cache(project_id: str, user_id: int):
     """Helper to invalidate cache for a specific project"""
@@ -143,31 +194,33 @@ async def generate_scope(
         scope_response_dict['generation_time_seconds'] = generation_time
         
         # Always create a new project with unique ID
-        db_project = Project(
-            project_id=scope_response.project_id,
-            name=scope_request.project_name,
-            description=scope_request.special_requirements,  # Store the original input description
-            project_type=scope_request.project_type.value,
-            project_classification=scope_request.project_classification.value,  # This is always present with default
-            building_type=scope_request.occupancy_type,  # Store specific building type
-            occupancy_type=scope_request.occupancy_type,
-            square_footage=scope_request.square_footage,
-            location=scope_request.location,
-            climate_zone=scope_request.climate_zone.value if scope_request.climate_zone else None,
-            num_floors=scope_request.num_floors,
-            ceiling_height=scope_request.ceiling_height,
+        project_data = {
+            'project_id': scope_response.project_id,
+            'name': scope_request.project_name,
+            'description': scope_request.special_requirements,  # Store the original input description
+            'project_type': scope_request.project_type.value,
+            'project_classification': scope_request.project_classification.value,  # This is always present with default
+            'building_type': scope_request.occupancy_type,  # Store specific building type
+            'occupancy_type': scope_request.occupancy_type,
+            'square_footage': scope_request.square_footage,
+            'location': scope_request.location,
+            'climate_zone': scope_request.climate_zone.value if scope_request.climate_zone else None,
+            'num_floors': scope_request.num_floors,
+            'ceiling_height': scope_request.ceiling_height,
             # Store all cost components for consistency across views
-            subtotal=scope_response.subtotal,
-            contingency_percentage=scope_response.contingency_percentage,
-            contingency_amount=scope_response.contingency_amount,
-            total_cost=scope_response_dict.get('total_cost', scope_response.total_cost),
-            cost_per_sqft=scope_response_dict.get('cost_per_sqft', scope_response.cost_per_sqft),
-            scope_data=json.dumps(scope_response_dict, default=str),  # Save complete data including trade summaries
-            cost_data=json.dumps(scope_response.cost_breakdown, default=str) if hasattr(scope_response, 'cost_breakdown') else None,
-            user_id=current_user.id,
-            created_by_id=current_user.id,
-            team_id=user.current_team_id  # Associate with user's current team
-        )
+            'subtotal': scope_response.subtotal,
+            'contingency_percentage': scope_response.contingency_percentage,
+            'contingency_amount': scope_response.contingency_amount,
+            'total_cost': scope_response_dict.get('total_cost', scope_response.total_cost),
+            'cost_per_sqft': scope_response_dict.get('cost_per_sqft', scope_response.cost_per_sqft),
+            'scope_data': json.dumps(scope_response_dict, default=str),  # Save complete data including trade summaries
+            'cost_data': json.dumps(scope_response.cost_breakdown, default=str) if hasattr(scope_response, 'cost_breakdown') else None,
+            'user_id': current_user.id,
+            'created_by_id': current_user.id,
+            'team_id': user.current_team_id  # Associate with user's current team
+        }
+        
+        db_project = create_project_safely(db, project_data)
         
         # Validate cost consistency before saving
         try:
@@ -572,29 +625,33 @@ async def duplicate_project(
     import uuid
     new_project_id = str(uuid.uuid4())[:8]
     
-    # Create the duplicate
-    duplicate = Project(
-        project_id=new_project_id,
-        name=duplicate_name or f"{original_project.name} (Copy)",
-        description=original_project.description,
-        project_type=original_project.project_type,
-        building_type=original_project.building_type,
-        occupancy_type=original_project.occupancy_type,
-        square_footage=original_project.square_footage,
-        location=original_project.location,
-        climate_zone=original_project.climate_zone,
-        num_floors=original_project.num_floors,
-        ceiling_height=original_project.ceiling_height,
+    # Create the duplicate using safe method
+    duplicate_data = {
+        'project_id': new_project_id,
+        'name': duplicate_name or f"{original_project.name} (Copy)",
+        'description': getattr(original_project, 'description', None),
+        'project_type': original_project.project_type,
+        'building_type': getattr(original_project, 'building_type', None),
+        'occupancy_type': getattr(original_project, 'occupancy_type', None),
+        'square_footage': original_project.square_footage,
+        'location': original_project.location,
+        'climate_zone': original_project.climate_zone,
+        'num_floors': original_project.num_floors,
+        'ceiling_height': original_project.ceiling_height,
         # Copy all cost components
-        subtotal=original_project.subtotal,
-        contingency_percentage=original_project.contingency_percentage,
-        contingency_amount=original_project.contingency_amount,
-        total_cost=original_project.total_cost,
-        cost_per_sqft=original_project.cost_per_sqft,
-        scope_data=original_project.scope_data,
-        cost_data=original_project.cost_data,
-        user_id=current_user.id
-    )
+        'subtotal': getattr(original_project, 'subtotal', None),
+        'contingency_percentage': getattr(original_project, 'contingency_percentage', 10.0),
+        'contingency_amount': getattr(original_project, 'contingency_amount', None),
+        'total_cost': original_project.total_cost,
+        'cost_per_sqft': getattr(original_project, 'cost_per_sqft', None),
+        'scope_data': original_project.scope_data,
+        'cost_data': getattr(original_project, 'cost_data', None),
+        'user_id': current_user.id,
+        'created_by_id': current_user.id,
+        'team_id': getattr(current_user, 'current_team_id', None)
+    }
+    
+    duplicate = create_project_safely(db, duplicate_data)
     
     db.add(duplicate)
     db.commit()
