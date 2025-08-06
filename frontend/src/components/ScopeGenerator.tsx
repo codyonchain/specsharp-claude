@@ -846,26 +846,26 @@ function ScopeGenerator() {
               Describe your building project in natural language. Include whether it's new construction, renovation, or addition:
               <br />
               <br /><strong>New Construction (Ground-Up):</strong>
-              <br />• "New 4000 sf quick service restaurant with drive-through in Nashville"
-              <br />• "Ground-up 75000 sf Class A office building in downtown Boston"
-              <br />• "New 150000 sf hospital with emergency department and 12 ORs in Boston"
-              <br />• "45000 sf surgical center with 6 operating rooms in Nashville"
+              <br />• "New 4000 sf quick service restaurant with drive-through in Nashville, TN"
+              <br />• "Ground-up 75000 sf Class A office building in downtown Boston, MA"
+              <br />• "New 150000 sf hospital with emergency department and 12 ORs in Boston, MA"
+              <br />• "45000 sf surgical center with 6 operating rooms in Nashville, TN"
               <br />• "Build new 25000 sf school from scratch in Concord, NH"
-              <br />• "New 50000 sf warehouse with 6 loading docks in Memphis"
+              <br />• "New 50000 sf warehouse with 6 loading docks in Memphis, TN"
               <br />
               <br /><strong>Renovations (Existing Buildings):</strong>
-              <br />• "Renovate existing 10000 sf office space in downtown Nashville"
-              <br />• "Remodel 5000 sf restaurant, full gut renovation in Manchester"
-              <br />• "Tenant improvement for 8000 sf retail space in Sacramento"
-              <br />• "Convert 20000 sf warehouse to mixed-use with retail and office"
-              <br />• "Modernize existing 25000 sf outpatient clinic with new imaging center"
-              <br />• "Renovate 8000 sf urgent care facility, add x-ray and lab"
+              <br />• "Renovate existing 10000 sf office space in downtown Nashville, TN"
+              <br />• "Remodel 5000 sf restaurant, full gut renovation in Manchester, NH"
+              <br />• "Tenant improvement for 8000 sf retail space in Sacramento, CA"
+              <br />• "Convert 20000 sf warehouse to mixed-use with retail and office in Atlanta, GA"
+              <br />• "Modernize existing 25000 sf outpatient clinic with new imaging center in Dallas, TX"
+              <br />• "Renovate 8000 sf urgent care facility, add x-ray and lab in Phoenix, AZ"
               <br />
               <br /><strong>Additions (Expanding Buildings):</strong>
-              <br />• "Add 3000 sf kitchen expansion to existing restaurant"
-              <br />• "Expand hospital with new 50000 sf surgical wing in Manchester"
-              <br />• "15000 sf office addition with underground parking"
-              <br />• "Add 35000 sf medical office wing with cancer center to existing building"
+              <br />• "Add 3000 sf kitchen expansion to existing restaurant in Nashville, TN"
+              <br />• "Expand hospital with new 50000 sf surgical wing in Manchester, NH"
+              <br />• "15000 sf office addition with underground parking in Denver, CO"
+              <br />• "Add 35000 sf medical office wing with cancer center to existing building in Houston, TX"
             </p>
             
             <div className="form-group">
