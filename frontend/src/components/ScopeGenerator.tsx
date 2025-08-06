@@ -295,47 +295,108 @@ function ScopeGenerator() {
       'wisconsin': 'WI', 'wyoming': 'WY', 'district of columbia': 'DC', 'dc': 'DC'
     };
     
-    // Look for state names with potential city
-    for (const [stateName, stateCode] of Object.entries(stateMap)) {
-      if (input.toLowerCase().includes(stateName)) {
-        // Try multiple patterns to extract city name
-        const patterns = [
-          // Pattern 1: "in [city], [state]" (with comma)
-          new RegExp(`\\bin\\s+([A-Za-z\\s]+?),\\s*${stateName.replace(/\s+/g, '\\s+')}`, 'i'),
-          // Pattern 2: "in [city] [state]" (without comma)
-          new RegExp(`\\bin\\s+([A-Za-z\\s]+?)\\s+${stateName.replace(/\s+/g, '\\s+')}`, 'i'),
-        ];
+    // Common city names to look for
+    const knownCities = [
+      'Nashville', 'Memphis', 'Knoxville', 'Chattanooga', 'Franklin', 'Murfreesboro', // TN
+      'Boston', 'Cambridge', 'Worcester', 'Springfield', // MA
+      'Manchester', 'Nashua', 'Concord', // NH
+      'New York', 'Brooklyn', 'Buffalo', 'Rochester', // NY
+      'Los Angeles', 'San Francisco', 'San Diego', 'Sacramento', 'San Jose', // CA
+      'Chicago', 'Aurora', 'Rockford', // IL
+      'Houston', 'Dallas', 'Austin', 'San Antonio', 'Fort Worth', // TX
+      'Phoenix', 'Tucson', 'Mesa', // AZ
+      'Philadelphia', 'Pittsburgh', // PA
+      'Detroit', 'Grand Rapids', // MI
+      'Seattle', 'Spokane', 'Tacoma', // WA
+      'Denver', 'Colorado Springs', // CO
+      'Atlanta', 'Augusta', 'Columbus', // GA
+      'Miami', 'Orlando', 'Tampa', 'Jacksonville', // FL
+      'Portland', 'Eugene', // OR
+      'Las Vegas', 'Henderson', 'Reno', // NV
+      'Milwaukee', 'Madison', // WI
+      'Minneapolis', 'St. Paul', // MN
+    ];
+    
+    // First, try to find known cities
+    for (const city of knownCities) {
+      const cityRegex = new RegExp(`\b${city}\b`, 'i');
+      if (cityRegex.test(input)) {
+        // Try to find the state context
+        const cityLower = city.toLowerCase();
         
-        let cityMatch = null;
-        for (const pattern of patterns) {
-          const match = pattern.exec(input);
-          if (match && match[1].trim()) {
-            const cityPart = match[1].trim();
-            // More strict validation - exclude common building-related words
-            const excludeWords = /\b(sf|sqft|square|feet|floor|story|building|restaurant|office|warehouse|retail|commercial|industrial|residential|kitchen|dining|room|space|with|and|or)\b/i;
-            // Split by spaces and filter out building-related words
-            const words = cityPart.split(/\s+/).filter(word => !excludeWords.test(word));
-            if (words.length > 0 && !/\d/.test(words.join(' '))) {
-              cityMatch = words.join(' ');
-              break;
+        // Map cities to their states
+        const cityStateMap: { [key: string]: string } = {
+          'nashville': 'TN', 'memphis': 'TN', 'knoxville': 'TN', 'chattanooga': 'TN', 'franklin': 'TN', 'murfreesboro': 'TN',
+          'boston': 'MA', 'cambridge': 'MA', 'worcester': 'MA', 'springfield': 'MA',
+          'manchester': 'NH', 'nashua': 'NH', 'concord': 'NH',
+          'new york': 'NY', 'brooklyn': 'NY', 'buffalo': 'NY', 'rochester': 'NY',
+          'los angeles': 'CA', 'san francisco': 'CA', 'san diego': 'CA', 'sacramento': 'CA', 'san jose': 'CA',
+          'chicago': 'IL', 'aurora': 'IL', 'rockford': 'IL',
+          'houston': 'TX', 'dallas': 'TX', 'austin': 'TX', 'san antonio': 'TX', 'fort worth': 'TX',
+          'phoenix': 'AZ', 'tucson': 'AZ', 'mesa': 'AZ',
+          'philadelphia': 'PA', 'pittsburgh': 'PA',
+          'detroit': 'MI', 'grand rapids': 'MI',
+          'seattle': 'WA', 'spokane': 'WA', 'tacoma': 'WA',
+          'denver': 'CO', 'colorado springs': 'CO',
+          'atlanta': 'GA', 'augusta': 'GA', 'columbus': 'GA',
+          'miami': 'FL', 'orlando': 'FL', 'tampa': 'FL', 'jacksonville': 'FL',
+          'portland': 'OR', 'eugene': 'OR',
+          'las vegas': 'NV', 'henderson': 'NV', 'reno': 'NV',
+          'milwaukee': 'WI', 'madison': 'WI',
+          'minneapolis': 'MN', 'st. paul': 'MN',
+        };
+        
+        const stateCode = cityStateMap[cityLower];
+        if (stateCode) {
+          result.location = `${city}, ${stateCode}`;
+          break;
+        }
+      }
+    };
+    
+    // If no known city found, look for state names with potential city
+    if (!result.location) {
+      for (const [stateName, stateCode] of Object.entries(stateMap)) {
+        if (input.toLowerCase().includes(stateName)) {
+          // Try multiple patterns to extract city name
+          const patterns = [
+            // Pattern 1: "in [city], [state]" (with comma)
+            new RegExp(`\\bin\\s+([A-Za-z\\s]+?),\\s*${stateName.replace(/\s+/g, '\\s+')}`, 'i'),
+            // Pattern 2: "in [city] [state]" (without comma)
+            new RegExp(`\\bin\\s+([A-Za-z\\s]+?)\\s+${stateName.replace(/\s+/g, '\\s+')}`, 'i'),
+          ];
+          
+          let cityMatch = null;
+          for (const pattern of patterns) {
+            const match = pattern.exec(input);
+            if (match && match[1].trim()) {
+              const cityPart = match[1].trim();
+              // More strict validation - exclude common building-related words
+              const excludeWords = /\b(sf|sqft|square|feet|floor|story|building|restaurant|office|warehouse|retail|commercial|industrial|residential|kitchen|dining|room|space|with|and|or|surgical|surgery|center|hospital|clinic|medical)\b/i;
+              // Split by spaces and filter out building-related words
+              const words = cityPart.split(/\s+/).filter(word => !excludeWords.test(word));
+              if (words.length > 0 && !/\d/.test(words.join(' '))) {
+                cityMatch = words.join(' ');
+                break;
+              }
             }
           }
+          
+          if (cityMatch) {
+            // Capitalize the city properly
+            const formattedCity = cityMatch.split(' ').map(word => 
+              word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+            ).join(' ');
+            result.location = `${formattedCity}, ${stateCode}`;
+          } else {
+            // No city found, just use state with proper capitalization
+            const formattedState = stateName.split(' ').map(word => 
+              word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+            ).join(' ');
+            result.location = `${formattedState}, ${stateCode}`;
+          }
+          break;
         }
-        
-        if (cityMatch) {
-          // Capitalize the city properly
-          const formattedCity = cityMatch.split(' ').map(word => 
-            word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-          ).join(' ');
-          result.location = `${formattedCity}, ${stateCode}`;
-        } else {
-          // No city found, just use state with proper capitalization
-          const formattedState = stateName.split(' ').map(word => 
-            word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-          ).join(' ');
-          result.location = `${formattedState}, ${stateCode}`;
-        }
-        break;
       }
     }
     
@@ -560,9 +621,51 @@ function ScopeGenerator() {
       }
     }
     
-    // Generate project name if not specified
-    if (!result.project_name && result.project_type) {
-      result.project_name = `${result.project_type.charAt(0).toUpperCase() + result.project_type.slice(1)} Building Project`;
+    // Generate a smart project name based on parsed details
+    if (!result.project_name) {
+      // Build a descriptive name from the components we found
+      const parts = [];
+      
+      // Add project classification if not ground-up
+      if (result.project_classification === 'renovation') {
+        parts.push('Renovation:');
+      } else if (result.project_classification === 'addition') {
+        parts.push('Addition:');
+      }
+      
+      // Add square footage if available
+      if (result.square_footage) {
+        parts.push(`${result.square_footage.toLocaleString()} SF`);
+      }
+      
+      // Add occupancy type
+      if (result.occupancy_type) {
+        const typeMap: {[key: string]: string} = {
+          'office': 'Office',
+          'retail': 'Retail',
+          'restaurant': 'Restaurant',
+          'warehouse': 'Warehouse',
+          'medical': 'Medical',
+          'hospital': 'Hospital',
+          'surgical_center': 'Surgical Center',
+          'clinic': 'Clinic',
+          'urgent_care': 'Urgent Care',
+          'school': 'School',
+          'residential': 'Residential',
+          'mixed_use': 'Mixed-Use'
+        };
+        parts.push(typeMap[result.occupancy_type] || result.occupancy_type);
+      } else if (result.project_type) {
+        parts.push(result.project_type.charAt(0).toUpperCase() + result.project_type.slice(1));
+      }
+      
+      // Add location if available
+      if (result.location) {
+        parts.push('-');
+        parts.push(result.location.split(',')[0]); // Just city name
+      }
+      
+      result.project_name = parts.join(' ');
     }
     
     // Parse finish level
