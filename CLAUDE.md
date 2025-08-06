@@ -221,3 +221,73 @@ See `backend/app/services/cost_service.py` and `backend/app/core/engine.py` for 
 - Any detected discrepancy > $1 triggers a warning log
 
 This architecture ensures absolute trust in displayed numbers across all views.
+
+## Database Schema Management
+
+### PostgreSQL Production Database
+- **CRITICAL**: Production uses PostgreSQL, not SQLite
+- Schema changes require migrations to avoid breaking production
+- Always test migrations locally before deploying
+
+### Emergency Fix Procedures
+If users can't see projects or create new ones:
+```bash
+# Run emergency fix immediately
+cd backend
+python emergency_fix_schema.py
+```
+
+### Running Migrations
+```bash
+# For comprehensive migration (handles both PostgreSQL and SQLite)
+cd backend
+python migrations/002_add_all_missing_columns.py
+
+# Check database health before deployment
+python db_health_check.py
+```
+
+### Schema Health Monitoring
+Before deploying any changes that modify models:
+1. Run `python db_health_check.py` to verify schema sync
+2. Create migration if schema changes detected
+3. Test migration on local database first
+4. Deploy code and run migration in production
+
+### Current Schema Version (v2.0)
+Critical columns added for cost consistency:
+- `subtotal`: Base construction cost before contingency
+- `contingency_percentage`: Default 10%
+- `contingency_amount`: Calculated contingency value
+- `cost_per_sqft`: Total cost / square footage
+- `project_classification`: ground_up, addition, or renovation
+- `cost_data`: Detailed JSON cost breakdown
+
+### Common Schema Issues & Fixes
+
+#### Issue: "column does not exist" errors
+**Cause**: Model updated but database schema not migrated
+**Fix**: Run `python emergency_fix_schema.py`
+
+#### Issue: Projects not showing in dashboard
+**Cause**: Missing required columns causing query failures
+**Fix**: 
+1. Check logs for specific column errors
+2. Run emergency fix script
+3. Verify with health check
+
+#### Issue: Can't create new projects
+**Cause**: INSERT fails due to missing columns
+**Fix**: Run migration to add all columns
+
+### Database Connection Info
+- **Production**: PostgreSQL via DATABASE_URL environment variable
+- **Development**: SQLite at `backend/specsharp.db`
+- **Test Locally**: Set DATABASE_URL to match production format
+
+### Migration Best Practices
+1. **Never** modify models without creating a migration
+2. **Always** test migrations on a copy of production data
+3. **Document** schema changes in migrations folder
+4. **Run** health check after migrations
+5. **Keep** emergency fix script updated with latest columns
