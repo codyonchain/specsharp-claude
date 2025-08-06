@@ -582,7 +582,7 @@ function ScopeGenerator() {
     return result;
   };
 
-  const handleNaturalLanguageSubmit = () => {
+  const handleNaturalLanguageSubmit = (submitImmediately = false) => {
     const parsed = parseNaturalLanguage(naturalLanguageInput);
     
     // If no occupancy type was detected, use the building type detection utility
@@ -596,14 +596,16 @@ function ScopeGenerator() {
     console.log('Parsed location specifically:', parsed.location);
     console.log('Detected project classification:', parsed.project_classification);
     
-    // Merge with form data
+    // Include the natural language input for backend smart naming
     const updatedFormData = {
       ...formData,
       ...parsed,
-      // Ensure required fields have values
-      project_name: parsed.project_name || formData.project_name || 'New Project',
+      // Let backend generate smart name, but provide fallback
+      project_name: parsed.project_name || formData.project_name || '',
       location: parsed.location || formData.location || 'Nashville, Tennessee',
       square_footage: parsed.square_footage || formData.square_footage || 10000,
+      // Pass natural language for backend processing
+      special_requirements: naturalLanguageInput,
     };
     
     // Safety check: ensure location is not the full input
@@ -627,26 +629,31 @@ function ScopeGenerator() {
       setTimeout(() => setClassificationAutoSelected(false), 3000);
     }
     
-    // Switch to form mode to show parsed results
+    // If submitImmediately is true, submit the form directly
+    if (submitImmediately) {
+      return updatedFormData;
+    }
+    
+    // Otherwise switch to form mode to show parsed results
     setInputMode('form');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // If in natural language mode, parse first
+    // If in natural language mode, parse and get the updated form data
+    let submitData = formData;
     if (inputMode === 'natural' && naturalLanguageInput) {
-      handleNaturalLanguageSubmit();
-      return;
+      submitData = handleNaturalLanguageSubmit(true) || formData;
     }
     
     setLoading(true);
     setError('');
 
     // Parse building mix from special requirements if it's a mixed_use project
-    let finalFormData = { ...formData };
-    if (formData.project_type === 'mixed_use' && formData.special_requirements && !formData.building_mix) {
-      const parsedData = parseNaturalLanguage(formData.special_requirements);
+    let finalFormData = { ...submitData };
+    if (submitData.project_type === 'mixed_use' && submitData.special_requirements && !submitData.building_mix) {
+      const parsedData = parseNaturalLanguage(submitData.special_requirements);
       if (parsedData.building_mix) {
         finalFormData.building_mix = parsedData.building_mix;
         console.log('Extracted building mix from special requirements:', parsedData.building_mix);
@@ -727,21 +734,29 @@ function ScopeGenerator() {
             <p className="help-text">
               Describe your building project in natural language. Include whether it's new construction, renovation, or addition:
               <br />
+              <br /><strong>Healthcare Facilities:</strong>
+              <br />• "New 150000 sf hospital with emergency department and 12 ORs in Boston"
+              <br />• "45000 sf surgical center with 6 operating rooms in Nashville"
+              <br />• "25000 sf outpatient clinic with imaging center in Manchester, NH"
+              <br />• "8000 sf urgent care facility with x-ray and lab in Franklin, TN"
+              <br />• "35000 sf medical office building with cancer center in Sacramento"
+              <br />
               <br /><strong>New Construction (Ground-Up):</strong>
-              <br />• "New 4000 sf restaurant on empty lot in Nashville, TN"
-              <br />• "Ground-up construction of 75000 sf medical office building in Manchester, NH"
+              <br />• "New 4000 sf quick service restaurant with drive-through in Nashville"
+              <br />• "Ground-up 75000 sf Class A office building in downtown Boston"
               <br />• "Build new 25000 sf school from scratch in Concord, NH"
+              <br />• "New 50000 sf warehouse with 6 loading docks in Memphis"
               <br />
               <br /><strong>Renovations (Existing Buildings):</strong>
               <br />• "Renovate existing 10000 sf office space in downtown Nashville"
-              <br />• "Remodel 5000 sf restaurant, full gut renovation in Manchester, NH"
-              <br />• "Tenant improvement for 8000 sf retail space in Sacramento, CA"
-              <br />• "Modernize existing 20000 sf warehouse, convert to mixed-use"
+              <br />• "Remodel 5000 sf restaurant, full gut renovation in Manchester"
+              <br />• "Tenant improvement for 8000 sf retail space in Sacramento"
+              <br />• "Convert 20000 sf warehouse to mixed-use with retail and office"
               <br />
               <br /><strong>Additions (Expanding Buildings):</strong>
-              <br />• "Add 3000 sf addition to existing restaurant in Nashville"
-              <br />• "Expand hospital with new 50000 sf wing in Manchester, NH"
-              <br />• "Building extension adding 15000 sf to existing office"
+              <br />• "Add 3000 sf kitchen expansion to existing restaurant"
+              <br />• "Expand hospital with new 50000 sf surgical wing in Manchester"
+              <br />• "15000 sf office addition with underground parking"
             </p>
             
             <div className="form-group">
@@ -793,8 +808,12 @@ function ScopeGenerator() {
                 type="text"
                 value={formData.project_name}
                 onChange={handleChange}
-                required
+                placeholder="Auto-generated based on your description"
+                required={false}
               />
+              {!formData.project_name && (
+                <small className="help-text">Name will be auto-generated from your project details</small>
+              )}
             </div>
 
             <div className="form-group">
