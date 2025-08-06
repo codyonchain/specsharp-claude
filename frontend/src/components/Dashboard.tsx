@@ -425,6 +425,9 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
                     {formatCurrency(project.total_cost)}
                     {project.square_footage && ` (${formatCurrencyPerSF(project.total_cost / project.square_footage)})`}
                   </p>
+                  <p className="project-date" style={{ fontSize: '0.8rem', color: '#888', marginTop: '0.25rem' }}>
+                    Created {new Date(project.created_at).toLocaleDateString()}
+                  </p>
                   {primaryMetric && (
                     <div className="developer-metric">
                       <span className="metric-label">{primaryMetric.label}:</span>

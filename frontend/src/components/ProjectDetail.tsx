@@ -907,6 +907,12 @@ function ProjectDetail() {
               <label>{selectedTrade !== 'general' ? `${TRADE_CATEGORY_MAP[selectedTrade]} Total Cost:` : 'Total Project Cost:'}</label>
               <span>{formatCurrency(filteredTotals.total)}</span>
             </div>
+            {project.created_at && selectedTrade === 'general' && (
+              <div className="cost-calculated-info" style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#666' }}>
+                <span style={{ marginRight: '0.25rem' }}>ⓘ</span>
+                Costs calculated on {new Date(project.created_at).toLocaleDateString()}
+              </div>
+            )}
           </div>
         </div>
       </div>

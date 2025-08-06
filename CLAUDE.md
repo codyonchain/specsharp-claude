@@ -190,3 +190,34 @@ The application uses deterministic pricing based on:
   - Phased construction premium (1.5%)
 
 See `backend/app/services/cost_service.py` and `backend/app/core/engine.py` for implementation details.
+
+### Cost Calculation Architecture
+
+**Core Principle**: "Calculate once, store completely, display consistently"
+
+#### How It Works:
+1. **Costs are calculated ONCE at project creation** - All calculations happen in the backend when a project is generated
+2. **All views display stored values from database** - Dashboard, detail view, and reports all use the same stored values
+3. **Recalculation only happens when user explicitly updates project** - Manual refresh or project edit triggers recalculation
+4. **Database values always override scope_data JSON if discrepancy exists** - Database is the single source of truth
+
+#### Data Integrity:
+- **Validation**: `validate_project_costs()` ensures mathematical consistency on save
+- **Monitoring**: Cost discrepancies are automatically logged with warnings
+- **Audit Trail**: All cost calculations are logged with full details
+- **Migration**: `fix_cost_consistency.py` ensures existing projects are consistent
+
+#### Database Fields:
+- `subtotal` - Base construction cost before contingency
+- `contingency_percentage` - Percentage for contingency (default 10%)
+- `contingency_amount` - Calculated contingency amount
+- `total_cost` - Final total (subtotal + contingency)
+- `cost_per_sqft` - Total cost / square footage
+
+#### Consistency Rules:
+- The `/projects/{project_id}` endpoint ensures scope_data values match database values
+- Dashboard and Detail views MUST display the SAME stored values
+- If filtering by trade, use stored component values rather than recalculating
+- Any detected discrepancy > $1 triggers a warning log
+
+This architecture ensures absolute trust in displayed numbers across all views.

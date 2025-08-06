@@ -15,6 +15,12 @@ from app.services.architectural_floor_plan_service import architectural_floor_pl
 from app.services.trade_summary_service import trade_summary_service
 from app.services.markup_service import markup_service
 from app.services.nlp_service import nlp_service
+from app.utils.cost_validation import (
+    validate_project_costs, 
+    detect_cost_discrepancy, 
+    log_cost_calculation,
+    CostValidationError
+)
 from app.db.database import get_db
 from app.db.models import Project, User
 from app.api.endpoints.auth import get_current_user_with_cookie
@@ -147,6 +153,10 @@ async def generate_scope(
             climate_zone=scope_request.climate_zone.value if scope_request.climate_zone else None,
             num_floors=scope_request.num_floors,
             ceiling_height=scope_request.ceiling_height,
+            # Store all cost components for consistency across views
+            subtotal=scope_response.subtotal,
+            contingency_percentage=scope_response.contingency_percentage,
+            contingency_amount=scope_response.contingency_amount,
             total_cost=scope_response_dict.get('total_cost', scope_response.total_cost),
             cost_per_sqft=scope_response_dict.get('cost_per_sqft', scope_response.cost_per_sqft),
             scope_data=json.dumps(scope_response_dict, default=str),  # Save complete data including trade summaries
@@ -154,6 +164,25 @@ async def generate_scope(
             user_id=current_user.id,
             created_by_id=current_user.id,
             team_id=user.current_team_id  # Associate with user's current team
+        )
+        
+        # Validate cost consistency before saving
+        try:
+            validate_project_costs(db_project)
+        except CostValidationError as e:
+            logger.error(f"Cost validation failed for new project: {e}")
+            # Continue anyway but log the issue for investigation
+        
+        # Log cost calculation for audit trail
+        log_cost_calculation(
+            project_id=db_project.project_id,
+            project_name=db_project.name,
+            subtotal=db_project.subtotal,
+            contingency_percentage=db_project.contingency_percentage,
+            contingency_amount=db_project.contingency_amount,
+            total_cost=db_project.total_cost,
+            cost_per_sqft=db_project.cost_per_sqft,
+            square_footage=db_project.square_footage
         )
         
         db.add(db_project)
@@ -230,6 +259,10 @@ async def list_projects(
             "description": p.Project.description,
             "square_footage": p.Project.square_footage,
             "location": p.Project.location,
+            # Include all cost components for consistency
+            "subtotal": p.Project.subtotal,
+            "contingency_percentage": p.Project.contingency_percentage,
+            "contingency_amount": p.Project.contingency_amount,
             "total_cost": p.Project.total_cost,
             "cost_per_sqft": p.Project.cost_per_sqft,
             "created_at": p.Project.created_at,
@@ -324,6 +357,10 @@ async def search_projects(
             "description": p.Project.description,
             "square_footage": p.Project.square_footage,
             "location": p.Project.location,
+            # Include all cost components for consistency
+            "subtotal": p.Project.subtotal,
+            "contingency_percentage": p.Project.contingency_percentage,
+            "contingency_amount": p.Project.contingency_amount,
             "total_cost": p.Project.total_cost,
             "cost_per_sqft": p.Project.cost_per_sqft,
             "created_at": p.Project.created_at,
@@ -349,13 +386,8 @@ async def get_project(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_with_cookie)
 ):
-    # Optimize query by selecting only needed columns
-    project = db.query(
-        Project.project_id,
-        Project.square_footage,
-        Project.project_type,
-        Project.scope_data
-    ).filter(
+    # Get ALL columns including cost components for consistency
+    project = db.query(Project).filter(
         Project.project_id == project_id,
         Project.user_id == current_user.id
     ).first()
@@ -365,6 +397,25 @@ async def get_project(
     
     # Parse stored scope data efficiently
     scope_data = json.loads(project.scope_data)
+    
+    # Detect any discrepancies between stored JSON and database values
+    if 'total_cost' in scope_data:
+        discrepancy = detect_cost_discrepancy(
+            stored_total=project.total_cost,
+            calculated_total=scope_data.get('total_cost', 0),
+            project_id=project.project_id,
+            project_name=project.name
+        )
+        if discrepancy:
+            logger.warning(f"Correcting cost discrepancy of ${discrepancy:.2f} for project {project.project_id}")
+    
+    # CRITICAL: Override scope data with database values to ensure consistency
+    # These values are the source of truth and MUST match what's shown in dashboard
+    scope_data['subtotal'] = project.subtotal if project.subtotal is not None else scope_data.get('subtotal', 0)
+    scope_data['contingency_percentage'] = project.contingency_percentage if project.contingency_percentage is not None else scope_data.get('contingency_percentage', 10)
+    scope_data['contingency_amount'] = project.contingency_amount if project.contingency_amount is not None else scope_data.get('contingency_amount', 0)
+    scope_data['total_cost'] = project.total_cost
+    scope_data['cost_per_sqft'] = project.cost_per_sqft
     
     # Check if floor plan already exists in stored data
     if 'floor_plan' not in scope_data or not scope_data.get('floor_plan'):
@@ -513,6 +564,10 @@ async def duplicate_project(
         climate_zone=original_project.climate_zone,
         num_floors=original_project.num_floors,
         ceiling_height=original_project.ceiling_height,
+        # Copy all cost components
+        subtotal=original_project.subtotal,
+        contingency_percentage=original_project.contingency_percentage,
+        contingency_amount=original_project.contingency_amount,
         total_cost=original_project.total_cost,
         cost_per_sqft=original_project.cost_per_sqft,
         scope_data=original_project.scope_data,

@@ -62,8 +62,14 @@ class Project(Base):
     climate_zone = Column(String, nullable=True)
     num_floors = Column(Integer, default=1)
     ceiling_height = Column(Float, default=9.0)
-    total_cost = Column(Float, nullable=False)
-    cost_per_sqft = Column(Float, nullable=True)
+    
+    # Cost components - store all separately for consistency
+    subtotal = Column(Float, nullable=True)  # Base construction cost
+    contingency_percentage = Column(Float, default=10.0)  # Contingency percentage
+    contingency_amount = Column(Float, nullable=True)  # Contingency amount
+    total_cost = Column(Float, nullable=False)  # Final total (subtotal + contingency)
+    cost_per_sqft = Column(Float, nullable=True)  # Total cost / square footage
+    
     scope_data = Column(Text, nullable=False)  # Full scope response JSON
     cost_data = Column(Text, nullable=True)  # Detailed cost breakdown JSON
     
