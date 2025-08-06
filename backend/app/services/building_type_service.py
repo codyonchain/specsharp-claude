@@ -162,6 +162,8 @@ class BuildingTypeService:
         return {
             'restaurant': self._get_restaurant_config(),
             'hospital': self._get_hospital_config(),
+            'healthcare': self._get_hospital_config(),  # Alias for hospital
+            'medical': self._get_hospital_config(),     # Another alias
             'school': self._get_school_config()
         }
     
@@ -292,7 +294,7 @@ class BuildingTypeService:
         )
     
     def _get_hospital_config(self) -> BuildingTypeConfig:
-        """Placeholder for hospital configuration"""
+        """Enhanced hospital/healthcare configuration with accurate costs"""
         service_levels = [
             ServiceLevel.OUTPATIENT_CLINIC,
             ServiceLevel.COMMUNITY_HOSPITAL,
@@ -300,26 +302,105 @@ class BuildingTypeService:
             ServiceLevel.TEACHING_HOSPITAL
         ]
         
-        features = {}  # To be implemented
+        features = {
+            'emergency_department': BuildingFeature(
+                key='emergency_department',
+                label='Emergency Department',
+                cost_per_sqft=75,
+                description='24/7 emergency room with trauma capabilities'
+            ),
+            'surgical_suite': BuildingFeature(
+                key='surgical_suite',
+                label='Operating Room Suite',
+                cost_per_sqft=100,
+                description='Fully equipped OR with support spaces'
+            ),
+            'imaging_center': BuildingFeature(
+                key='imaging_center',
+                label='Medical Imaging Center',
+                cost_per_sqft=60,
+                description='MRI, CT, X-ray with shielding'
+            ),
+            'intensive_care': BuildingFeature(
+                key='intensive_care',
+                label='ICU/Critical Care Unit',
+                cost_per_sqft=80,
+                description='Intensive care unit with monitoring'
+            ),
+            'laboratory': BuildingFeature(
+                key='laboratory',
+                label='Medical Laboratory',
+                cost_per_sqft=45,
+                description='Clinical lab with specialized equipment'
+            ),
+            'pharmacy': BuildingFeature(
+                key='pharmacy',
+                label='In-house Pharmacy',
+                cost_per_sqft=35,
+                description='Medication storage and dispensing'
+            )
+        }
         
         trade_allocations = {
             'outpatient_clinic': {
-                'structural': 0.15,
-                'mechanical': 0.25,
-                'electrical': 0.20,
-                'plumbing': 0.15,
-                'finishes': 0.20,
-                'general_conditions': 0.05
+                'structural': 0.12,
+                'mechanical': 0.28,      # Enhanced HVAC, some medical gas
+                'electrical': 0.15,       # Medical equipment power
+                'plumbing': 0.12,         # Exam room requirements
+                'finishes': 0.20,         # Patient-friendly finishes
+                'general_conditions': 0.13
             },
-            # Add other service levels
+            'community_hospital': {
+                'structural': 0.15,       # Heavier structure for equipment
+                'mechanical': 0.35,       # Complex HVAC, medical gas systems
+                'electrical': 0.20,       # Redundant power, emergency systems
+                'plumbing': 0.15,         # Medical gas, special drainage
+                'finishes': 0.08,         # Medical-grade finishes
+                'general_conditions': 0.07
+            },
+            'regional_medical_center': {
+                'structural': 0.15,
+                'mechanical': 0.36,       # Very complex MEP
+                'electrical': 0.21,       # High power requirements
+                'plumbing': 0.15,
+                'finishes': 0.07,
+                'general_conditions': 0.06
+            },
+            'teaching_hospital': {
+                'structural': 0.14,
+                'mechanical': 0.37,       # Research lab requirements
+                'electrical': 0.22,       # Teaching equipment
+                'plumbing': 0.15,
+                'finishes': 0.06,
+                'general_conditions': 0.06
+            }
         }
         
+        # Updated base costs to reflect accurate healthcare pricing
         base_costs = {
             'default': {
-                'outpatient_clinic': 300,
-                'community_hospital': 450,
-                'regional_medical_center': 600,
-                'teaching_hospital': 750
+                'outpatient_clinic': 375,           # Was 300, now accurate
+                'community_hospital': 550,          # Was 450, now accurate
+                'regional_medical_center': 625,     # Was 600, minor adjustment
+                'teaching_hospital': 700            # Was 750, adjusted
+            },
+            'CA': {  # California costs higher
+                'outpatient_clinic': 425,
+                'community_hospital': 625,
+                'regional_medical_center': 700,
+                'teaching_hospital': 800
+            },
+            'NY': {  # New York costs higher
+                'outpatient_clinic': 450,
+                'community_hospital': 650,
+                'regional_medical_center': 725,
+                'teaching_hospital': 825
+            },
+            'TX': {  # Texas costs lower
+                'outpatient_clinic': 350,
+                'community_hospital': 500,
+                'regional_medical_center': 575,
+                'teaching_hospital': 650
             }
         }
         

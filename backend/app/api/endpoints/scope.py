@@ -15,6 +15,7 @@ from app.services.architectural_floor_plan_service import architectural_floor_pl
 from app.services.trade_summary_service import trade_summary_service
 from app.services.markup_service import markup_service
 from app.services.nlp_service import nlp_service
+from app.services.cost_dna_service import cost_calculation_engine
 from app.utils.cost_validation import (
     validate_project_costs, 
     detect_cost_discrepancy, 
@@ -180,6 +181,38 @@ async def generate_scope(
         # Update scope_response with trade summaries for storage
         scope_response_dict = scope_response.model_dump()
         scope_response_dict['trade_summaries'] = scope_dict['trade_summaries']
+        
+        # Generate Cost DNA analysis
+        try:
+            cost_dna_data = cost_calculation_engine.calculate_with_dna(
+                square_footage=scope_request.square_footage,
+                occupancy_type=scope_request.occupancy_type,
+                location=scope_request.location if scope_request.location else "National Average",
+                project_classification=getattr(scope_request, 'project_classification', 'ground_up'),
+                description=scope_request.special_requirements or "",
+                finish_level=getattr(scope_request, 'finish_level', 'standard'),
+                building_mix=getattr(scope_request, 'building_mix', None)
+            )
+            
+            # Add Cost DNA to response
+            scope_response_dict['cost_dna'] = cost_dna_data['cost_dna']
+            scope_response_dict['confidence_score'] = cost_dna_data['confidence_score']
+            scope_response_dict['comparable_projects'] = cost_dna_data['comparable_projects']
+            scope_response_dict['cost_calculation_date'] = cost_dna_data['calculation_date']
+            scope_response_dict['market_data_version'] = cost_dna_data['market_data_version']
+            
+            logger.info(f"""
+            Cost DNA Generated:
+            - Project: {scope_request.project_name}
+            - Detected Factors: {len(cost_dna_data['cost_dna']['detected_factors'])}
+            - Confidence: {cost_dna_data['confidence_score']}%
+            - Total: ${cost_dna_data['total_cost']:,.2f}
+            """)
+        except Exception as e:
+            logger.error(f"Error generating Cost DNA: {str(e)}")
+            # Continue without Cost DNA if it fails
+            scope_response_dict['cost_dna'] = None
+            scope_response_dict['confidence_score'] = 75  # Default confidence
         
         # Apply markups to the scope
         scope_response_dict = markup_service.apply_markup_to_scope(

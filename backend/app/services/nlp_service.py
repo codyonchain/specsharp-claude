@@ -5,6 +5,7 @@ from enum import Enum
 from app.core.config import settings
 from app.core.floor_parser import extract_floors
 from app.core.building_type_detector import determine_building_type, get_building_subtype
+from app.services.healthcare_cost_service import healthcare_cost_service
 
 # Optional imports
 try:
@@ -54,6 +55,56 @@ class NLPService:
             "two_bedroom": re.compile(r'(\d+)\s*(?:2\s*br|2\s*bed|two\s*bed|2-bed)', re.IGNORECASE),
             "three_bedroom": re.compile(r'(\d+)\s*(?:3\s*br|3\s*bed|three\s*bed|3-bed)', re.IGNORECASE),
         }
+    
+    def detect_healthcare_type(self, text: str) -> Optional[Dict[str, Any]]:
+        """
+        Detect if the project is a healthcare facility and return details
+        
+        Returns:
+            Dictionary with healthcare details or None if not healthcare
+        """
+        text_lower = text.lower()
+        
+        # Check if this is a healthcare project
+        is_healthcare = False
+        healthcare_type = None
+        
+        for category, keywords in self.keywords.get("healthcare", {}).items():
+            for keyword in keywords:
+                if keyword in text_lower:
+                    is_healthcare = True
+                    healthcare_type = category
+                    break
+            if is_healthcare:
+                break
+        
+        if not is_healthcare:
+            # Also check general healthcare terms
+            general_healthcare = ["healthcare", "medical", "health facility", "health care"]
+            for term in general_healthcare:
+                if term in text_lower:
+                    is_healthcare = True
+                    healthcare_type = "medical_office"  # Default
+                    break
+        
+        if is_healthcare:
+            # Get detailed healthcare analysis
+            healthcare_details = healthcare_cost_service.get_healthcare_cost(
+                description=text,
+                occupancy_type="healthcare"
+            )
+            
+            return {
+                "is_healthcare": True,
+                "healthcare_type": healthcare_type,
+                "facility_type": healthcare_details.get("facility_type"),
+                "base_cost_per_sf": healthcare_details.get("adjusted_cost_per_sf"),
+                "features": healthcare_details.get("features"),
+                "complexity": healthcare_details.get("complexity"),
+                "trade_breakdown": healthcare_details.get("trade_breakdown")
+            }
+        
+        return None
     
     def detect_project_classification(self, text: str) -> str:
         """
@@ -140,6 +191,22 @@ class NLPService:
                              "rehab", "redesign", "makeover", "restoration", "conversion", "tenant improvement",
                              "TI", "build-out", "buildout", "existing space", "existing building"]
             },
+            "healthcare": {
+                "hospital": ["hospital", "medical center", "health center", "trauma center", 
+                           "emergency department", "emergency room", "acute care", "inpatient"],
+                "surgical": ["surgical center", "surgery center", "operating room", "OR suite",
+                           "ambulatory surgery", "outpatient surgery", "procedure room"],
+                "imaging": ["imaging center", "radiology", "MRI", "CT scan", "x-ray", 
+                          "diagnostic imaging", "pet scan", "mammography"],
+                "outpatient": ["outpatient", "clinic", "urgent care", "walk-in clinic",
+                             "ambulatory care", "immediate care"],
+                "medical_office": ["medical office", "doctor office", "physician office",
+                                 "primary care", "family medicine", "specialist"],
+                "specialty": ["cancer center", "cardiac center", "pediatric", "maternity",
+                            "oncology", "cardiology", "neurology", "orthopedic"],
+                "senior_care": ["nursing home", "assisted living", "senior living", 
+                              "memory care", "long term care", "skilled nursing"]
+            },
         }
     
     def extract_project_details(self, text: str) -> Dict[str, Any]:
@@ -220,15 +287,40 @@ class NLPService:
             extracted["location"] = location
             print(f"[NLP] Extracted location: '{location}' from text: '{text}'")
         
-        # Extract building type using the centralized detector
-        building_type = determine_building_type(text)
-        if building_type and building_type != 'commercial':  # Don't return generic 'commercial'
-            extracted["building_type"] = building_type
+        # Check for healthcare facilities first (highest priority)
+        healthcare_details = self.detect_healthcare_type(text)
+        if healthcare_details:
+            extracted["is_healthcare"] = True
+            extracted["building_type"] = "healthcare"
+            extracted["occupancy_type"] = "healthcare"
+            extracted["healthcare_details"] = healthcare_details
+            extracted["base_cost_per_sf"] = healthcare_details.get("base_cost_per_sf")
+            # Healthcare facilities detected, skip generic building type detection
+        else:
+            # Extract building type using the centralized detector
+            building_type = determine_building_type(text)
+            if building_type and building_type != 'commercial':  # Don't return generic 'commercial'
+                extracted["building_type"] = building_type
         
         # Extract building mix for mixed-use projects
         building_mix = self._extract_building_mix(text)
         if building_mix:
             extracted["building_mix"] = building_mix
+        
+        # Determine occupancy type if not already set
+        if not extracted.get("occupancy_type"):
+            if extracted.get("is_healthcare"):
+                extracted["occupancy_type"] = "healthcare"
+            elif extracted.get("building_type"):
+                extracted["occupancy_type"] = extracted["building_type"]
+        
+        # Generate smart project name
+        suggested_name = self.generate_project_name(text, extracted)
+        extracted["suggested_project_name"] = suggested_name
+        
+        # Add detail suggestions based on occupancy type
+        occupancy = extracted.get("occupancy_type", "")
+        extracted["detail_suggestions"] = self.get_detail_suggestions(occupancy)
         
         return extracted
     
@@ -645,7 +737,11 @@ class NLPService:
             'jackson': 'Mississippi',
             'albany': 'New York',
             'concord': 'New Hampshire',
-            'bristol': 'Tennessee'
+            'bristol': 'Tennessee',
+            'manchester': 'New Hampshire',  # Manchester, NH is the primary Manchester in examples
+            'franklin': 'Tennessee',  # Franklin, TN is common in Nashville area
+            'murfreesboro': 'Tennessee',
+            'nashua': 'New Hampshire'
         }
         
         # Common cities
@@ -662,13 +758,15 @@ class NLPService:
             'Anchorage', 'Honolulu', 'Anaheim', 'Santa Ana', 'Corpus Christi', 'Riverside',
             'Lexington', 'St. Louis', 'Stockton', 'Pittsburgh', 'Cincinnati', 'Saint Paul',
             'Greensboro', 'Lincoln', 'Orlando', 'Irvine', 'Newark', 'Durham', 'Chula Vista',
-            'Fort Wayne', 'Jersey City', 'St. Petersburg', 'Laredo', 'Buffalo', 'Madison'
+            'Fort Wayne', 'Jersey City', 'St. Petersburg', 'Laredo', 'Buffalo', 'Madison',
+            # Add cities from our examples
+            'Manchester', 'Franklin', 'Murfreesboro', 'Nashua', 'Concord'
         ]
         
         text_lower = text.lower()
         
-        # Try to find "in [location]" pattern
-        in_pattern = re.compile(r'\bin\s+([A-Za-z\s,]+?)(?:\.|$|\s+\d)', re.IGNORECASE)
+        # Try to find "in [location]" pattern, including "downtown"
+        in_pattern = re.compile(r'\bin\s+((?:downtown\s+)?[A-Za-z\s,]+?)(?:\.|$|\s+(?:with|including|featuring)|\Z)', re.IGNORECASE)
         match = in_pattern.search(text)
         if match:
             location_str = match.group(1).strip().rstrip(',')
@@ -694,15 +792,24 @@ class NLPService:
                 if matched_state:
                     return f"{city_part.title()}, {matched_state}"
             
+            # Handle "downtown" prefix
+            clean_location = location_str
+            is_downtown = False
+            if location_str.lower().startswith('downtown '):
+                is_downtown = True
+                clean_location = location_str[9:].strip()  # Remove "downtown " prefix
+            
             # Check if it's a known major city (before doing substring state matching)
             for city in major_cities:
-                if city.lower() == location_str.lower():
+                if city.lower() == clean_location.lower():
                     # Check if this city has a default state
                     default_state = city_state_defaults.get(city.lower())
                     if default_state:
-                        return f"{city}, {default_state}"
+                        prefix = "Downtown " if is_downtown else ""
+                        return f"{prefix}{city}, {default_state}"
                     else:
-                        return city
+                        prefix = "Downtown " if is_downtown else ""
+                        return f"{prefix}{city}"
             
             # Check for multi-word state names first (e.g., "New Hampshire", "New York")
             location_lower = location_str.lower()
@@ -763,6 +870,262 @@ class NLPService:
                     return city
         
         return None
+    
+    def generate_project_name(self, description: str, parsed_data: dict) -> str:
+        """
+        Generate a smart, descriptive project name from the natural language description.
+        Examples:
+        - "Expand hospital with new 50000 sf wing" -> "Hospital Wing Addition - Manchester"
+        - "New restaurant with outdoor patio" -> "New Restaurant - Nashville"
+        - "Renovate office to open plan" -> "Office Renovation - Downtown"
+        """
+        
+        description_lower = description.lower()
+        
+        # Extract key components
+        project_type = parsed_data.get('project_classification', 'Project')
+        location = parsed_data.get('location', '')
+        occupancy = parsed_data.get('occupancy_type', '')
+        square_footage = parsed_data.get('square_footage', 0)
+        
+        # Determine the primary subject (what's being built)
+        building_types = {
+            'restaurant': 'Restaurant',
+            'hospital': 'Hospital',
+            'medical': 'Medical Facility',
+            'office': 'Office',
+            'school': 'School',
+            'warehouse': 'Warehouse',
+            'retail': 'Retail Space',
+            'dealership': 'Auto Dealership',
+            'clinic': 'Clinic',
+            'surgical': 'Surgical Center',
+            'urgent care': 'Urgent Care',
+            'bank': 'Bank Branch',
+            'manufacturing': 'Manufacturing',
+            'distribution': 'Distribution Center',
+            'gym': 'Fitness Center',
+            'fitness': 'Fitness Center',
+            'hotel': 'Hotel',
+            'apartment': 'Apartments',
+            'condo': 'Condominiums',
+            'fast-casual': 'Fast-Casual Restaurant',
+            'fast food': 'Fast Food Restaurant',
+            'fine dining': 'Fine Dining Restaurant',
+            'quick service': 'QSR',
+            'cafe': 'Cafe',
+            'bistro': 'Bistro',
+            'bar': 'Bar & Grill',
+            'tavern': 'Tavern',
+            'pub': 'Pub',
+            'imaging': 'Imaging Center',
+            'outpatient': 'Outpatient Clinic',
+            'surgery': 'Surgery Center',
+            'dental': 'Dental Office',
+            'pharmacy': 'Pharmacy',
+            'lab': 'Laboratory',
+            'classroom': 'Classroom Building',
+            'gymnasium': 'Gymnasium',
+            'cafeteria': 'Cafeteria',
+            'showroom': 'Showroom',
+            'service center': 'Service Center',
+            'fulfillment': 'Fulfillment Center'
+        }
+        
+        # Find the building type - prioritize longer matches first
+        building_name = None
+        # Sort by length (descending) to match longer phrases first
+        sorted_types = sorted(building_types.items(), key=lambda x: len(x[0]), reverse=True)
+        for keyword, name in sorted_types:
+            if keyword in description_lower:
+                building_name = name
+                break
+        
+        # Check for healthcare facilities
+        if parsed_data.get('is_healthcare'):
+            healthcare_details = parsed_data.get('healthcare_details', {})
+            facility_type = healthcare_details.get('facility_type', '')
+            if facility_type == 'hospital':
+                building_name = 'Hospital'
+            elif facility_type == 'surgical_center':
+                building_name = 'Surgical Center'
+            elif facility_type == 'imaging_center':
+                building_name = 'Imaging Center'
+            elif facility_type == 'urgent_care':
+                building_name = 'Urgent Care'
+            elif facility_type == 'outpatient_clinic':
+                building_name = 'Outpatient Clinic'
+            elif facility_type == 'medical_office':
+                building_name = 'Medical Office'
+            elif facility_type == 'dental_office':
+                building_name = 'Dental Office'
+        
+        if not building_name:
+            building_name = occupancy.title() if occupancy else 'Commercial Building'
+        
+        # Check for special features to add to name
+        special_features = []
+        if 'wing' in description_lower:
+            special_features.append('Wing')
+        if 'expansion' in description_lower and 'addition' not in description_lower:
+            special_features.append('Expansion')
+        if 'surgical' in description_lower and 'Hospital' in building_name:
+            special_features.append('Surgical Wing')
+        if 'imaging' in description_lower and 'Medical' in building_name:
+            special_features.append('w/ Imaging')
+        if 'kitchen' in description_lower and 'Restaurant' in building_name:
+            special_features.append('Kitchen')
+        if 'patio' in description_lower or 'outdoor' in description_lower:
+            if 'Restaurant' in building_name or 'Cafe' in building_name:
+                special_features.append('w/ Patio')
+        if 'drive-thru' in description_lower or 'drive thru' in description_lower:
+            special_features.append('w/ Drive-Thru')
+        if 'operating room' in description_lower or 'operating rooms' in description_lower:
+            or_match = re.search(r'(\d+)\s*operating\s*rooms?', description_lower)
+            if or_match:
+                num_ors = or_match.group(1)
+                special_features.append(f'{num_ors} ORs')
+        if 'exam room' in description_lower or 'exam rooms' in description_lower:
+            exam_match = re.search(r'(\d+)\s*exam\s*rooms?', description_lower)
+            if exam_match:
+                num_exams = exam_match.group(1)
+                special_features.append(f'{num_exams} Exam Rooms')
+        if 'loading dock' in description_lower or 'loading docks' in description_lower:
+            dock_match = re.search(r'(\d+)\s*loading\s*docks?', description_lower)
+            if dock_match:
+                num_docks = dock_match.group(1)
+                special_features.append(f'{num_docks} Docks')
+        
+        # Build the name based on project classification
+        prefix = ""
+        if project_type == 'renovation':
+            if 'convert' in description_lower or 'conversion' in description_lower:
+                # Find what it's being converted to
+                if 'to' in description_lower:
+                    parts = description_lower.split('to')
+                    if len(parts) > 1:
+                        new_use = parts[1].strip().split()[0:3]  # Get first few words after "to"
+                        for keyword, name in building_types.items():
+                            if keyword in ' '.join(new_use):
+                                building_name = f"{name} Conversion"
+                                break
+                else:
+                    building_name = f"{building_name} Conversion"
+                prefix = building_name
+            else:
+                prefix = f"{building_name} Renovation"
+        elif project_type == 'addition':
+            if special_features:
+                prefix = f"{building_name} {' '.join(special_features[:2])}"  # Limit to 2 features
+            else:
+                prefix = f"{building_name} Addition"
+        else:  # ground_up
+            prefix = f"New {building_name}"
+            if special_features:
+                prefix += f" {' '.join(special_features[:2])}"  # Limit to 2 features
+        
+        # Add location if available
+        if location:
+            # Simplify location (remove state if it's long)
+            location_parts = location.split(',')
+            city = location_parts[0].strip()
+            
+            # Special handling for downtown/specific areas
+            if 'downtown' in description_lower:
+                city = f"Downtown {city}"
+            
+            name = f"{prefix} - {city}"
+        else:
+            name = prefix
+        
+        # Add size for large projects
+        if square_footage >= 50000:
+            size_k = int(square_footage / 1000)
+            name = f"{name} ({size_k}K SF)"
+        elif square_footage >= 10000:
+            size_k = int(square_footage / 1000)
+            name = f"{name} ({size_k}K SF)"
+        
+        # Ensure name isn't too long
+        if len(name) > 60:
+            # Truncate intelligently
+            if ' - ' in name:
+                parts = name.split(' - ')
+                if '(' in parts[0]:  # Has size in first part
+                    size_part = parts[0][parts[0].rfind('('):]
+                    main_part = parts[0][:parts[0].rfind('(')].strip()
+                    if len(main_part) > 35:
+                        main_part = main_part[:35] + "..."
+                    parts[0] = f"{main_part} {size_part}"
+                else:
+                    parts[0] = parts[0][:40] + "..."
+                name = f"{parts[0]} - {parts[1]}"
+            else:
+                name = name[:57] + "..."
+        
+        return name
+    
+    def get_detail_suggestions(self, occupancy_type: str) -> list:
+        """
+        Suggest what details users should include for better estimates
+        """
+        suggestions = {
+            'restaurant': [
+                'Type of restaurant (fast-food, casual, fine dining)',
+                'Kitchen size and equipment needs',
+                'Seating capacity',
+                'Special features (bar, patio, drive-through)'
+            ],
+            'healthcare': [
+                'Type of facility (hospital, clinic, surgical center)',
+                'Number of exam/operating rooms',
+                'Special equipment (MRI, CT, X-ray)',
+                'Lab or pharmacy needs'
+            ],
+            'office': [
+                'Class of office (A, B, C)',
+                'Open plan vs traditional layout',
+                'Number of conference rooms',
+                'Special requirements (data center, trading floor)'
+            ],
+            'retail': [
+                'Type of retail (boutique, big box, grocery)',
+                'Storage/warehouse needs',
+                'Customer amenities',
+                'Loading dock requirements'
+            ],
+            'educational': [
+                'Grade levels served',
+                'Special facilities (gym, cafeteria, labs)',
+                'Technology requirements',
+                'Outdoor facilities (playground, sports fields)'
+            ],
+            'warehouse': [
+                'Clear height requirements',
+                'Number of loading docks',
+                'Climate control needs',
+                'Racking or automation systems'
+            ],
+            'industrial': [
+                'Type of manufacturing or processing',
+                'Equipment and machinery needs',
+                'Environmental controls',
+                'Power and utility requirements'
+            ],
+            'residential': [
+                'Number and mix of units',
+                'Amenity spaces (gym, pool, clubhouse)',
+                'Parking requirements',
+                'Quality level (affordable, market-rate, luxury)'
+            ]
+        }
+        
+        return suggestions.get(occupancy_type, [
+            'Specific use case',
+            'Special equipment or features',
+            'Quality level (economy, standard, premium)',
+            'Any unique requirements'
+        ])
     
     def _extract_building_mix(self, text: str) -> Optional[Dict[str, float]]:
         """

@@ -134,6 +134,44 @@ The application uses deterministic pricing based on:
   - Addition: 1.15x (includes tie-ins, protection, limited access)
   - Renovation: 1.35x (includes demolition, unknowns, phased work)
 
+### Healthcare Facility Costs
+
+Healthcare facilities use specialized cost calculations based on facility type:
+
+| Facility Type | Base Cost/SF | Key Factors |
+|--------------|--------------|-------------|
+| Hospital (Full Service) | $550-625 | Complex MEP, redundant systems, medical gas, imaging |
+| Surgical Center | $475-500 | OR requirements, precise HVAC, medical gas |
+| Imaging Center | $450-475 | Equipment shielding, high power requirements |
+| Outpatient Clinic | $375-400 | Exam rooms, enhanced ventilation |
+| Urgent Care | $350-375 | Walk-in capabilities, basic imaging |
+| Medical Office | $325-350 | Standard medical fit-out |
+| Dental Office | $300-325 | Specialized plumbing, equipment |
+| Senior Care | $275-300 | Residential-style with medical support |
+
+#### Healthcare-Specific Features
+The system detects and adjusts costs for:
+- **Emergency Department**: +$50-75/SF
+- **Operating Rooms**: +$75-100/SF
+- **Medical Imaging** (MRI/CT): +$40-60/SF
+- **Laboratory**: +$25-35/SF
+- **ICU/Critical Care**: +$60-80/SF
+- **Specialty Services** (Cancer, Cardiac): +$30-50/SF
+
+#### Healthcare Additions
+Healthcare additions use enhanced multipliers due to:
+- **Hospitals**: 1.25x (vs 1.15x standard) - 24/7 operations, infection control
+- **Surgical Centers**: 1.20x - Complex tie-ins to medical gas and HVAC
+- **Medical Offices**: 1.15x - Standard addition complexity
+
+#### Trade Cost Distribution
+Healthcare facilities have unique trade allocations:
+- **Mechanical**: 35-38% (vs 20% commercial) - Medical gas, precise HVAC
+- **Electrical**: 20-22% (vs 15% commercial) - Redundant power, equipment
+- **Plumbing**: 15% - Medical gas, special drainage
+- **Finishes**: 7-10% (vs 25% commercial) - Medical-grade surfaces
+- **Structural**: 14-15% - Equipment loads, vibration isolation
+
 ### Regional Cost Multipliers (2024 Q2)
 - **Tennessee**:
   - Nashville: 1.02 (2% above national average)
