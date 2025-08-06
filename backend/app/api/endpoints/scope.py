@@ -24,9 +24,12 @@ from app.utils.cost_validation import (
 from app.db.database import get_db
 from app.db.models import Project, User
 from app.api.endpoints.auth import get_current_user_with_cookie
+import logging
+import traceback
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
+logger = logging.getLogger(__name__)
 
 
 async def invalidate_project_cache(project_id: str, user_id: int):
@@ -211,73 +214,91 @@ async def list_projects(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_with_cookie)
 ):
-    # Validate pagination parameters
-    if limit > 100:
-        limit = 100  # Max limit
-    if skip < 0:
-        skip = 0
+    try:
+        # Log the request for debugging
+        logger.info(f"Fetching projects for user: {current_user.email} (ID: {current_user.id}), skip={skip}, limit={limit}")
+        
+        # Validate pagination parameters
+        if limit > 100:
+            limit = 100  # Max limit
+        if skip < 0:
+            skip = 0
+        
+        # Get user's current team
+        user = current_user  # current_user is already the User object
+        
+        # Base query for projects - if user has a team, get all team projects
+        if user.current_team_id:
+            logger.info(f"User has team_id: {user.current_team_id}, fetching team projects")
+            base_query = db.query(Project).filter(
+                Project.team_id == user.current_team_id
+            )
+            projects_query = db.query(Project, User.full_name.label('creator_name')).join(
+                User, Project.created_by_id == User.id, isouter=True
+            ).filter(
+                Project.team_id == user.current_team_id
+            )
+        else:
+            # Fallback to user's personal projects
+            logger.info(f"User has no team, fetching personal projects for user_id: {current_user.id}")
+            base_query = db.query(Project).filter(
+                Project.user_id == current_user.id
+            )
+            projects_query = db.query(Project, User.full_name.label('creator_name')).join(
+                User, Project.created_by_id == User.id, isouter=True
+            ).filter(
+                Project.user_id == current_user.id
+            )
+        
+        # Get total count
+        total = base_query.count()
+        logger.info(f"Found {total} total projects for user {current_user.email}")
+        
+        # Get paginated projects ordered by created_at descending
+        projects = projects_query.order_by(Project.created_at.desc()).offset(skip).limit(limit).all()
+        
+        items = [
+            {
+                "id": p.Project.id,
+                "project_id": p.Project.project_id,
+                "name": p.Project.name,
+                "project_type": p.Project.project_type,
+                "project_classification": p.Project.project_classification,  # Add this field
+                "building_type": p.Project.building_type,
+                "occupancy_type": p.Project.occupancy_type,
+                "description": p.Project.description,
+                "square_footage": p.Project.square_footage,
+                "location": p.Project.location,
+                # Include all cost components for consistency
+                "subtotal": p.Project.subtotal,
+                "contingency_percentage": p.Project.contingency_percentage,
+                "contingency_amount": p.Project.contingency_amount,
+                "total_cost": p.Project.total_cost,
+                "cost_per_sqft": p.Project.cost_per_sqft,
+                "created_at": p.Project.created_at,
+                "created_by": p.creator_name or "Unknown",
+                "scope_data": json.loads(p.Project.scope_data) if p.Project.scope_data else {}
+            }
+            for p in projects
+        ]
     
-    # Get user's current team
-    user = current_user  # current_user is already the User object
-    
-    # Base query for projects - if user has a team, get all team projects
-    if user.current_team_id:
-        base_query = db.query(Project).filter(
-            Project.team_id == user.current_team_id
-        )
-        projects_query = db.query(Project, User.full_name.label('creator_name')).join(
-            User, Project.created_by_id == User.id, isouter=True
-        ).filter(
-            Project.team_id == user.current_team_id
-        )
-    else:
-        # Fallback to user's personal projects
-        base_query = db.query(Project).filter(
-            Project.user_id == current_user.id
-        )
-        projects_query = db.query(Project, User.full_name.label('creator_name')).join(
-            User, Project.created_by_id == User.id, isouter=True
-        ).filter(
-            Project.user_id == current_user.id
-        )
-    
-    # Get total count
-    total = base_query.count()
-    
-    # Get paginated projects ordered by created_at descending
-    projects = projects_query.order_by(Project.created_at.desc()).offset(skip).limit(limit).all()
-    
-    items = [
-        {
-            "id": p.Project.id,
-            "project_id": p.Project.project_id,
-            "name": p.Project.name,
-            "project_type": p.Project.project_type,
-            "project_classification": p.Project.project_classification,  # Add this field
-            "building_type": p.Project.building_type,
-            "occupancy_type": p.Project.occupancy_type,
-            "description": p.Project.description,
-            "square_footage": p.Project.square_footage,
-            "location": p.Project.location,
-            # Include all cost components for consistency
-            "subtotal": p.Project.subtotal,
-            "contingency_percentage": p.Project.contingency_percentage,
-            "contingency_amount": p.Project.contingency_amount,
-            "total_cost": p.Project.total_cost,
-            "cost_per_sqft": p.Project.cost_per_sqft,
-            "created_at": p.Project.created_at,
-            "created_by": p.creator_name or "Unknown",
-            "scope_data": json.loads(p.Project.scope_data) if p.Project.scope_data else {}
+        return {
+            "items": items,
+            "total": total,
+            "skip": skip,
+            "limit": limit
         }
-        for p in projects
-    ]
-    
-    return {
-        "items": items,
-        "total": total,
-        "skip": skip,
-        "limit": limit
-    }
+    except Exception as e:
+        logger.error(f"Error fetching projects for user {current_user.email}: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        # Return empty list instead of error to prevent frontend crash
+        return {
+            "items": [],
+            "total": 0,
+            "skip": skip,
+            "limit": limit,
+            "error": str(e)  # Include error for debugging
+        }
 
 
 @router.get("/projects/search")
@@ -645,3 +666,68 @@ async def debug_electrical(
             "note": "For 45k SF mixed-use in CA"
         }
     }
+
+
+@router.get("/debug/user-projects")
+async def debug_user_projects(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_with_cookie)
+):
+    """Debug endpoint to check user's projects and authentication state"""
+    try:
+        # Log the request
+        logger.info(f"Debug endpoint called by user: {current_user.email} (ID: {current_user.id})")
+        
+        # Get all projects for this user
+        user_projects = db.query(Project).filter(
+            Project.user_id == current_user.id
+        ).all()
+        
+        # Get projects if user has a team
+        team_projects = []
+        if current_user.current_team_id:
+            team_projects = db.query(Project).filter(
+                Project.team_id == current_user.current_team_id
+            ).all()
+        
+        # Get total count in database
+        total_projects = db.query(Project).count()
+        
+        return {
+            "debug_info": {
+                "user": {
+                    "id": current_user.id,
+                    "email": current_user.email,
+                    "oauth_provider": current_user.oauth_provider,
+                    "current_team_id": current_user.current_team_id,
+                    "created_at": str(current_user.created_at)
+                },
+                "projects": {
+                    "user_projects_count": len(user_projects),
+                    "team_projects_count": len(team_projects),
+                    "total_in_database": total_projects,
+                    "user_project_ids": [p.project_id for p in user_projects[:10]],  # First 10
+                    "user_project_names": [p.name for p in user_projects[:10]]
+                },
+                "authentication": {
+                    "authenticated": True,
+                    "method": "OAuth" if current_user.oauth_provider else "Standard"
+                }
+            },
+            "projects_list": [
+                {
+                    "project_id": p.project_id,
+                    "name": p.name,
+                    "created_at": str(p.created_at),
+                    "user_id": p.user_id,
+                    "team_id": p.team_id
+                } for p in user_projects[:20]  # Return first 20 for inspection
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Debug endpoint error: {str(e)}")
+        return {
+            "error": str(e),
+            "user_email": getattr(current_user, 'email', 'Unknown'),
+            "authenticated": False
+        }
