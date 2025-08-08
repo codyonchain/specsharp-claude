@@ -111,3 +111,10 @@ export const TRADE_COLORS: Record<string, string> = {
 export function getTradeColor(trade: string): string {
   return TRADE_COLORS[trade] || "#999999";
 }
+
+/**
+ * Get all pie colors for trades
+ */
+export function getPieColors(): Record<string, string> {
+  return TRADE_COLORS;
+}

@@ -699,13 +699,16 @@ function ProjectDetail() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredCostBreakdown.map((item, index) => (
-                    <tr key={index}>
-                      <td>{item.category}</td>
-                      <td>{formatCurrency(item.subtotal)}</td>
-                      <td>{(selectedTrade !== 'general' ? 100 : item.percentage_of_total).toFixed(1)}%</td>
-                    </tr>
-                  ))}
+                  {filteredCostBreakdown.map((item, index) => {
+                    const tradeId = `trade-${String(item.category || '').toLowerCase().replace(/[^a-z]/g, '')}`;
+                    return (
+                      <tr key={index} id={tradeId} data-trade-id={tradeId}>
+                        <td>{item.category}</td>
+                        <td>{formatCurrency(item.subtotal)}</td>
+                        <td>{(selectedTrade !== 'general' ? 100 : item.percentage_of_total).toFixed(1)}%</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -720,10 +723,12 @@ function ProjectDetail() {
         ) : selectedTrade !== 'general' ? (
           <div className="systems-detail">
             <h2>{TRADE_CATEGORY_MAP[selectedTrade]} Details</h2>
-            {filteredCategories.map((category: any) => (
-              <div key={category.name} className="category-section">
-                <div className="category-header">
-                  <h3>{category.name}</h3>
+            {filteredCategories.map((category: any) => {
+              const categoryId = `trade-${String(category.name || '').toLowerCase().replace(/[^a-z]/g, '')}`;
+              return (
+                <div key={category.name} id={categoryId} data-trade-id={categoryId} className="category-section">
+                  <div className="category-header">
+                    <h3>{category.name}</h3>
                   <button
                     className="extract-btn"
                     onClick={() => handleExtractTrade(category.name)}
@@ -795,15 +800,18 @@ function ProjectDetail() {
                     })}
                   </tbody>
                 </table>
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="systems-detail">
             <h2>System Details</h2>
             <p className="info-message">Trade summaries are being generated...</p>
-            {project.categories && project.categories.map((category: any) => (
-              <div key={category.name} className="category-section">
+            {project.categories && project.categories.map((category: any) => {
+              const categoryId = `trade-${String(category.name || '').toLowerCase().replace(/[^a-z]/g, '')}`;
+              return (
+                <div key={category.name} id={categoryId} data-trade-id={categoryId} className="category-section">
                 <div className="category-header">
                   <h3>{category.name}</h3>
                   <button
@@ -877,8 +885,9 @@ function ProjectDetail() {
                     })}
                   </tbody>
                 </table>
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         )}
 

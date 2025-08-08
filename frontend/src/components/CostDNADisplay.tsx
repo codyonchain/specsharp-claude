@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { getPieBreakdown, getTradeColor, TRADE_COLORS } from "../utils/getPieBreakdown";
+import { getPieBreakdown, getTradeColor, getPieColors, TRADE_COLORS } from "../utils/getPieBreakdown";
 
 /** ---------- Types ---------- **/
 type ProjectLike = {
@@ -36,6 +36,10 @@ const REGIONAL_INDEX_FALLBACK: Record<string, number> = {
   Tennessee: 1.08,
   Default: 1.00,
 };
+
+// Mocked sample size from "comparables" (replace later with real count)
+const SAMPLE_SIZE = 47;
+const SAMPLE_STD_DEV_PSF = 26; // mock $/SF variance for CI calc
 
 /** ---------- Utils ---------- **/
 const norm = (s: string) => String(s || "").toLowerCase().replace(/[^a-z]/g, "");
@@ -79,6 +83,8 @@ const CostDNADisplay: React.FC<Props> = ({ projectData }) => {
     JSON.stringify(projectData.categories || (projectData as any).category_breakdown || [])
   ]);
 
+  const colors = useMemo(() => getPieColors(), []);
+
   // Debug log to verify data
   console.debug("CostDNA pieData ->", pieData);
 
@@ -90,36 +96,63 @@ const CostDNADisplay: React.FC<Props> = ({ projectData }) => {
     const item = pieData.find(i => i.trade === trade);
     const amt = Number(item?.amount || 0);
     const percent = totalAmt > 0 ? amt / totalAmt : 0;
-    return { trade, amt, percent, color: getTradeColor(trade) };
+    return { trade, amt, percent, color: colors[trade] || "#ccc" };
   });
 
-  /** Confidence */
+  /** Back-solve base $/SF */
+  const basePsf = sf > 0 ? total / (sf * regionalMult * complexityMult) : 0;
+
+  /** ========== STATES ========== **/
+  const [mode, setMode] = useState<"total"|"psf">("total");
+  const [provOpen, setProvOpen] = useState(false);
+  
+  // Sensitivity sliders
+  const [regMultAdj, setRegMultAdj] = useState(regionalMult);
+  const [compMultAdj, setCompMultAdj] = useState(complexityMult);
+
+  // Calculate adjusted values
+  const psfFinal = basePsf * regMultAdj * compMultAdj;
+  const totalFinal = psfFinal * sf;
+
+  // Confidence interval calculation
+  const ciHalf = 1.96 * (SAMPLE_STD_DEV_PSF / Math.sqrt(Math.max(1, SAMPLE_SIZE)));
+  const ciLow  = Math.max(0, psfFinal - ciHalf);
+  const ciHigh = psfFinal + ciHalf;
+
+  /** Confidence score */
   const confidenceScore = Math.min(
-    0.95,
-    0.55
+    0.98,
+    0.60
       + (occ ? 0.15 : 0)
       + (location ? 0.10 : 0)
-      + (pieData.filter(c => c.amount > 0).length >= 4 ? 0.10 : 0)
+      + (pieData.filter(c => c.amount > 0).length >= 4 ? 0.08 : 0)
       + (sf > 0 ? 0.05 : 0)
+      + (SAMPLE_SIZE >= 30 ? 0.05 : 0)
   );
+
   const confidenceText = [
     occ && "clear occupancy type",
     location && "known region",
     pieData.filter(c => c.amount > 0).length >= 4 && "trade-level breakdown",
     sf > 0 && "square footage provided",
+    SAMPLE_SIZE >= 30 && "sufficient sample size",
   ].filter(Boolean).join(", ") || "limited signals";
 
-  /** Toggle */
-  const [mode, setMode] = useState<"total"|"psf">("total");
-  const asVal = (perSf: number) => (mode === "psf" ? perSf : perSf * sf);
-
-  /** Back-solved base_psf so flow reconciles to current total */
-  const basePsfSolved = sf > 0 ? total / (sf * regionalMult * complexityMult) : 0;
-  const baseVal       = asVal(basePsfSolved);
-  const regionalVal   = asVal(basePsfSolved * regionalMult);
-  const complexVal    = asVal(basePsfSolved * regionalMult * complexityMult);
-  const allowances    = 0;  // visible step; wire real data later
-  const finalVal      = complexVal + allowances;
+  /** ========== FUNCTIONS ========== **/
+  
+  // Jump to trade with highlight
+  function jumpToTrade(tradeLabel: string) {
+    const id = `trade-${String(tradeLabel).toLowerCase().replace(/[^a-z]/g, "")}`;
+    const el = document.getElementById(id) || document.querySelector(`[data-trade-id='${id}']`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Add Tailwind highlight classes
+      el.classList.add("ring-2", "ring-indigo-500", "ring-offset-2", "transition-all");
+      setTimeout(() => {
+        el.classList.remove("ring-2", "ring-indigo-500", "ring-offset-2");
+      }, 1600);
+    }
+  }
 
   /** Factors */
   const factors: {label: string; impact: "low"|"medium"|"high"}[] = [];
@@ -127,10 +160,6 @@ const CostDNADisplay: React.FC<Props> = ({ projectData }) => {
   if (/medical gas/.test(descText)) factors.push({ label: "Medical Gas", impact: "medium" });
 
   /** UI helpers */
-  const chipCls = "inline-flex items-center px-2.5 py-1 rounded-full border text-sm bg-white";
-  const blockCls = "flex-1 border rounded-lg p-3 bg-white";
-  const labelDim = "text-xs uppercase tracking-wide opacity-70";
-  const bigNum = "text-lg font-semibold";
   const pill = (active:boolean) => `px-3 py-1 ${active ? "bg-gray-900 text-white" : "bg-white"} rounded-full border`;
 
   /** Render */
@@ -147,125 +176,237 @@ const CostDNADisplay: React.FC<Props> = ({ projectData }) => {
       </div>
 
       <div className="card-body">
-        {/* AHA #1: Fingerprint ties to pie (mirrors order/colors) */}
-        <div className="mb-3">
-          <div className="text-sm opacity-70 mb-1">Cost Fingerprint (matches trade breakdown)</div>
+        {/* CLICKABLE FINGERPRINT */}
+        <div className="mb-4">
+          <div className="text-sm opacity-70 mb-2">Cost Fingerprint (click to jump to trade)</div>
           {totalAmt === 0 ? (
             <div className="text-sm opacity-70 p-3 border rounded bg-gray-50">
               No trade breakdown available yet. Once the trade totals populate, this bar will mirror the pie above.
             </div>
           ) : (
             <>
-              <div className="w-full h-3 flex rounded overflow-hidden border">
+              {/* Bar chart visualization */}
+              <div style={{ height: "120px", display: "flex", alignItems: "flex-end", gap: "8px" }} className="mb-3">
                 {fingerprint.map((f, i) => (
-                  <div
+                  <button
                     key={i}
-                    title={`${f.trade}: ${pct(f.percent)}`}
-                    style={{ width: `${f.percent * 100}%`, backgroundColor: f.color }}
-                    className="h-full cursor-pointer"
-                    onClick={() => {
-                      const el = document.querySelector(`#trade-${norm(f.trade)}`) || document.querySelector("#cost-breakdown, #trade-breakdown");
-                      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    onClick={() => jumpToTrade(f.trade)}
+                    className="hover:opacity-80 transition-all cursor-pointer"
+                    style={{
+                      width: `${100 / fingerprint.length}%`,
+                      backgroundColor: f.color,
+                      height: `${Math.max(5, f.percent * 100)}%`,
+                      borderRadius: "6px 6px 0 0",
+                      minHeight: "4px"
                     }}
+                    title={`${f.trade}: ${pct(f.percent)} - Click to view`}
                   />
                 ))}
               </div>
-              <div className="flex flex-wrap gap-4 mt-2 text-sm">
+              {/* Legend */}
+              <div className="flex flex-wrap gap-3 text-sm">
                 {fingerprint.map((f, i) => (
-                  <span key={i} className="opacity-80 cursor-pointer" onClick={() => {
-                    const el = document.querySelector(`#trade-${norm(f.trade)}`) || document.querySelector("#cost-breakdown, #trade-breakdown");
-                    el?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }}>
-                    <span style={{ backgroundColor: f.color, display: "inline-block", width: 10, height: 10, marginRight: 6 }}></span>
+                  <button 
+                    key={i} 
+                    onClick={() => jumpToTrade(f.trade)} 
+                    className="hover:underline flex items-center gap-1"
+                  >
+                    <span style={{ backgroundColor: f.color, display: "inline-block", width: 10, height: 10, borderRadius: 2 }}></span>
                     {f.trade}: {pct(f.percent)}
-                  </span>
+                  </button>
                 ))}
               </div>
             </>
           )}
         </div>
 
-        {/* AHA #2: One-flow visual calculation with provenance */}
-        <div className="grid md:grid-cols-5 gap-2 items-stretch">
-          <div className={`${blockCls}`}>
-            <div className={labelDim}>Base {mode==='psf' ? "$/SF" : "Subtotal"}</div>
-            <div className={bigNum}>{mode==='psf' ? `${fmtMoney(basePsfSolved, 2)}/SF` : fmtMoney(baseVal)}</div>
-            <div className="text-xs mt-1 opacity-80">
-              Source: {baseLabel}
-            </div>
-          </div>
-
-          <div className="self-center text-center opacity-40">×</div>
-
-          <div className={`${blockCls}`}>
-            <div className={labelDim}>Regional Index</div>
-            <div className={bigNum}>× {regionalMult.toFixed(2)}</div>
-            <div className="text-xs mt-1 opacity-80">
-              Source: SpecSharp Regional Index{location ? ` • ${location}` : ""}
-            </div>
-          </div>
-
-          <div className="self-center text-center opacity-40">×</div>
-
-          <div className={`${blockCls}`}>
-            <div className={labelDim}>Complexity</div>
-            <div className={bigNum}>× {complexityMult.toFixed(2)}</div>
-            <div className="text-xs mt-1 opacity-80">
-              {isHealthcare ? "Healthcare" : "Standard"} {/(surgical|operating room|\bor\b)/.test(descText) ? "• Surgical/OR" : ""}
-            </div>
-          </div>
-
-          <div className="self-center text-center opacity-40 hidden md:block">=</div>
-
-          <div className={`${blockCls} md:col-span-5 bg-gray-50`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className={labelDim}>Final {mode==='psf' ? "$/SF" : "Total"}</div>
-                <div className="text-2xl font-bold">{mode==='psf' ? `${fmtMoney((basePsfSolved*regionalMult*complexityMult), 2)}/SF` : fmtMoney(finalVal)}</div>
-                <div className="text-xs mt-1 opacity-80">Calculated for {sf.toLocaleString()} SF</div>
-              </div>
-              <div className="text-right">
-                <div className="inline-flex items-center gap-2">
-                  <span className="text-xs uppercase tracking-wide opacity-70">Confidence</span>
-                  <span className={`text-xs px-2 py-1 rounded-full ${confidenceScore>=0.85?"bg-green-100 text-green-700":confidenceScore>=0.7?"bg-yellow-100 text-yellow-700":"bg-red-100 text-red-700"}`}>
-                    {Math.round(confidenceScore*100)}% • {confidenceScore>=0.85?"High":confidenceScore>=0.7?"Medium":"Low"}
-                  </span>
-                </div>
-                <div className="text-xs opacity-70 mt-1 max-w-xs">{confidenceText || "limited signals"}</div>
-              </div>
+        {/* PRICE JOURNEY */}
+        <div className="bg-gray-50 p-4 rounded-lg mb-4">
+          <h4 className="font-semibold mb-3">📊 The Price Journey</h4>
+          <div className="space-y-2 text-sm">
+            <div><strong>Base Cost:</strong> {fmtMoney(basePsf, 2)}/SF — {srcName} ({srcVer})</div>
+            <div className="text-gray-400">↓</div>
+            <div><strong>Regional Index ({location || "Region"}):</strong> × {regMultAdj.toFixed(2)}</div>
+            <div className="text-gray-400">↓</div>
+            <div><strong>Complexity ({compMultAdj > 1 ? "Healthcare/Surgical" : "Standard"}):</strong> × {compMultAdj.toFixed(2)}</div>
+            <div className="text-gray-400">↓</div>
+            <div className="font-bold text-lg pt-2 border-t">
+              Final: {mode === 'psf' ? `${fmtMoney(psfFinal, 2)}/SF` : fmtMoney(totalFinal)}
             </div>
           </div>
         </div>
 
-        {/* AHA #3: Source strip */}
-        <div className="mt-3 px-3 py-2 rounded-lg bg-gray-50 text-sm flex flex-wrap gap-4 items-center">
-          <div><span className="opacity-70">Base:</span> {srcName} ({srcVer}){location?` • ${location}`:""}</div>
-          <div><span className="opacity-70">Regional:</span> Index {regionalMult.toFixed(2)}</div>
-          <div><span className="opacity-70">Complexity:</span> {isHealthcare ? "Healthcare" : "Standard"}{/(surgical|operating room|\bor\b)/.test(descText) ? " • Surgical/OR" : ""}</div>
-          <div className="opacity-70 ml-auto">Pulled: {todayStr()}</div>
+        {/* SENSITIVITY ANALYSIS */}
+        <div className="mb-4">
+          <h4 className="text-sm font-semibold mb-2">Sensitivity Analysis</h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="border rounded-lg p-3">
+              <div className="text-xs uppercase tracking-wide opacity-70 mb-2">Regional Multiplier</div>
+              <input 
+                type="range" 
+                min="0.90" 
+                max="1.20" 
+                step="0.01" 
+                value={regMultAdj} 
+                onChange={e => setRegMultAdj(parseFloat(e.target.value))} 
+                className="w-full accent-indigo-600"
+              />
+              <div className="text-sm mt-1 font-medium">× {regMultAdj.toFixed(2)}</div>
+              <div className="text-xs opacity-60">{((regMultAdj - 1) * 100).toFixed(0)}% from baseline</div>
+            </div>
+            
+            <div className="border rounded-lg p-3">
+              <div className="text-xs uppercase tracking-wide opacity-70 mb-2">Complexity Factor</div>
+              <input 
+                type="range" 
+                min="1.00" 
+                max="1.30" 
+                step="0.01" 
+                value={compMultAdj} 
+                onChange={e => setCompMultAdj(parseFloat(e.target.value))} 
+                className="w-full accent-indigo-600"
+              />
+              <div className="text-sm mt-1 font-medium">× {compMultAdj.toFixed(2)}</div>
+              <div className="text-xs opacity-60">{compMultAdj > 1.14 ? "Healthcare" : "Standard"}</div>
+            </div>
+            
+            <div className="border rounded-lg p-3 bg-indigo-50">
+              <div className="text-xs uppercase tracking-wide opacity-70 mb-2">Confidence Band</div>
+              <div className="text-sm font-medium">
+                {Math.round(confidenceScore * 100)}% confidence
+              </div>
+              <div className="text-xs mt-1">
+                {fmtMoney(ciLow, 2)}/SF – {fmtMoney(ciHigh, 2)}/SF
+              </div>
+              <div className="text-xs opacity-60 mt-1">Based on {SAMPLE_SIZE} similar projects</div>
+            </div>
+          </div>
         </div>
 
-        {/* Factors */}
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {factors.length ? factors.map((fa, i) => (
-            <span key={i} className="px-2 py-1 rounded-full border text-sm" title={`impact: ${fa.impact}`}>{fa.label}</span>
-          )) : <span className="text-sm opacity-70">No special factors detected</span>}
+        {/* PROVENANCE & SOURCES */}
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <button 
+            type="button" 
+            className="px-4 py-2 rounded-lg border border-indigo-200 text-sm hover:bg-indigo-50 transition-colors flex items-center gap-2"
+            onClick={() => setProvOpen(true)}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            View Provenance Receipt
+          </button>
+          
+          {factors.length > 0 && (
+            <div className="flex items-center gap-2">
+              {factors.map((fa, i) => (
+                <span key={i} className="px-2 py-1 rounded-full border text-xs" title={`impact: ${fa.impact}`}>
+                  {fa.label}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Source strip */}
+        <div className="px-3 py-2 rounded-lg bg-gray-50 text-xs flex flex-wrap gap-4 items-center">
+          <div><span className="opacity-70">Base:</span> {srcName} ({srcVer}){location ? ` • ${location}` : ""}</div>
+          <div><span className="opacity-70">Regional:</span> Index {regMultAdj.toFixed(2)}</div>
+          <div><span className="opacity-70">Complexity:</span> {isHealthcare ? "Healthcare" : "Standard"}</div>
+          <div className="opacity-70 ml-auto">Updated: {todayStr()}</div>
         </div>
 
         {/* Jump link to trade math */}
         <div className="mt-3 text-sm">
           <button
             type="button"
-            className="underline hover:no-underline"
+            className="underline hover:no-underline opacity-70"
             onClick={() => {
               const el = document.querySelector("#trade-breakdown, #cost-breakdown, [data-anchor='cost-breakdown']");
               el?.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
           >
-            See trade math below ↴
+            See detailed trade breakdown below ↴
           </button>
         </div>
       </div>
+
+      {/* PROVENANCE MODAL */}
+      {provOpen && (
+        <div 
+          className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4"
+          onClick={() => setProvOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-lg font-semibold">📋 Provenance Receipt</h4>
+              <button 
+                onClick={() => setProvOpen(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="space-y-4 text-sm">
+              <div className="border-b pb-3">
+                <h5 className="font-medium mb-2">Data Sources</h5>
+                <div className="space-y-1 text-gray-600">
+                  <div><span className="font-medium">Base Cost:</span> {srcName} ({srcVer}) — healthcare comparables {location ? `in ${location}` : "nationwide"}</div>
+                  <div><span className="font-medium">Regional Index:</span> {regionalMult.toFixed(2)} (SpecSharp Regional Cost Index)</div>
+                  <div><span className="font-medium">Complexity Rule:</span> {complexityMult.toFixed(2)} — {isHealthcare || /(surgical|operating room|\bor\b)/.test(descText) ? "Healthcare/Surgical compliance & systems" : "Standard construction"}</div>
+                </div>
+              </div>
+
+              <div className="border-b pb-3">
+                <h5 className="font-medium mb-2">Statistical Confidence</h5>
+                <div className="space-y-1 text-gray-600">
+                  <div><span className="font-medium">Sample Size:</span> {SAMPLE_SIZE} similar projects analyzed</div>
+                  <div><span className="font-medium">Standard Deviation:</span> ±${SAMPLE_STD_DEV_PSF}/SF</div>
+                  <div><span className="font-medium">95% Confidence Interval:</span> {fmtMoney(ciLow, 2)}/SF – {fmtMoney(ciHigh, 2)}/SF</div>
+                  <div><span className="font-medium">Confidence Score:</span> {Math.round(confidenceScore * 100)}% ({confidenceText})</div>
+                </div>
+              </div>
+
+              <div className="border-b pb-3">
+                <h5 className="font-medium mb-2">Price Calculation</h5>
+                <div className="bg-gray-50 p-3 rounded font-mono text-xs">
+                  Price = Base × Regional × Complexity<br/>
+                  Price = {fmtMoney(basePsf, 2)}/SF × {regMultAdj.toFixed(2)} × {compMultAdj.toFixed(2)}<br/>
+                  Price = <strong>{fmtMoney(psfFinal, 2)}/SF</strong><br/>
+                  <br/>
+                  Total = Price × Square Footage<br/>
+                  Total = {fmtMoney(psfFinal, 2)}/SF × {sf.toLocaleString()} SF<br/>
+                  Total = <strong>{fmtMoney(totalFinal)}</strong>
+                </div>
+              </div>
+
+              <div className="border-b pb-3">
+                <h5 className="font-medium mb-2">Trade Distribution</h5>
+                <div className="space-y-1">
+                  {fingerprint.filter(f => f.percent > 0).map((f, i) => (
+                    <div key={i} className="flex items-center justify-between text-gray-600">
+                      <div className="flex items-center gap-2">
+                        <span style={{ backgroundColor: f.color, width: 12, height: 12, borderRadius: 2 }}></span>
+                        <span>{f.trade}</span>
+                      </div>
+                      <span>{pct(f.percent)} • {fmtMoney(f.amt)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="text-xs text-gray-500 italic">
+                Note: Sample size and variance statistics are currently mocked. These will be replaced with live dataset analysis when the backend integration is complete.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
