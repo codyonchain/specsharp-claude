@@ -497,25 +497,42 @@ function ProgressiveProjectDetail() {
           </div>
 
           {/* Cost DNA Analysis - Moved to bottom */}
-          <div className="section-header">
-            <h2 className="section-title">Your Project's Unique Signature</h2>
-            <p className="section-subtitle">AI-powered cost pattern analysis</p>
-          </div>
-          {project && selectedTrade === 'all' && (
-            <CostDNADisplay
-              tryApi={false}
-              projectData={{
-                ...project,
-                square_footage: project.square_footage || project.request_data?.square_footage || 0,
-                occupancy_type: project.occupancy_type || project.request_data?.occupancy_type || "",
-                location: project.location || project.request_data?.location || "",
-                project_classification: project.project_classification || project.request_data?.project_classification || "ground_up",
-                description: project.description || project.project_name || project.request_data?.project_description || project.request_data?.description || project.request_data?.special_requirements || "",
-                total_cost: project.total_cost || 0,
-                categories: project.categories || [],
-                request_data: project.request_data || {},
-              }}
-            />
+          {selectedTrade === 'all' && (
+            <>
+              <div className="section-header">
+                <h2 className="section-title">Your Project's Unique Signature</h2>
+                <p className="section-subtitle">AI-powered cost pattern analysis</p>
+              </div>
+              {project ? (
+                <div style={{ marginBottom: '30px' }}>
+                  <CostDNADisplay
+                    tryApi={false}
+                    projectData={{
+                      ...project,
+                      square_footage: project.square_footage || project.request_data?.square_footage || 0,
+                      occupancy_type: project.occupancy_type || project.request_data?.occupancy_type || "",
+                      location: project.location || project.request_data?.location || "",
+                      project_classification: project.project_classification || project.request_data?.project_classification || "ground_up",
+                      description: project.description || project.project_name || project.request_data?.project_description || project.request_data?.description || project.request_data?.special_requirements || "",
+                      total_cost: project.total_cost || 0,
+                      categories: project.categories || [],
+                      request_data: project.request_data || {},
+                    }}
+                  />
+                </div>
+              ) : (
+                <div style={{
+                  padding: '40px',
+                  background: '#f8f9fa',
+                  borderRadius: '8px',
+                  textAlign: 'center',
+                  color: '#666',
+                  marginBottom: '30px'
+                }}>
+                  <p>Loading Cost DNA analysis...</p>
+                </div>
+              )}
+            </>
           )}
 
           {/* Progressive Disclosure Section - Trade Details */}
