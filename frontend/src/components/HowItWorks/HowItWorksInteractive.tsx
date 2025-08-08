@@ -267,38 +267,105 @@ const HowItWorksInteractive: React.FC = () => {
   );
 };
 
-// Mini Cost DNA Component for Preview
+// Animated Trade Breakdown Component for Preview
 const CostDNAMini: React.FC = () => {
-  const [bars, setBars] = useState<number[]>([]);
+  const [isVisible, setIsVisible] = useState(false);
   
   useEffect(() => {
-    // Generate animated bars
-    const values = [45, 78, 62, 89, 54, 71, 83, 49, 66, 75];
-    setBars([]);
-    values.forEach((value, idx) => {
-      setTimeout(() => {
-        setBars(prev => [...prev, value]);
-      }, idx * 100);
-    });
+    // Trigger animation when component mounts
+    setIsVisible(true);
   }, []);
+
+  const trades = [
+    {
+      name: 'Mechanical (Medical HVAC)',
+      amount: '$8.2M',
+      percentage: 46,
+      description: 'Medical-grade systems',
+      color: 'from-green-400 to-emerald-500',
+      delay: 0.2
+    },
+    {
+      name: 'Structural',
+      amount: '$5.2M',
+      percentage: 29,
+      description: 'Reinforced for equipment',
+      color: 'from-blue-400 to-blue-500',
+      delay: 0.4
+    },
+    {
+      name: 'Plumbing',
+      amount: '$3.1M',
+      percentage: 17,
+      description: 'Medical gas & drainage',
+      color: 'from-purple-400 to-purple-500',
+      delay: 0.6
+    },
+    {
+      name: 'Electrical',
+      amount: '$2.1M',
+      percentage: 12,
+      description: 'Redundant power systems',
+      color: 'from-yellow-400 to-orange-500',
+      delay: 0.8
+    },
+    {
+      name: 'Finishes & General',
+      amount: '$9.9M',
+      percentage: 35,
+      description: 'Medical surfaces',
+      color: 'from-indigo-400 to-indigo-500',
+      delay: 1.0
+    }
+  ];
   
   return (
-    <div className="dna-mini">
-      <h4>Cost DNA Fingerprint™</h4>
-      <div className="dna-bars">
-        {bars.map((height, idx) => (
-          <motion.div
-            key={idx}
-            className="dna-bar"
-            initial={{ height: 0 }}
-            animate={{ height: `${height}%` }}
-            style={{
-              background: `hsl(${200 + idx * 15}, 70%, 50%)`,
-            }}
-          />
+    <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl p-6">
+      <h4 className="text-xl font-bold text-white mb-2">Trade Cost Breakdown</h4>
+      <p className="text-blue-100 text-sm mb-4">See exactly where your budget goes</p>
+      
+      {/* Animated Trade Bars */}
+      <div className="space-y-3">
+        {trades.map((trade, idx) => (
+          <div key={idx} className="relative">
+            <div className="flex justify-between text-white mb-1">
+              <span className="text-sm font-medium">{trade.name}</span>
+              <span className="text-sm font-bold">{trade.amount}</span>
+            </div>
+            <div className="h-6 bg-white/20 rounded-full overflow-hidden">
+              <motion.div 
+                className={`h-full bg-gradient-to-r ${trade.color} rounded-full`}
+                initial={{ width: 0, opacity: 0 }}
+                animate={isVisible ? { 
+                  width: `${trade.percentage}%`, 
+                  opacity: 1 
+                } : {}}
+                transition={{ 
+                  duration: 1, 
+                  delay: trade.delay,
+                  ease: "easeOut"
+                }}
+              />
+            </div>
+            <span className="text-xs text-blue-200">
+              {trade.percentage}% - {trade.description}
+            </span>
+          </div>
         ))}
       </div>
-      <p className="dna-description">Unique cost signature for your project</p>
+
+      {/* Total at bottom */}
+      <motion.div 
+        className="mt-4 pt-3 border-t border-white/20"
+        initial={{ opacity: 0 }}
+        animate={isVisible ? { opacity: 1 } : {}}
+        transition={{ delay: 1.5 }}
+      >
+        <div className="flex justify-between items-center text-white">
+          <span className="text-sm">Total Project Cost:</span>
+          <span className="text-lg font-bold">$28.5M</span>
+        </div>
+      </motion.div>
     </div>
   );
 };
