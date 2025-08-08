@@ -251,17 +251,22 @@ const HowItWorksInteractive: React.FC = () => {
           )}
         </AnimatePresence>
         
-        {/* Replay Button */}
-        <div className="text-center mt-8">
-          <motion.button
-            className="replay-button"
-            onClick={() => setActiveStep(activeStep === 1 ? 2 : 1)}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            {activeStep === 1 ? 'Skip to Results' : '↻ Watch Again'}
-          </motion.button>
-        </div>
+        {/* Watch Again Button - Only show after animation completes */}
+        {activeStep === 2 && (
+          <div className="text-center mt-8">
+            <motion.button
+              className="replay-button"
+              onClick={() => setActiveStep(1)}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+            >
+              ↻ Watch Again
+            </motion.button>
+          </div>
+        )}
       </div>
     </section>
   );

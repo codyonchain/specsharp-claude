@@ -205,43 +205,101 @@ export const HomePage: React.FC = () => {
         )}
       </nav>
 
-      {/* Hero Section */}
-      <section className="hero-section text-white">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto text-center hero-content">
-            <h1 className="hero-title font-bold">
-              AI-Powered Construction Estimates
-              <span>in 60 Seconds</span>
+      {/* Enhanced Hero Section */}
+      <section className="relative min-h-[600px] overflow-hidden">
+        {/* Animated gradient background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-blue-500 to-purple-600">
+          {/* Animated gradient overlay for movement */}
+          <div className="absolute inset-0 bg-gradient-to-t from-blue-600/50 via-transparent to-purple-600/50 animate-gradient-shift"></div>
+        </div>
+        
+        {/* Floating grid pattern for depth */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute inset-0" style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+            backgroundSize: '60px 60px'
+          }}></div>
+        </div>
+        
+        {/* Animated floating particles */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="particle particle-1"></div>
+          <div className="particle particle-2"></div>
+          <div className="particle particle-3"></div>
+          <div className="particle particle-4"></div>
+        </div>
+        
+        {/* Subtle pulse rings emanating from center */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          <div className="absolute w-96 h-96 border border-white/10 rounded-full animate-pulse-ring"></div>
+          <div className="absolute w-96 h-96 border border-white/10 rounded-full animate-pulse-ring animation-delay-2"></div>
+          <div className="absolute w-96 h-96 border border-white/10 rounded-full animate-pulse-ring animation-delay-4"></div>
+        </div>
+        
+        {/* Main content - now with relative positioning */}
+        <div className="relative z-10 container mx-auto px-4 py-20">
+          <div className="text-center max-w-4xl mx-auto">
+            {/* Animated badge */}
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-full mb-6 animate-fade-in-down">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+              <span className="text-sm font-medium text-white">Trusted by 500+ Construction Pros</span>
+            </div>
+            
+            {/* Main headline with stagger animation */}
+            <h1 className="text-5xl md:text-6xl font-bold text-white mb-4">
+              <span className="inline-block animate-fade-in-up">AI-Powered</span>{' '}
+              <span className="inline-block animate-fade-in-up animation-delay-1">Construction</span>{' '}
+              <span className="inline-block animate-fade-in-up animation-delay-2">Estimates</span>
             </h1>
-            <p className="hero-subtitle">
+            
+            {/* Highlight the 60 seconds with special treatment */}
+            <div className="text-3xl md:text-4xl text-yellow-400 font-bold mb-6 animate-fade-in-up animation-delay-3">
+              in 60 Seconds
+              <span className="inline-block ml-2 text-lg text-yellow-300 animate-pulse">⚡</span>
+            </div>
+            
+            <p className="text-xl text-blue-100 mb-4 animate-fade-in-up animation-delay-4">
               Validate Your Vision Before Spending on Design
             </p>
-            <p className="hero-description max-w-3xl mx-auto">
+            
+            <p className="text-lg text-blue-200 mb-8 animate-fade-in-up animation-delay-5">
               Know if your project pencils out in 60 seconds.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            
+            {/* Buttons with hover effects */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in-up animation-delay-6">
               <Link
                 to="/demo"
-                className="btn-primary"
+                className="group px-8 py-4 bg-yellow-400 text-gray-900 rounded-lg font-bold text-lg hover:bg-yellow-300 transform hover:scale-105 transition-all duration-200 shadow-xl hover:shadow-2xl"
                 onClick={() => handleCTAClick('Create Your First Estimate', 'hero')}
               >
-                Create Your First Estimate <ArrowRight className="ml-2" />
+                Create Your First Estimate
+                <span className="inline-block ml-2 group-hover:translate-x-1 transition-transform">→</span>
               </Link>
               <a
                 href="#scenario-comparison"
-                className="btn-secondary"
+                className="px-8 py-4 bg-white/10 backdrop-blur-sm text-white rounded-lg font-bold text-lg border-2 border-white/30 hover:bg-white/20 transform hover:scale-105 transition-all duration-200"
                 onClick={(e) => {
                   e.preventDefault();
                   document.getElementById('scenario-comparison')?.scrollIntoView({ behavior: 'smooth' });
                 }}
               >
-                Compare Scenarios <Layers className="ml-2" />
+                Compare Scenarios
+                <span className="inline-block ml-2">📊</span>
               </a>
             </div>
-            <p className="mt-6 text-blue-100 text-lg">
+            
+            <p className="text-blue-200 mt-8 animate-fade-in-up animation-delay-7">
               Finally. Cost certainty before design commitment.
             </p>
           </div>
+        </div>
+        
+        {/* Bottom wave for transition to next section */}
+        <div className="absolute bottom-0 left-0 right-0">
+          <svg viewBox="0 0 1440 120" className="w-full h-20 fill-white">
+            <path d="M0,64 C240,120 480,0 720,48 C960,96 1200,16 1440,64 L1440,120 L0,120 Z" />
+          </svg>
         </div>
       </section>
 
