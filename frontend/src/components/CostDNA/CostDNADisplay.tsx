@@ -10,9 +10,14 @@ export const CostDNADisplay: React.FC<CostDNAProps> = ({ projectData, costDNA })
   const [isExpanded, setIsExpanded] = useState(false);
   const [dnaData, setDnaData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Log for debugging
+  console.log('🧬 CostDNADisplay mounted with projectData:', projectData);
   
   // If Cost DNA not provided, fetch it
   useEffect(() => {
+    console.log('🧬 Cost DNA useEffect triggered', { costDNA, projectData });
     if (!costDNA && projectData) {
       fetchCostDNA();
     } else if (costDNA) {
@@ -23,38 +28,92 @@ export const CostDNADisplay: React.FC<CostDNAProps> = ({ projectData, costDNA })
   const fetchCostDNA = async () => {
     try {
       setLoading(true);
+      setError(null);
       const token = localStorage.getItem('token');
+      
+      const requestData = {
+        square_footage: projectData.square_footage || projectData.request_data?.square_footage || 0,
+        occupancy_type: projectData.occupancy_type || projectData.request_data?.occupancy_type || 'office',
+        location: projectData.location || projectData.request_data?.location || 'Unknown',
+        project_classification: projectData.project_classification || projectData.request_data?.project_classification || 'ground_up',
+        description: projectData.description || projectData.request_data?.description || '',
+        total_cost: projectData.total_cost || 0
+      };
+      
+      console.log('🧬 Fetching Cost DNA with data:', requestData);
+      
       const response = await fetch('/api/v1/cost-dna/generate', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          square_footage: projectData.square_footage || projectData.request_data?.square_footage,
-          occupancy_type: projectData.occupancy_type || projectData.request_data?.occupancy_type,
-          location: projectData.location || projectData.request_data?.location,
-          project_classification: projectData.project_classification || projectData.request_data?.project_classification || 'ground_up',
-          description: projectData.description || projectData.request_data?.description || '',
-          total_cost: projectData.total_cost
-        })
+        body: JSON.stringify(requestData)
       });
       
+      console.log('🧬 Cost DNA response status:', response.status);
       const data = await response.json();
-      if (data.success) {
+      console.log('🧬 Cost DNA response data:', data);
+      
+      if (data.success && data.cost_dna) {
         setDnaData(data.cost_dna);
+        console.log('✅ Cost DNA data set successfully');
+      } else {
+        console.error('❌ Cost DNA response unsuccessful:', data);
+        setError(data.error || 'Failed to load Cost DNA');
       }
     } catch (error) {
-      console.error('Error fetching Cost DNA:', error);
-      // Don't crash - just don't show Cost DNA
+      console.error('❌ Error fetching Cost DNA:', error);
+      setError('Failed to fetch Cost DNA visualization');
     } finally {
       setLoading(false);
     }
   };
   
-  // If no DNA data or loading, return null (don't break the page)
-  if (!dnaData || loading) {
-    return null;
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="cost-dna-container">
+        <div className="dna-visualization">
+          <h3 className="dna-title">
+            <span className="dna-icon">🧬</span>
+            Loading Cost DNA Analysis...
+          </h3>
+        </div>
+      </div>
+    );
+  }
+  
+  // Show error state if needed
+  if (error) {
+    console.error('🧬 Cost DNA Error State:', error);
+    return (
+      <div className="cost-dna-container">
+        <div className="dna-visualization">
+          <h3 className="dna-title">
+            <span className="dna-icon">🧬</span>
+            Cost DNA Analysis
+          </h3>
+          <p style={{ color: '#666', fontSize: '14px' }}>Unable to load cost analysis visualization.</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // If no DNA data yet, show placeholder
+  if (!dnaData) {
+    console.log('🧬 No DNA data available yet');
+    return (
+      <div className="cost-dna-container">
+        <div className="dna-visualization">
+          <h3 className="dna-title">
+            <span className="dna-icon">🧬</span>
+            Cost DNA Analysis
+          </h3>
+          <p style={{ color: '#666', fontSize: '14px' }}>Initializing cost analysis...</p>
+        </div>
+      </div>
+    );
   }
   
   return (
