@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { getPieBreakdown, getTradeColor, TRADE_COLORS } from "../utils/getPieBreakdown";
 
 /** ---------- Types ---------- **/
-type CategoryAny = { trade?: string; name?: string; label?: string; amount?: number; value?: number; total?: number };
-type Category = { trade: string; amount: number };
 type ProjectLike = {
   project_name?: string;
   description?: string;
@@ -12,7 +11,7 @@ type ProjectLike = {
   location?: string;
   occupancy_type?: string;
   total_cost?: number;
-  categories?: CategoryAny[];
+  categories?: any[];
   request_data?: {
     location?: string;
     occupancy_type?: string;
@@ -31,15 +30,6 @@ interface Props {
 
 /** ---------- Constants ---------- **/
 const TRADE_ORDER = ["Structural", "Mechanical", "Electrical", "Plumbing", "General Conditions"]; // must mirror pie order
-
-// Mirror your pie colors exactly (update hex if your design tokens differ)
-const TRADE_COLORS: Record<string, string> = {
-  Structural: "#4F81BD",           // blue
-  Mechanical: "#9BBB59",           // green
-  Electrical: "#8064A2",           // purple
-  Plumbing: "#C0504D",             // red
-  "General Conditions": "#F79646", // orange
-};
 
 const REGIONAL_INDEX_FALLBACK: Record<string, number> = {
   "Nashville, TN": 1.08,
@@ -81,38 +71,27 @@ const CostDNADisplay: React.FC<Props> = ({ projectData }) => {
 
   const complexityMult = (isHealthcare || /(surgical|operating room|\bor\b)/.test(descText)) ? 1.15 : 1.00;
 
-  /** Categories normalization (fix 0% bug) */
-  const normalizedCats: Category[] = useMemo(() => {
-    const raw = (projectData.categories ??
-                (projectData as any).category_breakdown ??
-                []) as CategoryAny[];
-
-    const mapped = raw
-      .map(c => ({
-        trade: String(c.trade ?? c.name ?? c.label ?? "").trim(),
-        amount: Number(c.amount ?? c.value ?? c.total ?? 0),
-      }))
-      .filter(c => c.trade && isFinite(c.amount) && c.amount > 0);
-
-    // index by normalized name
-    const byNorm = Object.fromEntries(mapped.map(c => [norm(c.trade), c]));
-
-    // build in canonical pie order to mirror labels/colors
-    const ordered: Category[] = TRADE_ORDER.map(t => {
-      const m = byNorm[norm(t)];
-      return { trade: t, amount: Math.max(0, m?.amount ?? 0) };
-    });
-
-    return ordered;
-  }, [
+  /** Use shared pie breakdown helper for perfect consistency */
+  const pieData = useMemo(() => getPieBreakdown(projectData), [
+    projectData?.id || projectData?.project_id,
     projectData.total_cost,
     projectData.square_footage,
-    projectData.occupancy_type,
-    projectData.location,
-    JSON.stringify(projectData.categories ?? (projectData as any).category_breakdown ?? [])
+    JSON.stringify(projectData.categories || (projectData as any).category_breakdown || [])
   ]);
 
-  const catSum = normalizedCats.reduce((a, c) => a + c.amount, 0);
+  // Debug log to verify data
+  console.debug("CostDNA pieData ->", pieData);
+
+  // Calculate total from pie data
+  const totalAmt = pieData.reduce((a, i) => a + (Number(i.amount) || 0), 0);
+
+  // Build fingerprint in canonical order with colors
+  const fingerprint = TRADE_ORDER.map(trade => {
+    const item = pieData.find(i => i.trade === trade);
+    const amt = Number(item?.amount || 0);
+    const percent = totalAmt > 0 ? amt / totalAmt : 0;
+    return { trade, amt, percent, color: getTradeColor(trade) };
+  });
 
   /** Confidence */
   const confidenceScore = Math.min(
@@ -120,13 +99,13 @@ const CostDNADisplay: React.FC<Props> = ({ projectData }) => {
     0.55
       + (occ ? 0.15 : 0)
       + (location ? 0.10 : 0)
-      + (normalizedCats.filter(c => c.amount > 0).length >= 4 ? 0.10 : 0)
+      + (pieData.filter(c => c.amount > 0).length >= 4 ? 0.10 : 0)
       + (sf > 0 ? 0.05 : 0)
   );
   const confidenceText = [
     occ && "clear occupancy type",
     location && "known region",
-    normalizedCats.filter(c => c.amount > 0).length >= 4 && "trade-level breakdown",
+    pieData.filter(c => c.amount > 0).length >= 4 && "trade-level breakdown",
     sf > 0 && "square footage provided",
   ].filter(Boolean).join(", ") || "limited signals";
 
@@ -171,37 +150,39 @@ const CostDNADisplay: React.FC<Props> = ({ projectData }) => {
         {/* AHA #1: Fingerprint ties to pie (mirrors order/colors) */}
         <div className="mb-3">
           <div className="text-sm opacity-70 mb-1">Cost Fingerprint (matches trade breakdown)</div>
-          <div className="w-full h-3 flex rounded overflow-hidden border">
-            {normalizedCats.map((c, i) => {
-              const percent = catSum > 0 ? c.amount / catSum : 0;
-              return (
-                <div
-                  key={i}
-                  title={`${c.trade}: ${pct(percent)}`}
-                  style={{ width: `${percent * 100}%`, backgroundColor: TRADE_COLORS[c.trade] || "#ccc" }}
-                  className="h-full"
-                  onClick={() => {
-                    const el = document.querySelector(`#trade-${norm(c.trade)}`) || document.querySelector("#cost-breakdown, #trade-breakdown");
+          {totalAmt === 0 ? (
+            <div className="text-sm opacity-70 p-3 border rounded bg-gray-50">
+              No trade breakdown available yet. Once the trade totals populate, this bar will mirror the pie above.
+            </div>
+          ) : (
+            <>
+              <div className="w-full h-3 flex rounded overflow-hidden border">
+                {fingerprint.map((f, i) => (
+                  <div
+                    key={i}
+                    title={`${f.trade}: ${pct(f.percent)}`}
+                    style={{ width: `${f.percent * 100}%`, backgroundColor: f.color }}
+                    className="h-full cursor-pointer"
+                    onClick={() => {
+                      const el = document.querySelector(`#trade-${norm(f.trade)}`) || document.querySelector("#cost-breakdown, #trade-breakdown");
+                      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }}
+                  />
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-4 mt-2 text-sm">
+                {fingerprint.map((f, i) => (
+                  <span key={i} className="opacity-80 cursor-pointer" onClick={() => {
+                    const el = document.querySelector(`#trade-${norm(f.trade)}`) || document.querySelector("#cost-breakdown, #trade-breakdown");
                     el?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }}
-                />
-              );
-            })}
-          </div>
-          <div className="flex flex-wrap gap-4 mt-2 text-sm">
-            {normalizedCats.map((c, i) => {
-              const percent = catSum > 0 ? c.amount / catSum : 0;
-              return (
-                <span key={i} className="opacity-80 cursor-pointer" onClick={() => {
-                  const el = document.querySelector(`#trade-${norm(c.trade)}`) || document.querySelector("#cost-breakdown, #trade-breakdown");
-                  el?.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}>
-                  <span style={{ backgroundColor: TRADE_COLORS[c.trade] || "#ccc", display: "inline-block", width: 10, height: 10, marginRight: 6 }}></span>
-                  {c.trade}: {pct(percent)}
-                </span>
-              );
-            })}
-          </div>
+                  }}>
+                    <span style={{ backgroundColor: f.color, display: "inline-block", width: 10, height: 10, marginRight: 6 }}></span>
+                    {f.trade}: {pct(f.percent)}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         {/* AHA #2: One-flow visual calculation with provenance */}
