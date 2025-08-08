@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from authlib.integrations.starlette_client import OAuth, OAuthError
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 import logging
 
 # Configure logging
@@ -19,6 +21,7 @@ from app.db.models import User as DBUser
 from app.api.endpoints.auth import create_access_token, get_current_user_with_cookie
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 # Initialize OAuth
 oauth = OAuth()
@@ -89,6 +92,7 @@ def get_or_create_oauth_user(db: Session, email: str, full_name: str, oauth_id: 
 
 
 @router.get("/login/google")
+@limiter.limit("5/minute")  # Strict rate limiting for auth endpoints
 async def oauth_login(request: Request):
     """Initiate Google OAuth login flow"""
     try:
@@ -116,6 +120,7 @@ async def oauth_login(request: Request):
 
 
 @router.get("/callback/google")
+@limiter.limit("10/minute")  # Slightly higher limit for callbacks
 async def oauth_callback(request: Request, response: Response, db: Session = Depends(get_db)):
     """Handle Google OAuth callback"""
     

@@ -45,11 +45,22 @@ async def lifespan(app: FastAPI):
         pass
 
 
-app = FastAPI(
-    title=settings.app_name,
-    version=settings.app_version,
-    lifespan=lifespan
-)
+# Disable API documentation in production for security
+if settings.environment == "production":
+    app = FastAPI(
+        title=settings.app_name,
+        version=settings.app_version,
+        lifespan=lifespan,
+        docs_url=None,  # Disable /docs
+        redoc_url=None,  # Disable /redoc
+        openapi_url=None  # Disable /openapi.json
+    )
+else:
+    app = FastAPI(
+        title=settings.app_name,
+        version=settings.app_version,
+        lifespan=lifespan
+    )
 
 # Add rate limiter to app state
 app.state.limiter = limiter
