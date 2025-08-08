@@ -903,7 +903,7 @@ function ProjectDetail() {
                   project_classification: project.project_classification || project.request_data?.project_classification || "ground_up",
                   description: project.description || project.project_name || project.request_data?.project_description || project.request_data?.description || "",
                   total_cost: project.total_cost || 0,
-                  categories: project.categories || [],
+                  categories: project.categories || (project as any).category_breakdown || [],
                   request_data: project.request_data || {},
                 }}
               />

@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
+/** ---------- Types ---------- **/
+type CategoryAny = { trade?: string; name?: string; label?: string; amount?: number; value?: number; total?: number };
 type Category = { trade: string; amount: number };
 type ProjectLike = {
   project_name?: string;
@@ -10,32 +12,33 @@ type ProjectLike = {
   location?: string;
   occupancy_type?: string;
   total_cost?: number;
-  categories?: Category[];
+  categories?: CategoryAny[];
   request_data?: {
     location?: string;
     occupancy_type?: string;
-    data_source?: string;     // e.g., "RSMeans"
-    data_version?: string;    // e.g., "2024 Q3"
-    base_psf_source?: string; // optional display override
     region_multiplier?: number;
+    data_source?: string;     // e.g. "RSMeans"
+    data_version?: string;    // e.g. "2024 Q3"
+    base_psf_source?: string; // optional display override
     [k: string]: any;
   } | undefined;
-  [key: string]: any;
+  [k: string]: any;
 };
 
 interface Props {
   projectData: ProjectLike;
 }
 
-const TRADE_ORDER = ["Structural", "Mechanical", "Electrical", "Plumbing", "General Conditions"];
+/** ---------- Constants ---------- **/
+const TRADE_ORDER = ["Structural", "Mechanical", "Electrical", "Plumbing", "General Conditions"]; // must mirror pie order
 
-// Mirror the pie colors you use elsewhere (update if your tokens differ)
+// Mirror your pie colors exactly (update hex if your design tokens differ)
 const TRADE_COLORS: Record<string, string> = {
-  Structural: "#4F81BD",          // blue
-  Mechanical: "#9BBB59",          // green
-  Electrical: "#8064A2",          // purple
-  Plumbing: "#C0504D",            // red
-  "General Conditions": "#F79646",// orange
+  Structural: "#4F81BD",           // blue
+  Mechanical: "#9BBB59",           // green
+  Electrical: "#8064A2",           // purple
+  Plumbing: "#C0504D",             // red
+  "General Conditions": "#F79646", // orange
 };
 
 const REGIONAL_INDEX_FALLBACK: Record<string, number> = {
@@ -44,66 +47,30 @@ const REGIONAL_INDEX_FALLBACK: Record<string, number> = {
   Default: 1.00,
 };
 
-function fmt$(n: number): string;
-function fmt$(n: number, frac: number): string;
-function fmt$(n: number, frac?: number): string {
-  const f = typeof frac === "number" ? frac : 0;
-  if (!isFinite(n)) return "$0";
-  return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: f });
-}
-function pct(n: number) {
-  if (!isFinite(n)) return "0%";
-  return `${(n * 100).toFixed(1)}%`;
-}
-function copyToClipboard(text: string) {
-  try { navigator.clipboard?.writeText(text); } catch { /* noop */ }
-}
+/** ---------- Utils ---------- **/
+const norm = (s: string) => String(s || "").toLowerCase().replace(/[^a-z]/g, "");
+const fmtMoney = (n: number, frac: number = 0) =>
+  isFinite(n) ? n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: frac }) : "$0";
+const pct = (n: number) => (isFinite(n) ? `${(n * 100).toFixed(1)}%` : "0%");
+const todayStr = () => new Date().toLocaleDateString();
 
-// Simple chip+popover UI (no external libs)
-const Chip: React.FC<{ label: string; onClick?: () => void; title?: string }> = ({ label, onClick, title }) => (
-  <button
-    type="button"
-    className="inline-flex items-center px-2.5 py-1 rounded-full border text-sm hover:bg-gray-50 transition"
-    onClick={onClick}
-    title={title}
-    style={{ lineHeight: 1.1 }}
-  >
-    {label}
-  </button>
-);
-
-const Popover: React.FC<{ open: boolean; anchorRef: React.RefObject<HTMLButtonElement>; children: React.ReactNode }> = ({ open, anchorRef, children }) => {
-  const [style, setStyle] = useState<React.CSSProperties>({});
-  useEffect(() => {
-    if (!open || !anchorRef.current) return;
-    const rect = anchorRef.current.getBoundingClientRect();
-    setStyle({
-      position: "fixed",
-      top: rect.bottom + 8,
-      left: Math.max(12, rect.left),
-      zIndex: 50,
-      maxWidth: 360,
-    });
-  }, [open, anchorRef]);
-  if (!open) return null;
-  return (
-    <div style={style} className="rounded-lg shadow-lg border bg-white p-3 text-sm">
-      {children}
-    </div>
-  );
-};
-
+/** ---------- Component ---------- **/
 const CostDNADisplay: React.FC<Props> = ({ projectData }) => {
-  // ---------- Inputs & deterministic derivations ----------
+  /** Inputs */
   const sf               = Math.max(0, projectData.square_footage || 0);
   const total            = Math.max(0, projectData.total_cost || 0);
   const location         = projectData.location || projectData.request_data?.location || "";
-  const occ              = (projectData.occupancy_type || projectData.request_data?.occupancy_type || "").toLowerCase();
+  const occRaw           = projectData.occupancy_type || projectData.request_data?.occupancy_type || "";
+  const occ              = occRaw.toLowerCase();
   const isHealthcare     = /health/.test(occ);
-  const descText         = `${projectData.description || ""} ${projectData.occupancy_type || ""}`.toLowerCase();
-  const surgicalLike     = /(surgical|operating room|\bor\b)/.test(descText);
+  const descText         = `${projectData.description || ""} ${occRaw}`.toLowerCase();
 
-  // Regional multiplier (prefer request_data, else fallback table)
+  /** Provenance defaults */
+  const srcName   = projectData.request_data?.data_source  || "RSMeans";
+  const srcVer    = projectData.request_data?.data_version || "2024 Q3";
+  const baseLabel = projectData.request_data?.base_psf_source || `${srcName} (${srcVer}) — comparable ${occRaw || "occupancy"} in ${location || "region"}`;
+
+  /** Regional + complexity */
   const regionalMult =
     projectData.request_data?.region_multiplier ??
     REGIONAL_INDEX_FALLBACK[location] ??
@@ -112,259 +79,206 @@ const CostDNADisplay: React.FC<Props> = ({ projectData }) => {
       return stateKey ? REGIONAL_INDEX_FALLBACK[stateKey] : REGIONAL_INDEX_FALLBACK.Default;
     })();
 
-  // Complexity multiplier (deterministic)
-  const complexityMult = (surgicalLike || isHealthcare) ? 1.15 : 1.00;
+  const complexityMult = (isHealthcare || /(surgical|operating room|\bor\b)/.test(descText)) ? 1.15 : 1.00;
 
-  // Back-solve a base $/SF so the equation reconciles to the current total.
-  // Later, you can swap this with the DB base_psf and keep the UI identical.
-  const basePsfSolved = sf > 0 ? total / (sf * regionalMult * complexityMult) : 0;
+  /** Categories normalization (fix 0% bug) */
+  const normalizedCats: Category[] = useMemo(() => {
+    const raw = (projectData.categories ??
+                (projectData as any).category_breakdown ??
+                []) as CategoryAny[];
 
-  // Provenance settings (RSMeans)
-  const srcName   = projectData.request_data?.data_source  || "RSMeans";
-  const srcVer    = projectData.request_data?.data_version || "2024 Q3";
-  const baseLabel = projectData.request_data?.base_psf_source || `${srcName} (${srcVer}) — comparable ${projectData.occupancy_type || "occupancy"} in ${location || "region"}`;
+    const mapped = raw
+      .map(c => ({
+        trade: String(c.trade ?? c.name ?? c.label ?? "").trim(),
+        amount: Number(c.amount ?? c.value ?? c.total ?? 0),
+      }))
+      .filter(c => c.trade && isFinite(c.amount) && c.amount > 0);
 
-  // Fingerprint from categories (mirrors pie order/colors)
-  const cats = Array.isArray(projectData.categories) ? projectData.categories : [];
-  const catSum = cats.reduce((a, c) => a + (c.amount || 0), 0) || total;
-  const fingerprint = TRADE_ORDER.map(trade => {
-    const match = cats.find(c => c.trade === trade);
-    const amt = Math.max(0, match?.amount || 0);
-    const percent = catSum > 0 ? amt / catSum : 0;
-    return { trade, amt, percent, color: TRADE_COLORS[trade] || "#ccc" };
-  });
+    // index by normalized name
+    const byNorm = Object.fromEntries(mapped.map(c => [norm(c.trade), c]));
 
-  // Confidence score — ties directly to available signals
-  const signals = {
-    occ: !!occ,
-    loc: !!location,
-    cats: cats.length >= 4,
-    sf: sf > 0,
-  };
-  const confidenceScore = Math.min(0.95,
-    0.55 + (signals.occ ? 0.15 : 0) + (signals.loc ? 0.10 : 0) + (signals.cats ? 0.10 : 0) + (signals.sf ? 0.05 : 0)
+    // build in canonical pie order to mirror labels/colors
+    const ordered: Category[] = TRADE_ORDER.map(t => {
+      const m = byNorm[norm(t)];
+      return { trade: t, amount: Math.max(0, m?.amount ?? 0) };
+    });
+
+    return ordered;
+  }, [
+    projectData.total_cost,
+    projectData.square_footage,
+    projectData.occupancy_type,
+    projectData.location,
+    JSON.stringify(projectData.categories ?? (projectData as any).category_breakdown ?? [])
+  ]);
+
+  const catSum = normalizedCats.reduce((a, c) => a + c.amount, 0);
+
+  /** Confidence */
+  const confidenceScore = Math.min(
+    0.95,
+    0.55
+      + (occ ? 0.15 : 0)
+      + (location ? 0.10 : 0)
+      + (normalizedCats.filter(c => c.amount > 0).length >= 4 ? 0.10 : 0)
+      + (sf > 0 ? 0.05 : 0)
   );
   const confidenceText = [
-    signals.occ && "clear occupancy type",
-    signals.loc && "known region",
-    signals.cats && "trade-level breakdown",
-    signals.sf  && "square footage provided",
-  ].filter(Boolean).join(", ");
+    occ && "clear occupancy type",
+    location && "known region",
+    normalizedCats.filter(c => c.amount > 0).length >= 4 && "trade-level breakdown",
+    sf > 0 && "square footage provided",
+  ].filter(Boolean).join(", ") || "limited signals";
 
-  // Toggle for total vs per-SF
+  /** Toggle */
   const [mode, setMode] = useState<"total"|"psf">("total");
-  const value = (valPerSf: number) => mode === "psf" ? valPerSf : (valPerSf * sf);
+  const asVal = (perSf: number) => (mode === "psf" ? perSf : perSf * sf);
 
-  // Derive the step values for waterfall
-  const baseVal       = value(basePsfSolved);
-  const regionalVal   = value(basePsfSolved * regionalMult);
-  const complexVal    = value(basePsfSolved * regionalMult * complexityMult);
-  const allowances    = 0; // show step even if 0 to be honest & consistent
+  /** Back-solved base_psf so flow reconciles to current total */
+  const basePsfSolved = sf > 0 ? total / (sf * regionalMult * complexityMult) : 0;
+  const baseVal       = asVal(basePsfSolved);
+  const regionalVal   = asVal(basePsfSolved * regionalMult);
+  const complexVal    = asVal(basePsfSolved * regionalMult * complexityMult);
+  const allowances    = 0;  // visible step; wire real data later
   const finalVal      = complexVal + allowances;
 
-  // Detected special factor badges (trust cues)
+  /** Factors */
   const factors: {label: string; impact: "low"|"medium"|"high"}[] = [];
-  if (surgicalLike || isHealthcare) factors.push({ label: "OSHPD/Healthcare Compliance", impact: "high" });
+  if (isHealthcare || /(surgical|operating room|\bor\b)/.test(descText)) factors.push({ label: "OSHPD/Healthcare Compliance", impact: "high" });
   if (/medical gas/.test(descText)) factors.push({ label: "Medical Gas", impact: "medium" });
 
-  // Chip popovers
-  const [openChip, setOpenChip] = useState<string | null>(null);
-  const chipRef = useRef<Record<string, HTMLButtonElement | null>>({});
+  /** UI helpers */
+  const chipCls = "inline-flex items-center px-2.5 py-1 rounded-full border text-sm bg-white";
+  const blockCls = "flex-1 border rounded-lg p-3 bg-white";
+  const labelDim = "text-xs uppercase tracking-wide opacity-70";
+  const bigNum = "text-lg font-semibold";
+  const pill = (active:boolean) => `px-3 py-1 ${active ? "bg-gray-900 text-white" : "bg-white"} rounded-full border`;
 
-  const setChipRef = (key: string) => (el: HTMLButtonElement | null) => { chipRef.current[key] = el; };
-
-  // Copy formula text
-  const copyFormula = () => {
-    const text =
-      `Price = (Base ${fmt$(basePsfSolved, 2)}/SF × ${sf.toLocaleString()} SF) × ${regionalMult.toFixed(2)} × ${complexityMult.toFixed(2)} + ${fmt$(allowances)} = ${fmt$(finalVal)}`;
-    copyToClipboard(text);
-  };
-
-  // Close popovers on outside click/esc
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpenChip(null); };
-    const onClick = (e: MouseEvent) => {
-      if (!openChip) return;
-      const el = chipRef.current[openChip];
-      if (el && !el.contains(e.target as Node)) setOpenChip(null);
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("mousedown", onClick);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("mousedown", onClick);
-    };
-  }, [openChip]);
-
+  /** Render */
   return (
     <div className="card">
       <div className="card-header flex items-center justify-between">
         <h3 className="text-lg font-semibold">🧬 Why This Price (Cost DNA)</h3>
         <div className="flex items-center gap-2">
-          <div className="inline-flex border rounded-full overflow-hidden text-sm">
-            <button
-              type="button"
-              className={`px-3 py-1 ${mode === "total" ? "bg-gray-900 text-white" : "bg-white"}`}
-              onClick={() => setMode("total")}
-            >Total</button>
-            <button
-              type="button"
-              className={`px-3 py-1 ${mode === "psf" ? "bg-gray-900 text-white" : "bg-white"}`}
-              onClick={() => setMode("psf")}
-            >Per-SF</button>
+          <div className="inline-flex gap-1">
+            <button className={pill(mode==='total')} onClick={() => setMode('total')}>Total</button>
+            <button className={pill(mode==='psf')} onClick={() => setMode('psf')}>Per-SF</button>
           </div>
-          <button type="button" className="px-3 py-1 rounded border text-sm hover:bg-gray-50" onClick={copyFormula}>
-            Copy formula
-          </button>
         </div>
       </div>
 
       <div className="card-body">
-        {/* Formula line with chips */}
-        <div className="text-sm mb-3 flex flex-wrap items-center gap-2">
-          <span className="opacity-70">Price =</span>
-
-          <button ref={setChipRef("base")} onClick={() => setOpenChip(openChip === "base" ? null : "base")} className="inline-flex items-center px-2.5 py-1 rounded-full border text-sm hover:bg-gray-50">
-            Base {mode === "psf" ? fmt$(basePsfSolved, 2) + "/SF" : fmt$(baseVal)}
-          </button>
-          <span className="opacity-70">×</span>
-
-          <button ref={setChipRef("sf")} onClick={() => setOpenChip(openChip === "sf" ? null : "sf")} className="inline-flex items-center px-2.5 py-1 rounded-full border text-sm hover:bg-gray-50">
-            {sf.toLocaleString()} SF
-          </button>
-          <span className="opacity-70">×</span>
-
-          <button ref={setChipRef("regional")} onClick={() => setOpenChip(openChip === "regional" ? null : "regional")} className="inline-flex items-center px-2.5 py-1 rounded-full border text-sm hover:bg-gray-50">
-            Regional {regionalMult.toFixed(2)}
-          </button>
-          <span className="opacity-70">×</span>
-
-          <button ref={setChipRef("complex")} onClick={() => setOpenChip(openChip === "complex" ? null : "complex")} className="inline-flex items-center px-2.5 py-1 rounded-full border text-sm hover:bg-gray-50">
-            Complexity {complexityMult.toFixed(2)}
-          </button>
-
-          <span className="opacity-70">+</span>
-          <button ref={setChipRef("allow")} onClick={() => setOpenChip(openChip === "allow" ? null : "allow")} className="inline-flex items-center px-2.5 py-1 rounded-full border text-sm hover:bg-gray-50">
-            Allowances {mode === "psf" ? fmt$(allowances / (sf || 1), 2) + "/SF" : fmt$(allowances)}
-          </button>
-
-          <span className="opacity-70">=</span>
-          <strong>{mode === "psf" ? fmt$(finalVal / (sf || 1), 2) + "/SF" : fmt$(finalVal)}</strong>
-        </div>
-
-        {/* Popovers for provenance */}
-        <Popover open={openChip === "base"} anchorRef={{ current: chipRef.current["base"] as HTMLButtonElement }}>
-          <div className="font-medium mb-1">Base {mode === "psf" ? "$/SF" : "Subtotal"}</div>
-          <div className="mb-1">{mode === "psf" ? fmt$(basePsfSolved, 2) + "/SF" : fmt$(baseVal)}</div>
-          <div className="opacity-80">Source: {baseLabel}</div>
-          <div className="opacity-70 mt-1">Note: adjusted by regional & complexity multipliers shown here.</div>
-        </Popover>
-
-        <Popover open={openChip === "sf"} anchorRef={{ current: chipRef.current["sf"] as HTMLButtonElement }}>
-          <div className="font-medium mb-1">Square Footage</div>
-          <div className="mb-1">{sf.toLocaleString()} SF</div>
-          <div className="opacity-70">From project input.</div>
-        </Popover>
-
-        <Popover open={openChip === "regional"} anchorRef={{ current: chipRef.current["regional"] as HTMLButtonElement }}>
-          <div className="font-medium mb-1">Regional Multiplier</div>
-          <div className="mb-1">× {regionalMult.toFixed(2)}</div>
-          <div className="opacity-80">Source: SpecSharp Regional Index{location ? ` for ${location}` : ""}.</div>
-          <div className="opacity-70">Reflects localized labor/material costs.</div>
-        </Popover>
-
-        <Popover open={openChip === "complex"} anchorRef={{ current: chipRef.current["complex"] as HTMLButtonElement }}>
-          <div className="font-medium mb-1">Occupancy / Complexity</div>
-          <div className="mb-1">× {complexityMult.toFixed(2)}</div>
-          <div className="opacity-80">Reason: {isHealthcare || surgicalLike ? "Healthcare/Surgical compliance & systems" : "No special complexity detected"}</div>
-        </Popover>
-
-        <Popover open={openChip === "allow"} anchorRef={{ current: chipRef.current["allow"] as HTMLButtonElement }}>
-          <div className="font-medium mb-1">Allowances</div>
-          <div className="mb-1">{mode === "psf" ? fmt$(allowances / (sf || 1), 2) + "/SF" : fmt$(allowances)}</div>
-          <div className="opacity-70">No specific allowances detected for this project.</div>
-        </Popover>
-
-        {/* Waterfall / Step progression */}
-        <div className="mt-3">
-          <div className="flex items-stretch text-sm">
-            <div className="flex-1 border rounded-l p-2">
-              <div className="opacity-70">Base</div>
-              <div className="font-medium">{mode === "psf" ? fmt$(basePsfSolved, 2) + "/SF" : fmt$(baseVal)}</div>
-            </div>
-            <div className="px-2 self-center opacity-50">→</div>
-            <div className="flex-1 border p-2">
-              <div className="opacity-70">× Regional</div>
-              <div className="font-medium">{mode === "psf" ? fmt$(basePsfSolved * regionalMult, 2) + "/SF" : fmt$(regionalVal)}</div>
-            </div>
-            <div className="px-2 self-center opacity-50">→</div>
-            <div className="flex-1 border p-2">
-              <div className="opacity-70">× Complexity</div>
-              <div className="font-medium">{mode === "psf" ? fmt$(basePsfSolved * regionalMult * complexityMult, 2) + "/SF" : fmt$(complexVal)}</div>
-            </div>
-            <div className="px-2 self-center opacity-50">→</div>
-            <div className="flex-1 border p-2">
-              <div className="opacity-70">+ Allowances</div>
-              <div className="font-medium">{mode === "psf" ? fmt$(allowances / (sf || 1), 2) + "/SF" : fmt$(allowances)}</div>
-            </div>
-            <div className="px-2 self-center opacity-50">=</div>
-            <div className="flex-1 border rounded-r p-2 bg-gray-50">
-              <div className="opacity-70">Final</div>
-              <div className="font-semibold">{mode === "psf" ? fmt$(finalVal / (sf || 1), 2) + "/SF" : fmt$(finalVal)}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Sources / provenance line */}
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm opacity-80">
-          <div>Inputs: {(projectData.occupancy_type || "Occupancy")} • {sf.toLocaleString()} SF • {projectData.project_classification || "Ground-Up"} • {location || "Region"}</div>
-          <div>Sources: Base — {srcName} ({srcVer}) {location ? `for ${location}` : ""} • Regional — Index {regionalMult.toFixed(2)} • Complexity — {surgicalLike || isHealthcare ? "Healthcare/Surgical" : "None"}</div>
-          <div>Calc v1 • {new Date().toLocaleDateString()}</div>
-        </div>
-
-        {/* Cost Fingerprint (mirrors pie) */}
-        <div className="mt-4">
+        {/* AHA #1: Fingerprint ties to pie (mirrors order/colors) */}
+        <div className="mb-3">
           <div className="text-sm opacity-70 mb-1">Cost Fingerprint (matches trade breakdown)</div>
           <div className="w-full h-3 flex rounded overflow-hidden border">
-            {fingerprint.map((f, i) => (
-              <div key={i} title={`${f.trade}: ${pct(f.percent)}`} style={{ width: `${f.percent * 100}%`, backgroundColor: f.color }} className="h-full" />
-            ))}
+            {normalizedCats.map((c, i) => {
+              const percent = catSum > 0 ? c.amount / catSum : 0;
+              return (
+                <div
+                  key={i}
+                  title={`${c.trade}: ${pct(percent)}`}
+                  style={{ width: `${percent * 100}%`, backgroundColor: TRADE_COLORS[c.trade] || "#ccc" }}
+                  className="h-full"
+                  onClick={() => {
+                    const el = document.querySelector(`#trade-${norm(c.trade)}`) || document.querySelector("#cost-breakdown, #trade-breakdown");
+                    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                />
+              );
+            })}
           </div>
-          <div className="flex flex-wrap gap-3 mt-2 text-sm">
-            {fingerprint.map((f, i) => (
-              <span key={i} className="opacity-80">
-                <span style={{ backgroundColor: f.color, display: "inline-block", width: 10, height: 10, marginRight: 6 }}></span>
-                {f.trade}: {pct(f.percent)}
-              </span>
-            ))}
+          <div className="flex flex-wrap gap-4 mt-2 text-sm">
+            {normalizedCats.map((c, i) => {
+              const percent = catSum > 0 ? c.amount / catSum : 0;
+              return (
+                <span key={i} className="opacity-80 cursor-pointer" onClick={() => {
+                  const el = document.querySelector(`#trade-${norm(c.trade)}`) || document.querySelector("#cost-breakdown, #trade-breakdown");
+                  el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}>
+                  <span style={{ backgroundColor: TRADE_COLORS[c.trade] || "#ccc", display: "inline-block", width: 10, height: 10, marginRight: 6 }}></span>
+                  {c.trade}: {pct(percent)}
+                </span>
+              );
+            })}
           </div>
         </div>
 
-        {/* Factors + confidence */}
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            {factors.length ? factors.map((fa, i) => (
-              <span key={i} className="px-2 py-1 rounded-full border text-sm" title={`impact: ${fa.impact}`}>{fa.label}</span>
-            )) : <span className="text-sm opacity-70">No special factors detected</span>}
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            <div className="text-sm">Confidence</div>
-            <div className="w-28 h-2 bg-gray-200 rounded overflow-hidden">
-              <div className="h-full bg-black" style={{ width: `${confidenceScore * 100}%` }} />
+        {/* AHA #2: One-flow visual calculation with provenance */}
+        <div className="grid md:grid-cols-5 gap-2 items-stretch">
+          <div className={`${blockCls}`}>
+            <div className={labelDim}>Base {mode==='psf' ? "$/SF" : "Subtotal"}</div>
+            <div className={bigNum}>{mode==='psf' ? `${fmtMoney(basePsfSolved, 2)}/SF` : fmtMoney(baseVal)}</div>
+            <div className="text-xs mt-1 opacity-80">
+              Source: {baseLabel}
             </div>
-            <div className="text-sm">{Math.round(confidenceScore * 100)}%</div>
+          </div>
+
+          <div className="self-center text-center opacity-40">×</div>
+
+          <div className={`${blockCls}`}>
+            <div className={labelDim}>Regional Index</div>
+            <div className={bigNum}>× {regionalMult.toFixed(2)}</div>
+            <div className="text-xs mt-1 opacity-80">
+              Source: SpecSharp Regional Index{location ? ` • ${location}` : ""}
+            </div>
+          </div>
+
+          <div className="self-center text-center opacity-40">×</div>
+
+          <div className={`${blockCls}`}>
+            <div className={labelDim}>Complexity</div>
+            <div className={bigNum}>× {complexityMult.toFixed(2)}</div>
+            <div className="text-xs mt-1 opacity-80">
+              {isHealthcare ? "Healthcare" : "Standard"} {/(surgical|operating room|\bor\b)/.test(descText) ? "• Surgical/OR" : ""}
+            </div>
+          </div>
+
+          <div className="self-center text-center opacity-40 hidden md:block">=</div>
+
+          <div className={`${blockCls} md:col-span-5 bg-gray-50`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className={labelDim}>Final {mode==='psf' ? "$/SF" : "Total"}</div>
+                <div className="text-2xl font-bold">{mode==='psf' ? `${fmtMoney((basePsfSolved*regionalMult*complexityMult), 2)}/SF` : fmtMoney(finalVal)}</div>
+                <div className="text-xs mt-1 opacity-80">Calculated for {sf.toLocaleString()} SF</div>
+              </div>
+              <div className="text-right">
+                <div className="inline-flex items-center gap-2">
+                  <span className="text-xs uppercase tracking-wide opacity-70">Confidence</span>
+                  <span className={`text-xs px-2 py-1 rounded-full ${confidenceScore>=0.85?"bg-green-100 text-green-700":confidenceScore>=0.7?"bg-yellow-100 text-yellow-700":"bg-red-100 text-red-700"}`}>
+                    {Math.round(confidenceScore*100)}% • {confidenceScore>=0.85?"High":confidenceScore>=0.7?"Medium":"Low"}
+                  </span>
+                </div>
+                <div className="text-xs opacity-70 mt-1 max-w-xs">{confidenceText || "limited signals"}</div>
+              </div>
+            </div>
           </div>
         </div>
-        <div className="text-xs opacity-70 mt-1">Why: {confidenceText || "limited signals"}</div>
 
-        {/* Anchor to trade math below */}
+        {/* AHA #3: Source strip */}
+        <div className="mt-3 px-3 py-2 rounded-lg bg-gray-50 text-sm flex flex-wrap gap-4 items-center">
+          <div><span className="opacity-70">Base:</span> {srcName} ({srcVer}){location?` • ${location}`:""}</div>
+          <div><span className="opacity-70">Regional:</span> Index {regionalMult.toFixed(2)}</div>
+          <div><span className="opacity-70">Complexity:</span> {isHealthcare ? "Healthcare" : "Standard"}{/(surgical|operating room|\bor\b)/.test(descText) ? " • Surgical/OR" : ""}</div>
+          <div className="opacity-70 ml-auto">Pulled: {todayStr()}</div>
+        </div>
+
+        {/* Factors */}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {factors.length ? factors.map((fa, i) => (
+            <span key={i} className="px-2 py-1 rounded-full border text-sm" title={`impact: ${fa.impact}`}>{fa.label}</span>
+          )) : <span className="text-sm opacity-70">No special factors detected</span>}
+        </div>
+
+        {/* Jump link to trade math */}
         <div className="mt-3 text-sm">
           <button
             type="button"
             className="underline hover:no-underline"
             onClick={() => {
               const el = document.querySelector("#trade-breakdown, #cost-breakdown, [data-anchor='cost-breakdown']");
-              if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+              el?.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
           >
             See trade math below ↴
