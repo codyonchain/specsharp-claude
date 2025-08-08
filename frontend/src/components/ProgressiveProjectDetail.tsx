@@ -10,6 +10,38 @@ import { Package, Sliders, ChevronDown, ChevronUp, FileSpreadsheet, Download } f
 import { getDisplayBuildingType } from '../utils/buildingTypeDisplay';
 import './ProjectDetail.css';
 
+// Import Cost DNA component with fallback
+let CostDNADisplay: any;
+try {
+  CostDNADisplay = require('./CostDNA/CostDNADisplay').default;
+  console.log('✅ CostDNADisplay component loaded successfully');
+} catch (error) {
+  console.error('❌ Failed to load CostDNADisplay component:', error);
+  // Fallback component if import fails
+  CostDNADisplay = ({ projectData }: any) => (
+    <div style={{ 
+      background: 'white', 
+      borderRadius: '12px', 
+      padding: '24px', 
+      margin: '20px 0', 
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' 
+    }}>
+      <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>
+        <span style={{ marginRight: '8px' }}>🧬</span>
+        Cost DNA Analysis
+      </h3>
+      <p style={{ color: '#666', fontSize: '14px' }}>
+        Project Type: {projectData?.occupancy_type || 'Unknown'} | 
+        Location: {projectData?.location || 'Unknown'} | 
+        Size: {projectData?.square_footage || 0} SF
+      </p>
+      <p style={{ color: '#999', fontSize: '12px', marginTop: '8px' }}>
+        (Full visualization loading...)
+      </p>
+    </div>
+  );
+}
+
 type TradeType = 'all' | 'structural' | 'mechanical' | 'electrical' | 'plumbing' | 'finishes' | 'general_conditions';
 
 interface TradeSummary {
@@ -527,6 +559,31 @@ function ProgressiveProjectDetail() {
               </div>
             )}
           </div>
+
+          {/* Cost DNA Analysis - Display when viewing all trades */}
+          {(() => {
+            const shouldShowCostDNA = project && selectedTrade === 'all';
+            console.log('🧬 Cost DNA render check:', { 
+              hasProject: !!project, 
+              selectedTrade, 
+              shouldShow: shouldShowCostDNA,
+              projectData: project 
+            });
+            
+            if (shouldShowCostDNA) {
+              const costDNAData = {
+                square_footage: project.square_footage || project.request_data?.square_footage || 0,
+                occupancy_type: project.occupancy_type || project.request_data?.occupancy_type || 'office',
+                location: project.location || project.request_data?.location || 'Unknown',
+                project_classification: project.project_classification || project.request_data?.project_classification || 'ground_up',
+                description: project.description || project.request_data?.special_requirements || project.project_name || '',
+                total_cost: project.total_cost || 0
+              };
+              console.log('🧬 Rendering CostDNADisplay with data:', costDNAData);
+              return <CostDNADisplay projectData={costDNAData} />;
+            }
+            return null;
+          })()}
 
           <div className="project-footer">
             <div className="footer-summary">
