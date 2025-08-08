@@ -1,9 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Clock, DollarSign, CheckCircle, Building, Calculator, TrendingUp, Users, FileText, Zap, Brain, Share2, Shield, Lock, Award, Hotel, Building2, Layers, HardHat } from 'lucide-react';
+import { ArrowRight, CheckCircle, Calculator, Zap, Brain, Share2, Shield, Lock, Award, Building2, Layers, HardHat } from 'lucide-react';
 import { ROICalculator } from '../components/ROICalculator';
 import { Footer } from '../components/Footer';
 import { trackCTAClick, trackPageView, setupViewTracking } from '../utils/analytics';
+import HowItWorksInteractive from '../components/HowItWorks/HowItWorksInteractive';
+import ScenarioComparison from '../components/ScenarioComparison/ScenarioComparison';
+import WhyChooseEnhanced from '../components/WhyChooseEnhanced/WhyChooseEnhanced';
 import './HomePage.css';
 
 export const HomePage: React.FC = () => {
@@ -259,7 +262,18 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* Who Uses SpecSharp - Three Audiences */}
+      {/* How It Works - Interactive Version (MOVED UP TO #2) */}
+      <div id="how-it-works">
+        <HowItWorksInteractive />
+      </div>
+
+      {/* Scenario Comparison - Interactive Version (MOVED UP TO #3) */}
+      <ScenarioComparison />
+
+      {/* Why Choose SpecSharp - Enhanced Version (NOW #4 with new design) */}
+      <WhyChooseEnhanced />
+
+      {/* Who Uses SpecSharp - Three Audiences (MOVED DOWN TO #5) */}
       <section className="audience-section fade-in-section">
         <div className="container mx-auto px-4">
           <h2 className="section-title text-center">Who Uses SpecSharp?</h2>
@@ -418,232 +432,7 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* Why SpecSharp Section */}
-      <section className="py-12 bg-blue-50 fade-in-section">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto text-center">
-            <h3 className="text-2xl font-bold mb-4 text-gray-800">Why Construction Professionals Choose SpecSharp</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-              <div>
-                <p className="text-3xl font-bold text-blue-600">94%</p>
-                <p className="text-sm text-gray-600">Accuracy Rate</p>
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-blue-600">50x</p>
-                <p className="text-sm text-gray-600">Faster Than Manual</p>
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-blue-600">$2.3M</p>
-                <p className="text-sm text-gray-600">Avg. Project Size</p>
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-blue-600">$100K+</p>
-                <p className="text-sm text-gray-600">Avg. saved on dead-deal designs</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Three Benefit Columns */}
-      <section className="fade-in-section" style={{backgroundColor: 'white'}}>
-        <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            <div className="benefit-column">
-              <div className="benefit-icon" style={{background: 'linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%)'}}>
-                <Zap className="w-10 h-10" style={{color: '#3B60E4'}} />
-              </div>
-              <h3>Speed Wins Deals</h3>
-              <ul>
-                <li>60-second estimates</li>
-                <li>Bid 10x more projects</li>
-                <li>First to respond wins</li>
-              </ul>
-            </div>
-            <div className="benefit-column">
-              <div className="benefit-icon" style={{background: 'linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%)'}}>
-                <Brain className="w-10 h-10 text-green-600" />
-              </div>
-              <h3>AI-Backed Accuracy</h3>
-              <ul>
-                <li>Learns from every project</li>
-                <li>Local market intelligence</li>
-                <li>90% accurate estimates</li>
-              </ul>
-            </div>
-            <div className="benefit-column">
-              <div className="benefit-icon" style={{background: 'linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)'}}>
-                <Share2 className="w-10 h-10 text-purple-600" />
-              </div>
-              <h3>Professional Results</h3>
-              <ul>
-                <li>Detailed Excel exports</li>
-                <li>Share links with anyone</li>
-                <li>Investor-ready reports</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ROI Calculator Section */}
-      <section id="roi-calculator" className="roi-section fade-in-section">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-12">
-            <h2 className="section-title">
-              See Your Monthly Savings
-            </h2>
-            <p className="section-subtitle">
-              Most users save 20-40 hours per month with SpecSharp
-            </p>
-          </div>
-          <ROICalculator />
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section id="how-it-works" className="how-it-works-section fade-in-section">
-        <div className="container mx-auto px-4">
-          <h2 className="section-title text-center">
-            How It Works
-          </h2>
-          <div className="max-w-4xl mx-auto">
-            <div className="space-y-6">
-              {/* Step 1 */}
-              <div className="flex items-start space-x-4">
-                <div className="step-number">
-                  1
-                </div>
-                <div className="step-content">
-                  <h3>
-                    Describe Your Project
-                  </h3>
-                  <p>
-                    Just type what you need - SpecSharp understands your industry
-                  </p>
-                  <div className="example-cards">
-                    <div className="example-card" style={{backgroundColor: '#EFF6FF', borderColor: '#DBEAFE'}}>
-                      <span className="text-xs font-semibold uppercase tracking-wide" style={{color: '#3B60E4'}}>DEVELOPER:</span>
-                      <p className="text-sm mt-1 font-mono">"200 room hotel on my site in Nashville"</p>
-                    </div>
-                    <div className="example-card" style={{backgroundColor: '#F0FDF4', borderColor: '#D1FAE5'}}>
-                      <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">GC:</span>
-                      <p className="text-sm mt-1 font-mono">"Quick estimate for repeat client - warehouse"</p>
-                    </div>
-                    <div className="example-card" style={{backgroundColor: '#FAF5FF', borderColor: '#EDE9FE'}}>
-                      <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">SUB:</span>
-                      <p className="text-sm mt-1 font-mono">"Plumbing for 50k sf office building"</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Step 2 */}
-              <div className="flex items-start space-x-4">
-                <div className="step-number">
-                  2
-                </div>
-                <div className="step-content">
-                  <h3>
-                    Get Instant Detailed Scope
-                  </h3>
-                  <p>
-                    SpecSharp generates 200+ line items with quantities, costs, and trade breakdowns
-                  </p>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white p-4 rounded-lg border shadow-sm">
-                      <p className="font-semibold">Mechanical</p>
-                      <p className="text-2xl font-bold" style={{color: '#3B60E4'}}>$13.7M</p>
-                    </div>
-                    <div className="bg-white p-4 rounded-lg border shadow-sm">
-                      <p className="font-semibold">Electrical</p>
-                      <p className="text-2xl font-bold" style={{color: '#3B60E4'}}>$8.2M</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Step 3 */}
-              <div className="flex items-start space-x-4">
-                <div className="step-number">
-                  3
-                </div>
-                <div className="step-content">
-                  <h3>
-                    Export and Share
-                  </h3>
-                  <p>
-                    Download Excel with formulas, PDF reports, or share with your team
-                  </p>
-                  <div className="flex space-x-4">
-                    <span className="bg-green-100 text-green-700 px-4 py-2 rounded-lg font-medium">
-                      ✓ Excel Export
-                    </span>
-                    <span className="bg-green-100 text-green-700 px-4 py-2 rounded-lg font-medium">
-                      ✓ PDF Reports
-                    </span>
-                    <span className="bg-green-100 text-green-700 px-4 py-2 rounded-lg font-medium">
-                      ✓ Share Links
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonial */}
-      <section className="testimonial-section fade-in-section">
-        <div className="container mx-auto px-4">
-          <div className="max-w-3xl mx-auto text-center">
-            <p className="testimonial-text">
-              "SpecSharp paid for itself on our first project. 
-              We tested 5 different building types in an afternoon."
-            </p>
-            <p className="font-bold text-xl">
-              Michael Rodriguez, Development Director
-            </p>
-            <p className="text-blue-100 text-lg mt-2">
-              Trammell Crow Company
-            </p>
-          </div>
-        </div>
-      </section>
-      
-      {/* Scenario Comparison Section */}
-      <section className="scenario-comparison-section fade-in-section" style={{backgroundColor: 'white', padding: '60px 0'}}>
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto text-center">
-            <h2 className="text-3xl font-bold mb-3 text-gray-800">Compare Multiple Scenarios Side-by-Side</h2>
-            <p className="text-xl text-gray-600 mb-8">Test hotels vs. offices vs. mixed-use in seconds</p>
-            <div className="flex justify-center items-center gap-8">
-              <div className="scenario-icon" style={{textAlign: 'center'}}>
-                <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mb-2 mx-auto">
-                  <Hotel className="w-10 h-10 text-blue-600" />
-                </div>
-                <p className="font-semibold text-gray-700">Hotel</p>
-              </div>
-              <ArrowRight className="text-gray-400" size={24} />
-              <div className="scenario-icon" style={{textAlign: 'center'}}>
-                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-2 mx-auto">
-                  <Building2 className="w-10 h-10 text-green-600" />
-                </div>
-                <p className="font-semibold text-gray-700">Office</p>
-              </div>
-              <ArrowRight className="text-gray-400" size={24} />
-              <div className="scenario-icon" style={{textAlign: 'center'}}>
-                <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mb-2 mx-auto">
-                  <Layers className="w-10 h-10 text-purple-600" />
-                </div>
-                <p className="font-semibold text-gray-700">Mixed-Use</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Logos Section */}
+      {/* Logos Section (MOVED UP TO #6) */}
       <section className="trust-section fade-in-section" data-track-section="logos">
         <div className="container mx-auto px-4">
           <h2 className="text-center text-gray-800 mb-2 text-3xl font-bold">Trusted by 500+ Construction Professionals</h2>
@@ -672,7 +461,22 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* CTA Section */}
+      {/* ROI Calculator Section (MOVED DOWN TO #7) */}
+      <section id="roi-calculator" className="roi-section fade-in-section">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="section-title">
+              See Your Monthly Savings
+            </h2>
+            <p className="section-subtitle">
+              Most users save 20-40 hours per month with SpecSharp
+            </p>
+          </div>
+          <ROICalculator />
+        </div>
+      </section>
+
+      {/* CTA Section (KEPT AS FINAL #8) */}
       <section className="cta-section fade-in-section">
         <div className="container mx-auto px-4 text-center" style={{position: 'relative', zIndex: 1}}>
           <h2 className="section-title" style={{color: 'white'}}>
