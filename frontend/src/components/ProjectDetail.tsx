@@ -40,14 +40,23 @@ export const PIE_TRADE_COLORS: Record<string, string> = {
   "General Conditions": "#8884D8",  // purple
 };
 
-// Helper function to get pie breakdown data
+// Helper function to get pie breakdown data - matches categories to canonical trade names
 export function getPieBreakdown(project: any): Array<{ trade: string; amount: number }> {
   if (!project?.categories) return [];
   
-  return project.categories.map((cat: any) => ({
-    trade: cat.name || cat.trade || "",
-    amount: cat.subtotal || cat.amount || 0
-  })).filter((item: any) => item.trade && item.amount > 0);
+  // Map category names to canonical trade names for consistency
+  return project.categories.map((cat: any) => {
+    const catName = cat.name || cat.trade || "";
+    // Find matching canonical trade name
+    const canonicalTrade = PIE_TRADE_ORDER.find(t => 
+      t.toLowerCase() === catName.toLowerCase()
+    ) || catName;
+    
+    return {
+      trade: canonicalTrade,
+      amount: cat.subtotal || cat.amount || 0
+    };
+  }).filter((item: any) => item.trade && item.amount > 0);
 }
 
 function ProjectDetail() {
@@ -373,8 +382,9 @@ function ProjectDetail() {
     percentage: selectedTrade !== 'general' ? 100 : item.percentage_of_total,
   }));
 
-  // Map categories to colors based on order
-  const COLORS = costBreakdown.map(item => {
+  // Map categories to colors - ensure consistent colors for each trade
+  const COLORS = filteredCostBreakdown.map(item => {
+    // Find matching canonical trade name
     const tradeName = PIE_TRADE_ORDER.find(t => 
       t.toLowerCase() === item.category?.toLowerCase()
     );
@@ -743,7 +753,7 @@ function ProjectDetail() {
           </div>
         </section>
 
-        {/* Cost DNA Analysis - Display when viewing all trades */}
+        {/* Cost DNA Analysis - Display BELOW pie/table when viewing all trades */}
         {selectedTrade === 'general' && (
           <CostDNADisplay
             projectData={{
