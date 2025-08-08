@@ -565,7 +565,7 @@ function ProgressiveProjectDetail() {
                     <h4 className="font-semibold mb-3">📊 Cost Calculation Breakdown</h4>
                     <div className="space-y-2 text-sm">
                       <div>
-                        <strong>Base Cost:</strong> ${Math.round(project.total_cost / project.request_data.square_footage / (project.request_data.region_multiplier || 1) / (project.project_classification === 'addition' ? 1.15 : project.project_classification === 'renovation' ? 1.35 : 1)).toFixed(2)}/SF
+                        <strong>Base Cost:</strong> ${Math.round(project.total_cost / project.request_data.square_footage / (project.request_data.region_multiplier || 1) / (project.request_data.project_classification === 'addition' ? 1.15 : project.request_data.project_classification === 'renovation' ? 1.35 : 1)).toFixed(2)}/SF
                         <span className="text-gray-500 ml-2">— RSMeans (2024 Q3)</span>
                       </div>
                       <div className="text-gray-400">↓</div>
@@ -574,7 +574,7 @@ function ProgressiveProjectDetail() {
                       </div>
                       <div className="text-gray-400">↓</div>
                       <div>
-                        <strong>Complexity ({project.project_classification === 'addition' ? 'Addition' : project.project_classification === 'renovation' ? 'Renovation' : 'Ground-Up'}):</strong> × {project.project_classification === 'addition' ? '1.15' : project.project_classification === 'renovation' ? '1.35' : '1.00'}
+                        <strong>Complexity ({project.request_data.project_classification === 'addition' ? 'Addition' : project.request_data.project_classification === 'renovation' ? 'Renovation' : 'Ground-Up'}):</strong> × {project.request_data.project_classification === 'addition' ? '1.15' : project.request_data.project_classification === 'renovation' ? '1.35' : '1.00'}
                       </div>
                       <div className="text-gray-400">↓</div>
                       <div className="font-bold text-lg pt-2 border-t">
@@ -609,12 +609,12 @@ function ProgressiveProjectDetail() {
                           min="1.00" 
                           max="1.35" 
                           step="0.01" 
-                          value={project.project_classification === 'addition' ? 1.15 : project.project_classification === 'renovation' ? 1.35 : 1.00} 
+                          value={project.request_data.project_classification === 'addition' ? 1.15 : project.request_data.project_classification === 'renovation' ? 1.35 : 1.00} 
                           disabled
                           className="w-full accent-indigo-600"
                         />
-                        <div className="text-sm mt-1 font-medium">× {project.project_classification === 'addition' ? '1.15' : project.project_classification === 'renovation' ? '1.35' : '1.00'}</div>
-                        <div className="text-xs opacity-60">{project.project_classification === 'addition' ? 'Addition' : project.project_classification === 'renovation' ? 'Renovation' : 'Ground-Up'}</div>
+                        <div className="text-sm mt-1 font-medium">× {project.request_data.project_classification === 'addition' ? '1.15' : project.request_data.project_classification === 'renovation' ? '1.35' : '1.00'}</div>
+                        <div className="text-xs opacity-60">{project.request_data.project_classification === 'addition' ? 'Addition' : project.request_data.project_classification === 'renovation' ? 'Renovation' : 'Ground-Up'}</div>
                       </div>
                       
                       <div className="border rounded-lg p-3 bg-indigo-50">
@@ -648,7 +648,7 @@ function ProgressiveProjectDetail() {
                   <div className="px-3 py-2 rounded-lg bg-gray-50 text-xs flex flex-wrap gap-4 items-center">
                     <div><span className="opacity-70">Base:</span> RSMeans (2024 Q3) • {project.request_data.location}</div>
                     <div><span className="opacity-70">Regional:</span> Index {(project.request_data.region_multiplier || 1).toFixed(2)}</div>
-                    <div><span className="opacity-70">Complexity:</span> {project.project_classification === 'addition' ? 'Addition' : project.project_classification === 'renovation' ? 'Renovation' : 'Ground-Up'}</div>
+                    <div><span className="opacity-70">Complexity:</span> {project.request_data.project_classification === 'addition' ? 'Addition' : project.request_data.project_classification === 'renovation' ? 'Renovation' : 'Ground-Up'}</div>
                     <div className="opacity-70 ml-auto">Updated: {new Date().toLocaleDateString()}</div>
                   </div>
                 </div>
