@@ -10,8 +10,8 @@ import { Package, Sliders, ChevronDown, ChevronUp, FileSpreadsheet, Download } f
 import { getDisplayBuildingType } from '../utils/buildingTypeDisplay';
 import './ProjectDetail.css';
 
-// Import Cost DNA component - using direct import instead of require
-import CostDNADisplay from './CostDNA/CostDNADisplay';
+// Import Cost DNA component
+import CostDNADisplay from './CostDNADisplay';
 
 type TradeType = 'all' | 'structural' | 'mechanical' | 'electrical' | 'plumbing' | 'finishes' | 'general_conditions';
 
@@ -412,15 +412,19 @@ function ProgressiveProjectDetail() {
 
           {/* Cost DNA Analysis - Display right after Project Summary */}
           {project && selectedTrade === 'all' && (
-            <CostDNADisplay 
+            <CostDNADisplay
+              tryApi={false}
               projectData={{
-                square_footage: project.request_data?.square_footage || project.square_footage || 0,
-                occupancy_type: project.request_data?.occupancy_type || project.occupancy_type || 'office',
-                location: project.request_data?.location || project.location || 'Unknown',
-                project_classification: project.request_data?.project_classification || project.project_classification || 'ground_up',
-                description: project.request_data?.special_requirements || project.description || project.project_name || '',
-                total_cost: project.total_cost || 0
-              }} 
+                ...project,
+                square_footage: project.square_footage || project.request_data?.square_footage || 0,
+                occupancy_type: project.occupancy_type || project.request_data?.occupancy_type || "",
+                location: project.location || project.request_data?.location || "",
+                project_classification: project.project_classification || project.request_data?.project_classification || "ground_up",
+                description: project.description || project.project_name || project.request_data?.project_description || project.request_data?.description || project.request_data?.special_requirements || "",
+                total_cost: project.total_cost || 0,
+                categories: project.categories || [],
+                request_data: project.request_data || {},
+              }}
             />
           )}
 

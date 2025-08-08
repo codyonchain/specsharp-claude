@@ -10,37 +10,7 @@ import ComparisonTool from './ComparisonTool';
 import ComparisonToolV2 from './ComparisonToolV2';
 import TradeSummary from './TradeSummary';
 import TimeSavedDisplay from './TimeSavedDisplay';
-// Import Cost DNA component with fallback
-let CostDNADisplay: any;
-try {
-  CostDNADisplay = require('./CostDNA/CostDNADisplay').default;
-  console.log('✅ CostDNADisplay component loaded successfully');
-} catch (error) {
-  console.error('❌ Failed to load CostDNADisplay component:', error);
-  // Fallback component if import fails
-  CostDNADisplay = ({ projectData }: any) => (
-    <div style={{ 
-      background: 'white', 
-      borderRadius: '12px', 
-      padding: '24px', 
-      margin: '20px 0', 
-      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' 
-    }}>
-      <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>
-        <span style={{ marginRight: '8px' }}>🧬</span>
-        Cost DNA Analysis
-      </h3>
-      <p style={{ color: '#666', fontSize: '14px' }}>
-        Project Type: {projectData?.occupancy_type || 'Unknown'} | 
-        Location: {projectData?.location || 'Unknown'} | 
-        Size: {projectData?.square_footage || 0} SF
-      </p>
-      <p style={{ color: '#999', fontSize: '12px', marginTop: '8px' }}>
-        (Full visualization component not available)
-      </p>
-    </div>
-  );
-}
+import CostDNADisplay from './CostDNADisplay';
 import { Package, Sliders, FileSpreadsheet, Download, FileText, Share2, ArrowLeft } from 'lucide-react';
 import { getDisplayBuildingType as getDisplayBuildingTypeUtil } from '../utils/buildingTypeDisplay';
 import { formatCurrency, formatNumber } from '../utils/formatters';
@@ -923,17 +893,22 @@ function ProjectDetail() {
           });
           
           if (shouldShowCostDNA) {
-            const costDNAData = {
-              square_footage: project.square_footage || 0,
-              occupancy_type: project.occupancy_type || 'office',
-              location: project.location || 'Unknown',
-              project_classification: project.project_classification || 'ground_up',
-              description: project.description || project.project_name || '',
-              total_cost: project.total_cost || 0,
-              ...(project.request_data || {})
-            };
-            console.log('🧬 Rendering CostDNADisplay with data:', costDNAData);
-            return <CostDNADisplay projectData={costDNAData} />;
+            return (
+              <CostDNADisplay
+                tryApi={false}
+                projectData={{
+                  ...project,
+                  square_footage: project.square_footage || project.request_data?.square_footage || 0,
+                  occupancy_type: project.occupancy_type || project.request_data?.occupancy_type || "",
+                  location: project.location || project.request_data?.location || "",
+                  project_classification: project.project_classification || project.request_data?.project_classification || "ground_up",
+                  description: project.description || project.project_name || project.request_data?.project_description || project.request_data?.description || "",
+                  total_cost: project.total_cost || 0,
+                  categories: project.categories || [],
+                  request_data: project.request_data || {},
+                }}
+              />
+            );
           }
           return null;
         })()}
