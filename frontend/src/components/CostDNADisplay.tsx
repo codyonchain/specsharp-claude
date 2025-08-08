@@ -332,19 +332,6 @@ const CostDNADisplay: React.FC<Props> = ({ projectData }) => {
           <div className="opacity-70 ml-auto">Updated: {todayStr()}</div>
         </div>
 
-        {/* Jump link to trade math */}
-        <div className="mt-3 text-sm">
-          <button
-            type="button"
-            className="underline hover:no-underline opacity-70"
-            onClick={() => {
-              const el = document.querySelector("#trade-breakdown, #cost-breakdown, [data-anchor='cost-breakdown']");
-              el?.scrollIntoView({ behavior: "smooth", block: "start" });
-            }}
-          >
-            See detailed trade breakdown below ↴
-          </button>
-        </div>
       </div>
 
       {/* PROVENANCE MODAL */}
