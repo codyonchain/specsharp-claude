@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { getPieBreakdown, getTradeColor, getPieColors, TRADE_COLORS } from "../utils/getPieBreakdown";
+import { getPieBreakdown, PIE_TRADE_COLORS, PIE_TRADE_ORDER } from "./ProjectDetail";
 
 /** ---------- Types ---------- **/
 type ProjectLike = {
@@ -29,8 +29,6 @@ interface Props {
 }
 
 /** ---------- Constants ---------- **/
-const TRADE_ORDER = ["Structural", "Mechanical", "Electrical", "Plumbing", "General Conditions"]; // must mirror pie order
-
 const REGIONAL_INDEX_FALLBACK: Record<string, number> = {
   "Nashville, TN": 1.08,
   Tennessee: 1.08,
@@ -83,21 +81,33 @@ const CostDNADisplay: React.FC<Props> = ({ projectData }) => {
     JSON.stringify(projectData.categories || (projectData as any).category_breakdown || [])
   ]);
 
-  const colors = useMemo(() => getPieColors(), []);
-
   // Debug log to verify data
   console.debug("CostDNA pieData ->", pieData);
 
   // Calculate total from pie data
   const totalAmt = pieData.reduce((a, i) => a + (Number(i.amount) || 0), 0);
 
-  // Build fingerprint in canonical order with colors
-  const fingerprint = TRADE_ORDER.map(trade => {
+  // Build fingerprint in canonical order with colors from pie
+  const fingerprint = PIE_TRADE_ORDER.map(trade => {
     const item = pieData.find(i => i.trade === trade);
     const amt = Number(item?.amount || 0);
     const percent = totalAmt > 0 ? amt / totalAmt : 0;
-    return { trade, amt, percent, color: colors[trade] || "#ccc" };
+    return { trade, amt, percent, color: PIE_TRADE_COLORS[trade] || "#999" };
   });
+
+  /** Jump to trade with highlight */
+  function jumpToTrade(tradeLabel: string) {
+    const id = `trade-${String(tradeLabel).toLowerCase().replace(/[^a-z]/g, "")}`;
+    const el = document.getElementById(id) || document.querySelector(`[data-trade-id='${id}']`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      // Add highlight classes
+      el.classList.add("ring-2", "ring-indigo-500", "ring-offset-2", "transition-all");
+      setTimeout(() => {
+        el.classList.remove("ring-2", "ring-indigo-500", "ring-offset-2");
+      }, 1500);
+    }
+  }
 
   /** Back-solve base $/SF */
   const basePsf = sf > 0 ? total / (sf * regionalMult * complexityMult) : 0;
@@ -105,10 +115,17 @@ const CostDNADisplay: React.FC<Props> = ({ projectData }) => {
   /** ========== STATES ========== **/
   const [mode, setMode] = useState<"total"|"psf">("total");
   const [provOpen, setProvOpen] = useState(false);
+  const [animateFingerprint, setAnimateFingerprint] = useState(false);
   
   // Sensitivity sliders
   const [regMultAdj, setRegMultAdj] = useState(regionalMult);
   const [compMultAdj, setCompMultAdj] = useState(complexityMult);
+
+  // Animate fingerprint on mount
+  useEffect(() => {
+    const timer = setTimeout(() => setAnimateFingerprint(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Calculate adjusted values
   const psfFinal = basePsf * regMultAdj * compMultAdj;
@@ -138,22 +155,6 @@ const CostDNADisplay: React.FC<Props> = ({ projectData }) => {
     SAMPLE_SIZE >= 30 && "sufficient sample size",
   ].filter(Boolean).join(", ") || "limited signals";
 
-  /** ========== FUNCTIONS ========== **/
-  
-  // Jump to trade with highlight
-  function jumpToTrade(tradeLabel: string) {
-    const id = `trade-${String(tradeLabel).toLowerCase().replace(/[^a-z]/g, "")}`;
-    const el = document.getElementById(id) || document.querySelector(`[data-trade-id='${id}']`);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      // Add Tailwind highlight classes
-      el.classList.add("ring-2", "ring-indigo-500", "ring-offset-2", "transition-all");
-      setTimeout(() => {
-        el.classList.remove("ring-2", "ring-indigo-500", "ring-offset-2");
-      }, 1600);
-    }
-  }
-
   /** Factors */
   const factors: {label: string; impact: "low"|"medium"|"high"}[] = [];
   if (isHealthcare || /(surgical|operating room|\bor\b)/.test(descText)) factors.push({ label: "OSHPD/Healthcare Compliance", impact: "high" });
@@ -176,43 +177,59 @@ const CostDNADisplay: React.FC<Props> = ({ projectData }) => {
       </div>
 
       <div className="card-body">
-        {/* CLICKABLE FINGERPRINT */}
+        {/* ENHANCED CLICKABLE FINGERPRINT */}
         <div className="mb-4">
-          <div className="text-sm opacity-70 mb-2">Cost Fingerprint (click to jump to trade)</div>
+          <div className="text-sm opacity-70 mb-2">
+            Cost Fingerprint (matches trade breakdown) — <span className="opacity-60">click a bar to jump to that trade</span>
+          </div>
           {totalAmt === 0 ? (
             <div className="text-sm opacity-70 p-3 border rounded bg-gray-50">
-              No trade breakdown available yet. Once the trade totals populate, this bar will mirror the pie above.
+              Trade breakdown not available yet. Once populated, this fingerprint will mirror the pie exactly.
             </div>
           ) : (
             <>
-              {/* Bar chart visualization */}
-              <div style={{ height: "120px", display: "flex", alignItems: "flex-end", gap: "8px" }} className="mb-3">
+              {/* Taller animated bar chart */}
+              <div style={{ height: "200px", display: "flex", alignItems: "flex-end", gap: "10px" }} className="mb-3">
                 {fingerprint.map((f, i) => (
                   <button
                     key={i}
+                    type="button"
                     onClick={() => jumpToTrade(f.trade)}
-                    className="hover:opacity-80 transition-all cursor-pointer"
+                    className="hover:opacity-80 transition-all cursor-pointer relative group"
                     style={{
                       width: `${100 / fingerprint.length}%`,
+                      height: animateFingerprint ? `${Math.max(2, f.percent * 100)}%` : '0%',
                       backgroundColor: f.color,
-                      height: `${Math.max(5, f.percent * 100)}%`,
-                      borderRadius: "6px 6px 0 0",
+                      borderRadius: "8px 8px 0 0",
+                      transition: "height 420ms cubic-bezier(.2,.8,.2,1)",
                       minHeight: "4px"
                     }}
                     title={`${f.trade}: ${pct(f.percent)} - Click to view`}
-                  />
+                  >
+                    {/* Show percentage on hover */}
+                    <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-black text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                      {pct(f.percent)}
+                    </span>
+                  </button>
                 ))}
               </div>
-              {/* Legend */}
+              {/* Legend with colors matching the pie */}
               <div className="flex flex-wrap gap-3 text-sm">
                 {fingerprint.map((f, i) => (
                   <button 
                     key={i} 
+                    type="button"
                     onClick={() => jumpToTrade(f.trade)} 
                     className="hover:underline flex items-center gap-1"
                   >
-                    <span style={{ backgroundColor: f.color, display: "inline-block", width: 10, height: 10, borderRadius: 2 }}></span>
-                    {f.trade}: {pct(f.percent)}
+                    <span style={{ 
+                      backgroundColor: f.color, 
+                      display: "inline-block", 
+                      width: 12, 
+                      height: 12, 
+                      borderRadius: 3 
+                    }}></span>
+                    <span>{f.trade}: {pct(f.percent)}</span>
                   </button>
                 ))}
               </div>
@@ -386,7 +403,7 @@ const CostDNADisplay: React.FC<Props> = ({ projectData }) => {
               </div>
 
               <div className="border-b pb-3">
-                <h5 className="font-medium mb-2">Trade Distribution</h5>
+                <h5 className="font-medium mb-2">Trade Distribution (Matching Pie Colors)</h5>
                 <div className="space-y-1">
                   {fingerprint.filter(f => f.percent > 0).map((f, i) => (
                     <div key={i} className="flex items-center justify-between text-gray-600">

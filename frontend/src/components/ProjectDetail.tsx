@@ -28,6 +28,28 @@ const TRADE_CATEGORY_MAP: Record<TradeType, string | null> = {
   structural: 'Structural',
 };
 
+// Export these for use in CostDNA component
+export const PIE_TRADE_ORDER = ["Structural", "Mechanical", "Electrical", "Plumbing", "General Conditions"];
+
+// Exact colors that match the pie chart (Electrical is yellow)
+export const PIE_TRADE_COLORS: Record<string, string> = {
+  Structural:           "#0088FE",  // blue
+  Mechanical:           "#00C49F",  // teal/green
+  Electrical:           "#FFBB28",  // YELLOW (matches pie)
+  Plumbing:             "#FF8042",  // orange/red
+  "General Conditions": "#8884D8",  // purple
+};
+
+// Helper function to get pie breakdown data
+export function getPieBreakdown(project: any): Array<{ trade: string; amount: number }> {
+  if (!project?.categories) return [];
+  
+  return project.categories.map((cat: any) => ({
+    trade: cat.name || cat.trade || "",
+    amount: cat.subtotal || cat.amount || 0
+  })).filter((item: any) => item.trade && item.amount > 0);
+}
+
 function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -351,7 +373,13 @@ function ProjectDetail() {
     percentage: selectedTrade !== 'general' ? 100 : item.percentage_of_total,
   }));
 
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
+  // Map categories to colors based on order
+  const COLORS = costBreakdown.map(item => {
+    const tradeName = PIE_TRADE_ORDER.find(t => 
+      t.toLowerCase() === item.category?.toLowerCase()
+    );
+    return tradeName ? PIE_TRADE_COLORS[tradeName] : '#999999';
+  });
 
   return (
     <div className="project-detail">
@@ -663,7 +691,7 @@ function ProjectDetail() {
           </div>
         )}
 
-        <div className="cost-breakdown">
+        <section id="cost-breakdown" className="cost-breakdown">
           <h2>Cost Breakdown</h2>
           <div className="breakdown-content">
             <div className="chart-container">
@@ -702,7 +730,7 @@ function ProjectDetail() {
                   {filteredCostBreakdown.map((item, index) => {
                     const tradeId = `trade-${String(item.category || '').toLowerCase().replace(/[^a-z]/g, '')}`;
                     return (
-                      <tr key={index} id={tradeId} data-trade-id={tradeId}>
+                      <tr key={index} id={tradeId} data-trade-id={tradeId} className="scroll-mt-24">
                         <td>{item.category}</td>
                         <td>{formatCurrency(item.subtotal)}</td>
                         <td>{(selectedTrade !== 'general' ? 100 : item.percentage_of_total).toFixed(1)}%</td>
@@ -713,7 +741,24 @@ function ProjectDetail() {
               </table>
             </div>
           </div>
-        </div>
+        </section>
+
+        {/* Cost DNA Analysis - Display when viewing all trades */}
+        {selectedTrade === 'general' && (
+          <CostDNADisplay
+            projectData={{
+              ...project,
+              square_footage: project.square_footage || project.request_data?.square_footage || 0,
+              occupancy_type: project.occupancy_type || project.request_data?.occupancy_type || "",
+              location: project.location || project.request_data?.location || "",
+              project_classification: project.project_classification || project.request_data?.project_classification || "ground_up",
+              description: project.description || project.project_name || project.request_data?.project_description || project.request_data?.description || "",
+              total_cost: project.total_cost || 0,
+              categories: project.categories || (project as any).category_breakdown || [],
+              request_data: project.request_data || {},
+            }}
+          />
+        )}
 
         {selectedTrade === 'general' && project.trade_summaries ? (
           <TradeSummary 
@@ -726,7 +771,7 @@ function ProjectDetail() {
             {filteredCategories.map((category: any) => {
               const categoryId = `trade-${String(category.name || '').toLowerCase().replace(/[^a-z]/g, '')}`;
               return (
-                <div key={category.name} id={categoryId} data-trade-id={categoryId} className="category-section">
+                <div key={category.name} id={categoryId} data-trade-id={categoryId} className="category-section scroll-mt-24">
                   <div className="category-header">
                     <h3>{category.name}</h3>
                   <button
@@ -811,7 +856,7 @@ function ProjectDetail() {
             {project.categories && project.categories.map((category: any) => {
               const categoryId = `trade-${String(category.name || '').toLowerCase().replace(/[^a-z]/g, '')}`;
               return (
-                <div key={category.name} id={categoryId} data-trade-id={categoryId} className="category-section">
+                <div key={category.name} id={categoryId} data-trade-id={categoryId} className="category-section scroll-mt-24">
                 <div className="category-header">
                   <h3>{category.name}</h3>
                   <button
@@ -891,35 +936,6 @@ function ProjectDetail() {
           </div>
         )}
 
-        {/* Cost DNA Analysis - Display when viewing all trades */}
-        {(() => {
-          const shouldShowCostDNA = project && selectedTrade === 'general';
-          console.log('🧬 Cost DNA render check:', { 
-            hasProject: !!project, 
-            selectedTrade, 
-            shouldShow: shouldShowCostDNA,
-            projectData: project 
-          });
-          
-          if (shouldShowCostDNA) {
-            return (
-              <CostDNADisplay
-                projectData={{
-                  ...project,
-                  square_footage: project.square_footage || project.request_data?.square_footage || 0,
-                  occupancy_type: project.occupancy_type || project.request_data?.occupancy_type || "",
-                  location: project.location || project.request_data?.location || "",
-                  project_classification: project.project_classification || project.request_data?.project_classification || "ground_up",
-                  description: project.description || project.project_name || project.request_data?.project_description || project.request_data?.description || "",
-                  total_cost: project.total_cost || 0,
-                  categories: project.categories || (project as any).category_breakdown || [],
-                  request_data: project.request_data || {},
-                }}
-              />
-            );
-          }
-          return null;
-        })()}
 
         <div className="project-footer">
           <div className="footer-summary">
