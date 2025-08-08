@@ -895,7 +895,6 @@ function ProjectDetail() {
           if (shouldShowCostDNA) {
             return (
               <CostDNADisplay
-                tryApi={false}
                 projectData={{
                   ...project,
                   square_footage: project.square_footage || project.request_data?.square_footage || 0,
