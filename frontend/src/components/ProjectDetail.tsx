@@ -644,11 +644,6 @@ function ProjectDetail() {
           </div>
         </div>
 
-        {/* Cost DNA Analysis */}
-        {project && project.request_data && (
-          <CostDNADisplay projectData={project.request_data} />
-        )}
-        
         {/* Time Saved Display */}
         <TimeSavedDisplay 
           generationTimeSeconds={project.generation_time_seconds}
@@ -885,6 +880,21 @@ function ProjectDetail() {
               </div>
             ))}
           </div>
+        )}
+
+        {/* Cost DNA Analysis - Display when viewing all trades */}
+        {project && selectedTrade === 'general' && (
+          <CostDNADisplay 
+            projectData={{
+              square_footage: project.square_footage,
+              occupancy_type: project.occupancy_type,
+              location: project.location,
+              project_classification: project.project_classification || 'ground_up',
+              description: project.description || project.project_name || '',
+              total_cost: project.total_cost,
+              ...project.request_data
+            }} 
+          />
         )}
 
         <div className="project-footer">
