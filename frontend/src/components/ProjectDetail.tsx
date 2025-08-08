@@ -10,7 +10,7 @@ import ComparisonTool from './ComparisonTool';
 import ComparisonToolV2 from './ComparisonToolV2';
 import TradeSummary from './TradeSummary';
 import TimeSavedDisplay from './TimeSavedDisplay';
-import CostDNA from './CostDNA';
+import CostDNADisplay from './CostDNA/CostDNADisplay';
 import { Package, Sliders, FileSpreadsheet, Download, FileText, Share2, ArrowLeft } from 'lucide-react';
 import { getDisplayBuildingType as getDisplayBuildingTypeUtil } from '../utils/buildingTypeDisplay';
 import { formatCurrency, formatNumber } from '../utils/formatters';
@@ -645,7 +645,9 @@ function ProjectDetail() {
         </div>
 
         {/* Cost DNA Analysis */}
-        <CostDNA projectData={project.request_data} />
+        {project && project.request_data && (
+          <CostDNADisplay projectData={project.request_data} />
+        )}
         
         {/* Time Saved Display */}
         <TimeSavedDisplay 
