@@ -923,6 +923,73 @@ h1, h2, h3, h4, h5, h6 {
   opacity: 1;
 }
 
+/* New Hero Section Animations */
+@keyframes grid-flow {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(40px, 40px); }
+}
+
+@keyframes grid-move {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(50px, 50px); }
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  50% { transform: translateY(-20px) translateX(10px); }
+}
+
+@keyframes float-reverse {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  50% { transform: translateY(15px) translateX(10px); }
+}
+
+@keyframes float-reverse-slow {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  50% { transform: translateY(20px) translateX(-10px); }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-scale {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
 /* Performance Optimizations */
 .audience-card,
 .benefit-icon,

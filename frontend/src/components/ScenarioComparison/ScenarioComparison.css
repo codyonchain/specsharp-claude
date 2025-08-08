@@ -180,8 +180,8 @@
 .primary-btn.large {
   padding: 20px 40px;
   font-size: 1.125rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: linear-gradient(135deg, #FCD34D 0%, #F59E0B 100%);
+  color: #111827;
   border: none;
   border-radius: 12px;
   cursor: pointer;
@@ -194,7 +194,8 @@
 
 .primary-btn.large:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 10px 30px rgba(251, 191, 36, 0.4);
+  background: linear-gradient(135deg, #FDE68A 0%, #FCD34D 100%);
 }
 
 .arrow {

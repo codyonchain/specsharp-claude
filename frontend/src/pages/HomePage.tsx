@@ -205,100 +205,162 @@ export const HomePage: React.FC = () => {
         )}
       </nav>
 
-      {/* Enhanced Hero Section */}
-      <section className="relative min-h-[600px] overflow-hidden">
-        {/* Animated gradient background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-blue-500 to-purple-600">
-          {/* Animated gradient overlay for movement */}
-          <div className="absolute inset-0 bg-gradient-to-t from-blue-600/50 via-transparent to-purple-600/50 animate-gradient-shift"></div>
+      {/* Mobile-First Responsive Hero */}
+      <section className="relative min-h-screen flex items-center overflow-hidden bg-gradient-to-br from-blue-600 via-blue-500 to-blue-600">
+        {/* Animated mesh gradient background */}
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_50%,rgba(59,130,246,0.3),transparent_50%)]"></div>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_50%,rgba(37,99,235,0.2),transparent_50%)]"></div>
         </div>
-        
-        {/* Floating grid pattern for depth */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute inset-0" style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: '60px 60px'
-          }}></div>
-        </div>
-        
-        {/* Animated floating particles */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="particle particle-1"></div>
-          <div className="particle particle-2"></div>
-          <div className="particle particle-3"></div>
-          <div className="particle particle-4"></div>
-        </div>
-        
-        {/* Subtle pulse rings emanating from center */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-          <div className="absolute w-96 h-96 border border-white/10 rounded-full animate-pulse-ring"></div>
-          <div className="absolute w-96 h-96 border border-white/10 rounded-full animate-pulse-ring animation-delay-2"></div>
-          <div className="absolute w-96 h-96 border border-white/10 rounded-full animate-pulse-ring animation-delay-4"></div>
-        </div>
-        
-        {/* Main content - now with relative positioning */}
-        <div className="relative z-10 container mx-auto px-4 py-20">
-          <div className="text-center max-w-4xl mx-auto">
-            {/* Animated badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-full mb-6 animate-fade-in-down">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-              <span className="text-sm font-medium text-white">Trusted by 500+ Construction Pros</span>
+
+        {/* Moving grid overlay - hidden on mobile for performance */}
+        <div className="hidden sm:block absolute inset-0" style={{
+          backgroundImage: 'linear-gradient(rgba(59, 130, 246, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(59, 130, 246, 0.05) 1px, transparent 1px)',
+          backgroundSize: '40px 40px',
+          animation: 'grid-flow 25s linear infinite'
+        }}></div>
+
+        {/* Floating metrics - hidden on mobile */}
+        <div className="hidden lg:block absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-[15%] left-[5%] opacity-30 text-white font-mono text-xs" style={{animation: 'float-slow 5s ease-in-out infinite'}}>
+            <div className="bg-blue-500/10 backdrop-blur border border-blue-400/20 rounded px-3 py-2">
+              <div className="text-blue-300">STRUCTURAL</div>
+              <div className="text-2xl font-bold">$5.2M</div>
             </div>
+          </div>
+
+          <div className="absolute top-[20%] right-[8%] opacity-30 text-white font-mono text-xs" style={{animation: 'float-reverse 4.5s ease-in-out infinite'}}>
+            <div className="bg-blue-500/10 backdrop-blur border border-blue-400/20 rounded px-3 py-2">
+              <div className="text-cyan-300">MECHANICAL</div>
+              <div className="text-2xl font-bold">$8.2M</div>
+            </div>
+          </div>
+
+          <div className="absolute bottom-[25%] left-[10%] opacity-30 text-white font-mono text-xs" style={{animation: 'float-slow 5s ease-in-out infinite'}}>
+            <div className="bg-blue-500/10 backdrop-blur border border-blue-400/20 rounded px-3 py-2">
+              <div className="text-green-400">CONFIDENCE</div>
+              <div className="text-2xl font-bold">92%</div>
+            </div>
+          </div>
+
+          <div className="absolute bottom-[20%] right-[5%] opacity-30 text-white font-mono text-xs" style={{animation: 'float-reverse-slow 5.5s ease-in-out infinite'}}>
+            <div className="bg-blue-500/10 backdrop-blur border border-blue-400/20 rounded px-3 py-2">
+              <div className="text-yellow-400">TIME SAVED</div>
+              <div className="text-2xl font-bold">3 hrs</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content - Mobile optimized */}
+        <div className="relative z-10 w-full px-4 sm:px-6 lg:px-8">
+          <div className="max-w-5xl mx-auto text-center">
             
-            {/* Main headline with stagger animation */}
-            <h1 className="text-5xl md:text-6xl font-bold text-white mb-4">
-              <span className="inline-block animate-fade-in-up">AI-Powered</span>{' '}
-              <span className="inline-block animate-fade-in-up animation-delay-1">Construction</span>{' '}
-              <span className="inline-block animate-fade-in-up animation-delay-2">Estimates</span>
+            {/* Main headline - responsive sizes */}
+            <h1 className="font-black tracking-tight mb-6">
+              <span className="block text-3xl sm:text-5xl md:text-6xl lg:text-7xl text-white leading-tight" 
+                    style={{animation: 'slide-in 0.5s ease-out both'}}>
+                Instant AI Construction
+              </span>
+              <span className="block text-3xl sm:text-5xl md:text-6xl lg:text-7xl text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 leading-tight" 
+                    style={{animation: 'slide-in 0.5s ease-out both', animationDelay: '0.1s'}}>
+                Estimates
+              </span>
             </h1>
-            
-            {/* Highlight the 60 seconds with special treatment */}
-            <div className="text-3xl md:text-4xl text-yellow-400 font-bold mb-6 animate-fade-in-up animation-delay-3">
-              in 60 Seconds
-              <span className="inline-block ml-2 text-lg text-yellow-300 animate-pulse">⚡</span>
+
+            {/* The hook - in 60 seconds with pulse */}
+            <div className="mb-6" style={{animation: 'slide-in 0.5s ease-out both', animationDelay: '0.2s'}}>
+              <div className="relative inline-flex items-center justify-center">
+                <span className="text-2xl sm:text-3xl md:text-4xl text-gray-300 mr-3">in</span>
+                <span className="text-5xl sm:text-6xl md:text-7xl font-black text-yellow-400 
+                               filter drop-shadow-[0_0_20px_rgba(250,204,21,0.4)]"
+                      style={{animation: 'pulse-scale 2s ease-in-out infinite'}}>
+                  60
+                </span>
+                <span className="text-2xl sm:text-3xl md:text-4xl text-yellow-400 ml-2 sm:ml-3 font-bold">Seconds</span>
+              </div>
             </div>
-            
-            <p className="text-xl text-blue-100 mb-4 animate-fade-in-up animation-delay-4">
+
+            {/* Validate Your Vision */}
+            <p className="text-xl sm:text-2xl md:text-3xl text-gray-200 mb-4" 
+               style={{animation: 'slide-in 0.5s ease-out both', animationDelay: '0.3s'}}>
               Validate Your Vision Before Spending on Design
             </p>
-            
-            <p className="text-lg text-blue-200 mb-8 animate-fade-in-up animation-delay-5">
+
+            {/* Subheadline - Know if your project pencils out */}
+            <p className="text-base sm:text-lg md:text-xl text-gray-200 mb-8 max-w-xl mx-auto px-4" 
+               style={{animation: 'slide-in 0.5s ease-out both', animationDelay: '0.35s'}}>
               Know if your project pencils out in 60 seconds.
             </p>
-            
-            {/* Buttons with hover effects */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in-up animation-delay-6">
+
+            {/* CTAs - stack on mobile, side-by-side on desktop */}
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center mb-6 px-4" 
+                 style={{animation: 'slide-in 0.5s ease-out both', animationDelay: '0.4s'}}>
               <Link
                 to="/demo"
-                className="group px-8 py-4 bg-yellow-400 text-gray-900 rounded-lg font-bold text-lg hover:bg-yellow-300 transform hover:scale-105 transition-all duration-200 shadow-xl hover:shadow-2xl"
+                className="group relative px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-yellow-400 to-amber-400 
+                           rounded-lg font-bold text-base sm:text-lg text-gray-900 overflow-hidden
+                           transform hover:scale-105 transition-all duration-200
+                           shadow-[0_10px_30px_-10px_rgba(251,191,36,0.5)]"
                 onClick={() => handleCTAClick('Create Your First Estimate', 'hero')}
               >
-                Create Your First Estimate
-                <span className="inline-block ml-2 group-hover:translate-x-1 transition-transform">→</span>
+                <span className="relative z-10 flex items-center justify-center">
+                  Create Your First Estimate
+                  <svg className="w-4 sm:w-5 h-4 sm:h-5 ml-2 group-hover:translate-x-1 transition-transform" 
+                       fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </span>
               </Link>
-              <a
-                href="#scenario-comparison"
-                className="px-8 py-4 bg-white/10 backdrop-blur-sm text-white rounded-lg font-bold text-lg border-2 border-white/30 hover:bg-white/20 transform hover:scale-105 transition-all duration-200"
-                onClick={(e) => {
-                  e.preventDefault();
+
+              <button 
+                className="px-6 sm:px-8 py-3 sm:py-4 bg-white/5 backdrop-blur border border-white/20 
+                           rounded-lg font-bold text-base sm:text-lg text-white
+                           hover:bg-white/10 hover:border-white/30
+                           transform hover:scale-105 transition-all duration-200"
+                onClick={() => {
                   document.getElementById('scenario-comparison')?.scrollIntoView({ behavior: 'smooth' });
                 }}
               >
                 Compare Scenarios
                 <span className="inline-block ml-2">📊</span>
-              </a>
+              </button>
             </div>
-            
-            <p className="text-blue-200 mt-8 animate-fade-in-up animation-delay-7">
+
+            {/* Finally tagline */}
+            <p className="text-base sm:text-lg md:text-xl text-gray-300 mb-8" 
+               style={{animation: 'slide-in 0.5s ease-out both', animationDelay: '0.45s'}}>
               Finally. Cost certainty before design commitment.
             </p>
+
+            {/* Trust row - responsive, wrap on mobile */}
+            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-6 text-[10px] sm:text-xs text-gray-400" 
+                 style={{animation: 'fade-in 0.5s ease-out both', animationDelay: '0.5s'}}>
+              <div className="flex items-center gap-1">
+                <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
+                </svg>
+                <span>SOC 2 Certified</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
+                </svg>
+                <span>Bank-Level Security</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
+                </svg>
+                <span>99.9% Uptime</span>
+              </div>
+            </div>
           </div>
         </div>
-        
-        {/* Bottom wave for transition to next section */}
-        <div className="absolute bottom-0 left-0 right-0">
-          <svg viewBox="0 0 1440 120" className="w-full h-20 fill-white">
-            <path d="M0,64 C240,120 480,0 720,48 C960,96 1200,16 1440,64 L1440,120 L0,120 Z" />
+
+        {/* Scroll hint - hidden on mobile */}
+        <div className="hidden sm:block absolute bottom-4 left-1/2 -translate-x-1/2 opacity-40 animate-bounce">
+          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
           </svg>
         </div>
       </section>
