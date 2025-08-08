@@ -6,7 +6,31 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 from app.services.simple_cost_dna_service import SimpleCostDNAService
-from app.api.endpoints.auth import get_current_user_optional
+from app.api.endpoints.auth import oauth2_scheme
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
+from app.db.database import get_db
+from jose import JWTError, jwt
+from app.core.config import settings
+from app.db.models import User as DBUser
+
+# Optional auth - won't fail if no token
+async def get_current_user_optional(
+    token: Optional[str] = Depends(oauth2_scheme), 
+    db: Session = Depends(get_db)
+):
+    if not token:
+        return None
+    
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        email: str = payload.get("sub")
+        if email is None:
+            return None
+        user = db.query(DBUser).filter(DBUser.email == email).first()
+        return user
+    except JWTError:
+        return None
 
 router = APIRouter()
 
