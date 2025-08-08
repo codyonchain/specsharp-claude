@@ -49,6 +49,26 @@
   padding: 0 2rem;
 }
 
+/* Section Headers for Better Navigation */
+.section-header {
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.section-title {
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 8px;
+}
+
+.section-subtitle {
+  font-size: 1rem;
+  color: #666;
+  margin: 0;
+}
+
 .project-summary,
 .cost-breakdown,
 .systems-detail,

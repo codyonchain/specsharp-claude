@@ -119,18 +119,15 @@ export const HomePage: React.FC = () => {
               How It Works
             </a>
             <a 
-              href="#roi-calculator" 
+              href="#scenario-comparison" 
               className="text-gray-700 hover:text-blue-600 transition-colors"
               onClick={(e) => {
                 e.preventDefault();
-                document.getElementById('roi-calculator')?.scrollIntoView({ behavior: 'smooth' });
+                document.getElementById('scenario-comparison')?.scrollIntoView({ behavior: 'smooth' });
               }}
             >
-              ROI Calculator
+              Compare Scenarios
             </a>
-            <Link to="/pricing" className="text-gray-700 hover:text-blue-600 transition-colors">
-              Pricing
-            </Link>
             <Link to="/login" className="text-blue-600 hover:text-blue-700 transition-colors font-medium">
               Login
             </Link>
@@ -175,23 +172,16 @@ export const HomePage: React.FC = () => {
                 How It Works
               </a>
               <a 
-                href="#roi-calculator" 
+                href="#scenario-comparison" 
                 className="block py-2 text-gray-700 hover:text-blue-600 transition-colors"
                 onClick={(e) => {
                   e.preventDefault();
-                  document.getElementById('roi-calculator')?.scrollIntoView({ behavior: 'smooth' });
+                  document.getElementById('scenario-comparison')?.scrollIntoView({ behavior: 'smooth' });
                   setIsMobileMenuOpen(false);
                 }}
               >
-                ROI Calculator
+                Compare Scenarios
               </a>
-              <Link 
-                to="/pricing" 
-                className="block py-2 text-gray-700 hover:text-blue-600 transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Pricing
-              </Link>
               <Link 
                 to="/login" 
                 className="block py-2 text-blue-600 hover:text-blue-700 transition-colors font-medium"
@@ -238,25 +228,18 @@ export const HomePage: React.FC = () => {
                 Create Your First Estimate <ArrowRight className="ml-2" />
               </Link>
               <a
-                href="#roi-calculator"
+                href="#scenario-comparison"
                 className="btn-secondary"
                 onClick={(e) => {
                   e.preventDefault();
-                  document.getElementById('roi-calculator')?.scrollIntoView({ behavior: 'smooth' });
+                  document.getElementById('scenario-comparison')?.scrollIntoView({ behavior: 'smooth' });
                 }}
               >
-                Calculate Your ROI <Calculator className="ml-2" />
+                Compare Scenarios <Layers className="ml-2" />
               </a>
             </div>
             <p className="mt-6 text-blue-100 text-lg">
-              From <span style={{color: '#FFC107'}} className="font-bold">$799/month</span>
-              <span className="mx-2">•</span>
-              <span className="text-blue-200">No setup fees</span>
-              <span className="mx-2">•</span>
-              <span className="text-blue-200">Cancel anytime</span>
-            </p>
-            <p className="mt-2 text-blue-200 text-sm" style={{opacity: 0.8}}>
-              Less than 2 hours of consultant time
+              Finally. Cost certainty before design commitment.
             </p>
           </div>
         </div>
@@ -268,7 +251,9 @@ export const HomePage: React.FC = () => {
       </div>
 
       {/* Scenario Comparison - Interactive Version (MOVED UP TO #3) */}
-      <ScenarioComparison />
+      <div id="scenario-comparison">
+        <ScenarioComparison />
+      </div>
 
       {/* Why Choose SpecSharp - Enhanced Version (NOW #4 with new design) */}
       <WhyChooseEnhanced />
@@ -461,7 +446,92 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* ROI Calculator Section (MOVED DOWN TO #7) */}
+      {/* Personalized Demo Section - Replaces ROI Calculator for Warm Leads */}
+      <section className="py-16 bg-white">
+        <div className="container mx-auto px-4">
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-12 text-white relative">
+              {/* Early Access Badge */}
+              <div className="absolute top-6 right-6">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur rounded-full">
+                  <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                  <span className="text-sm font-medium">Limited Early Access</span>
+                </div>
+              </div>
+              
+              <h2 className="text-3xl font-bold mb-4">
+                See Your Project Estimated in Real-Time
+              </h2>
+              
+              <p className="text-xl mb-8 text-blue-100">
+                Bring your current project. Walk away with real numbers.
+              </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                <div>
+                  <h3 className="font-semibold mb-3">What you'll get:</h3>
+                  <ul className="space-y-2 text-sm">
+                    <li className="flex items-start gap-2">
+                      <span className="text-yellow-400">→</span>
+                      <span>Complete cost breakdown for your project</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-yellow-400">→</span>
+                      <span>3 alternate scenarios to optimize budget</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-yellow-400">→</span>
+                      <span>Detailed PDF report to share with stakeholders</span>
+                    </li>
+                  </ul>
+                </div>
+                
+                <div>
+                  <h3 className="font-semibold mb-3">Perfect for:</h3>
+                  <ul className="space-y-2 text-sm">
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-400">✓</span>
+                      <span>Active projects needing quick validation</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-400">✓</span>
+                      <span>Teams evaluating multiple options</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-400">✓</span>
+                      <span>Developers seeking investor-ready numbers</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-4">
+                <a
+                  href="mailto:cody@specsharp.ai?subject=SpecSharp Demo Request - [Your Company]&body=Hi Cody,%0D%0A%0D%0AI'd like to schedule a personalized demo of SpecSharp.%0D%0A%0D%0AProject Details:%0D%0A- Company: %0D%0A- Project Type: %0D%0A- Approximate Square Footage: %0D%0A- Timeline: %0D%0A%0D%0ABest times for me:%0D%0A%0D%0AThanks!"
+                  className="px-6 py-3 bg-white text-blue-600 rounded-lg font-semibold hover:bg-gray-100 transition-colors text-center shadow-lg"
+                  onClick={() => handleCTAClick('Schedule Personalized Demo', 'personalized-demo')}
+                >
+                  Schedule Personalized Demo
+                </a>
+                <button 
+                  onClick={() => window.location.href = '/demo'}
+                  className="px-6 py-3 bg-transparent border-2 border-white/50 text-white rounded-lg font-semibold hover:bg-white/10 transition-colors"
+                >
+                  Try It Yourself First →
+                </button>
+              </div>
+              
+              <p className="text-center mt-6 text-sm text-blue-200">
+                🔥 Currently onboarding 5 select firms this month
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ROI Calculator Section - COMMENTED OUT FOR WARM LEADS */}
+      {/* Uncomment this section when launching to public/cold traffic */}
+      {/* 
       <section id="roi-calculator" className="roi-section fade-in-section">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
@@ -475,6 +545,7 @@ export const HomePage: React.FC = () => {
           <ROICalculator />
         </div>
       </section>
+      */}
 
       {/* CTA Section (KEPT AS FINAL #8) */}
       <section className="cta-section fade-in-section">

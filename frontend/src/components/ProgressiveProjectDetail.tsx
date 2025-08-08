@@ -410,24 +410,11 @@ function ProgressiveProjectDetail() {
             </div>
           </div>
 
-          {/* Cost DNA Analysis - Display right after Project Summary */}
-          {project && selectedTrade === 'all' && (
-            <CostDNADisplay
-              tryApi={false}
-              projectData={{
-                ...project,
-                square_footage: project.square_footage || project.request_data?.square_footage || 0,
-                occupancy_type: project.occupancy_type || project.request_data?.occupancy_type || "",
-                location: project.location || project.request_data?.location || "",
-                project_classification: project.project_classification || project.request_data?.project_classification || "ground_up",
-                description: project.description || project.project_name || project.request_data?.project_description || project.request_data?.description || project.request_data?.special_requirements || "",
-                total_cost: project.total_cost || 0,
-                categories: project.categories || [],
-                request_data: project.request_data || {},
-              }}
-            />
-          )}
-
+          {/* Cost Breakdown - Moved up to show actionable information first */}
+          <div className="section-header">
+            <h2 className="section-title">Where Your Budget Goes</h2>
+            <p className="section-subtitle">Detailed breakdown of construction costs by trade</p>
+          </div>
           <div className="cost-breakdown">
             <h2>Cost Breakdown</h2>
             <div className="breakdown-content">
@@ -477,7 +464,61 @@ function ProgressiveProjectDetail() {
             </div>
           </div>
 
-          {/* Progressive Disclosure Section */}
+          {/* Sensitivity Analysis Section - Placeholder for future implementation */}
+          <div className="section-header" style={{marginTop: '40px'}}>
+            <h2 className="section-title">Optimize Your Costs</h2>
+            <p className="section-subtitle">Adjust variables to see cost impacts</p>
+          </div>
+          <div className="sensitivity-analysis-placeholder" style={{
+            padding: '40px',
+            background: '#f8f9fa',
+            borderRadius: '8px',
+            textAlign: 'center',
+            color: '#666',
+            marginBottom: '30px'
+          }}>
+            <p>Sensitivity analysis coming soon - adjust square footage, materials, and timeline to optimize costs</p>
+          </div>
+
+          {/* Price Journey Section - Placeholder for future implementation */}
+          <div className="section-header">
+            <h2 className="section-title">How We Calculate</h2>
+            <p className="section-subtitle">Transparent pricing methodology</p>
+          </div>
+          <div className="price-journey-placeholder" style={{
+            padding: '40px',
+            background: '#f8f9fa',
+            borderRadius: '8px',
+            textAlign: 'center',
+            color: '#666',
+            marginBottom: '30px'
+          }}>
+            <p>Price journey visualization coming soon - see how each decision impacts your total cost</p>
+          </div>
+
+          {/* Cost DNA Analysis - Moved to bottom */}
+          <div className="section-header">
+            <h2 className="section-title">Your Project's Unique Signature</h2>
+            <p className="section-subtitle">AI-powered cost pattern analysis</p>
+          </div>
+          {project && selectedTrade === 'all' && (
+            <CostDNADisplay
+              tryApi={false}
+              projectData={{
+                ...project,
+                square_footage: project.square_footage || project.request_data?.square_footage || 0,
+                occupancy_type: project.occupancy_type || project.request_data?.occupancy_type || "",
+                location: project.location || project.request_data?.location || "",
+                project_classification: project.project_classification || project.request_data?.project_classification || "ground_up",
+                description: project.description || project.project_name || project.request_data?.project_description || project.request_data?.description || project.request_data?.special_requirements || "",
+                total_cost: project.total_cost || 0,
+                categories: project.categories || [],
+                request_data: project.request_data || {},
+              }}
+            />
+          )}
+
+          {/* Progressive Disclosure Section - Trade Details */}
           <div className="progressive-disclosure">
             {selectedTrade === 'all' ? (
               // Level 1: Show all trades summary
