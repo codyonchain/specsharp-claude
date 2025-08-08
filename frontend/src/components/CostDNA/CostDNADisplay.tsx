@@ -18,12 +18,12 @@ export const CostDNADisplay: React.FC<CostDNAProps> = ({ projectData, costDNA })
   // If Cost DNA not provided, fetch it
   useEffect(() => {
     console.log('🧬 Cost DNA useEffect triggered', { costDNA, projectData });
-    if (!costDNA && projectData) {
+    if (!costDNA && projectData && projectData.square_footage) {
       fetchCostDNA();
     } else if (costDNA) {
       setDnaData(costDNA);
     }
-  }, [costDNA, projectData]);
+  }, [costDNA, projectData?.square_footage, projectData?.occupancy_type, projectData?.location]);
   
   const fetchCostDNA = async () => {
     try {
@@ -42,14 +42,21 @@ export const CostDNADisplay: React.FC<CostDNAProps> = ({ projectData, costDNA })
       
       console.log('🧬 Fetching Cost DNA with data:', requestData);
       
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      
       const response = await fetch('/api/v1/cost-dna/generate', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(requestData)
+        body: JSON.stringify(requestData),
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
       
       console.log('🧬 Cost DNA response status:', response.status);
       const data = await response.json();
@@ -62,9 +69,14 @@ export const CostDNADisplay: React.FC<CostDNAProps> = ({ projectData, costDNA })
         console.error('❌ Cost DNA response unsuccessful:', data);
         setError(data.error || 'Failed to load Cost DNA');
       }
-    } catch (error) {
-      console.error('❌ Error fetching Cost DNA:', error);
-      setError('Failed to fetch Cost DNA visualization');
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.error('❌ Cost DNA request timed out');
+        setError('Request timed out - API may be unavailable');
+      } else {
+        console.error('❌ Error fetching Cost DNA:', error);
+        setError('Failed to fetch Cost DNA visualization');
+      }
     } finally {
       setLoading(false);
     }
