@@ -1,10 +1,17 @@
 """
 Healthcare Facility Cost Calculation Service
 Provides accurate cost estimates for hospitals, medical centers, and healthcare facilities
+Integrates classifier with market-specific costs
 """
-from typing import Dict, Tuple, Optional, List
+from typing import Dict, Tuple, Optional, List, Any
 import re
 import logging
+from app.services.healthcare_classifier import HealthcareFacilityClassifier
+from app.data.healthcare_market_costs import (
+    get_market_costs, 
+    calculate_equipment_cost,
+    MEDICAL_EQUIPMENT_COSTS
+)
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +151,7 @@ class HealthcareCostService:
         self.base_costs = HEALTHCARE_BASE_COSTS
         self.keywords = HEALTHCARE_KEYWORDS
         self.trade_breakdowns = HEALTHCARE_TRADE_BREAKDOWNS
+        self.classifier = HealthcareFacilityClassifier()
     
     def determine_facility_type(self, description: str, occupancy_type: str = None) -> HealthcareFacilityType:
         """
@@ -352,6 +360,150 @@ class HealthcareCostService:
             return 1.20  # 20% premium for specialized facility additions
         else:
             return 1.15  # Standard 15% premium for other healthcare additions
+    
+    def calculate_healthcare_costs_v2(
+        self, 
+        description: str, 
+        square_feet: int, 
+        location: str
+    ) -> Dict[str, Any]:
+        """
+        Calculate complete healthcare facility costs using Phase 2 market-specific data
+        
+        Args:
+            description: Natural language project description
+            square_feet: Building square footage
+            location: Project location (e.g., "Nashville, TN")
+            
+        Returns:
+            Dictionary with comprehensive cost breakdown
+        """
+        # Classify the facility using the new classifier
+        classification = self.classifier.classify_healthcare_facility(description)
+        
+        # Get market-specific costs
+        market_data = get_market_costs(location)
+        
+        # Get base construction cost
+        facility_type = classification['facility_type']
+        base_cost_per_sf = market_data['facility_costs_per_sf'].get(
+            facility_type, 
+            275  # Default
+        )
+        
+        # Apply complexity multiplier
+        base_cost_per_sf *= classification['complexity_multiplier']
+        
+        # Apply regional multiplier
+        base_cost_per_sf *= market_data['regional_multiplier']
+        
+        # Calculate special space costs
+        special_space_cost = 0
+        special_spaces = classification['special_spaces']
+        special_costs = market_data['special_space_costs']
+        
+        for space in special_spaces:
+            # Estimate SF for special spaces (rough approximation)
+            if space == 'operating_room':
+                space_sf = min(600 * 2, square_feet * 0.1)  # 2 ORs or 10% max
+            elif space == 'mri_suite':
+                space_sf = 800
+            elif space == 'ct_suite':
+                space_sf = 600
+            elif space == 'emergency_dept':
+                space_sf = square_feet * 0.15  # 15% for ED
+            elif space == 'icu':
+                space_sf = square_feet * 0.1   # 10% for ICU
+            else:
+                space_sf = 400  # Default special space
+            
+            cost_per_sf = special_costs.get(space, 0)
+            special_space_cost += cost_per_sf * space_sf
+        
+        # Calculate base construction
+        base_construction = base_cost_per_sf * square_feet
+        
+        # Apply trade percentages
+        trade_pct = market_data['trade_percentages']
+        trades = {
+            'site_work': base_construction * trade_pct['site_work'],
+            'structural': base_construction * trade_pct['structural'],
+            'mechanical': base_construction * trade_pct['mechanical'],
+            'electrical': base_construction * trade_pct['electrical'],
+            'plumbing': base_construction * trade_pct['plumbing'],
+            'finishes': base_construction * trade_pct['finishes'],
+            'general_conditions': base_construction * trade_pct['general_conditions']
+        }
+        
+        # Add special space premium to mechanical/electrical
+        trades['mechanical'] += special_space_cost * 0.6
+        trades['electrical'] += special_space_cost * 0.4
+        
+        # Calculate subtotal
+        construction_subtotal = sum(trades.values())
+        
+        # Apply compliance premiums
+        if market_data.get('certificate_of_need') and construction_subtotal > market_data.get('con_threshold', 0):
+            construction_subtotal *= market_data.get('con_cost_impact', 1.0)
+        
+        if market_data.get('state_licensing_premium'):
+            construction_subtotal *= market_data.get('state_licensing_premium', 1.0)
+        
+        # Add contingency
+        contingency = construction_subtotal * 0.10
+        construction_total = construction_subtotal + contingency
+        
+        # Calculate equipment costs
+        equipment_items = []
+        equipment_total = 0
+        
+        for equipment_key, equipment_data in classification['equipment_needs'].items():
+            equipment_items.append({
+                'name': equipment_data['type'],
+                'cost': equipment_data['typical_cost'],
+                'requires_shielding': equipment_data.get('requires_shielding', False)
+            })
+            equipment_total += equipment_data['typical_cost']
+        
+        # Project totals
+        project_total_with_equipment = construction_total + equipment_total
+        
+        return {
+            'facility_type': facility_type,
+            'classification': classification,
+            'market': market_data['region_name'],
+            'square_feet': square_feet,
+            
+            # Construction costs
+            'construction': {
+                'base_cost_per_sf': base_cost_per_sf,
+                'trades': trades,
+                'special_spaces_premium': special_space_cost,
+                'subtotal': construction_subtotal,
+                'contingency': contingency,
+                'total': construction_total,
+                'cost_per_sf': construction_total / square_feet
+            },
+            
+            # Equipment costs (separate)
+            'equipment': {
+                'items': equipment_items,
+                'total': equipment_total,
+                'cost_per_sf': equipment_total / square_feet if square_feet > 0 else 0
+            },
+            
+            # Combined totals
+            'project_total': {
+                'construction_only': construction_total,
+                'equipment_only': equipment_total,
+                'all_in_total': project_total_with_equipment,
+                'all_in_cost_per_sf': project_total_with_equipment / square_feet
+            },
+            
+            # Compliance and special requirements
+            'compliance': classification['compliance_requirements'],
+            'special_spaces': special_spaces
+        }
 
 
 # Initialize global service instance

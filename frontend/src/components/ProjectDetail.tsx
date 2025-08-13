@@ -11,6 +11,8 @@ import ComparisonToolV2 from './ComparisonToolV2';
 import TradeSummary from './TradeSummary';
 import TimeSavedDisplay from './TimeSavedDisplay';
 import CostDNADisplay from './CostDNADisplay';
+import { HealthcareCostView } from './HealthcareCostView';
+import { ViewToggle } from './ViewToggle';
 import { Package, Sliders, FileSpreadsheet, Download, FileText, Share2, ArrowLeft } from 'lucide-react';
 import { getDisplayBuildingType as getDisplayBuildingTypeUtil } from '../utils/buildingTypeDisplay';
 import { formatCurrency, formatNumber } from '../utils/formatters';
@@ -80,6 +82,9 @@ function ProjectDetail() {
   const [shareLink, setShareLink] = useState<string>('');
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [viewMode, setViewMode] = useState<'trade' | 'healthcare'>('trade');
+  const [healthcareData, setHealthcareData] = useState<any>(null);
+  const [isHealthcareFacility, setIsHealthcareFacility] = useState(false);
 
   useEffect(() => {
     if (projectId) {
@@ -102,6 +107,23 @@ function ProjectDetail() {
       
       const breakdown = await costService.calculateBreakdown(projectData);
       setCostBreakdown(breakdown);
+      
+      // Check if this is a healthcare facility and fetch healthcare-specific data
+      try {
+        const healthcareResult = await costService.calculateWithHealthcare({
+          description: projectData.description || '',
+          building_type: projectData.building_type || '',
+          square_footage: projectData.square_footage || 0,
+          location: projectData.location || ''
+        });
+        
+        if (healthcareResult.is_healthcare) {
+          setIsHealthcareFacility(true);
+          setHealthcareData(healthcareResult.healthcare_view);
+        }
+      } catch (healthcareError) {
+        console.log('Not a healthcare facility or error fetching healthcare data:', healthcareError);
+      }
     } catch (error) {
       console.error('Failed to load project:', error);
     } finally {
@@ -702,7 +724,20 @@ function ProjectDetail() {
         )}
 
         <section id="cost-breakdown" className="cost-breakdown">
-          <h2>Cost Breakdown</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h2>Cost Breakdown</h2>
+            {isHealthcareFacility && (
+              <ViewToggle 
+                currentView={viewMode} 
+                onViewChange={setViewMode}
+              />
+            )}
+          </div>
+          
+          {/* Healthcare View */}
+          {isHealthcareFacility && viewMode === 'healthcare' && healthcareData ? (
+            <HealthcareCostView data={healthcareData} />
+          ) : (
           <div className="breakdown-content">
             <div className="chart-container">
               <ResponsiveContainer width="100%" height={300}>
@@ -751,6 +786,7 @@ function ProjectDetail() {
               </table>
             </div>
           </div>
+          )}
         </section>
 
         {/* Cost DNA Analysis - Display BELOW pie/table when viewing all trades */}

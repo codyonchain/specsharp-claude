@@ -142,6 +142,11 @@ export const costService = {
     const response = await api.post('/cost/calculate-breakdown', scopeData);
     return response.data;
   },
+
+  calculateWithHealthcare: async (projectData: any) => {
+    const response = await api.post('/cost/calculate-with-healthcare', projectData);
+    return response.data;
+  },
 };
 
 export const floorPlanService = {

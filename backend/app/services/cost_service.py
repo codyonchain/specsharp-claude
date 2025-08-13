@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 import json
 from datetime import datetime
 from app.core.cost_engine import (
@@ -9,6 +9,8 @@ from app.core.cost_engine import (
     REGIONAL_MULTIPLIERS,
     ScopeItem
 )
+from app.services.healthcare_cost_service import healthcare_cost_service
+from app.services.healthcare_classifier import HealthcareFacilityClassifier
 
 
 class CostService:
@@ -525,6 +527,99 @@ class CostService:
     def get_regional_multipliers(self, region: str) -> Dict[str, float]:
         """Get regional multipliers for a specific region"""
         return REGIONAL_MULTIPLIERS.get(region, {"structural": 1.0, "mechanical": 1.0, "electrical": 1.0, "plumbing": 1.0, "finishes": 1.0})
+    
+    def is_healthcare_facility(self, description: str, building_type: str = None) -> bool:
+        """
+        Check if the project is a healthcare facility
+        """
+        if not description:
+            return False
+        
+        description_lower = description.lower()
+        
+        # Check for healthcare keywords
+        healthcare_keywords = [
+            'hospital', 'medical', 'healthcare', 'health care', 'clinic',
+            'surgical', 'surgery', 'urgent care', 'emergency', 'patient',
+            'nursing', 'rehabilitation', 'rehab', 'dental', 'imaging',
+            'radiology', 'mri', 'ct scan', 'laboratory', 'pharmacy',
+            'ambulatory', 'outpatient', 'inpatient', 'icu', 'nicu'
+        ]
+        
+        for keyword in healthcare_keywords:
+            if keyword in description_lower:
+                return True
+        
+        # Check building type if provided
+        if building_type and 'medical' in building_type.lower():
+            return True
+        
+        return False
+    
+    def calculate_with_healthcare(
+        self,
+        project_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Calculate costs with healthcare-specific breakdown if applicable
+        
+        Returns a dual-view structure for healthcare facilities
+        """
+        description = project_data.get('description', '')
+        building_type = project_data.get('building_type', '')
+        square_feet = project_data.get('square_footage', 0)
+        location = project_data.get('location', '')
+        
+        # Standard calculation (always performed)
+        standard_result = {
+            'trades': {},
+            'subtotal': 0,
+            'contingency': 0,
+            'total': 0,
+            'cost_per_sf': 0
+        }
+        
+        # Calculate standard trade costs
+        trades = ['structural', 'mechanical', 'electrical', 'plumbing', 'finishes']
+        total_cost = 0
+        
+        for trade in trades:
+            trade_cost, _ = self.calculate_trade_cost_v2(
+                trade=trade,
+                building_type=building_type or 'commercial',
+                square_footage=square_feet,
+                location=location
+            )
+            standard_result['trades'][trade] = trade_cost
+            total_cost += trade_cost
+        
+        standard_result['subtotal'] = total_cost
+        standard_result['contingency'] = total_cost * 0.10
+        standard_result['total'] = total_cost * 1.10
+        standard_result['cost_per_sf'] = standard_result['total'] / square_feet if square_feet > 0 else 0
+        
+        # Check if this is a healthcare facility
+        if self.is_healthcare_facility(description, building_type):
+            # Get healthcare-specific costs
+            healthcare_result = healthcare_cost_service.calculate_healthcare_costs_v2(
+                description=description,
+                square_feet=int(square_feet),
+                location=location
+            )
+            
+            return {
+                'standard_view': standard_result,
+                'healthcare_view': healthcare_result,
+                'display_mode': 'dual',
+                'building_classification': healthcare_result.get('facility_type'),
+                'is_healthcare': True
+            }
+        
+        return {
+            'standard_view': standard_result,
+            'display_mode': 'single',
+            'is_healthcare': False
+        }
 
 
 cost_service = CostService()

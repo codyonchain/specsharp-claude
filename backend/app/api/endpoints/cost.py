@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from app.models.scope import CostBreakdown
 from app.api.endpoints.auth import get_current_user
+from app.services.cost_service import cost_service
 
 router = APIRouter()
 
@@ -137,3 +138,22 @@ async def calculate_cost_breakdown(
         
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error calculating breakdown: {str(e)}")
+
+
+@router.post("/calculate-with-healthcare")
+async def calculate_with_healthcare(
+    project_data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Calculate costs with healthcare-specific breakdown if applicable
+    Returns dual-view structure for healthcare facilities
+    """
+    try:
+        # Call the cost service with healthcare detection
+        result = cost_service.calculate_with_healthcare(project_data)
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error calculating healthcare costs: {str(e)}")
