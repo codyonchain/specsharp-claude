@@ -1,6 +1,4 @@
 import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Progress } from './ui/progress';
 import { 
   Building2, 
   Heart, 
@@ -11,6 +9,7 @@ import {
   DollarSign,
   Cpu
 } from 'lucide-react';
+import './HealthcareCostView.css';
 
 interface HealthcareCostViewProps {
   data: {
@@ -108,62 +107,62 @@ export const HealthcareCostView: React.FC<HealthcareCostViewProps> = ({ data }) 
   };
 
   return (
-    <div className="space-y-6">
+    <div className="healthcare-cost-view" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* Facility Overview */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Heart className="h-5 w-5 text-red-500" />
+      <div className="healthcare-card">
+        <div className="card-header">
+          <h3 className="card-title flex items-center gap-2">
+            <Heart className="h-5 w-5" style={{ color: '#ef4444' }} />
             Healthcare Facility Overview
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          </h3>
+        </div>
+        <div className="card-content">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
             <div>
-              <p className="text-sm text-muted-foreground">Facility Type</p>
-              <p className="font-semibold">{getFacilityTypeDisplay(data.facility_type)}</p>
+              <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>Facility Type</p>
+              <p style={{ fontWeight: '600' }}>{getFacilityTypeDisplay(data.facility_type)}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Market</p>
-              <p className="font-semibold flex items-center gap-1">
-                <MapPin className="h-4 w-4" />
+              <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>Market</p>
+              <p style={{ fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <MapPin style={{ height: '16px', width: '16px' }} />
                 {data.market}
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Size</p>
-              <p className="font-semibold">{data.square_feet.toLocaleString()} SF</p>
+              <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>Size</p>
+              <p style={{ fontWeight: '600' }}>{data.square_feet.toLocaleString()} SF</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Complexity</p>
-              <p className="font-semibold">{data.classification?.complexity_multiplier.toFixed(2)}x</p>
+              <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>Complexity</p>
+              <p style={{ fontWeight: '600' }}>{data.classification?.complexity_multiplier.toFixed(2)}x</p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Special Spaces */}
       {data.special_spaces && data.special_spaces.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-blue-500" />
+        <div className="healthcare-card">
+          <div className="card-header">
+            <h3 className="card-title flex items-center gap-2">
+              <Activity className="h-5 w-5" style={{ color: '#3b82f6' }} />
               Specialized Healthcare Spaces
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
+            </h3>
+          </div>
+          <div className="card-content">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
               {data.special_spaces.map((space, index) => (
                 <div
                   key={index}
-                  className="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-md text-sm font-medium"
+                  style={{ padding: '0.375rem 0.75rem', backgroundColor: '#dbeafe', color: '#1d4ed8', borderRadius: '0.375rem', fontSize: '0.875rem', fontWeight: '500' }}
                 >
                   {getSpecialSpaceDisplay(space)}
                 </div>
               ))}
             </div>
             {data.construction.special_spaces_premium > 0 && (
-              <p className="mt-4 text-sm text-muted-foreground">
+              <p style={{ marginTop: '1rem', fontSize: '0.875rem', color: '#6b7280' }}>
                 Special spaces premium: {formatCurrency(data.construction.special_spaces_premium)}
               </p>
             )}
@@ -172,77 +171,79 @@ export const HealthcareCostView: React.FC<HealthcareCostViewProps> = ({ data }) 
       )}
 
       {/* Department-Level Costs */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-green-500" />
+      <div className="healthcare-card">
+        <div className="card-header">
+          <h3 className="card-title flex items-center gap-2">
+            <Building2 className="h-5 w-5" style={{ color: '#10b981' }} />
             Construction Costs by Department
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          </h3>
+        </div>
+        <div className="card-content" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {Object.entries(departmentCosts).map(([dept, cost]) => (
             <div key={dept}>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium">{dept}</span>
-                <span className="text-sm text-muted-foreground">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <span style={{ fontSize: '0.875rem', fontWeight: '500' }}>{dept}</span>
+                <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
                   {formatCurrency(cost)} ({formatPercentage(cost, data.construction.subtotal)})
                 </span>
               </div>
-              <Progress value={(cost / data.construction.subtotal) * 100} className="h-2" />
+              <div className="progress-bar" style={{ height: '8px', backgroundColor: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ width: `${(cost / data.construction.subtotal) * 100}%`, height: '100%', backgroundColor: '#0088FE', transition: 'width 0.3s' }} />
+              </div>
             </div>
           ))}
-          <div className="pt-4 border-t">
-            <div className="flex justify-between items-center">
-              <span className="font-semibold">Construction Subtotal</span>
-              <span className="font-semibold">{formatCurrency(data.construction.subtotal)}</span>
+          <div style={{ paddingTop: '1rem', borderTop: '1px solid #e5e7eb' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontWeight: '600' }}>Construction Subtotal</span>
+              <span style={{ fontWeight: '600' }}>{formatCurrency(data.construction.subtotal)}</span>
             </div>
-            <div className="flex justify-between items-center mt-2">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
               <span className="text-sm text-muted-foreground">Contingency (10%)</span>
               <span className="text-sm text-muted-foreground">{formatCurrency(data.construction.contingency)}</span>
             </div>
-            <div className="flex justify-between items-center mt-2 pt-2 border-t">
-              <span className="font-semibold">Total Construction</span>
-              <div className="text-right">
-                <p className="font-semibold">{formatCurrency(data.construction.total)}</p>
-                <p className="text-sm text-muted-foreground">{formatCurrency(data.construction.cost_per_sf)}/SF</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid #e5e7eb' }}>
+              <span style={{ fontWeight: '600' }}>Total Construction</span>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontWeight: '600' }}>{formatCurrency(data.construction.total)}</p>
+                <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>{formatCurrency(data.construction.cost_per_sf)}/SF</p>
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Medical Equipment */}
       {data.equipment.total > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Stethoscope className="h-5 w-5 text-purple-500" />
+        <div className="healthcare-card">
+          <div className="card-header">
+            <h3 className="card-title flex items-center gap-2">
+              <Stethoscope className="h-5 w-5" style={{ color: '#a855f7' }} />
               Medical Equipment Costs
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
+            </h3>
+          </div>
+          <div className="card-content">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {data.equipment.items.map((item, index) => (
-                <div key={index} className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <Cpu className="h-4 w-4 text-purple-500" />
-                    <span className="text-sm">{item.name}</span>
+                <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Cpu style={{ height: '16px', width: '16px', color: '#a855f7' }} />
+                    <span style={{ fontSize: '0.875rem' }}>{item.name}</span>
                     {item.requires_shielding && (
-                      <span className="text-xs px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 rounded">
+                      <span style={{ fontSize: '0.75rem', padding: '0.125rem 0.5rem', backgroundColor: '#fef3c7', color: '#b45309', borderRadius: '0.25rem' }}>
                         Requires Shielding
                       </span>
                     )}
                   </div>
-                  <span className="font-medium">{formatCurrency(item.cost)}</span>
+                  <span style={{ fontWeight: '500' }}>{formatCurrency(item.cost)}</span>
                 </div>
               ))}
             </div>
-            <div className="mt-4 pt-4 border-t">
-              <div className="flex justify-between items-center">
-                <span className="font-semibold">Total Equipment</span>
-                <div className="text-right">
-                  <p className="font-semibold">{formatCurrency(data.equipment.total)}</p>
-                  <p className="text-sm text-muted-foreground">{formatCurrency(data.equipment.cost_per_sf)}/SF</p>
+            <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #e5e7eb' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: '600' }}>Total Equipment</span>
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ fontWeight: '600' }}>{formatCurrency(data.equipment.total)}</p>
+                  <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>{formatCurrency(data.equipment.cost_per_sf)}/SF</p>
                 </div>
               </div>
             </div>
@@ -252,19 +253,19 @@ export const HealthcareCostView: React.FC<HealthcareCostViewProps> = ({ data }) 
 
       {/* Compliance & Regulatory */}
       {data.compliance && Object.keys(data.compliance).length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-orange-500" />
+        <div className="healthcare-card">
+          <div className="card-header">
+            <h3 className="card-title flex items-center gap-2">
+              <Shield className="h-5 w-5" style={{ color: '#f97316' }} />
               Compliance & Regulatory Requirements
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            </h3>
+          </div>
+          <div className="card-content">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
               {Object.entries(data.compliance).map(([req, status]) => (
-                <div key={req} className="flex items-center gap-2">
-                  <div className={`h-3 w-3 rounded-full ${status ? 'bg-green-500' : 'bg-gray-300'}`} />
-                  <span className="text-sm">
+                <div key={req} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ height: '12px', width: '12px', borderRadius: '50%', backgroundColor: status ? '#10b981' : '#d1d5db' }} />
+                  <span style={{ fontSize: '0.875rem' }}>
                     {req.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                   </span>
                 </div>
@@ -275,45 +276,49 @@ export const HealthcareCostView: React.FC<HealthcareCostViewProps> = ({ data }) 
       )}
 
       {/* Project Total Summary */}
-      <Card className="border-2 border-primary">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <DollarSign className="h-5 w-5 text-primary" />
+      <div className="healthcare-card" style={{ border: '2px solid #0088FE' }}>
+        <div className="card-header">
+          <h3 className="card-title flex items-center gap-2">
+            <DollarSign className="h-5 w-5" style={{ color: '#0088FE' }} />
             Project Total Summary
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
+          </h3>
+        </div>
+        <div className="card-content">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium">Construction</span>
-                <span className="text-sm">{formatCurrency(data.project_total.construction_only)}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <span style={{ fontSize: '0.875rem', fontWeight: '500' }}>Construction</span>
+                <span style={{ fontSize: '0.875rem' }}>{formatCurrency(data.project_total.construction_only)}</span>
               </div>
-              <Progress value={constructionPercentage} className="h-3" />
-              <p className="text-xs text-muted-foreground mt-1">{constructionPercentage.toFixed(1)}% of total</p>
+              <div className="progress-bar" style={{ height: '12px', backgroundColor: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ width: `${constructionPercentage}%`, height: '100%', backgroundColor: '#0088FE', transition: 'width 0.3s' }} />
+              </div>
+              <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>{constructionPercentage.toFixed(1)}% of total</p>
             </div>
             
             <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium">Equipment</span>
-                <span className="text-sm">{formatCurrency(data.project_total.equipment_only)}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <span style={{ fontSize: '0.875rem', fontWeight: '500' }}>Equipment</span>
+                <span style={{ fontSize: '0.875rem' }}>{formatCurrency(data.project_total.equipment_only)}</span>
               </div>
-              <Progress value={equipmentPercentage} className="h-3" />
-              <p className="text-xs text-muted-foreground mt-1">{equipmentPercentage.toFixed(1)}% of total</p>
+              <div className="progress-bar" style={{ height: '12px', backgroundColor: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ width: `${equipmentPercentage}%`, height: '100%', backgroundColor: '#a855f7', transition: 'width 0.3s' }} />
+              </div>
+              <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>{equipmentPercentage.toFixed(1)}% of total</p>
             </div>
 
-            <div className="pt-4 border-t">
-              <div className="flex justify-between items-center">
-                <span className="text-lg font-bold">All-In Project Total</span>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-primary">{formatCurrency(data.project_total.all_in_total)}</p>
-                  <p className="text-sm text-muted-foreground">{formatCurrency(data.project_total.all_in_cost_per_sf)}/SF</p>
+            <div style={{ paddingTop: '1rem', borderTop: '1px solid #e5e7eb' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '1.125rem', fontWeight: '700' }}>All-In Project Total</span>
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ fontSize: '1.5rem', fontWeight: '700', color: '#0088FE' }}>{formatCurrency(data.project_total.all_in_total)}</p>
+                  <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>{formatCurrency(data.project_total.all_in_cost_per_sf)}/SF</p>
                 </div>
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 };

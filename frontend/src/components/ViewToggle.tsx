@@ -1,6 +1,6 @@
 import React from 'react';
-import { cn } from '../lib/utils';
 import { Building2, Heart } from 'lucide-react';
+import './ViewToggle.css';
 
 interface ViewToggleProps {
   currentView: 'trade' | 'healthcare';
@@ -14,31 +14,19 @@ export const ViewToggle: React.FC<ViewToggleProps> = ({
   className 
 }) => {
   return (
-    <div className={cn("inline-flex items-center rounded-lg bg-muted p-1", className)}>
+    <div className={`view-toggle ${className || ''}`}>
       <button
         onClick={() => onViewChange('trade')}
-        className={cn(
-          "inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium transition-all",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-          currentView === 'trade'
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"
-        )}
+        className={`toggle-button ${currentView === 'trade' ? 'active' : ''}`}
       >
-        <Building2 className="mr-2 h-4 w-4" />
+        <Building2 style={{ marginRight: '8px', height: '16px', width: '16px' }} />
         Trade Breakdown
       </button>
       <button
         onClick={() => onViewChange('healthcare')}
-        className={cn(
-          "inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium transition-all",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-          currentView === 'healthcare'
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"
-        )}
+        className={`toggle-button ${currentView === 'healthcare' ? 'active' : ''}`}
       >
-        <Heart className="mr-2 h-4 w-4" />
+        <Heart style={{ marginRight: '8px', height: '16px', width: '16px' }} />
         Healthcare View
       </button>
     </div>

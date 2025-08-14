@@ -1,0 +1,64 @@
+.healthcare-cost-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.healthcare-card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.healthcare-card .card-header {
+  padding: 1.25rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.healthcare-card .card-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.healthcare-card .card-content {
+  padding: 1.25rem;
+}
+
+.progress-bar {
+  height: 8px;
+  background-color: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar > div {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .healthcare-card {
+    background: #1f2937;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
+  }
+  
+  .healthcare-card .card-header {
+    background: #111827;
+    border-bottom-color: #374151;
+  }
+  
+  .healthcare-card .card-title {
+    color: #f3f4f6;
+  }
+  
+  .progress-bar {
+    background-color: #374151;
+  }
+}

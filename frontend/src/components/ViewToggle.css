@@ -1,0 +1,58 @@
+.view-toggle {
+  display: inline-flex;
+  align-items: center;
+  background-color: #f3f4f6;
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.toggle-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.toggle-button:hover {
+  color: #111827;
+}
+
+.toggle-button.active {
+  background: white;
+  color: #111827;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+.toggle-button:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .view-toggle {
+    background-color: #374151;
+  }
+  
+  .toggle-button {
+    color: #9ca3af;
+  }
+  
+  .toggle-button:hover {
+    color: #f3f4f6;
+  }
+  
+  .toggle-button.active {
+    background: #1f2937;
+    color: #f3f4f6;
+  }
+}
