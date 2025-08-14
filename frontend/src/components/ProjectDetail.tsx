@@ -98,6 +98,7 @@ function ProjectDetail() {
       console.log('Project data loaded:', projectData);
       console.log('Project name:', projectData.project_name);
       console.log('Trade summaries:', projectData.trade_summaries);
+      console.log('Building type:', projectData.building_type);
       setProject(projectData);
       
       // Set finish level from project data
@@ -105,24 +106,48 @@ function ProjectDetail() {
         setProjectFinishLevel(projectData.request_data.finish_level);
       }
       
-      const breakdown = await costService.calculateBreakdown(projectData);
-      setCostBreakdown(breakdown);
+      // Check if this is a healthcare facility BEFORE fetching cost breakdown
+      const buildingType = (projectData.building_type || projectData.request_data?.occupancy_type || '').toLowerCase();
+      const isHealthcare = buildingType.includes('healthcare') || buildingType.includes('hospital') || 
+                          buildingType.includes('medical') || buildingType.includes('clinic');
       
-      // Check if this is a healthcare facility and fetch healthcare-specific data
-      try {
-        const healthcareResult = await costService.calculateWithHealthcare({
-          description: projectData.description || '',
-          building_type: projectData.building_type || '',
-          square_footage: projectData.square_footage || 0,
-          location: projectData.location || ''
-        });
-        
-        if (healthcareResult.is_healthcare) {
-          setIsHealthcareFacility(true);
-          setHealthcareData(healthcareResult.healthcare_view);
+      if (isHealthcare) {
+        console.log('Healthcare facility detected, calling healthcare-specific endpoint');
+        try {
+          const healthcareResult = await costService.calculateWithHealthcare({
+            description: projectData.description || projectData.project_name || '',
+            building_type: projectData.building_type || projectData.request_data?.occupancy_type || '',
+            square_footage: projectData.square_footage || projectData.request_data?.square_footage || 0,
+            location: projectData.location || projectData.request_data?.location || ''
+          });
+          
+          console.log('Healthcare calculation result:', healthcareResult);
+          
+          if (healthcareResult.is_healthcare) {
+            setIsHealthcareFacility(true);
+            setHealthcareData(healthcareResult.healthcare_view);
+            // Use healthcare cost breakdown if available
+            if (healthcareResult.cost_breakdown) {
+              setCostBreakdown(healthcareResult.cost_breakdown);
+            } else {
+              const breakdown = await costService.calculateBreakdown(projectData);
+              setCostBreakdown(breakdown);
+            }
+          } else {
+            // Fallback to regular breakdown if API doesn't confirm healthcare
+            const breakdown = await costService.calculateBreakdown(projectData);
+            setCostBreakdown(breakdown);
+          }
+        } catch (healthcareError) {
+          console.error('Error fetching healthcare data:', healthcareError);
+          // Fallback to regular breakdown on error
+          const breakdown = await costService.calculateBreakdown(projectData);
+          setCostBreakdown(breakdown);
         }
-      } catch (healthcareError) {
-        console.log('Not a healthcare facility or error fetching healthcare data:', healthcareError);
+      } else {
+        // Not a healthcare facility, use regular cost breakdown
+        const breakdown = await costService.calculateBreakdown(projectData);
+        setCostBreakdown(breakdown);
       }
     } catch (error) {
       console.error('Failed to load project:', error);
