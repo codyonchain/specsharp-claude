@@ -391,8 +391,12 @@ class HealthcareCostService:
             275  # Default
         )
         
-        # Apply complexity multiplier
-        base_cost_per_sf *= classification['complexity_multiplier']
+        # Note: The base_cost_per_sf from market data already includes typical complexity
+        # Only apply additional complexity if significantly above normal (>1.2x)
+        complexity_mult = classification['complexity_multiplier']
+        if complexity_mult > 1.2:
+            # Apply only the excess complexity
+            base_cost_per_sf *= (1 + (complexity_mult - 1.0) * 0.3)  # Dampen the multiplier
         
         # Apply regional multiplier
         base_cost_per_sf *= market_data['regional_multiplier']
@@ -420,31 +424,37 @@ class HealthcareCostService:
             cost_per_sf = special_costs.get(space, 0)
             special_space_cost += cost_per_sf * space_sf
         
-        # Calculate base construction
-        base_construction = base_cost_per_sf * square_feet
+        # The base_cost_per_sf (after multipliers) IS the total construction cost per SF
+        # Trade percentages show the BREAKDOWN, not additional multipliers
+        # First, calculate the construction subtotal INCLUDING special spaces
+        construction_cost_per_sf = base_cost_per_sf + (special_space_cost / square_feet)
+        construction_subtotal = construction_cost_per_sf * square_feet
         
-        # Apply trade percentages
+        # Now break down the total into trades (percentages should sum to 100%)
         trade_pct = market_data['trade_percentages']
+        
+        # Calculate base trade allocation (before special spaces)
+        base_trade_total = base_cost_per_sf * square_feet
         trades = {
-            'site_work': base_construction * trade_pct['site_work'],
-            'structural': base_construction * trade_pct['structural'],
-            'mechanical': base_construction * trade_pct['mechanical'],
-            'electrical': base_construction * trade_pct['electrical'],
-            'plumbing': base_construction * trade_pct['plumbing'],
-            'finishes': base_construction * trade_pct['finishes'],
-            'general_conditions': base_construction * trade_pct['general_conditions']
+            'site_work': base_trade_total * trade_pct['site_work'],
+            'structural': base_trade_total * trade_pct['structural'],
+            'mechanical': base_trade_total * trade_pct['mechanical'],
+            'electrical': base_trade_total * trade_pct['electrical'],
+            'plumbing': base_trade_total * trade_pct['plumbing'],
+            'finishes': base_trade_total * trade_pct['finishes'],
+            'general_conditions': base_trade_total * trade_pct['general_conditions']
         }
         
         # Add special space premium to mechanical/electrical
         trades['mechanical'] += special_space_cost * 0.6
         trades['electrical'] += special_space_cost * 0.4
         
-        # Calculate subtotal
-        construction_subtotal = sum(trades.values())
-        
-        # Apply compliance premiums
+        # Apply compliance premiums (CON adds cost but not 5% of entire project)
         if market_data.get('certificate_of_need') and construction_subtotal > market_data.get('con_threshold', 0):
-            construction_subtotal *= market_data.get('con_cost_impact', 1.0)
+            # CON compliance adds fixed costs, not percentage of total
+            # Typical CON costs: legal, consultants, delays = ~$500k-1M for large projects
+            con_cost = min(1000000, construction_subtotal * 0.005)  # 0.5% max or $1M
+            construction_subtotal += con_cost
         
         if market_data.get('state_licensing_premium'):
             construction_subtotal *= market_data.get('state_licensing_premium', 1.0)
@@ -468,11 +478,15 @@ class HealthcareCostService:
         # Project totals
         project_total_with_equipment = construction_total + equipment_total
         
+        # Add the calculated base_cost_per_sf to classification for reference
+        classification['base_cost_per_sf'] = base_cost_per_sf
+        
         return {
             'facility_type': facility_type,
             'classification': classification,
             'market': market_data['region_name'],
             'square_feet': square_feet,
+            'regional_multiplier': market_data['regional_multiplier'],
             
             # Construction costs
             'construction': {

@@ -20,7 +20,7 @@ HEALTHCARE_MARKET_COSTS = {
         
         # Facility type base CONSTRUCTION costs (equipment added separately)
         'facility_costs_per_sf': {
-            'general_hospital': 850,  # Construction only (+$150-300 equipment)
+            'general_hospital': 825,  # Construction only (+$150-300 equipment) - Calibrated to Vanderbilt benchmark
             'pediatric_hospital': 875,  # Construction only
             'psychiatric_hospital': 650,  # Construction only
             'rehabilitation_hospital': 700,  # Construction only

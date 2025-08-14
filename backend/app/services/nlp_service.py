@@ -56,6 +56,115 @@ class NLPService:
             "three_bedroom": re.compile(r'(\d+)\s*(?:3\s*br|3\s*bed|three\s*bed|3-bed)', re.IGNORECASE),
         }
     
+    def classify_restaurant_type(self, description: str) -> Dict[str, Any]:
+        """
+        Classify restaurant type from description and extract key features
+        """
+        description_lower = description.lower()
+        
+        # Quick Service Restaurant (QSR) indicators
+        qsr_keywords = [
+            'quick service', 'fast food', 'qsr', 'fast casual', 'counter service',
+            'takeout only', 'to-go', 'grab and go', 'express',
+            'burger', 'pizza', 'sandwich shop', 'coffee shop', 'donut',
+            'subway', 'mcdonald', 'wendy', 'chick-fil-a', 'taco bell',
+            'dunkin', 'starbucks', 'chipotle', 'panera', 'five guys',
+            'jimmy john', 'jersey mike', 'firehouse', 'potbelly'
+        ]
+        
+        # Full Service Restaurant indicators
+        full_service_keywords = [
+            'full service', 'casual dining', 'family restaurant', 'sit-down',
+            'table service', 'diner', 'bistro', 'brasserie', 'cafe',
+            'applebee', 'olive garden', 'outback', 'chili\'s', 'red lobster',
+            'texas roadhouse', 'cracker barrel', 'ihop', 'denny\'s'
+        ]
+        
+        # Fine Dining indicators
+        fine_dining_keywords = [
+            'fine dining', 'upscale', 'white tablecloth', 'chef-driven',
+            'tasting menu', 'prix fixe', 'steakhouse', 'luxury',
+            'michelin', 'james beard', 'gourmet', 'haute cuisine',
+            'premium steakhouse', 'upscale dining'
+        ]
+        
+        # Bar/Brewery indicators
+        bar_keywords = [
+            'bar', 'pub', 'tavern', 'brewery', 'brewpub', 'taproom',
+            'cocktail', 'nightclub', 'sports bar', 'wine bar',
+            'gastropub', 'beer garden', 'distillery'
+        ]
+        
+        # Ghost Kitchen / Delivery Only
+        ghost_kitchen_keywords = [
+            'ghost kitchen', 'cloud kitchen', 'dark kitchen', 'virtual kitchen',
+            'delivery only', 'takeout only', 'no seating', 'delivery kitchen'
+        ]
+        
+        # Determine restaurant type
+        restaurant_type = None
+        if any(keyword in description_lower for keyword in ghost_kitchen_keywords):
+            restaurant_type = 'ghost_kitchen'
+            seats_per_sf = 0  # No seating
+            max_seats = 0
+            kitchen_cost_per_sf = 65  # High kitchen density
+            has_bar = False
+        elif any(keyword in description_lower for keyword in qsr_keywords):
+            restaurant_type = 'quick_service'
+            seats_per_sf = 80  # 80 SF per seat for QSR
+            max_seats = 60  # QSRs typically don't exceed 60 seats
+            kitchen_cost_per_sf = 50
+            has_bar = False
+        elif any(keyword in description_lower for keyword in fine_dining_keywords):
+            restaurant_type = 'fine_dining'
+            seats_per_sf = 100  # More space per seat for fine dining
+            max_seats = None
+            kitchen_cost_per_sf = 75
+            has_bar = True
+        elif any(keyword in description_lower for keyword in bar_keywords):
+            restaurant_type = 'bar_focused'
+            seats_per_sf = 40  # Bars pack more people
+            max_seats = None
+            kitchen_cost_per_sf = 30  # Less kitchen in bars
+            has_bar = True
+        elif any(keyword in description_lower for keyword in full_service_keywords):
+            restaurant_type = 'full_service'
+            seats_per_sf = 60  # Standard full service
+            max_seats = None
+            kitchen_cost_per_sf = 40
+            has_bar = True
+        else:
+            # Default to full service if restaurant is mentioned but type unclear
+            restaurant_type = 'full_service'
+            seats_per_sf = 60
+            max_seats = None
+            kitchen_cost_per_sf = 40
+            has_bar = False  # Conservative default
+        
+        # Check for drive-through
+        has_drive_through = any(term in description_lower for term in 
+                               ['drive-through', 'drive through', 'drive-thru', 'drive thru'])
+        
+        # Check for specific equipment
+        has_pizza_oven = 'pizza' in description_lower
+        has_brewery_equipment = any(term in description_lower for term in ['brewery', 'brewpub', 'brewing'])
+        
+        # Check for outdoor seating
+        has_outdoor_seating = any(term in description_lower for term in 
+                                 ['patio', 'outdoor', 'terrace', 'deck', 'sidewalk seating'])
+        
+        return {
+            'type': restaurant_type,
+            'seats_per_sf': seats_per_sf,
+            'max_seats': max_seats,
+            'kitchen_cost_per_sf': kitchen_cost_per_sf,
+            'has_bar': has_bar,
+            'has_drive_through': has_drive_through,
+            'has_pizza_oven': has_pizza_oven,
+            'has_brewery_equipment': has_brewery_equipment,
+            'has_outdoor_seating': has_outdoor_seating
+        }
+    
     def detect_healthcare_type(self, text: str) -> Optional[Dict[str, Any]]:
         """
         Detect if the project is a healthcare facility and return details

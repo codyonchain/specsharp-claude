@@ -33,7 +33,124 @@ class CostCalculationEngine:
         Calculate costs and return the complete "DNA" of how we arrived at the number
         """
         
-        # Initialize DNA tracking
+        # Check if this is a healthcare facility - use comprehensive v2 calculation
+        if occupancy_type == "healthcare":
+            # Use the comprehensive healthcare calculation
+            healthcare_result = healthcare_cost_service.calculate_healthcare_costs_v2(
+                description=description,
+                square_feet=square_footage,
+                location=location
+            )
+            
+            # Extract costs from the nested structure
+            project_totals = healthcare_result.get("project_total", {})
+            total_cost = project_totals.get("all_in_total", 0)
+            cost_per_sf = project_totals.get("all_in_cost_per_sf", 0)
+            
+            # Get base cost from classification
+            classification = healthcare_result.get("classification", {})
+            base_cost_per_sf = classification.get("base_cost_per_sf", 350)
+            facility_type = healthcare_result.get("facility_type", "medical_office")
+            
+            # Extract and format the healthcare result into DNA format
+            cost_dna = {
+                "detected_factors": [],
+                "applied_multipliers": [],
+                "base_components": [],
+                "market_adjustments": [],
+                "special_conditions": [],
+                "confidence_factors": []
+            }
+            
+            # Add base cost component
+            cost_dna["base_components"].append({
+                "factor": "Healthcare Base Cost",
+                "value": f"${base_cost_per_sf}/SF",
+                "reason": f"{facility_type.replace('_', ' ').title()} facility with specialized medical systems",
+                "impact": "baseline",
+                "source": "RSMeans 2024 Healthcare Data"
+            })
+            
+            # Add detected features as factors
+            features = healthcare_result.get("features_detected", [])
+            for feature in features:
+                cost_dna["detected_factors"].append({
+                    "factor": feature["name"],
+                    "category": "Medical Systems",
+                    "impact": f"+${feature['cost_impact']}/SF",
+                    "description": feature.get("description", "Specialized medical requirement")
+                })
+            
+            # Add regional multiplier
+            regional_mult = healthcare_result.get("regional_multiplier", 1.0)
+            if regional_mult != 1.0:
+                cost_dna["applied_multipliers"].append({
+                    "factor": "Regional Healthcare Index",
+                    "value": f"{regional_mult:.2f}x",
+                    "reason": f"Healthcare costs in {location}",
+                    "impact": f"{((regional_mult - 1) * 100):+.1f}%",
+                    "source": "RSMeans City Cost Index Q3 2024"
+                })
+            
+            # Add complexity multiplier from classification
+            complexity_mult = classification.get("complexity_multiplier", 1.0)
+            if complexity_mult != 1.0:
+                cost_dna["applied_multipliers"].append({
+                    "factor": "Healthcare Facility Complexity",
+                    "value": f"{complexity_mult:.2f}x", 
+                    "reason": classification.get("description", "Healthcare facility complexity"),
+                    "impact": f"{((complexity_mult - 1) * 100):+.1f}%",
+                    "source": "Healthcare construction standards"
+                })
+            
+            # Add project classification multiplier if applicable
+            if project_classification != "ground_up":
+                if project_classification == "addition":
+                    class_mult = 1.25 if "hospital" in facility_type else 1.15
+                else:  # renovation
+                    class_mult = 1.35
+                cost_dna["applied_multipliers"].append({
+                    "factor": f"Healthcare {project_classification.title()} Complexity",
+                    "value": f"{class_mult:.2f}x",
+                    "reason": f"Healthcare {project_classification} requires special protocols",
+                    "impact": f"{((class_mult - 1) * 100):+.1f}%",
+                    "source": "Healthcare construction standards"
+                })
+            
+            # Add confidence scoring
+            confidence_score = 85  # High confidence for healthcare with detailed analysis
+            confidence_factors = [
+                {"factor": "Facility Type Identified", "impact": "+15%"},
+                {"factor": "Healthcare-Specific Costing", "impact": "+20%"},
+                {"factor": "Feature Detection", "impact": "+10%"}
+            ]
+            cost_dna["confidence_factors"] = confidence_factors
+            
+            # Get comparable projects for healthcare
+            comparables = self.find_comparable_projects(
+                "healthcare", location, square_footage, project_classification
+            )
+            
+            # Extract trade costs
+            construction = healthcare_result.get("construction", {})
+            trade_costs = construction.get("trades", {})
+            
+            return {
+                "total_cost": total_cost,
+                "cost_per_sf": cost_per_sf,
+                "square_footage": square_footage,
+                "cost_dna": cost_dna,
+                "confidence_score": confidence_score,
+                "comparable_projects": comparables,
+                "calculation_date": datetime.now().isoformat(),
+                "market_data_version": "RSMeans 2024 Q3 Healthcare",
+                "facility_type": facility_type,
+                "is_healthcare": True,
+                "trade_costs": trade_costs,
+                "healthcare_details": healthcare_result  # Include full details for debugging
+            }
+        
+        # Initialize DNA tracking for non-healthcare
         cost_dna = {
             "detected_factors": [],
             "applied_multipliers": [],
