@@ -108,8 +108,13 @@ function ProjectDetail() {
       
       // Check if this is a healthcare facility BEFORE fetching cost breakdown
       const buildingType = (projectData.building_type || projectData.request_data?.occupancy_type || '').toLowerCase();
+      const description = (projectData.description || projectData.project_name || '').toLowerCase();
       const isHealthcare = buildingType.includes('healthcare') || buildingType.includes('hospital') || 
-                          buildingType.includes('medical') || buildingType.includes('clinic');
+                          buildingType.includes('medical') || buildingType.includes('clinic') ||
+                          description.includes('hospital') || description.includes('medical') ||
+                          description.includes('healthcare') || description.includes('clinic') ||
+                          description.includes('surgery') || description.includes('surgical') ||
+                          description.includes('emergency') || description.includes('urgent care');
       
       if (isHealthcare) {
         console.log('Healthcare facility detected, calling healthcare-specific endpoint');
@@ -126,9 +131,68 @@ function ProjectDetail() {
           if (healthcareResult.is_healthcare) {
             setIsHealthcareFacility(true);
             setHealthcareData(healthcareResult.healthcare_view);
+            
+            // Update project with healthcare-specific costs
+            if (healthcareResult.healthcare_view) {
+              const hcView = healthcareResult.healthcare_view;
+              
+              // Use the all-in total (construction + equipment) for display
+              const allInTotal = hcView.project_total?.all_in_total || 
+                                hcView.total_cost || 
+                                hcView.total || 
+                                projectData.total_cost;
+              
+              const constructionTotal = hcView.construction?.total || 
+                                      hcView.project_total?.construction_only ||
+                                      projectData.subtotal;
+              
+              const equipmentTotal = hcView.equipment?.total || 
+                                   hcView.project_total?.equipment_only || 
+                                   0;
+              
+              // Override project costs with healthcare ALL-IN costs (construction + equipment)
+              projectData.total_cost = allInTotal;
+              projectData.subtotal = constructionTotal;
+              projectData.cost_per_sqft = hcView.project_total?.all_in_cost_per_sf || 
+                                         (allInTotal / projectData.square_footage) || 
+                                         projectData.cost_per_sqft;
+              projectData.contingency_amount = hcView.construction?.contingency || 
+                                              (constructionTotal * 0.1) || 
+                                              projectData.contingency_amount;
+              
+              // Store equipment cost separately for display
+              projectData.equipment_cost = equipmentTotal;
+              projectData.construction_cost = constructionTotal;
+              
+              // Update categories with healthcare breakdown if available
+              if (hcView.construction?.trades) {
+                projectData.categories = Object.entries(hcView.construction.trades).map(([name, amount]) => ({
+                  name: name.charAt(0).toUpperCase() + name.slice(1).replace('_', ' '),
+                  subtotal: amount as number,
+                  systems: []
+                }));
+              }
+              
+              setProject({...projectData});
+              console.log('Updated project with healthcare costs:', {
+                construction: constructionTotal,
+                equipment: equipmentTotal,
+                total: allInTotal,
+                perSF: projectData.cost_per_sqft
+              });
+            }
+            
             // Use healthcare cost breakdown if available
             if (healthcareResult.cost_breakdown) {
               setCostBreakdown(healthcareResult.cost_breakdown);
+            } else if (healthcareResult.standard_view?.trades) {
+              // Convert standard view trades to breakdown format
+              const breakdown = Object.entries(healthcareResult.standard_view.trades).map(([category, subtotal]) => ({
+                category: category.charAt(0).toUpperCase() + category.slice(1),
+                subtotal: subtotal as number,
+                percentage_of_total: ((subtotal as number) / healthcareResult.standard_view.total) * 100
+              }));
+              setCostBreakdown(breakdown);
             } else {
               const breakdown = await costService.calculateBreakdown(projectData);
               setCostBreakdown(breakdown);
@@ -1023,15 +1087,21 @@ function ProjectDetail() {
               </>
             )}
             <div>
-              <label>Subtotal:</label>
+              <label>{isHealthcareFacility ? 'Construction Subtotal:' : 'Subtotal:'}</label>
               <span>{formatCurrency(filteredTotals.subtotal)}</span>
             </div>
             <div>
               <label>Contingency ({project.contingency_percentage}%):</label>
               <span>{formatCurrency(filteredTotals.contingencyAmount)}</span>
             </div>
+            {isHealthcareFacility && project.equipment_cost && (
+              <div>
+                <label>Medical Equipment:</label>
+                <span>{formatCurrency(project.equipment_cost)}</span>
+              </div>
+            )}
             <div className="total">
-              <label>{selectedTrade !== 'general' ? `${TRADE_CATEGORY_MAP[selectedTrade]} Total Cost:` : 'Total Project Cost:'}</label>
+              <label>{selectedTrade !== 'general' ? `${TRADE_CATEGORY_MAP[selectedTrade]} Total Cost:` : isHealthcareFacility ? 'Total Project Cost (All-In):' : 'Total Project Cost:'}</label>
               <span>{formatCurrency(filteredTotals.total)}</span>
             </div>
             {project.created_at && selectedTrade === 'general' && (

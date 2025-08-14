@@ -30,27 +30,27 @@ class HealthcareFacilityType:
     IMAGING_CENTER = "imaging_center"
 
 
-# Base costs per square foot for different healthcare facility types
+# Base CONSTRUCTION costs per square foot (equipment calculated separately)
 HEALTHCARE_BASE_COSTS = {
-    # Full Hospitals (most expensive)
-    HealthcareFacilityType.HOSPITAL: 550,  # Full-service hospital with ER, OR, ICU
-    HealthcareFacilityType.MEDICAL_CENTER: 525,  # Medical center without full ER
+    # Full Hospitals (construction only - equipment adds $150-300/SF)
+    HealthcareFacilityType.HOSPITAL: 850,  # Construction only
+    HealthcareFacilityType.MEDICAL_CENTER: 750,  # Construction only
     
-    # Specialized Facilities
-    HealthcareFacilityType.SURGICAL_CENTER: 475,  # Ambulatory surgery center
-    HealthcareFacilityType.IMAGING_CENTER: 450,  # MRI, CT, radiology center
+    # Specialized Facilities (equipment adds $200-300/SF for surgical)
+    HealthcareFacilityType.SURGICAL_CENTER: 550,  # Construction only
+    HealthcareFacilityType.IMAGING_CENTER: 500,  # Construction only
     
     # Outpatient Facilities
-    HealthcareFacilityType.OUTPATIENT_CLINIC: 375,  # Outpatient treatment
-    HealthcareFacilityType.URGENT_CARE: 350,  # Walk-in urgent care
-    HealthcareFacilityType.REHABILITATION: 325,  # Physical therapy, rehab
+    HealthcareFacilityType.OUTPATIENT_CLINIC: 380,  # Construction only
+    HealthcareFacilityType.URGENT_CARE: 350,  # Construction only
+    HealthcareFacilityType.REHABILITATION: 325,  # Construction only
     
-    # Medical Offices
-    HealthcareFacilityType.MEDICAL_OFFICE: 325,  # Primary care, specialists
-    HealthcareFacilityType.DENTAL_OFFICE: 300,  # Dental practices
+    # Medical Offices (equipment adds $10-30/SF)
+    HealthcareFacilityType.MEDICAL_OFFICE: 320,  # Construction only
+    HealthcareFacilityType.DENTAL_OFFICE: 300,  # Construction only
     
     # Residential Care
-    HealthcareFacilityType.NURSING_HOME: 275,  # Assisted living, nursing home
+    HealthcareFacilityType.NURSING_HOME: 275,  # Construction only
 }
 
 

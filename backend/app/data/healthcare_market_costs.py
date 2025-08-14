@@ -18,25 +18,25 @@ HEALTHCARE_MARKET_COSTS = {
         'con_threshold': 2000000,  # Projects over $2M need CON
         'con_cost_impact': 1.05,   # 5% increase for CON compliance
         
-        # Facility type base costs (construction only, no equipment)
+        # Facility type base CONSTRUCTION costs (equipment added separately)
         'facility_costs_per_sf': {
-            'general_hospital': 465,
-            'pediatric_hospital': 490,
-            'psychiatric_hospital': 360,
-            'rehabilitation_hospital': 385,
-            'critical_access_hospital': 410,
-            'ambulatory_surgery_center': 440,
-            'imaging_center': 385,
-            'cancer_center': 465,
-            'dialysis_center': 335,
-            'birthing_center': 415,
-            'urgent_care': 335,
-            'community_health_center': 285,
-            'medical_office': 285,
-            'dental_clinic': 310,
-            'eye_clinic': 335,
-            'skilled_nursing_facility': 260,
-            'assisted_living': 235
+            'general_hospital': 850,  # Construction only (+$150-300 equipment)
+            'pediatric_hospital': 875,  # Construction only
+            'psychiatric_hospital': 650,  # Construction only
+            'rehabilitation_hospital': 700,  # Construction only
+            'critical_access_hospital': 750,  # Construction only
+            'ambulatory_surgery_center': 550,  # Construction only (+$200-300 equipment)
+            'imaging_center': 500,  # Construction only (+$150-250 equipment)
+            'cancer_center': 800,  # Construction only (+$200-400 equipment)
+            'dialysis_center': 450,  # Construction only (+$100-150 equipment)
+            'birthing_center': 650,  # Construction only
+            'urgent_care': 350,  # Construction only
+            'community_health_center': 320,  # Construction only
+            'medical_office': 320,  # Construction only (+$10-30 equipment)
+            'dental_clinic': 300,  # Construction only (+$50-100 equipment)
+            'eye_clinic': 325,  # Construction only
+            'skilled_nursing_facility': 275,  # Construction only
+            'assisted_living': 250  # Construction only
         },
         
         # Special space premiums (added to base)
@@ -80,24 +80,24 @@ HEALTHCARE_MARKET_COSTS = {
         'con_threshold': 2000000,
         'con_cost_impact': 1.05,
         
-        # Costs similar to Nashville with slight premium
+        # Costs similar to Nashville with slight premium - CONSTRUCTION ONLY
         'facility_costs_per_sf': {
-            'general_hospital': 470,
-            'pediatric_hospital': 495,
-            'psychiatric_hospital': 365,
-            'rehabilitation_hospital': 390,
-            'critical_access_hospital': 415,
-            'ambulatory_surgery_center': 445,
-            'imaging_center': 390,
-            'cancer_center': 470,
-            'dialysis_center': 340,
-            'birthing_center': 420,
-            'urgent_care': 340,
-            'community_health_center': 290,
-            'medical_office': 290,
-            'dental_clinic': 315,
-            'eye_clinic': 340,
-            'skilled_nursing_facility': 265,
+            'general_hospital': 865,  # Construction only (+$150-300 equipment)
+            'pediatric_hospital': 890,  # Construction only
+            'psychiatric_hospital': 660,  # Construction only
+            'rehabilitation_hospital': 710,  # Construction only
+            'critical_access_hospital': 760,  # Construction only
+            'ambulatory_surgery_center': 560,  # Construction only (+$200-300 equipment)
+            'imaging_center': 510,  # Construction only (+$150-250 equipment)
+            'cancer_center': 815,  # Construction only (+$200-400 equipment)
+            'dialysis_center': 460,  # Construction only (+$100-150 equipment)
+            'birthing_center': 660,  # Construction only
+            'urgent_care': 360,  # Construction only
+            'community_health_center': 330,  # Construction only
+            'medical_office': 330,  # Construction only (+$10-30 equipment)
+            'dental_clinic': 310,  # Construction only (+$50-100 equipment)
+            'eye_clinic': 335,  # Construction only
+            'skilled_nursing_facility': 285,  # Construction only
             'assisted_living': 240
         },
         
