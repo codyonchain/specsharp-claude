@@ -166,8 +166,8 @@ export const HealthcareCostView: React.FC<HealthcareCostViewProps> = ({ data }) 
                 Special spaces premium: {formatCurrency(data.construction.special_spaces_premium)}
               </p>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* Department-Level Costs */}
@@ -247,8 +247,8 @@ export const HealthcareCostView: React.FC<HealthcareCostViewProps> = ({ data }) 
                 </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* Compliance & Regulatory */}
@@ -271,8 +271,8 @@ export const HealthcareCostView: React.FC<HealthcareCostViewProps> = ({ data }) 
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* Project Total Summary */}
