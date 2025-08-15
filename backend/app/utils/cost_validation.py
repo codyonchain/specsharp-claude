@@ -14,8 +14,6 @@ class CostValidationError(Exception):
 
 def validate_cost_consistency(
     subtotal: float,
-    contingency_percentage: float,
-    contingency_amount: float,
     total_cost: float,
     tolerance: float = 0.01
 ) -> bool:
@@ -24,9 +22,7 @@ def validate_cost_consistency(
     
     Args:
         subtotal: Base construction cost
-        contingency_percentage: Contingency percentage (e.g., 10.0 for 10%)
-        contingency_amount: Calculated contingency amount
-        total_cost: Final total cost
+        total_cost: Final total cost (should equal subtotal for pure construction costs)
         tolerance: Acceptable difference due to rounding (default $0.01)
     
     Returns:
@@ -35,25 +31,11 @@ def validate_cost_consistency(
     Raises:
         CostValidationError: If validation fails with details
     """
-    # Calculate expected values
-    expected_contingency = subtotal * (contingency_percentage / 100)
-    expected_total = subtotal + contingency_amount
-    
-    # Check contingency calculation
-    contingency_diff = abs(expected_contingency - contingency_amount)
-    if contingency_diff > tolerance:
-        error_msg = (
-            f"Contingency mismatch: Expected ${expected_contingency:.2f} "
-            f"but got ${contingency_amount:.2f} (diff: ${contingency_diff:.2f})"
-        )
-        logger.error(error_msg)
-        raise CostValidationError(error_msg)
-    
-    # Check total calculation
-    total_diff = abs(expected_total - total_cost)
+    # For pure construction costs, total should equal subtotal
+    total_diff = abs(subtotal - total_cost)
     if total_diff > tolerance:
         error_msg = (
-            f"Total cost mismatch: Expected ${expected_total:.2f} "
+            f"Total cost mismatch: Expected ${subtotal:.2f} (subtotal) "
             f"but got ${total_cost:.2f} (diff: ${total_diff:.2f})"
         )
         logger.error(error_msg)
@@ -82,8 +64,6 @@ def validate_project_costs(project) -> bool:
     try:
         return validate_cost_consistency(
             subtotal=project.subtotal,
-            contingency_percentage=project.contingency_percentage or 10.0,
-            contingency_amount=project.contingency_amount or 0,
             total_cost=project.total_cost
         )
     except CostValidationError as e:
@@ -144,8 +124,6 @@ def log_cost_calculation(
     project_id: str,
     project_name: str,
     subtotal: float,
-    contingency_percentage: float,
-    contingency_amount: float,
     total_cost: float,
     cost_per_sqft: float,
     square_footage: float
@@ -158,8 +136,7 @@ def log_cost_calculation(
     logger.info(
         f"Cost calculation for '{project_name}' (ID: {project_id}):\n"
         f"  Square Footage: {square_footage:,.0f} SF\n"
-        f"  Subtotal: ${subtotal:,.2f}\n"
-        f"  Contingency ({contingency_percentage}%): ${contingency_amount:,.2f}\n"
+        f"  Construction Cost: ${subtotal:,.2f}\n"
         f"  Total Cost: ${total_cost:,.2f}\n"
         f"  Cost per SF: ${cost_per_sqft:.2f}"
     )

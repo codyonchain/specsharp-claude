@@ -4,11 +4,7 @@ from enum import Enum
 from datetime import datetime
 
 
-class ProjectType(str, Enum):
-    RESIDENTIAL = "residential"
-    COMMERCIAL = "commercial"
-    INDUSTRIAL = "industrial"
-    MIXED_USE = "mixed_use"
+# ProjectType enum removed - we only use building_type string now
 
 
 class ProjectClassification(str, Enum):
@@ -45,14 +41,16 @@ class BuildingSystem(BaseModel):
 
 class ScopeRequest(BaseModel):
     project_name: Optional[str] = Field(None, min_length=1, max_length=200)
-    project_type: ProjectType
     project_classification: ProjectClassification = Field(default=ProjectClassification.GROUND_UP)
     square_footage: float = Field(..., gt=0, le=1000000)
     location: str = Field(..., min_length=1)
     climate_zone: Optional[ClimateZone] = None
     num_floors: int = Field(default=1, ge=1, le=100)
     ceiling_height: float = Field(default=9.0, gt=0, le=30)
-    occupancy_type: str = Field(default="office")
+    # Only building type fields - no legacy fields
+    building_type: str = Field(default="commercial")     # Primary category: healthcare, restaurant, etc.
+    building_subtype: str = Field(default="office")      # Specific type: hospital, qsr, etc.
+    
     special_requirements: Optional[str] = None
     budget_constraint: Optional[float] = Field(None, gt=0)
     finish_level: Optional[str] = Field(default="standard", pattern="^(basic|standard|premium)$")
@@ -60,6 +58,8 @@ class ScopeRequest(BaseModel):
     service_level: Optional[str] = None  # e.g., "full_service" for restaurants
     building_features: Optional[List[str]] = None  # e.g., ["commercial_kitchen", "full_bar"]
     unit_mix: Optional[Dict[str, Any]] = None  # For multi-family residential
+    
+    # Remove all legacy validators - we only use building_type now
     
     @validator('building_mix')
     def validate_building_mix(cls, v, values):
@@ -73,12 +73,12 @@ class ScopeRequest(BaseModel):
         json_schema_extra = {
             "example": {
                 "project_name": "Downtown Office Building",
-                "project_type": "commercial",
+                "building_type": "commercial",
+                "building_subtype": "office",
                 "square_footage": 50000,
                 "location": "Seattle, WA",
                 "num_floors": 5,
                 "ceiling_height": 10,
-                "occupancy_type": "office",
                 "special_requirements": "LEED Gold certification required"
             }
         }
@@ -104,12 +104,11 @@ class ScopeResponse(BaseModel):
     request_data: ScopeRequest
     categories: List[ScopeCategory]
     subtotal: float = Field(default=0.0, ge=0)
-    contingency_percentage: float = Field(default=10.0, ge=0, le=50)
-    contingency_amount: float = Field(default=0.0, ge=0)
     total_cost: float = Field(default=0.0, ge=0)
     cost_per_sqft: float = Field(default=0.0, ge=0)
     confidence_score: int = Field(default=95, ge=0, le=100)
     floor_plan: Optional[Dict[str, Any]] = None
+    calculation_breakdown: Optional[Dict[str, Any]] = None
     
     @validator('subtotal', always=True)
     def calculate_subtotal(cls, v, values):
@@ -117,16 +116,11 @@ class ScopeResponse(BaseModel):
             return round(sum(cat.subtotal for cat in values['categories']), 2)
         return v
     
-    @validator('contingency_amount', always=True)
-    def calculate_contingency(cls, v, values):
-        if 'subtotal' in values and 'contingency_percentage' in values:
-            return round(values['subtotal'] * values['contingency_percentage'] / 100, 2)
-        return v
-    
     @validator('total_cost', always=True)
     def calculate_total(cls, v, values):
-        if 'subtotal' in values and 'contingency_amount' in values:
-            return round(values['subtotal'] + values['contingency_amount'], 2)
+        # For pure construction cost, total_cost = subtotal (no contingency)
+        if 'subtotal' in values:
+            return round(values['subtotal'], 2)
         return v
     
     @validator('cost_per_sqft', always=True)

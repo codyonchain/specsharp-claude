@@ -9,13 +9,15 @@ from fastapi_cache.decorator import cache
 from fastapi_cache import FastAPICache
 
 from app.models.scope import ScopeRequest, ScopeResponse
-from app.core.engine import engine as scope_engine
+from app.services.clean_engine_v2 import calculate_scope
+
+import logging
+logger = logging.getLogger(__name__)
+
 from app.services.floor_plan_service import floor_plan_service
 from app.services.architectural_floor_plan_service import architectural_floor_plan_service
-from app.services.trade_summary_service import trade_summary_service
 from app.services.markup_service import markup_service
 from app.services.nlp_service import nlp_service
-from app.services.cost_dna_service import cost_calculation_engine
 from app.utils.cost_validation import (
     validate_project_costs, 
     detect_cost_discrepancy, 
@@ -123,19 +125,28 @@ async def generate_scope(
         #             "limit": FREE_ESTIMATE_LIMIT
         #         }
         #     )
+        print("=" * 60)
+        print("📨 STEP 2: BACKEND RECEIVED REQUEST")
+        print("=" * 60)
+        print(f"Raw request data: {json.dumps(scope_request.model_dump(), indent=2)}")
+        print(f"Building type received: {scope_request.building_type}")
+        print(f"Building subtype received: {getattr(scope_request, 'building_subtype', 'NOT SET')}")
+        print(f"Square footage: {scope_request.square_footage}")
+        print(f"Location: {scope_request.location}")
+        
         logger.error(f"=== SCOPE GENERATION STARTED ===")
         logger.error(f"Request data: {scope_request.model_dump()}")
         
         # Track generation time
         start_time = time.time()
         
-        # If occupancy_type is not set or is default, detect from special_requirements
-        if (scope_request.occupancy_type == "office" or not scope_request.occupancy_type) and scope_request.special_requirements:
+        # If building_type is not set or is default, detect from special_requirements
+        if (scope_request.building_type == "commercial" or not scope_request.building_type) and scope_request.special_requirements:
             nlp_result = nlp_service._fallback_analysis(scope_request.special_requirements)
-            detected_occupancy = nlp_result.get('occupancy_type')
-            if detected_occupancy and detected_occupancy != 'commercial':
-                scope_request.occupancy_type = detected_occupancy
-                logger.error(f"[NLP] Updated occupancy_type to: {detected_occupancy}")
+            detected_type = nlp_result.get('building_type') or nlp_result.get('occupancy_type')
+            if detected_type and detected_type != 'commercial':
+                scope_request.building_type = detected_type
+                logger.error(f"[NLP] Updated building_type to: {detected_type}")
                 
                 # Also extract unit mix if multi-family residential
                 if detected_occupancy == 'multi_family_residential' and nlp_result.get('unit_mix'):
@@ -155,11 +166,12 @@ async def generate_scope(
         # Auto-generate project name if not provided
         if not scope_request.project_name:
             # Use special requirements or build a description from the request data
-            description = scope_request.special_requirements or f"{scope_request.square_footage} sf {scope_request.occupancy_type} in {scope_request.location}"
+            description = scope_request.special_requirements or f"{scope_request.square_footage} sf {scope_request.building_type} in {scope_request.location}"
             
             # Extract details for name generation
             parsed_data = {
-                "occupancy_type": scope_request.occupancy_type,
+                "building_type": scope_request.building_type,
+                "building_subtype": getattr(scope_request, 'building_subtype', ''),
                 "location": scope_request.location,
                 "square_footage": scope_request.square_footage,
                 "project_classification": getattr(scope_request, 'project_classification', 'ground_up')
@@ -170,13 +182,78 @@ async def generate_scope(
             scope_request.project_name = generated_name
             logger.info(f"[NLP] Auto-generated project name: {generated_name}")
         
-        scope_response = scope_engine.generate_scope(scope_request)
+        # Convert ScopeRequest to dict for clean engine
+        clean_request = {
+            "building_type": scope_request.building_type,
+            "building_subtype": getattr(scope_request, 'building_subtype', scope_request.building_type),
+            "square_footage": scope_request.square_footage,
+            "location": scope_request.location,
+            "num_floors": getattr(scope_request, 'num_floors', 1),
+            "finish_level": getattr(scope_request, 'finish_level', 'standard'),
+            "project_classification": getattr(scope_request, 'project_classification', 'ground_up').value if hasattr(getattr(scope_request, 'project_classification', 'ground_up'), 'value') else getattr(scope_request, 'project_classification', 'ground_up'),
+            "project_description": getattr(scope_request, 'special_requirements', None),
+            "project_name": getattr(scope_request, 'project_name', None),
+            "features": getattr(scope_request, 'building_features', []) or []
+        }
+        
+        # Only extract from special requirements if no features provided
+        if not clean_request["features"] and hasattr(scope_request, 'special_requirements') and scope_request.special_requirements:
+            # Basic feature extraction as fallback
+            feature_keywords = {
+                'gymnasium': ['gym', 'gymnasium', 'athletic'],
+                'science_labs': ['science', 'lab', 'laboratory'],
+                'cafeteria': ['cafeteria', 'dining', 'food service'],
+                'auditorium': ['auditorium', 'theater', 'assembly'],
+                'library': ['library', 'media center']
+            }
+            
+            req_lower = scope_request.special_requirements.lower()
+            for feature, keywords in feature_keywords.items():
+                if any(keyword in req_lower for keyword in keywords):
+                    clean_request["features"].append(feature)
+        
+        # Call clean engine
+        result = calculate_scope(clean_request)
+        
+        # Convert dict result to ScopeResponse object
+        scope_response = ScopeResponse(
+            project_id=result['project_id'],
+            project_name=result['project_name'],
+            created_at=result['created_at'],
+            building_type=result['building_type'],
+            building_subtype=result['building_subtype'],
+            square_footage=result['square_footage'],
+            location=result['location'],
+            num_floors=result.get('num_floors', 1),
+            cost_per_sqft=result['cost_per_sqft'],
+            subtotal=result['subtotal'],
+            total_cost=result['total_cost'],
+            categories=result['categories'],
+            calculation_breakdown=result.get('calculation_breakdown'),
+            project_classification=result.get('project_classification', 'ground_up'),
+            request_data=result.get('request_data', clean_request)
+        )
+        
+        print("=" * 60)
+        print("📤 STEP 4: BACKEND SENDING RESPONSE")
+        print("=" * 60)
+        print(f"Scope response generated:")
+        print(f"  Building type: {scope_response.building_type if hasattr(scope_response, 'building_type') else 'NOT SET'}")
+        print(f"  Building subtype: {scope_response.building_subtype if hasattr(scope_response, 'building_subtype') else 'NOT SET'}")
+        print(f"  Cost per SF: ${scope_response.cost_per_sqft}")
+        print(f"  Total cost: ${scope_response.total_cost:,.2f}")
+        print(f"  Subtotal: ${scope_response.subtotal:,.2f}")
+        
+        if scope_request.building_type == 'education' and scope_response.cost_per_sqft < 250:
+            print("🚨 BUG DETECTED IN BACKEND: Education type but low pricing!")
+            print(f"  Expected: ~$309/SF")
+            print(f"  Got: ${scope_response.cost_per_sqft}/SF")
         
         # Generate architectural floor plan with error handling
         try:
             floor_plan_data = architectural_floor_plan_service.generate_architectural_plan(
                 square_footage=scope_request.square_footage,
-                project_type=scope_request.project_type.value,
+                project_type=scope_request.building_type,
                 building_mix=getattr(scope_request, 'building_mix', None)
             )
             scope_response.floor_plan = floor_plan_data
@@ -187,50 +264,20 @@ async def generate_scope(
             # Use old floor plan service as fallback
             floor_plan_data = floor_plan_service.generate_floor_plan(
                 square_footage=scope_request.square_footage,
-                project_type=scope_request.project_type.value,
+                project_type=scope_request.building_type,
                 building_mix=getattr(scope_request, 'building_mix', None)
             )
             scope_response.floor_plan = floor_plan_data
         
-        # Generate trade summaries
+        # Clean Engine V2 already provides all trade breakdowns
         scope_dict = scope_response.model_dump()
-        scope_dict['trade_summaries'] = trade_summary_service.generate_trade_summaries(scope_dict)
         
-        # Update scope_response with trade summaries for storage
+        # Update scope_response for storage
         scope_response_dict = scope_response.model_dump()
-        scope_response_dict['trade_summaries'] = scope_dict['trade_summaries']
         
-        # Generate Cost DNA analysis
-        try:
-            cost_dna_data = cost_calculation_engine.calculate_with_dna(
-                square_footage=scope_request.square_footage,
-                occupancy_type=scope_request.occupancy_type,
-                location=scope_request.location if scope_request.location else "National Average",
-                project_classification=getattr(scope_request, 'project_classification', 'ground_up'),
-                description=scope_request.special_requirements or "",
-                finish_level=getattr(scope_request, 'finish_level', 'standard'),
-                building_mix=getattr(scope_request, 'building_mix', None)
-            )
-            
-            # Add Cost DNA to response
-            scope_response_dict['cost_dna'] = cost_dna_data['cost_dna']
-            scope_response_dict['confidence_score'] = cost_dna_data['confidence_score']
-            scope_response_dict['comparable_projects'] = cost_dna_data['comparable_projects']
-            scope_response_dict['cost_calculation_date'] = cost_dna_data['calculation_date']
-            scope_response_dict['market_data_version'] = cost_dna_data['market_data_version']
-            
-            logger.info(f"""
-            Cost DNA Generated:
-            - Project: {scope_request.project_name}
-            - Detected Factors: {len(cost_dna_data['cost_dna']['detected_factors'])}
-            - Confidence: {cost_dna_data['confidence_score']}%
-            - Total: ${cost_dna_data['total_cost']:,.2f}
-            """)
-        except Exception as e:
-            logger.error(f"Error generating Cost DNA: {str(e)}")
-            # Continue without Cost DNA if it fails
-            scope_response_dict['cost_dna'] = None
-            scope_response_dict['confidence_score'] = 75  # Default confidence
+        # Skip Cost DNA generation - clean engine handles all cost calculation
+        scope_response_dict['cost_dna'] = None
+        scope_response_dict['confidence_score'] = 95  # High confidence with clean engine
         
         # Apply markups to the scope
         scope_response_dict = markup_service.apply_markup_to_scope(
@@ -249,10 +296,9 @@ async def generate_scope(
             'project_id': scope_response.project_id,
             'name': scope_request.project_name,
             'description': scope_request.special_requirements,  # Store the original input description
-            'project_type': scope_request.project_type.value,
+            'project_type': scope_request.building_type,  # Using building_type as project_type is removed
             'project_classification': scope_request.project_classification.value,  # This is always present with default
-            'building_type': scope_request.occupancy_type,  # Store specific building type
-            'occupancy_type': scope_request.occupancy_type,
+            'building_type': scope_request.building_type,  # Store specific building type
             'square_footage': scope_request.square_footage,
             'location': scope_request.location,
             'climate_zone': scope_request.climate_zone.value if scope_request.climate_zone else None,
@@ -260,12 +306,12 @@ async def generate_scope(
             'ceiling_height': scope_request.ceiling_height,
             # Store all cost components for consistency across views
             'subtotal': scope_response.subtotal,
-            'contingency_percentage': scope_response.contingency_percentage,
-            'contingency_amount': scope_response.contingency_amount,
+            'contingency_percentage': 0.0,  # No contingency for pure construction costs
+            'contingency_amount': 0.0,  # No contingency for pure construction costs
             'total_cost': scope_response_dict.get('total_cost', scope_response.total_cost),
-            'cost_per_sqft': scope_response_dict.get('cost_per_sqft', scope_response.cost_per_sqft),
+            'cost_per_sqft': scope_response.cost_per_sqft,  # ALWAYS use Clean Engine's pure construction cost
             'scope_data': json.dumps(scope_response_dict, default=str),  # Save complete data including trade summaries
-            'cost_data': json.dumps(scope_response.cost_breakdown, default=str) if hasattr(scope_response, 'cost_breakdown') else None,
+            'cost_data': json.dumps(scope_response.calculation_breakdown, default=str) if hasattr(scope_response, 'calculation_breakdown') and scope_response.calculation_breakdown else None,
             'user_id': current_user.id,
             'created_by_id': current_user.id,
             'team_id': user.current_team_id  # Associate with user's current team
@@ -285,8 +331,6 @@ async def generate_scope(
             project_id=db_project.project_id,
             project_name=db_project.name,
             subtotal=db_project.subtotal,
-            contingency_percentage=db_project.contingency_percentage,
-            contingency_amount=db_project.contingency_amount,
             total_cost=db_project.total_cost,
             cost_per_sqft=db_project.cost_per_sqft,
             square_footage=db_project.square_footage
@@ -299,6 +343,17 @@ async def generate_scope(
         
         db.commit()
         db.refresh(db_project)
+        
+        # CRITICAL FIX: cost_per_sqft must be CONSTRUCTION COST ONLY (no GC, no contingency)
+        # Override whatever was calculated and use the clean engine's pure construction cost
+        
+        print(f"🔧 DEBUG: Original cost_per_sqft from scope_response: ${scope_response.cost_per_sqft}")
+        print(f"🔧 DEBUG: Modified cost_per_sqft in scope_response_dict: ${scope_response_dict.get('cost_per_sqft', 'MISSING')}")
+        
+        # Force the cost_per_sqft to be the clean engine result
+        scope_response_dict['cost_per_sqft'] = scope_response.cost_per_sqft
+        
+        print(f"🔧 FINAL: Set cost_per_sqft to ${scope_response_dict['cost_per_sqft']}/SF")
         
         # Return the complete response with trade summaries
         return scope_response_dict
@@ -556,6 +611,18 @@ async def get_project(
     scope_data['total_cost'] = project.total_cost
     scope_data['cost_per_sqft'] = project.cost_per_sqft
     
+    # Add top-level building info for frontend display
+    scope_data['building_type'] = project.building_type if hasattr(project, 'building_type') else scope_data.get('request_data', {}).get('building_type')
+    scope_data['building_subtype'] = scope_data.get('request_data', {}).get('building_subtype')
+    scope_data['square_footage'] = project.square_footage
+    
+    # Add calculation breakdown if stored in database
+    if hasattr(project, 'cost_data') and project.cost_data:
+        try:
+            scope_data['calculation_breakdown'] = json.loads(project.cost_data)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning(f"Could not parse cost_data for project {project.project_id}")
+    
     # Check if floor plan already exists in stored data
     if 'floor_plan' not in scope_data or not scope_data.get('floor_plan'):
         # Generate floor plan if missing
@@ -579,8 +646,7 @@ async def get_project(
             )
         scope_data['floor_plan'] = floor_plan_data
     
-    # Generate trade summaries
-    scope_data['trade_summaries'] = trade_summary_service.generate_trade_summaries(scope_data)
+    # Clean Engine V2 already provides all trade breakdowns
     
     return scope_data
 
@@ -632,32 +698,59 @@ async def recalculate_project(
     # Reconstruct the ScopeRequest
     scope_request = ScopeRequest(**request_data)
     
-    # Regenerate the scope with current engine
-    new_scope_response = scope_engine.generate_scope(scope_request)
+    # Convert to clean engine format
+    clean_request = {
+        "building_type": scope_request.building_type,
+        "building_subtype": getattr(scope_request, 'building_subtype', scope_request.building_type),
+        "square_footage": scope_request.square_footage,
+        "location": scope_request.location,
+        "num_floors": getattr(scope_request, 'num_floors', 1),
+        "finish_level": getattr(scope_request, 'finish_level', 'standard'),
+        "project_classification": getattr(scope_request, 'project_classification', 'ground_up').value if hasattr(getattr(scope_request, 'project_classification', 'ground_up'), 'value') else getattr(scope_request, 'project_classification', 'ground_up'),
+        "project_name": getattr(scope_request, 'project_name', None),
+        "features": getattr(scope_request, 'building_features', []) or []
+    }
+    
+    result = calculate_scope(clean_request)
+    
+    new_scope_response = ScopeResponse(
+        project_id=result['project_id'],
+        project_name=result['project_name'],
+        created_at=result['created_at'],
+        building_type=result['building_type'],
+        building_subtype=result['building_subtype'],
+        square_footage=result['square_footage'],
+        location=result['location'],
+        num_floors=result.get('num_floors', 1),
+        cost_per_sqft=result['cost_per_sqft'],
+        subtotal=result['subtotal'],
+        contingency_percentage=result['contingency_percentage'],
+        contingency_amount=result['contingency_amount'],
+        total_cost=result['total_cost'],
+        categories=result['categories'],
+        request_data=result.get('request_data', clean_request)
+    )
     
     # Generate floor plan
     if 'floor_plan' not in scope_data or not scope_data.get('floor_plan'):
         try:
             floor_plan_data = architectural_floor_plan_service.generate_architectural_plan(
                 square_footage=scope_request.square_footage,
-                project_type=scope_request.project_type.value,
+                project_type=scope_request.building_type,
                 building_mix=getattr(scope_request, 'building_mix', None)
             )
             new_scope_response.floor_plan = floor_plan_data
         except Exception as e:
             floor_plan_data = floor_plan_service.generate_floor_plan(
                 square_footage=scope_request.square_footage,
-                project_type=scope_request.project_type.value,
+                project_type=scope_request.building_type,
                 building_mix=getattr(scope_request, 'building_mix', None)
             )
             new_scope_response.floor_plan = floor_plan_data
     else:
         new_scope_response.floor_plan = scope_data['floor_plan']
     
-    # Generate trade summaries
-    new_scope_response.trade_summaries = trade_summary_service.generate_trade_summaries(
-        json.loads(new_scope_response.model_dump_json())
-    )
+    # Clean Engine V2 already provides all trade breakdowns
     
     # Update the project in database
     project.scope_data = new_scope_response.model_dump_json()

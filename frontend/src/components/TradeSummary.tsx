@@ -41,8 +41,7 @@ function TradeSummary({ tradeSummaries, onGeneratePackage, isReadOnly = false }:
       'Electrical': '⚡',
       'HVAC': '🌡️',
       'Plumbing': '🚰',
-      'Structural': '🏗️',
-      'General Conditions': '📋'
+      'Structural': '🏗️'
     };
     return icons[trade] || '📦';
   };

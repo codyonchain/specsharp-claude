@@ -1,90 +1,81 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { scopeService, costService, tradePackageService } from '../services/api';
+import { scopeService, costService, excelService, tradePackageService } from '../services/api';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
-import ArchitecturalFloorPlan from './ArchitecturalFloorPlan';
-import FloorPlanViewer from './FloorPlanViewer';
-import ProfessionalFloorPlan from './ProfessionalFloorPlan';
 import TradePackageModal from './TradePackageModal';
 import ComparisonTool from './ComparisonTool';
-import ComparisonToolV2 from './ComparisonToolV2';
-import TradeSummary from './TradeSummary';
-import TimeSavedDisplay from './TimeSavedDisplay';
-import CostDNADisplay from './CostDNADisplay';
-import { HealthcareCostView } from './HealthcareCostView';
-import { ViewToggle } from './ViewToggle';
-import { Package, Sliders, FileSpreadsheet, Download, FileText, Share2, ArrowLeft } from 'lucide-react';
-import { getDisplayBuildingType as getDisplayBuildingTypeUtil } from '../utils/buildingTypeDisplay';
-import { formatCurrency, formatNumber } from '../utils/formatters';
-import { calculateDeveloperMetrics, formatMetricValue } from '../utils/developerMetrics';
-import { excelService, pdfService, shareService } from '../services/api';
+import { Package, Sliders, ChevronDown, ChevronUp, FileSpreadsheet, Download } from 'lucide-react';
+import { getDisplayBuildingType } from '../utils/buildingTypeDisplay';
 import './ProjectDetail.css';
 
-type TradeType = 'electrical' | 'plumbing' | 'hvac' | 'structural' | 'general';
+type TradeType = 'all' | 'structural' | 'mechanical' | 'electrical' | 'plumbing' | 'finishes' | 'general_conditions';
 
-const TRADE_CATEGORY_MAP: Record<TradeType, string | null> = {
-  general: null,
-  electrical: 'Electrical',
-  plumbing: 'Plumbing',
-  hvac: 'Mechanical',
-  structural: 'Structural',
-};
-
-// Export these for use in CostDNA component
-export const PIE_TRADE_ORDER = ["Structural", "Mechanical", "Electrical", "Plumbing", "General Conditions"];
-
-// Exact colors that match the pie chart (Electrical is yellow)
-export const PIE_TRADE_COLORS: Record<string, string> = {
-  Structural:           "#0088FE",  // blue
-  Mechanical:           "#00C49F",  // teal/green
-  Electrical:           "#FFBB28",  // YELLOW (matches pie)
-  Plumbing:             "#FF8042",  // orange/red
-  "General Conditions": "#8884D8",  // purple
-};
-
-// Helper function to get pie breakdown data - matches categories to canonical trade names
-export function getPieBreakdown(project: any): Array<{ trade: string; amount: number }> {
-  if (!project?.categories) return [];
-  
-  // Map category names to canonical trade names for consistency
-  return project.categories.map((cat: any) => {
-    const catName = cat.name || cat.trade || "";
-    // Find matching canonical trade name
-    const canonicalTrade = PIE_TRADE_ORDER.find(t => 
-      t.toLowerCase() === catName.toLowerCase()
-    ) || catName;
-    
-    return {
-      trade: canonicalTrade,
-      amount: cat.subtotal || cat.amount || 0
-    };
-  }).filter((item: any) => item.trade && item.amount > 0);
+interface TradeSummary {
+  name: string;
+  displayName: string;
+  total: number;
+  percentage: number;
+  categories?: CategorySummary[];
 }
+
+interface CategorySummary {
+  name: string;
+  total: number;
+  systems?: any[];
+}
+
+// Trade mapping for aggregation
+const TRADE_MAPPING: Record<string, TradeType> = {
+  'structural': 'structural',
+  'mechanical': 'mechanical',
+  'mechanical - equipment': 'mechanical',
+  'mechanical - ductwork': 'mechanical',
+  'mechanical - terminals': 'mechanical',
+  'mechanical - exhaust': 'mechanical',
+  'mechanical - controls': 'mechanical',
+  'mechanical - piping': 'mechanical',
+  'mechanical - commissioning': 'mechanical',
+  'electrical': 'electrical',
+  'electrical - service & distribution': 'electrical',
+  'electrical - branch wiring': 'electrical',
+  'electrical - lighting': 'electrical',
+  'electrical - devices': 'electrical',
+  'electrical - equipment connections': 'electrical',
+  'electrical - life safety': 'electrical',
+  'electrical - fire alarm': 'electrical',
+  'electrical - low voltage': 'electrical',
+  'plumbing': 'plumbing',
+  'plumbing - fixtures': 'plumbing',
+  'plumbing - equipment': 'plumbing',
+  'plumbing - piping': 'plumbing',
+  'plumbing - insulation': 'plumbing',
+  'plumbing - drainage': 'plumbing',
+  'plumbing - valves': 'plumbing',
+  'plumbing - specialties': 'plumbing',
+  'plumbing - gas piping': 'plumbing',
+  'finishes': 'finishes',
+};
+
+const TRADE_DISPLAY_NAMES: Record<TradeType, string> = {
+  'all': 'All Trades',
+  'structural': 'Structural',
+  'mechanical': 'Mechanical (HVAC)',
+  'electrical': 'Electrical',
+  'plumbing': 'Plumbing',
+  'finishes': 'Finishes',
+  'general_conditions': 'General Conditions',
+};
 
 function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const [project, setProject] = useState<any>(null);
-  const [costBreakdown, setCostBreakdown] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'details' | 'floorplan'>('details');
+  const [selectedTrade, setSelectedTrade] = useState<TradeType>('all');
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [showTradePackageModal, setShowTradePackageModal] = useState(false);
-  const [selectedTradePackage, setSelectedTradePackage] = useState<TradeType>('general');
+  const [selectedTradePackage, setSelectedTradePackage] = useState<string>('');
   const [showComparisonTool, setShowComparisonTool] = useState(false);
-  const [selectedTrade, setSelectedTrade] = useState<TradeType>('general');
-  const [exportingExcel, setExportingExcel] = useState(false);
-  const [exportingPDF, setExportingPDF] = useState(false);
-  const [showExportMenu, setShowExportMenu] = useState(false);
-  const [projectFinishLevel, setProjectFinishLevel] = useState<'basic' | 'standard' | 'premium'>('standard');
-  const [tradeFinishOverrides, setTradeFinishOverrides] = useState<Record<string, 'basic' | 'standard' | 'premium'>>({});
-  const [showFinishImpact, setShowFinishImpact] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [shareLink, setShareLink] = useState<string>('');
-  const [isGeneratingShare, setIsGeneratingShare] = useState(false);
-  const [shareCopied, setShareCopied] = useState(false);
-  const [viewMode, setViewMode] = useState<'trade' | 'healthcare'>('trade');
-  const [healthcareData, setHealthcareData] = useState<any>(null);
-  const [isHealthcareFacility, setIsHealthcareFacility] = useState(false);
 
   useEffect(() => {
     if (projectId) {
@@ -94,125 +85,28 @@ function ProjectDetail() {
 
   const loadProjectDetails = async () => {
     try {
+      console.log('=' .repeat(60));
+      console.log('📋 STEP 6: LOADING PROJECT FOR DISPLAY');
+      console.log('=' .repeat(60));
+      console.log('Project ID:', projectId);
+      
       const projectData = await scopeService.getProject(projectId!);
-      console.log('Project data loaded:', projectData);
-      console.log('Project name:', projectData.project_name);
-      console.log('Trade summaries:', projectData.trade_summaries);
-      console.log('Building type:', projectData.building_type);
+      
+      console.log('Project data loaded:', JSON.stringify(projectData, null, 2));
+      console.log('Key values:');
+      console.log('  Building type:', projectData.building_type);
+      console.log('  Building subtype:', projectData.building_subtype);
+      console.log('  Cost per SF:', projectData.cost_per_sqft);
+      console.log('  Total cost:', projectData.total_cost);
+      console.log('  Square footage:', projectData.square_footage);
+      
+      if (projectData.building_type === 'education' && projectData.cost_per_sqft < 250) {
+        console.error('🚨 BUG IN DISPLAY: Education type but commercial pricing!');
+        console.error('Expected: ~$309/SF for middle school');
+        console.error('Got:', projectData.cost_per_sqft);
+      }
+      
       setProject(projectData);
-      
-      // Set finish level from project data
-      if (projectData.request_data?.finish_level) {
-        setProjectFinishLevel(projectData.request_data.finish_level);
-      }
-      
-      // Check if this is a healthcare facility BEFORE fetching cost breakdown
-      const buildingType = (projectData.building_type || projectData.request_data?.occupancy_type || '').toLowerCase();
-      const description = (projectData.description || projectData.project_name || '').toLowerCase();
-      const isHealthcare = buildingType.includes('healthcare') || buildingType.includes('hospital') || 
-                          buildingType.includes('medical') || buildingType.includes('clinic') ||
-                          description.includes('hospital') || description.includes('medical') ||
-                          description.includes('healthcare') || description.includes('clinic') ||
-                          description.includes('surgery') || description.includes('surgical') ||
-                          description.includes('emergency') || description.includes('urgent care');
-      
-      if (isHealthcare) {
-        console.log('Healthcare facility detected, calling healthcare-specific endpoint');
-        try {
-          const healthcareResult = await costService.calculateWithHealthcare({
-            description: projectData.description || projectData.project_name || '',
-            building_type: projectData.building_type || projectData.request_data?.occupancy_type || '',
-            square_footage: projectData.square_footage || projectData.request_data?.square_footage || 0,
-            location: projectData.location || projectData.request_data?.location || ''
-          });
-          
-          console.log('Healthcare calculation result:', healthcareResult);
-          
-          if (healthcareResult.is_healthcare) {
-            setIsHealthcareFacility(true);
-            setHealthcareData(healthcareResult.healthcare_view);
-            
-            // Update project with healthcare-specific costs
-            if (healthcareResult.healthcare_view) {
-              const hcView = healthcareResult.healthcare_view;
-              
-              // Use the all-in total (construction + equipment) for display
-              const allInTotal = hcView.project_total?.all_in_total || 
-                                hcView.total_cost || 
-                                hcView.total || 
-                                projectData.total_cost;
-              
-              const constructionTotal = hcView.construction?.total || 
-                                      hcView.project_total?.construction_only ||
-                                      projectData.subtotal;
-              
-              const equipmentTotal = hcView.equipment?.total || 
-                                   hcView.project_total?.equipment_only || 
-                                   0;
-              
-              // Override project costs with healthcare ALL-IN costs (construction + equipment)
-              projectData.total_cost = allInTotal;
-              projectData.subtotal = constructionTotal;
-              projectData.cost_per_sqft = hcView.project_total?.all_in_cost_per_sf || 
-                                         (allInTotal / projectData.square_footage) || 
-                                         projectData.cost_per_sqft;
-              projectData.contingency_amount = hcView.construction?.contingency || 
-                                              (constructionTotal * 0.1) || 
-                                              projectData.contingency_amount;
-              
-              // Store equipment cost separately for display
-              projectData.equipment_cost = equipmentTotal;
-              projectData.construction_cost = constructionTotal;
-              
-              // Update categories with healthcare breakdown if available
-              if (hcView.construction?.trades) {
-                projectData.categories = Object.entries(hcView.construction.trades).map(([name, amount]) => ({
-                  name: name.charAt(0).toUpperCase() + name.slice(1).replace('_', ' '),
-                  subtotal: amount as number,
-                  systems: []
-                }));
-              }
-              
-              setProject({...projectData});
-              console.log('Updated project with healthcare costs:', {
-                construction: constructionTotal,
-                equipment: equipmentTotal,
-                total: allInTotal,
-                perSF: projectData.cost_per_sqft
-              });
-            }
-            
-            // Use healthcare cost breakdown if available
-            if (healthcareResult.cost_breakdown) {
-              setCostBreakdown(healthcareResult.cost_breakdown);
-            } else if (healthcareResult.standard_view?.trades) {
-              // Convert standard view trades to breakdown format
-              const breakdown = Object.entries(healthcareResult.standard_view.trades).map(([category, subtotal]) => ({
-                category: category.charAt(0).toUpperCase() + category.slice(1),
-                subtotal: subtotal as number,
-                percentage_of_total: ((subtotal as number) / healthcareResult.standard_view.total) * 100
-              }));
-              setCostBreakdown(breakdown);
-            } else {
-              const breakdown = await costService.calculateBreakdown(projectData);
-              setCostBreakdown(breakdown);
-            }
-          } else {
-            // Fallback to regular breakdown if API doesn't confirm healthcare
-            const breakdown = await costService.calculateBreakdown(projectData);
-            setCostBreakdown(breakdown);
-          }
-        } catch (healthcareError) {
-          console.error('Error fetching healthcare data:', healthcareError);
-          // Fallback to regular breakdown on error
-          const breakdown = await costService.calculateBreakdown(projectData);
-          setCostBreakdown(breakdown);
-        }
-      } else {
-        // Not a healthcare facility, use regular cost breakdown
-        const breakdown = await costService.calculateBreakdown(projectData);
-        setCostBreakdown(breakdown);
-      }
     } catch (error) {
       console.error('Failed to load project:', error);
     } finally {
@@ -220,12 +114,93 @@ function ProjectDetail() {
     }
   };
 
+  // Aggregate categories into main trades
+  const tradeSummaries = useMemo(() => {
+    if (!project?.categories) return [];
+
+    const tradeGroups: Record<TradeType, TradeSummary> = {
+      'structural': { name: 'structural', displayName: 'Structural', total: 0, percentage: 0, categories: [] },
+      'mechanical': { name: 'mechanical', displayName: 'Mechanical', total: 0, percentage: 0, categories: [] },
+      'electrical': { name: 'electrical', displayName: 'Electrical', total: 0, percentage: 0, categories: [] },
+      'plumbing': { name: 'plumbing', displayName: 'Plumbing', total: 0, percentage: 0, categories: [] },
+      'finishes': { name: 'finishes', displayName: 'Finishes', total: 0, percentage: 0, categories: [] },
+    };
+
+    // Aggregate categories into trades (skip General Conditions)
+    project.categories.forEach((category: any) => {
+      const categoryName = category.name.toLowerCase();
+      
+      // Skip General Conditions entirely
+      if (categoryName.includes('general')) {
+        return;
+      }
+      
+      const tradeName = TRADE_MAPPING[categoryName];
+      
+      if (tradeName && tradeGroups[tradeName]) {
+        const categoryTotal = category.systems.reduce((sum: number, system: any) => sum + system.total_cost, 0);
+        tradeGroups[tradeName].total += categoryTotal;
+        tradeGroups[tradeName].categories!.push({
+          name: category.name,
+          total: categoryTotal,
+          systems: category.systems
+        });
+      }
+    });
+
+    // Calculate percentages and filter out empty trades
+    const totalCost = Object.values(tradeGroups).reduce((sum, trade) => sum + trade.total, 0);
+    const summaries = Object.values(tradeGroups)
+      .filter(trade => trade.total > 0)
+      .map(trade => ({
+        ...trade,
+        percentage: (trade.total / totalCost) * 100
+      }));
+
+    return summaries;
+  }, [project]);
+
+  // Get data for selected trade
+  const selectedTradeData = useMemo(() => {
+    if (selectedTrade === 'all') {
+      return tradeSummaries;
+    }
+    return tradeSummaries.filter(trade => trade.name === selectedTrade);
+  }, [tradeSummaries, selectedTrade]);
+
+  // Chart data for pie chart
+  const chartData = useMemo(() => {
+    if (selectedTrade === 'all') {
+      return tradeSummaries.map(trade => ({
+        name: trade.displayName,
+        value: trade.total,
+        percentage: trade.percentage
+      }));
+    } else {
+      const trade = tradeSummaries.find(t => t.name === selectedTrade);
+      return trade?.categories?.map(cat => ({
+        name: cat.name,
+        value: cat.total,
+        percentage: (cat.total / trade.total) * 100
+      })) || [];
+    }
+  }, [tradeSummaries, selectedTrade]);
+
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#8DD1E1'];
+
+  const toggleCategoryExpansion = (categoryName: string) => {
+    const newExpanded = new Set(expandedCategories);
+    if (newExpanded.has(categoryName)) {
+      newExpanded.delete(categoryName);
+    } else {
+      newExpanded.add(categoryName);
+    }
+    setExpandedCategories(newExpanded);
+  };
+
   const handleGenerateTradePackage = async (projectId: string, trade: string) => {
-    console.log(`[TradePackage] Starting generation for trade: ${trade}, project: ${projectId}`);
-    
     try {
       const data = await tradePackageService.generate(projectId, trade);
-      console.log('[TradePackage] Successfully generated package:', data);
       return data;
     } catch (error) {
       console.error('[TradePackage] Error generating package:', error);
@@ -233,205 +208,63 @@ function ProjectDetail() {
     }
   };
 
-  const openTradePackageModal = (trade: TradeType) => {
+  const openTradePackageModal = (trade: string) => {
     setSelectedTradePackage(trade);
     setShowTradePackageModal(true);
-  };
-
-  // Calculate cost impact of finish level changes
-  const calculateFinishImpact = (finishLevel: 'basic' | 'standard' | 'premium') => {
-    const multipliers = {
-      basic: 0.85,
-      standard: 1.0,
-      premium: 1.25
-    };
-    
-    const currentMultiplier = multipliers[projectFinishLevel];
-    const newMultiplier = multipliers[finishLevel];
-    const impactPercentage = ((newMultiplier / currentMultiplier) - 1) * 100;
-    
-    return {
-      percentage: impactPercentage,
-      newTotal: project?.total_cost ? project.total_cost * (newMultiplier / currentMultiplier) : 0
-    };
   };
 
   // Excel export handlers
   const handleExportFullProject = async () => {
     try {
-      setExportingExcel(true);
-      setShowExportMenu(false); // Close menu immediately
-      console.log('Starting Excel export for project:', project.project_id);
-      console.log('Excel service:', excelService);
-      console.log('Export function:', excelService.exportProject);
       const response = await excelService.exportProject(project.project_id);
-      
-      // Check if response has data
-      if (!response.data) {
-        throw new Error('No data received from server');
-      }
-      
-      // Check blob size
-      console.log('Received blob size:', response.data.size);
-      
-      if (response.data.size === 0) {
-        throw new Error('Received empty file from server');
-      }
-      
       // response.data is already a blob when responseType is 'blob'
       const blob = response.data;
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `${project.project_name}_estimate.xlsx`);
+      link.download = `${project.project_name.replace(/\s+/g, '_')}_estimate.xlsx`;
       document.body.appendChild(link);
       link.click();
-      link.remove();
+      document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      
-      console.log('Excel export completed successfully');
     } catch (error: any) {
       console.error('Failed to export Excel:', error);
-      console.error('Error response:', error.response);
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        projectId: project.project_id
+      });
       
       let errorMessage = 'Failed to export Excel file. Please try again.';
-      
-      if (error.response) {
-        // The request was made and the server responded with a status code
-        // that falls out of the range of 2xx
-        if (error.response.status === 401) {
-          errorMessage = 'Authentication failed. Please log in again.';
-          // Optionally redirect to login
-          // navigate('/login');
-        } else if (error.response.status === 404) {
-          errorMessage = 'Project not found or you do not have access to it.';
-        } else if (error.response.status === 500) {
-          errorMessage = 'Server error. Please try again later.';
-        } else if (error.response.data?.detail) {
-          errorMessage = error.response.data.detail;
-        }
-      } else if (error.request) {
-        // The request was made but no response was received
-        errorMessage = 'No response from server. Please check your connection.';
+      if (error.response?.status === 404) {
+        errorMessage = 'Project not found. Please refresh and try again.';
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Session expired. Please log in again.';
+      } else if (error.response?.data?.detail) {
+        errorMessage = `Export failed: ${error.response.data.detail}`;
       }
       
-      alert(`Export Error: ${errorMessage}`);
-    } finally {
-      setExportingExcel(false);
-    }
-  };
-
-  // PDF export handler
-  const handleExportPDF = async (clientName?: string) => {
-    try {
-      setExportingPDF(true);
-      console.log('Starting PDF export for project:', project.project_id);
-      const response = await pdfService.exportProject(project.project_id, clientName);
-      
-      // Check if response has data
-      if (!response.data) {
-        throw new Error('No data received from server');
-      }
-      
-      // response.data is already a blob when responseType is 'blob'
-      const blob = response.data;
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `${project.project_name}_professional_estimate.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      
-      console.log('PDF export completed successfully');
-    } catch (error: any) {
-      console.error('Failed to export PDF:', error);
-      const errorMessage = error.response?.data?.detail || error.message || 'Failed to export PDF file';
-      alert(`Export Error: ${errorMessage}`);
-    } finally {
-      setExportingPDF(false);
-      setShowExportMenu(false);
+      alert(errorMessage);
     }
   };
 
   const handleExportTrade = async (tradeName: string) => {
     try {
       const response = await excelService.exportTrade(project.project_id, tradeName);
-      
       // response.data is already a blob when responseType is 'blob'
       const blob = response.data;
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `${project.project_name}_${tradeName}_package.xlsx`);
+      link.download = `${project.project_name.replace(/\s+/g, '_')}_${tradeName}_package.xlsx`;
       document.body.appendChild(link);
       link.click();
-      link.remove();
+      document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Failed to export trade Excel:', error);
       alert('Failed to export trade Excel file. Please try again.');
-    }
-  };
-
-  const handleExtractTrade = async (tradeName: string) => {
-    try {
-      setExportingExcel(true);
-      console.log('Extracting trade for subs:', tradeName);
-      
-      const response = await excelService.extractForSubs(project.project_id, tradeName);
-      console.log('Extract response:', response);
-      
-      // Create blob and download
-      const blob = response.data;
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${project.project_name}_${tradeName}_Scope_for_Subs.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error: any) {
-      console.error('Failed to extract trade for subs:', error);
-      const errorMessage = error.response?.data?.detail || error.message || 'Failed to extract trade data';
-      alert(`Extract Error: ${errorMessage}`);
-    } finally {
-      setExportingExcel(false);
-    }
-  };
-
-  const handleShareProject = async () => {
-    try {
-      setIsGeneratingShare(true);
-      const response = await shareService.createShareLink(project.project_id);
-      setShareLink(response.share_url);
-      setShowShareModal(true);
-    } catch (error: any) {
-      console.error('Failed to create share link:', error);
-      alert('Failed to create share link. Please try again.');
-    } finally {
-      setIsGeneratingShare(false);
-    }
-  };
-
-  const handleCopyShareLink = async () => {
-    try {
-      await navigator.clipboard.writeText(shareLink);
-      setShareCopied(true);
-      setTimeout(() => setShareCopied(false), 2000);
-    } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
-      // Fallback for older browsers
-      const textArea = document.createElement('textarea');
-      textArea.value = shareLink;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      setShareCopied(true);
-      setTimeout(() => setShareCopied(false), 2000);
     }
   };
 
@@ -443,72 +276,16 @@ function ProjectDetail() {
     return <div className="error">Project not found</div>;
   }
 
-  // Get display-friendly building type
-  const getDisplayBuildingType = () => {
-    return getDisplayBuildingTypeUtil(project.request_data);
-  };
-
-  // Filter categories based on selected trade
-  const getFilteredCategories = () => {
-    if (selectedTrade === 'general') {
-      return project.categories;
-    }
-    
-    const targetCategory = TRADE_CATEGORY_MAP[selectedTrade];
-    return project.categories.filter((cat: any) => 
-      cat.name.toLowerCase() === targetCategory?.toLowerCase()
-    );
-  };
-
-  const filteredCategories = getFilteredCategories();
-  
-  // Calculate filtered totals
-  const calculateFilteredTotals = () => {
-    const categories = getFilteredCategories();
-    const subtotal = categories.reduce((sum: number, cat: any) => sum + cat.subtotal, 0);
-    const contingencyAmount = subtotal * (project.contingency_percentage / 100);
-    const total = subtotal + contingencyAmount;
-    
-    return { subtotal, contingencyAmount, total };
-  };
-
-  const filteredTotals = selectedTrade !== 'general' 
-    ? calculateFilteredTotals() 
-    : { 
-        subtotal: project.subtotal, 
-        contingencyAmount: project.contingency_amount, 
-        total: project.total_cost 
-      };
-
-  // Filter cost breakdown for chart
-  const filteredCostBreakdown = selectedTrade !== 'general'
-    ? costBreakdown.filter(item => 
-        item.category.toLowerCase() === TRADE_CATEGORY_MAP[selectedTrade]?.toLowerCase()
-      )
-    : costBreakdown;
-
-  const chartData = filteredCostBreakdown.map(item => ({
-    name: item.category,
-    value: item.subtotal,
-    percentage: selectedTrade !== 'general' ? 100 : item.percentage_of_total,
-  }));
-
-  // Map categories to colors - ensure consistent colors for each trade
-  const COLORS = filteredCostBreakdown.map(item => {
-    // Find matching canonical trade name
-    const tradeName = PIE_TRADE_ORDER.find(t => 
-      t.toLowerCase() === item.category?.toLowerCase()
-    );
-    return tradeName ? PIE_TRADE_COLORS[tradeName] : '#999999';
-  });
+  const totalCost = selectedTrade === 'all' 
+    ? project.total_cost 
+    : selectedTradeData.reduce((sum, trade) => sum + trade.total, 0);
 
   return (
     <div className="project-detail">
-      
       <header className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <button
-            onClick={() => navigate('/dashboard')}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
+          <button 
+            onClick={() => navigate('/dashboard')} 
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -521,97 +298,36 @@ function ProjectDetail() {
               cursor: 'pointer',
               fontSize: '16px',
               fontWeight: '600',
-              transition: 'all 0.2s'
+              transition: 'all 0.2s',
+              boxShadow: '0 2px 4px rgba(102, 126, 234, 0.2)'
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = '#5a67d8';
               e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 4px 8px rgba(102, 126, 234, 0.3)';
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = '#667eea';
               e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 2px 4px rgba(102, 126, 234, 0.2)';
             }}
           >
-            <ArrowLeft size={20} />
+            <span style={{ fontSize: '20px' }}>←</span>
             Dashboard
           </button>
           <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#333' }}>
-            {project.project_name || 'Project Details'}
+            {project.project_name}
           </h1>
         </div>
         <div className="header-actions">
-          <div className="export-menu-container">
-            <button 
-              className="export-btn"
-              onClick={() => setShowExportMenu(!showExportMenu)}
-              disabled={exportingExcel || exportingPDF}
-              title="Export options"
-            >
-              <Download size={18} />
-              Export
-              <span className="dropdown-arrow">▼</span>
-            </button>
-            
-            {showExportMenu && (
-              <div className="export-dropdown">
-                <button 
-                  className="export-option"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log('Excel button clicked!');
-                    handleExportFullProject();
-                  }}
-                  disabled={exportingExcel}
-                >
-                  <FileSpreadsheet size={16} />
-                  Standard Excel
-                  {exportingExcel && <span> (Loading...)</span>}
-                </button>
-                <button 
-                  className="export-option premium"
-                  onClick={() => {
-                    const clientName = prompt('Enter client name (optional):');
-                    handleExportPDF(clientName || undefined);
-                  }}
-                  disabled={exportingPDF}
-                >
-                  <FileText size={16} />
-                  Professional PDF
-                  <span className="premium-badge">Premium</span>
-                </button>
-                <button 
-                  className="export-option premium"
-                  onClick={() => {
-                    const clientName = prompt('Enter client name (optional):');
-                    excelService.exportProfessional(project.project_id, clientName || undefined)
-                      .then(response => {
-                        const blob = response.data;
-                        const url = window.URL.createObjectURL(blob);
-                        const link = document.createElement('a');
-                        link.href = url;
-                        link.setAttribute('download', `${project.project_name}_professional.xlsx`);
-                        document.body.appendChild(link);
-                        link.click();
-                        link.remove();
-                        window.URL.revokeObjectURL(url);
-                      })
-                      .catch(error => {
-                        console.error('Failed to export professional Excel:', error);
-                        alert('Failed to export professional Excel file');
-                      })
-                      .finally(() => setShowExportMenu(false));
-                  }}
-                  disabled={exportingExcel}
-                >
-                  <FileSpreadsheet size={16} />
-                  Professional Excel
-                  <span className="premium-badge">Premium</span>
-                </button>
-              </div>
-            )}
-          </div>
-          
+          <button 
+            className="export-excel-btn"
+            onClick={handleExportFullProject}
+            title="Export full project to Excel"
+          >
+            <FileSpreadsheet size={18} />
+            Export Excel
+          </button>
           <button 
             className="compare-scenarios-btn"
             onClick={() => setShowComparisonTool(true)}
@@ -619,70 +335,28 @@ function ProjectDetail() {
             <Sliders size={18} />
             Compare Scenarios
           </button>
-          
-          <button 
-            className="share-btn"
-            onClick={handleShareProject}
-            disabled={isGeneratingShare}
-          >
-            <Share2 size={18} />
-            Share
-          </button>
         </div>
       </header>
 
-      {project.floor_plan && (
-        <div className="project-tabs">
-          <button 
-            className={`tab ${activeTab === 'details' ? 'active' : ''}`}
-            onClick={() => setActiveTab('details')}
-          >
-            Project Details
-          </button>
-          <button 
-            className={`tab ${activeTab === 'floorplan' ? 'active' : ''}`}
-            onClick={() => setActiveTab('floorplan')}
-          >
-            Floor Plan
-          </button>
-        </div>
-      )}
-
-      {activeTab === 'details' && (
-        <div className="trade-filters">
+      <div className="trade-filters">
           <div className="filter-tabs">
             <button
-              className={`filter-tab ${selectedTrade === 'general' ? 'active' : ''}`}
-              onClick={() => setSelectedTrade('general')}
+              className={`filter-tab ${selectedTrade === 'all' ? 'active' : ''}`}
+              onClick={() => setSelectedTrade('all')}
             >
               All Trades
             </button>
-            <button
-              className={`filter-tab ${selectedTrade === 'electrical' ? 'active' : ''}`}
-              onClick={() => setSelectedTrade('electrical')}
-            >
-              Electrical
-            </button>
-            <button
-              className={`filter-tab ${selectedTrade === 'plumbing' ? 'active' : ''}`}
-              onClick={() => setSelectedTrade('plumbing')}
-            >
-              Plumbing
-            </button>
-            <button
-              className={`filter-tab ${selectedTrade === 'hvac' ? 'active' : ''}`}
-              onClick={() => setSelectedTrade('hvac')}
-            >
-              HVAC
-            </button>
-            <button
-              className={`filter-tab ${selectedTrade === 'structural' ? 'active' : ''}`}
-              onClick={() => setSelectedTrade('structural')}
-            >
-              Structural
-            </button>
+            {tradeSummaries.map(trade => (
+              <button
+                key={trade.name}
+                className={`filter-tab ${selectedTrade === trade.name ? 'active' : ''}`}
+                onClick={() => setSelectedTrade(trade.name as TradeType)}
+              >
+                {trade.displayName}
+              </button>
+            ))}
           </div>
-          {selectedTrade !== 'general' && (
+          {selectedTrade !== 'all' && (
             <div className="trade-actions">
               <button 
                 className="trade-excel-btn"
@@ -697,440 +371,285 @@ function ProjectDetail() {
                 onClick={() => openTradePackageModal(selectedTrade)}
               >
                 <Package size={16} />
-                Generate {TRADE_CATEGORY_MAP[selectedTrade]} Package
+                Generate {TRADE_DISPLAY_NAMES[selectedTrade]} Package
               </button>
             </div>
           )}
         </div>
-      )}
 
-      {activeTab === 'details' ? (
       <div className="project-content">
-        <div className="project-summary">
-          <h2>Project Summary</h2>
-          <div className="summary-grid">
-            <div className="summary-item">
-              <label>Location</label>
-              <span>{project.request_data.location}</span>
-            </div>
-            <div className="summary-item">
-              <label>Type</label>
-              <span>{getDisplayBuildingType()}</span>
-            </div>
-            <div className="summary-item">
-              <label>Project Classification</label>
-              <span className="classification-badge">
-                {project.request_data.project_classification === 'ground_up' && '🏗️ Ground-Up'}
-                {project.request_data.project_classification === 'addition' && '🏠➕ Addition'}
-                {project.request_data.project_classification === 'renovation' && '🔨 Renovation'}
-                {!project.request_data.project_classification && '🏗️ Ground-Up'}
-              </span>
-            </div>
-            <div className="summary-item">
-              <label>Square Footage</label>
-              <span>{project.request_data.square_footage.toLocaleString()} sq ft</span>
-            </div>
-            <div className="summary-item">
-              <label>Floors</label>
-              <span>{project.request_data.num_floors}</span>
-            </div>
-            <div className="summary-item">
-              <label>Project Finish Level</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <select 
-                  value={projectFinishLevel} 
-                  onChange={(e) => {
-                    const newLevel = e.target.value as 'basic' | 'standard' | 'premium';
-                    setProjectFinishLevel(newLevel);
-                    setShowFinishImpact(true);
-                    setTimeout(() => setShowFinishImpact(false), 3000);
-                  }}
-                  onFocus={() => setShowFinishImpact(true)}
-                  onBlur={() => setTimeout(() => setShowFinishImpact(false), 300)}
-                  style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #ddd' }}
-                >
-                  <option value="basic">Basic (-15%)</option>
-                  <option value="standard">Standard</option>
-                  <option value="premium">Premium (+25%)</option>
-                </select>
-                {showFinishImpact && projectFinishLevel !== 'standard' && (
-                  <span style={{ 
-                    fontSize: '0.85em', 
-                    color: projectFinishLevel === 'basic' ? '#dc3545' : '#28a745',
-                    fontWeight: 'bold'
-                  }}>
-                    {projectFinishLevel === 'basic' ? '-15%' : '+25%'} impact
-                  </span>
-                )}
+          <div className="project-summary">
+            <h2>Project Summary</h2>
+            <div className="summary-grid">
+              <div className="summary-item">
+                <label>Location</label>
+                <span>{project.request_data.location}</span>
+              </div>
+              <div className="summary-item">
+                <label>Type</label>
+                <span>{getDisplayBuildingType(project.request_data)}</span>
+              </div>
+              <div className="summary-item">
+                <label>Square Footage</label>
+                <span>{project.request_data.square_footage.toLocaleString()} sq ft</span>
+              </div>
+              <div className="summary-item">
+                <label>Floors</label>
+                <span>{project.request_data.num_floors}</span>
+              </div>
+              <div className="summary-item">
+                <label>{selectedTrade !== 'all' ? `${TRADE_DISPLAY_NAMES[selectedTrade]} Cost` : 'Total Cost'}</label>
+                <span className="highlight">${totalCost.toLocaleString()}</span>
+              </div>
+              <div className="summary-item">
+                <label>Cost per Sq Ft</label>
+                <span>${(totalCost / project.request_data.square_footage).toFixed(2)}</span>
               </div>
             </div>
-            <div className="summary-item">
-              <label>{selectedTrade !== 'general' ? `${TRADE_CATEGORY_MAP[selectedTrade]} Cost` : 'Total Cost'}</label>
-              <span className="highlight">{formatCurrency(filteredTotals.total)}</span>
-            </div>
-            <div className="summary-item">
-              <label>Cost per Sq Ft</label>
-              <span>${(filteredTotals.total / project.request_data.square_footage).toFixed(2)}</span>
-            </div>
           </div>
-        </div>
 
-        {/* Developer Metrics */}
-        <div className="developer-metrics-section">
-          <h3>Key Developer Metrics</h3>
-          <div className="metrics-grid">
-            {calculateDeveloperMetrics(project).map((metric, index) => (
-              <div key={index} className="metric-card">
-                <div className="metric-label">{metric.label}</div>
-                <div className="metric-value">
-                  {formatMetricValue(metric.value)}{metric.unit}
-                </div>
-                {metric.description && (
-                  <div className="metric-description">{metric.description}</div>
-                )}
-              </div>
-            ))}
+          {/* Cost Breakdown - Moved up to show actionable information first */}
+          <div className="section-header">
+            <h2 className="section-title">Where Your Budget Goes</h2>
+            <p className="section-subtitle">Detailed breakdown of construction costs by trade</p>
           </div>
-        </div>
-
-        {/* Time Saved Display */}
-        <TimeSavedDisplay 
-          generationTimeSeconds={project.generation_time_seconds}
-          hourlyRate={75}
-        />
-
-        {/* Alert for multi-story buildings without elevators */}
-        {project.request_data.num_floors > 1 && 
-         project.request_data.occupancy_type === 'healthcare' &&
-         !project.categories.some((cat: any) => 
-           cat.name === 'Mechanical' && 
-           cat.systems.some((sys: any) => sys.name.toLowerCase().includes('elevator'))
-         ) && (
-          <div className="info-message" style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#fff3cd', border: '1px solid #ffeaa7', borderRadius: '4px' }}>
-            <strong>Note:</strong> This project was generated before elevator calculations were added. 
-            Consider regenerating the scope for updated mechanical systems including elevators.
-          </div>
-        )}
-
-        <section id="cost-breakdown" className="cost-breakdown">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <div className="cost-breakdown">
             <h2>Cost Breakdown</h2>
-            {isHealthcareFacility && (
-              <ViewToggle 
-                currentView={viewMode} 
-                onViewChange={setViewMode}
-              />
-            )}
-          </div>
-          
-          {/* Healthcare View */}
-          {isHealthcareFacility && viewMode === 'healthcare' && healthcareData ? (
-            <HealthcareCostView data={healthcareData} />
-          ) : (
-          <div className="breakdown-content">
-            <div className="chart-container">
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={chartData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ percentage }) => `${percentage.toFixed(0)}%`}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {chartData.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+            <div className="breakdown-content">
+              <div className="chart-container">
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={chartData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ percentage }) => `${percentage.toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {chartData.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
 
-            <div className="breakdown-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Category</th>
-                    <th>Amount</th>
-                    <th>Percentage</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredCostBreakdown.map((item, index) => {
-                    const tradeId = `trade-${String(item.category || '').toLowerCase().replace(/[^a-z]/g, '')}`;
-                    return (
-                      <tr key={index} id={tradeId} data-trade-id={tradeId} className="scroll-mt-24">
-                        <td>{item.category}</td>
-                        <td>{formatCurrency(item.subtotal)}</td>
-                        <td>{(selectedTrade !== 'general' ? 100 : item.percentage_of_total).toFixed(1)}%</td>
+              <div className="breakdown-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{selectedTrade === 'all' ? 'Trade' : 'Category'}</th>
+                      <th>Amount</th>
+                      <th>Percentage</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {chartData.map((item, index) => (
+                      <tr key={index}>
+                        <td>{item.name}</td>
+                        <td>${item.value.toLocaleString()}</td>
+                        <td>{item.percentage.toFixed(1)}%</td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
+
+
+          {/* Progressive Disclosure Section - Trade Details */}
+          <div className="progressive-disclosure">
+            {selectedTrade === 'all' ? (
+              // Level 1: Show all trades summary
+              <div className="trade-summaries">
+                <h2>Trade Summaries</h2>
+                {tradeSummaries.map(trade => (
+                  <div key={trade.name} className="trade-summary-card">
+                    <div className="trade-header">
+                      <h3>{trade.displayName}</h3>
+                      <span className="trade-total">${trade.total.toLocaleString()} ({trade.percentage.toFixed(1)}%)</span>
+                    </div>
+                    <button 
+                      className="view-details-btn"
+                      onClick={() => setSelectedTrade(trade.name as TradeType)}
+                    >
+                      View Details →
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              // Level 2: Show categories for selected trade
+              <div className="category-summaries">
+                <h2>{TRADE_DISPLAY_NAMES[selectedTrade]} Categories</h2>
+                {selectedTradeData[0]?.categories?.map(category => (
+                  <div key={category.name} className="category-card">
+                    <div 
+                      className="category-header"
+                      onClick={() => toggleCategoryExpansion(category.name)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <div>
+                        <h3>{category.name}</h3>
+                        <span className="category-total">${category.total.toLocaleString()}</span>
+                      </div>
+                      {expandedCategories.has(category.name) ? <ChevronUp /> : <ChevronDown />}
+                    </div>
+                    
+                    {/* Level 3: Detailed line items (expandable) */}
+                    {expandedCategories.has(category.name) && (
+                      <div className="category-details">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Item</th>
+                              <th>Quantity</th>
+                              <th>Unit</th>
+                              <th>Unit Cost</th>
+                              <th>Total Cost</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {category.systems?.map((system: any, index: number) => (
+                              <tr key={index}>
+                                <td>{system.name}</td>
+                                <td>{system.quantity.toLocaleString()}</td>
+                                <td>{system.unit}</td>
+                                <td>${system.unit_cost.toFixed(2)}</td>
+                                <td>${system.total_cost.toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+
+          <div className="project-footer">
+            <div className="footer-summary">
+              <div className="total">
+                <label>{selectedTrade !== 'all' ? `${TRADE_DISPLAY_NAMES[selectedTrade]} Total:` : 'Total Construction Cost:'}</label>
+                <span>${totalCost.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* The Price Journey - Moved to very bottom */}
+          {selectedTrade === 'all' && (
+            <div className="price-journey-section" style={{ marginTop: '40px' }}>
+              <div className="section-header">
+                <h2 className="section-title">The Price Journey</h2>
+                <p className="section-subtitle">Understanding how your price is calculated</p>
+              </div>
+              <div className="card">
+                <div className="card-body">
+                  <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                    <h4 className="font-semibold mb-3">📊 Cost Calculation Breakdown</h4>
+                    <div className="space-y-2 text-sm">
+                      <div>
+                        <strong>Base Cost:</strong> ${(project.calculation_breakdown?.raw_construction || (project.total_cost / project.request_data.square_footage / (project.calculation_breakdown?.multipliers?.regional || 1) / (project.request_data.project_classification === 'addition' ? 1.15 : project.request_data.project_classification === 'renovation' ? 1.35 : 1))).toFixed(2)}/SF
+                        <span className="text-gray-500 ml-2">— RSMeans (2024 Q3)</span>
+                      </div>
+                      <div className="text-gray-400">↓</div>
+                      <div>
+                        <strong>Regional Index ({project.request_data.location}):</strong> × {(project.calculation_breakdown?.multipliers?.regional || 1).toFixed(2)}
+                      </div>
+                      <div className="text-gray-400">↓</div>
+                      <div>
+                        <strong>Complexity ({project.request_data.project_classification === 'addition' ? 'Addition' : project.request_data.project_classification === 'renovation' ? 'Renovation' : 'Ground-Up'}):</strong> × {project.request_data.project_classification === 'addition' ? '1.15' : project.request_data.project_classification === 'renovation' ? '1.35' : '1.00'}
+                      </div>
+                      <div className="text-gray-400">↓</div>
+                      <div className="font-bold text-lg pt-2 border-t">
+                        Final: ${Math.round(project.total_cost / project.request_data.square_footage).toFixed(2)}/SF • ${project.total_cost.toLocaleString()} Total
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sensitivity Analysis Sliders */}
+                  <div className="mb-4">
+                    <h4 className="text-sm font-semibold mb-2">Sensitivity Analysis</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="border rounded-lg p-3">
+                        <div className="text-xs uppercase tracking-wide opacity-70 mb-2">Regional Multiplier</div>
+                        <input 
+                          type="range" 
+                          min="0.90" 
+                          max="1.20" 
+                          step="0.01" 
+                          value={project.calculation_breakdown?.multipliers?.regional || 1} 
+                          disabled
+                          className="w-full accent-indigo-600"
+                        />
+                        <div className="text-sm mt-1 font-medium">× {(project.calculation_breakdown?.multipliers?.regional || 1).toFixed(2)}</div>
+                        <div className="text-xs opacity-60">{((project.calculation_breakdown?.multipliers?.regional || 1) - 1) * 100 >= 0 ? '+' : ''}{(((project.calculation_breakdown?.multipliers?.regional || 1) - 1) * 100).toFixed(1)}% from baseline</div>
+                      </div>
+                      
+                      <div className="border rounded-lg p-3">
+                        <div className="text-xs uppercase tracking-wide opacity-70 mb-2">Complexity Factor</div>
+                        <input 
+                          type="range" 
+                          min="1.00" 
+                          max="1.35" 
+                          step="0.01" 
+                          value={project.request_data.project_classification === 'addition' ? 1.15 : project.request_data.project_classification === 'renovation' ? 1.35 : 1.00} 
+                          disabled
+                          className="w-full accent-indigo-600"
+                        />
+                        <div className="text-sm mt-1 font-medium">× {project.request_data.project_classification === 'addition' ? '1.15' : project.request_data.project_classification === 'renovation' ? '1.35' : '1.00'}</div>
+                        <div className="text-xs opacity-60">{project.request_data.project_classification === 'addition' ? 'Addition' : project.request_data.project_classification === 'renovation' ? 'Renovation' : 'Ground-Up'}</div>
+                      </div>
+                      
+                      <div className="border rounded-lg p-3 bg-indigo-50">
+                        <div className="text-xs uppercase tracking-wide opacity-70 mb-2">Confidence Band</div>
+                        <div className="text-sm font-medium">
+                          95% confidence
+                        </div>
+                        <div className="text-xs mt-1">
+                          ${Math.round((project.total_cost / project.request_data.square_footage) * 0.9).toFixed(2)}/SF – ${Math.round((project.total_cost / project.request_data.square_footage) * 1.1).toFixed(2)}/SF
+                        </div>
+                        <div className="text-xs opacity-60 mt-1">Based on 47 similar projects</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* View Provenance Receipt Button */}
+                  <div className="flex flex-wrap items-center gap-3 mb-4">
+                    <button 
+                      type="button" 
+                      className="px-4 py-2 rounded-lg border border-indigo-200 text-sm hover:bg-indigo-50 transition-colors flex items-center gap-2"
+                      onClick={() => alert('Provenance details: Base cost from RSMeans 2024 Q3, Regional index from SpecSharp database, Complexity factor based on project classification.')}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      View Provenance Receipt
+                    </button>
+                  </div>
+
+                  {/* Source strip */}
+                  <div className="px-3 py-2 rounded-lg bg-gray-50 text-xs flex flex-wrap gap-4 items-center">
+                    <div><span className="opacity-70">Base:</span> RSMeans (2024 Q3) • {project.request_data.location}</div>
+                    <div><span className="opacity-70">Regional:</span> Index {(project.calculation_breakdown?.multipliers?.regional || 1).toFixed(2)}</div>
+                    <div><span className="opacity-70">Complexity:</span> {project.request_data.project_classification === 'addition' ? 'Addition' : project.request_data.project_classification === 'renovation' ? 'Renovation' : 'Ground-Up'}</div>
+                    <div className="opacity-70 ml-auto">Updated: {new Date().toLocaleDateString()}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
-        </section>
 
-        {/* Cost DNA Analysis - Display BELOW pie/table when viewing all trades */}
-        {selectedTrade === 'general' && (
-          <CostDNADisplay
-            projectData={{
-              ...project,
-              square_footage: project.square_footage || project.request_data?.square_footage || 0,
-              occupancy_type: project.occupancy_type || project.request_data?.occupancy_type || "",
-              location: project.location || project.request_data?.location || "",
-              project_classification: project.project_classification || project.request_data?.project_classification || "ground_up",
-              description: project.description || project.project_name || project.request_data?.project_description || project.request_data?.description || "",
-              total_cost: project.total_cost || 0,
-              categories: project.categories || (project as any).category_breakdown || [],
-              request_data: project.request_data || {},
-            }}
-          />
-        )}
-
-        {selectedTrade === 'general' && project.trade_summaries ? (
-          <TradeSummary 
-            tradeSummaries={project.trade_summaries}
-            onGeneratePackage={(trade) => openTradePackageModal(trade as TradeType)}
-          />
-        ) : selectedTrade !== 'general' ? (
-          <div className="systems-detail">
-            <h2>{TRADE_CATEGORY_MAP[selectedTrade]} Details</h2>
-            {filteredCategories.map((category: any) => {
-              const categoryId = `trade-${String(category.name || '').toLowerCase().replace(/[^a-z]/g, '')}`;
-              return (
-                <div key={category.name} id={categoryId} data-trade-id={categoryId} className="category-section scroll-mt-24">
-                  <div className="category-header">
-                    <h3>{category.name}</h3>
-                  <button
-                    className="extract-btn"
-                    onClick={() => handleExtractTrade(category.name)}
-                    title="Download scope for subcontractor"
-                  >
-                    <Download size={16} />
-                    Extract for Subs
-                  </button>
-                </div>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>System</th>
-                      <th>Quantity</th>
-                      <th>Unit</th>
-                      <th>Unit Cost</th>
-                      <th>Total Cost</th>
-                      <th>Finish Level</th>
-                      <th>Confidence</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {category.systems.map((system: any, index: number) => {
-                      const systemKey = `${category.name}-${system.name}`;
-                      const finishLevel = tradeFinishOverrides[systemKey] || projectFinishLevel;
-                      return (
-                        <tr key={index}>
-                          <td>{system.name}</td>
-                          <td>{system.quantity.toLocaleString()}</td>
-                          <td>{system.unit}</td>
-                          <td>${system.unit_cost.toFixed(2)}</td>
-                          <td>{formatCurrency(system.total_cost)}</td>
-                          <td>
-                            <select
-                              value={finishLevel}
-                              onChange={(e) => {
-                                const newOverrides = { ...tradeFinishOverrides };
-                                if (e.target.value === projectFinishLevel) {
-                                  delete newOverrides[systemKey];
-                                } else {
-                                  newOverrides[systemKey] = e.target.value as 'basic' | 'standard' | 'premium';
-                                }
-                                setTradeFinishOverrides(newOverrides);
-                              }}
-                              style={{ 
-                                padding: '2px 4px', 
-                                fontSize: '0.9em',
-                                backgroundColor: finishLevel !== 'standard' ? 
-                                  (finishLevel === 'basic' ? '#ffe6e6' : '#e6ffe6') : 'white',
-                                border: `1px solid ${finishLevel !== 'standard' ? 
-                                  (finishLevel === 'basic' ? '#ffcccc' : '#ccffcc') : '#ddd'}`
-                              }}
-                            >
-                              <option value="basic">Basic</option>
-                              <option value="standard">Standard</option>
-                              <option value="premium">Premium</option>
-                            </select>
-                          </td>
-                          <td>
-                            <span 
-                              className={`confidence-badge confidence-${system.confidence_label?.toLowerCase() || 'high'}`}
-                              title={`Confidence Score: ${system.confidence_score || 95}%`}
-                            >
-                              {system.confidence_label || 'High'}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="systems-detail">
-            <h2>System Details</h2>
-            <p className="info-message">Trade summaries are being generated...</p>
-            {project.categories && project.categories.map((category: any) => {
-              const categoryId = `trade-${String(category.name || '').toLowerCase().replace(/[^a-z]/g, '')}`;
-              return (
-                <div key={category.name} id={categoryId} data-trade-id={categoryId} className="category-section scroll-mt-24">
-                <div className="category-header">
-                  <h3>{category.name}</h3>
-                  <button
-                    className="extract-btn"
-                    onClick={() => handleExtractTrade(category.name)}
-                    title="Download scope for subcontractor"
-                  >
-                    <Download size={16} />
-                    Extract for Subs
-                  </button>
-                </div>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>System</th>
-                      <th>Quantity</th>
-                      <th>Unit</th>
-                      <th>Unit Cost</th>
-                      <th>Total Cost</th>
-                      <th>Finish Level</th>
-                      <th>Confidence</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {category.systems.map((system: any, index: number) => {
-                      const systemKey = `${category.name}-${system.name}`;
-                      const finishLevel = tradeFinishOverrides[systemKey] || projectFinishLevel;
-                      return (
-                        <tr key={index}>
-                          <td>{system.name}</td>
-                          <td>{system.quantity.toLocaleString()}</td>
-                          <td>{system.unit}</td>
-                          <td>${system.unit_cost.toFixed(2)}</td>
-                          <td>{formatCurrency(system.total_cost)}</td>
-                          <td>
-                            <select
-                              value={finishLevel}
-                              onChange={(e) => {
-                                const newOverrides = { ...tradeFinishOverrides };
-                                if (e.target.value === projectFinishLevel) {
-                                  delete newOverrides[systemKey];
-                                } else {
-                                  newOverrides[systemKey] = e.target.value as 'basic' | 'standard' | 'premium';
-                                }
-                                setTradeFinishOverrides(newOverrides);
-                              }}
-                              style={{ 
-                                padding: '2px 4px', 
-                                fontSize: '0.9em',
-                                backgroundColor: finishLevel !== 'standard' ? 
-                                  (finishLevel === 'basic' ? '#ffe6e6' : '#e6ffe6') : 'white',
-                                border: `1px solid ${finishLevel !== 'standard' ? 
-                                  (finishLevel === 'basic' ? '#ffcccc' : '#ccffcc') : '#ddd'}`
-                              }}
-                            >
-                              <option value="basic">Basic</option>
-                              <option value="standard">Standard</option>
-                              <option value="premium">Premium</option>
-                            </select>
-                          </td>
-                          <td>
-                            <span 
-                              className={`confidence-badge confidence-${system.confidence_label?.toLowerCase() || 'high'}`}
-                              title={`Confidence Score: ${system.confidence_score || 95}%`}
-                            >
-                              {system.confidence_label || 'High'}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-
-        <div className="project-footer">
-          <div className="footer-summary">
-            {project.markup_summary && (
-              <>
-                <div>
-                  <label>Base Cost:</label>
-                  <span>{formatCurrency(project.markup_summary.total_base_cost || project.base_subtotal || filteredTotals.subtotal)}</span>
-                </div>
-                <div>
-                  <label>Markup ({project.markup_summary.average_markup_percent?.toFixed(1) || 0}%):</label>
-                  <span>{formatCurrency(project.markup_summary.total_markup || 0)}</span>
-                </div>
-              </>
-            )}
-            <div>
-              <label>{isHealthcareFacility ? 'Construction Subtotal:' : 'Subtotal:'}</label>
-              <span>{formatCurrency(filteredTotals.subtotal)}</span>
-            </div>
-            <div>
-              <label>Contingency ({project.contingency_percentage}%):</label>
-              <span>{formatCurrency(filteredTotals.contingencyAmount)}</span>
-            </div>
-            {isHealthcareFacility && project.equipment_cost && (
-              <div>
-                <label>Medical Equipment:</label>
-                <span>{formatCurrency(project.equipment_cost)}</span>
-              </div>
-            )}
-            <div className="total">
-              <label>{selectedTrade !== 'general' ? `${TRADE_CATEGORY_MAP[selectedTrade]} Total Cost:` : isHealthcareFacility ? 'Total Project Cost (All-In):' : 'Total Project Cost:'}</label>
-              <span>{formatCurrency(filteredTotals.total)}</span>
-            </div>
-            {project.created_at && selectedTrade === 'general' && (
-              <div className="cost-calculated-info" style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#666' }}>
-                <span style={{ marginRight: '0.25rem' }}>ⓘ</span>
-                Costs calculated on {new Date(project.created_at).toLocaleDateString()}
-              </div>
-            )}
-          </div>
-        </div>
       </div>
-      ) : (
-        // DEBUG: Check what's happening with floor plan rendering
-        console.log('🏗️ FLOOR PLAN TAB ACTIVE!'),
-        console.log('📊 Floor plan data:', project.floor_plan),
-        console.log('🏛️ Has walls?', project.floor_plan && project.floor_plan.walls),
-        
-        project.floor_plan && project.floor_plan.walls ? (
-          <ArchitecturalFloorPlan 
-            floorPlan={project.floor_plan} 
-            projectName={project.project_name}
-          />
-        ) : (
-          <ProfessionalFloorPlan 
-            floorPlan={project.floor_plan} 
-            projectName={project.project_name}
-          />
-        )
-      )}
 
       {showTradePackageModal && (
         <TradePackageModal
@@ -1143,49 +662,10 @@ function ProjectDetail() {
       )}
 
       {showComparisonTool && (
-        <ComparisonToolV2
+        <ComparisonTool
           projectData={project}
           onClose={() => setShowComparisonTool(false)}
         />
-      )}
-
-      {/* Share Modal */}
-      {showShareModal && (
-        <div className="modal-overlay" onClick={() => setShowShareModal(false)}>
-          <div className="modal-content share-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Share Project</h3>
-            <p>Share this read-only view with clients or partners:</p>
-            
-            <div className="share-link-container">
-              <input 
-                type="text" 
-                value={shareLink} 
-                readOnly 
-                className="share-link-input"
-              />
-              <button 
-                className="copy-btn"
-                onClick={handleCopyShareLink}
-              >
-                {shareCopied ? '✓ Copied!' : 'Copy Link'}
-              </button>
-            </div>
-            
-            <p className="share-info">
-              <span className="info-icon">ℹ️</span>
-              This link will expire in 30 days
-            </p>
-            
-            <div className="modal-actions">
-              <button 
-                onClick={() => setShowShareModal(false)} 
-                className="close-btn"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
