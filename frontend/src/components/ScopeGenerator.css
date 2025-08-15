@@ -30,6 +30,60 @@
   }
 }
 
+/* Visual feedback for detected values */
+.detected-values-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  animation: slideInFade 0.3s ease-in-out;
+}
+
+/* Auto-detected indicator */
+.auto-detected {
+  color: #10b981;
+  font-size: 0.875rem;
+  font-weight: normal;
+  margin-left: 0.5rem;
+}
+
+.detected-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  color: #374151;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  animation: slideInFade 0.3s ease-in-out;
+}
+
+.detected-badge.success {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border-color: #10b981;
+  color: #047857;
+  font-weight: 500;
+}
+
+.detected-badge .checkmark {
+  color: #10b981;
+  font-weight: bold;
+  font-size: 1rem;
+}
+
+.detected-badge .detected-text {
+  color: inherit;
+}
+
+.detected-badge .confidence {
+  opacity: 0.7;
+  font-size: 0.813rem;
+  margin-left: 0.25rem;
+}
+
 .page-header {
   background: white;
   padding: 1rem 2rem;
@@ -206,4 +260,63 @@
   outline: none;
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* Clickable example prompts */
+.example-prompts-section {
+  margin: 1rem 0;
+}
+
+.example-prompts-section strong {
+  display: block;
+  margin: 1rem 0 0.5rem 0;
+  color: #333;
+}
+
+.example-prompt {
+  cursor: pointer;
+  padding: 8px 12px;
+  margin: 4px 0;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  color: #555;
+  position: relative;
+}
+
+.example-prompt:hover {
+  background: #e8f4fd;
+  color: #333;
+  transform: translateX(4px);
+}
+
+.example-prompt:hover::after {
+  content: "→ Click to use";
+  position: absolute;
+  right: 12px;
+  color: #667eea;
+  font-size: 0.85rem;
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+/* Highlight animation for input field */
+.natural-language-input.highlight {
+  animation: highlightPulse 0.5s ease;
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+@keyframes highlightPulse {
+  0% {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+  }
+  50% {
+    border-color: #10b981;
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.2);
+  }
+  100% {
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+  }
 }

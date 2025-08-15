@@ -1,21 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { scopeService } from '../services/api';
 import './ScopeGenerator.css';
 import { determineOccupancyType, getProjectTypeFromOccupancy } from '../utils/buildingTypeDetection';
 import ProjectTypeSelector from './ProjectTypeSelector';
+import { parseDescription, ParsedInput, getOccupancyTypes, getSubtypes } from '../services/nlpService';
+import { BUILDING_TYPES, getBuildingType, getSubtype, estimateFloors, getDefaultCeilingHeight } from '../config/buildingTypes';
 
-// Temporary type definition
+// Enhanced type definition with clear hierarchy
 interface ScopeRequest {
   project_name: string;
-  project_type: 'residential' | 'commercial' | 'industrial' | 'mixed_use';
+  project_type: 'residential' | 'commercial' | 'industrial' | 'mixed_use';  // Legacy field for compatibility
   project_classification?: 'ground_up' | 'addition' | 'renovation';
   square_footage: number;
   location: string;
   climate_zone?: string;
   num_floors?: number;
   ceiling_height?: number;
-  occupancy_type?: string;
+  building_type?: string;     // Primary category (healthcare, restaurant, etc.)
+  building_subtype?: string;  // Specific type (hospital, qsr, etc.)
+  occupancy_type?: string;    // Legacy field, maps to building_type
+  subtype?: string;           // Legacy field, maps to building_subtype
   special_requirements?: string;
   budget_constraint?: number;
   building_mix?: { [key: string]: number };
@@ -32,15 +37,20 @@ function ScopeGenerator() {
   const [inputMode, setInputMode] = useState<'natural' | 'form'>('natural');
   const [naturalLanguageInput, setNaturalLanguageInput] = useState('');
   const [classificationAutoSelected, setClassificationAutoSelected] = useState(false);
+  const [parsedData, setParsedData] = useState<ParsedInput | null>(null);
+  const [inputHighlight, setInputHighlight] = useState(false);
   const [formData, setFormData] = useState<ScopeRequest>({
     project_name: '',
-    project_type: 'commercial',
+    project_type: 'commercial',  // Legacy field
     project_classification: 'ground_up',
     square_footage: 10000,
     location: '',
     num_floors: 1,
-    ceiling_height: 9,
-    occupancy_type: 'office',
+    ceiling_height: 10,
+    building_type: '',  // New primary field
+    building_subtype: '',  // New specific type field
+    occupancy_type: '',  // Legacy, will map to building_type
+    subtype: '',  // Legacy, will map to building_subtype
     special_requirements: '',
     finish_level: 'standard',
   });
@@ -685,19 +695,123 @@ function ScopeGenerator() {
     return result;
   };
 
+  // Real-time NLP parsing as user types
+  useEffect(() => {
+    if (naturalLanguageInput && inputMode === 'natural') {
+      const parsed = parseDescription(naturalLanguageInput);
+      setParsedData(parsed);
+      
+      // Auto-populate form fields based on NLP parsing
+      let updatedFormData = { ...formData };
+      
+      if (parsed.square_footage) {
+        console.log('🔍 NLP parsed square footage:', parsed.square_footage);
+        updatedFormData.square_footage = parsed.square_footage;
+      }
+      
+      if (parsed.occupancy_type && parsed.subtype) {
+        updatedFormData.building_type = parsed.occupancy_type;
+        updatedFormData.building_subtype = parsed.subtype;
+        // Legacy fields for compatibility
+        updatedFormData.occupancy_type = parsed.occupancy_type;
+        updatedFormData.subtype = parsed.subtype;
+        // Map to project type for backward compatibility
+        updatedFormData.project_type = parsed.occupancy_type === 'residential' ? 'residential' :
+                                       parsed.occupancy_type === 'industrial' ? 'industrial' :
+                                       'commercial';
+        
+        // Auto-estimate floors if we have square footage and building type
+        // Only if user hasn't explicitly provided floors
+        if (!parsed.stories && updatedFormData.square_footage) {
+          const estimatedFloors = estimateFloors(
+            updatedFormData.square_footage,
+            parsed.occupancy_type,
+            parsed.subtype
+          );
+          console.log('🏢 NLP Auto-estimating floors:', {
+            squareFootage: updatedFormData.square_footage,
+            occupancyType: parsed.occupancy_type,
+            subtype: parsed.subtype,
+            estimatedFloors: estimatedFloors
+          });
+          updatedFormData.num_floors = estimatedFloors;
+        }
+        
+        // Auto-set ceiling height
+        updatedFormData.ceiling_height = getDefaultCeilingHeight(parsed.occupancy_type, parsed.subtype);
+      }
+      
+      if (parsed.location) {
+        updatedFormData.location = parsed.location;
+      }
+      
+      if (parsed.stories) {
+        updatedFormData.num_floors = parsed.stories;
+      }
+      
+      if (parsed.features.length > 0) {
+        updatedFormData.building_features = parsed.features;
+      }
+      
+      setFormData(updatedFormData);
+    }
+  }, [naturalLanguageInput, inputMode]);
+
+  // Track if user has manually changed floors
+  const [userChangedFloors, setUserChangedFloors] = useState(false);
+
+  // Handle example prompt click
+  const handleExampleClick = (prompt: string) => {
+    // Remove quotes and bullet points from the prompt
+    const cleanPrompt = prompt.replace(/^[•"]/g, '').replace(/"$/g, '').trim();
+    
+    // Set the input and parse it immediately
+    setNaturalLanguageInput(cleanPrompt);
+    
+    // Parse the description to get building info
+    const parsed = parseDescription(cleanPrompt);
+    setParsedData(parsed);
+    
+    // Highlight the input field briefly
+    setInputHighlight(true);
+    setTimeout(() => setInputHighlight(false), 500);
+    
+    // Scroll to the input field
+    const inputElement = document.querySelector('.natural-language-input');
+    if (inputElement) {
+      inputElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
   const handleNaturalLanguageSubmit = (submitImmediately = false) => {
-    const parsed = parseNaturalLanguage(naturalLanguageInput);
+    // Use the already parsed data from NLP service
+    const enhancedParsed = parsedData || parseDescription(naturalLanguageInput);
+    
+    // Also use the old parser for additional data (like project classification)
+    const legacyParsed = parseNaturalLanguage(naturalLanguageInput);
+    
+    // Combine both parsers' results
+    const parsed = {
+      ...legacyParsed,
+      occupancy_type: enhancedParsed.occupancy_type || legacyParsed.occupancy_type,
+      subtype: enhancedParsed.subtype,
+      square_footage: enhancedParsed.square_footage || legacyParsed.square_footage,
+      location: enhancedParsed.location || legacyParsed.location,
+      num_floors: enhancedParsed.stories || legacyParsed.num_floors,
+      building_features: enhancedParsed.features
+    };
+    
+    console.log('Natural language input:', naturalLanguageInput);
+    console.log('NLP Parsed result:', enhancedParsed);
+    console.log('Combined result:', parsed);
+    console.log('Detected occupancy type:', parsed.occupancy_type, 'subtype:', parsed.subtype);
+    console.log('Detected project classification:', parsed.project_classification);
     
     // If no occupancy type was detected, use the building type detection utility
     if (!parsed.occupancy_type) {
       parsed.occupancy_type = determineOccupancyType(naturalLanguageInput);
-      console.log('Detected occupancy type:', parsed.occupancy_type);
+      console.log('Fallback detected occupancy type:', parsed.occupancy_type);
     }
-    
-    console.log('Natural language input:', naturalLanguageInput);
-    console.log('Parsed result:', parsed);
-    console.log('Parsed location specifically:', parsed.location);
-    console.log('Detected project classification:', parsed.project_classification);
     
     // Include the natural language input for backend smart naming
     const updatedFormData = {
@@ -707,6 +821,8 @@ function ScopeGenerator() {
       project_name: parsed.project_name || formData.project_name,
       location: parsed.location || formData.location || 'Nashville, Tennessee',
       square_footage: parsed.square_footage || formData.square_footage || 10000,
+      // Map stories to num_floors if present
+      num_floors: parsed.stories || formData.num_floors || 1,
       // Pass natural language for backend processing
       special_requirements: naturalLanguageInput,
     };
@@ -772,6 +888,7 @@ function ScopeGenerator() {
     }
 
     console.log('Submitting form data:', finalFormData);
+    console.log('📏 Square footage being submitted:', finalFormData.square_footage);
 
     try {
       const response = await scopeService.generate(finalFormData);
@@ -804,12 +921,35 @@ function ScopeGenerator() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: name === 'square_footage' || name === 'num_floors' || name === 'ceiling_height' || name === 'budget_constraint' 
-        ? parseFloat(value) || 0 
-        : value,
-    });
+    
+    if (name === 'square_footage') {
+      // If empty, keep the existing value or default
+      const parsedValue = value ? parseFloat(value) : formData.square_footage;
+      console.log(`📐 Square footage input: "${value}" → parsed: ${parsedValue}`);
+      setFormData({
+        ...formData,
+        square_footage: parsedValue
+      });
+      // Reset user floor change flag when square footage changes
+      setUserChangedFloors(false);
+    } else if (name === 'num_floors') {
+      const parsedValue = parseFloat(value) || 1;  // Default to 1, not 0!
+      setFormData({
+        ...formData,
+        num_floors: parsedValue
+      });
+      // Mark that user has manually changed floors
+      setUserChangedFloors(true);
+    } else {
+      setFormData({
+        ...formData,
+        [name]: name === 'ceiling_height' 
+          ? parseFloat(value) || 10  // Default ceiling height to 10
+          : name === 'budget_constraint'
+          ? parseFloat(value) || undefined  // Budget can be empty
+          : value,
+      });
+    }
   };
 
   // Add a try-catch for the render to catch any rendering errors
@@ -842,31 +982,75 @@ function ScopeGenerator() {
         <form onSubmit={handleSubmit} className="scope-form">
           <div className="form-section">
             <h2>Describe Your Project</h2>
-            <p className="help-text">
-              Describe your building project in natural language. Include whether it's new construction, renovation, or addition:
-              <br />
-              <br /><strong>New Construction (Ground-Up):</strong>
-              <br />• "New 4000 sf quick service restaurant with drive-through in Nashville, TN"
-              <br />• "Ground-up 75000 sf Class A office building in downtown Boston, MA"
-              <br />• "New 150000 sf hospital with emergency department and 12 ORs in Boston, MA"
-              <br />• "45000 sf surgical center with 6 operating rooms in Nashville, TN"
-              <br />• "Build new 25000 sf school from scratch in Concord, NH"
-              <br />• "New 50000 sf warehouse with 6 loading docks in Memphis, TN"
-              <br />
-              <br /><strong>Renovations (Existing Buildings):</strong>
-              <br />• "Renovate existing 10000 sf office space in downtown Nashville, TN"
-              <br />• "Remodel 5000 sf restaurant, full gut renovation in Manchester, NH"
-              <br />• "Tenant improvement for 8000 sf retail space in Sacramento, CA"
-              <br />• "Convert 20000 sf warehouse to mixed-use with retail and office in Atlanta, GA"
-              <br />• "Modernize existing 25000 sf outpatient clinic with new imaging center in Dallas, TX"
-              <br />• "Renovate 8000 sf urgent care facility, add x-ray and lab in Phoenix, AZ"
-              <br />
-              <br /><strong>Additions (Expanding Buildings):</strong>
-              <br />• "Add 3000 sf kitchen expansion to existing restaurant in Nashville, TN"
-              <br />• "Expand hospital with new 50000 sf surgical wing in Manchester, NH"
-              <br />• "15000 sf office addition with underground parking in Denver, CO"
-              <br />• "Add 35000 sf medical office wing with cancer center to existing building in Houston, TX"
-            </p>
+            <div className="help-text">
+              <p>Describe your building project in natural language. Include whether it's new construction, renovation, or addition:</p>
+              
+              <div className="example-prompts-section">
+                <strong>New Construction (Ground-Up):</strong>
+                <div className="example-prompt" onClick={() => handleExampleClick('New 200000 sf 5 story regional hospital with emergency department, 12 operating rooms, and 150 beds in Nashville, TN')}>
+                  • "New 200000 sf 5 story regional hospital with emergency department, 12 operating rooms, and 150 beds in Nashville, TN"
+                </div>
+                <div className="example-prompt" onClick={() => handleExampleClick('Build 180000 sf 8 story luxury apartment complex with 120 units, rooftop pool, and underground parking in Boston, MA')}>
+                  • "Build 180000 sf 8 story luxury apartment complex with 120 units, rooftop pool, and underground parking in Boston, MA"
+                </div>
+                <div className="example-prompt" onClick={() => handleExampleClick('New 250000 sf 15 story Class A office tower with trading floors, executive suites, and fitness center in Chicago, IL')}>
+                  • "New 250000 sf 15 story Class A office tower with trading floors, executive suites, and fitness center in Chicago, IL"
+                </div>
+                <div className="example-prompt" onClick={() => handleExampleClick('Ground-up 400000 sf distribution center with 40 foot clear height, 50 loading docks, and automated sorting in Memphis, TN')}>
+                  • "Ground-up 400000 sf distribution center with 40 foot clear height, 50 loading docks, and automated sorting in Memphis, TN"
+                </div>
+                <div className="example-prompt" onClick={() => handleExampleClick('New 150000 sf 3 story high school for 1200 students with gymnasium, auditorium, and STEM labs in Denver, CO')}>
+                  • "New 150000 sf 3 story high school for 1200 students with gymnasium, auditorium, and STEM labs in Denver, CO"
+                </div>
+                <div className="example-prompt" onClick={() => handleExampleClick('Build 100000 sf 2 story Tier 3 data center with redundant power, 20MW capacity, and secure cages in Phoenix, AZ')}>
+                  • "Build 100000 sf 2 story Tier 3 data center with redundant power, 20MW capacity, and secure cages in Phoenix, AZ"
+                </div>
+              </div>
+
+              <div className="example-prompts-section">
+                <strong>Renovations (Existing Buildings):</strong>
+                <div className="example-prompt" onClick={() => handleExampleClick('Renovate 200 room 12 story downtown hotel including lobby, restaurant, conference center, and guest rooms in Atlanta, GA')}>
+                  • "Renovate 200 room 12 story downtown hotel including lobby, restaurant, conference center, and guest rooms in Atlanta, GA"
+                </div>
+                <div className="example-prompt" onClick={() => handleExampleClick('Remodel 85000 sf strip shopping center with new facades, common areas, and anchor tenant space in Dallas, TX')}>
+                  • "Remodel 85000 sf strip shopping center with new facades, common areas, and anchor tenant space in Dallas, TX"
+                </div>
+                <div className="example-prompt" onClick={() => handleExampleClick('Convert 120000 sf 4 story assisted living facility to memory care with secured units and therapy spaces in Sacramento, CA')}>
+                  • "Convert 120000 sf 4 story assisted living facility to memory care with secured units and therapy spaces in Sacramento, CA"
+                </div>
+                <div className="example-prompt" onClick={() => handleExampleClick('Renovate 8000 sf full service restaurant with commercial kitchen, bar, private dining, and outdoor patio in Nashville, TN')}>
+                  • "Renovate 8000 sf full service restaurant with commercial kitchen, bar, private dining, and outdoor patio in Nashville, TN"
+                </div>
+                <div className="example-prompt" onClick={() => handleExampleClick('Modernize 150000 sf 2 story manufacturing facility with clean rooms, automated production lines, and QC labs in Detroit, MI')}>
+                  • "Modernize 150000 sf 2 story manufacturing facility with clean rooms, automated production lines, and QC labs in Detroit, MI"
+                </div>
+                <div className="example-prompt" onClick={() => handleExampleClick('Renovate 45000 sf 3 story medical office building for multi-specialty clinic with imaging center in Manchester, NH')}>
+                  • "Renovate 45000 sf 3 story medical office building for multi-specialty clinic with imaging center in Manchester, NH"
+                </div>
+              </div>
+
+              <div className="example-prompts-section">
+                <strong>Additions (Expanding Buildings):</strong>
+                <div className="example-prompt" onClick={() => handleExampleClick('Add 350000 sf 20 story mixed use tower with ground floor retail, 15 floors offices, and 100 apartments in Seattle, WA')}>
+                  • "Add 350000 sf 20 story mixed use tower with ground floor retail, 15 floors offices, and 100 apartments in Seattle, WA"
+                </div>
+                <div className="example-prompt" onClick={() => handleExampleClick('Expand campus with 80000 sf 4 story science building containing research labs, lecture halls, and collaboration spaces in Austin, TX')}>
+                  • "Expand campus with 80000 sf 4 story science building containing research labs, lecture halls, and collaboration spaces in Austin, TX"
+                </div>
+                <div className="example-prompt" onClick={() => handleExampleClick('Add 150000 sf 8 story hotel tower with 200 rooms, spa, conference facilities, and restaurants in Orlando, FL')}>
+                  • "Add 150000 sf 8 story hotel tower with 200 rooms, spa, conference facilities, and restaurants in Orlando, FL"
+                </div>
+                <div className="example-prompt" onClick={() => handleExampleClick('Expand headquarters with 175000 sf 6 story office building including cafeteria, fitness center, and parking garage in San Francisco, CA')}>
+                  • "Expand headquarters with 175000 sf 6 story office building including cafeteria, fitness center, and parking garage in San Francisco, CA"
+                </div>
+                <div className="example-prompt" onClick={() => handleExampleClick('Add 300000 sf fulfillment center expansion with robotics, multi-level mezzanines, and shipping hub in Columbus, OH')}>
+                  • "Add 300000 sf fulfillment center expansion with robotics, multi-level mezzanines, and shipping hub in Columbus, OH"
+                </div>
+                <div className="example-prompt" onClick={() => handleExampleClick('Build 60000 sf 3 story biotech laboratory addition with BSL-3 labs, vivarium, and cGMP manufacturing in Cambridge, MA')}>
+                  • "Build 60000 sf 3 story biotech laboratory addition with BSL-3 labs, vivarium, and cGMP manufacturing in Cambridge, MA"
+                </div>
+              </div>
+            </div>
             
             <div className="form-group">
               <textarea
@@ -874,10 +1058,61 @@ function ScopeGenerator() {
                 onChange={(e) => setNaturalLanguageInput(e.target.value)}
                 placeholder="Example: 50,000 sf office building in Manchester, New Hampshire"
                 rows={6}
-                className="natural-language-input"
+                className={`natural-language-input ${inputHighlight ? 'highlight' : ''}`}
                 required
               />
             </div>
+            
+            {/* Visual feedback for detected values */}
+            {parsedData && naturalLanguageInput && (
+              <div className="detected-values-feedback">
+                {parsedData.occupancy_type && parsedData.subtype && (
+                  <div className="detected-badge success">
+                    <span className="checkmark">✓</span>
+                    <span className="detected-text">
+                      {parsedData.occupancy_type.charAt(0).toUpperCase() + parsedData.occupancy_type.slice(1)} → {' '}
+                      {parsedData.subtype.split('_').map(word => 
+                        word.charAt(0).toUpperCase() + word.slice(1)
+                      ).join(' ')} detected
+                    </span>
+                    {parsedData.confidence > 0 && (
+                      <span className="confidence">
+                        ({parsedData.confidence}% confidence)
+                      </span>
+                    )}
+                  </div>
+                )}
+                
+                {parsedData.square_footage && (
+                  <div className="detected-badge">
+                    <span className="checkmark">✓</span>
+                    <span className="detected-text">
+                      {parsedData.square_footage.toLocaleString()} SF
+                    </span>
+                  </div>
+                )}
+                
+                {parsedData.location && (
+                  <div className="detected-badge">
+                    <span className="checkmark">✓</span>
+                    <span className="detected-text">
+                      Location: {parsedData.location}
+                    </span>
+                  </div>
+                )}
+                
+                {parsedData.features.length > 0 && (
+                  <div className="detected-badge">
+                    <span className="checkmark">✓</span>
+                    <span className="detected-text">
+                      Features: {parsedData.features.map(f => 
+                        f.split('_').join(' ')
+                      ).join(', ')}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {error && <div className="error-message">{error}</div>}
@@ -926,23 +1161,94 @@ function ScopeGenerator() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="project_type">Project Type</label>
+              <label htmlFor="building_type">Building Category *</label>
               <select
-                id="project_type"
-                name="project_type"
-                value={formData.project_type}
-                onChange={handleChange}
+                id="building_type"
+                name="building_type"
+                value={formData.building_type || ''}
+                onChange={(e) => {
+                  const newBuildingType = e.target.value;
+                  // Reset user floor change flag when building type changes
+                  setUserChangedFloors(false);
+                  // Reset subtype when building type changes
+                  setFormData({
+                    ...formData,
+                    building_type: newBuildingType,
+                    building_subtype: '',
+                    occupancy_type: newBuildingType,  // For backward compatibility
+                    subtype: '',  // Reset legacy field too
+                    // Update project_type for backward compatibility
+                    project_type: newBuildingType === 'residential' ? 'residential' :
+                                 newBuildingType === 'industrial' ? 'industrial' :
+                                 'commercial'
+                  });
+                }}
                 required
               >
-                <option value="residential">Residential</option>
-                <option value="commercial">Commercial</option>
-                <option value="industrial">Industrial</option>
-                <option value="mixed_use">Mixed Use</option>
+                <option value="">Select building category...</option>
+                {BUILDING_TYPES.map(type => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
               </select>
             </div>
 
+            {formData.building_type && (
+              <div className="form-group">
+                <label htmlFor="building_subtype">
+                  Specific Type * 
+                  {parsedData?.subtype && (
+                    <span className="auto-detected"> (Auto-detected: {parsedData.subtype})</span>
+                  )}
+                </label>
+                <select
+                  id="building_subtype"
+                  name="building_subtype"
+                  value={formData.building_subtype || ''}
+                  onChange={(e) => {
+                    const newSubtype = e.target.value;
+                    const subtypeDetails = getSubtype(formData.building_type!, newSubtype);
+                    
+                    // Reset user floor change flag when subtype changes
+                    setUserChangedFloors(false);
+                    
+                    // Calculate estimated floors
+                    const estimatedFloors = formData.square_footage ? 
+                      estimateFloors(formData.square_footage, formData.building_type!, newSubtype) :
+                      1;
+                    
+                    console.log('🏗️ Subtype changed - estimating floors:', {
+                      squareFootage: formData.square_footage,
+                      buildingType: formData.building_type,
+                      newSubtype: newSubtype,
+                      estimatedFloors: estimatedFloors
+                    });
+                    
+                    setFormData({
+                      ...formData,
+                      building_subtype: newSubtype,
+                      subtype: newSubtype,  // For backward compatibility
+                      // Auto-estimate floors based on subtype
+                      num_floors: estimatedFloors,
+                      // Auto-set ceiling height
+                      ceiling_height: getDefaultCeilingHeight(formData.building_type!, newSubtype)
+                    });
+                  }}
+                  required
+                >
+                  <option value="">Select specific type...</option>
+                  {getBuildingType(formData.building_type)?.subtypes.map(subtype => (
+                    <option key={subtype.value} value={subtype.value}>
+                      {subtype.label} - {subtype.costHint}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="form-group">
-              <label htmlFor="location">Location</label>
+              <label htmlFor="location">Location *</label>
               <input
                 id="location"
                 name="location"
@@ -978,7 +1284,7 @@ function ScopeGenerator() {
                   id="num_floors"
                   name="num_floors"
                   type="number"
-                  value={formData.num_floors}
+                  value={formData.num_floors || 1}
                   onChange={handleChange}
                   min="1"
                   max="100"
@@ -1002,17 +1308,6 @@ function ScopeGenerator() {
               </div>
             </div>
 
-            <div className="form-group">
-              <label htmlFor="occupancy_type">Occupancy Type</label>
-              <input
-                id="occupancy_type"
-                name="occupancy_type"
-                type="text"
-                value={formData.occupancy_type}
-                onChange={handleChange}
-                placeholder="e.g., office, retail, warehouse, restaurant"
-              />
-            </div>
 
             <div className="form-group">
               <label htmlFor="special_requirements">Special Requirements</label>
