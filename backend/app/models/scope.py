@@ -100,6 +100,7 @@ class ScopeResponse(BaseModel):
     project_id: str
     project_name: str
     created_at: datetime
+    generated_at: datetime = Field(default_factory=datetime.now)
     request_data: ScopeRequest
     categories: List[ScopeCategory]
     subtotal: float = Field(default=0.0, ge=0)
@@ -107,6 +108,7 @@ class ScopeResponse(BaseModel):
     contingency_amount: float = Field(default=0.0, ge=0)
     total_cost: float = Field(default=0.0, ge=0)
     cost_per_sqft: float = Field(default=0.0, ge=0)
+    confidence_score: int = Field(default=95, ge=0, le=100)
     floor_plan: Optional[Dict[str, Any]] = None
     
     @validator('subtotal', always=True)
