@@ -66,6 +66,19 @@ const TRADE_DISPLAY_NAMES: Record<TradeType, string> = {
   'general_conditions': 'General Conditions',
 };
 
+// Helper function to get classification display info
+const getClassificationInfo = (classification: string | undefined) => {
+  const classificationMap = {
+    'ground_up': { name: 'Ground-Up', multiplier: 1.00 },
+    'addition': { name: 'Addition', multiplier: 1.15 },
+    'renovation': { name: 'Renovation', multiplier: 1.35 },
+    'tenant_improvement': { name: 'Tenant Improvement', multiplier: 1.10 }
+  };
+  
+  const defaultClassification = { name: 'Ground-Up', multiplier: 1.00 };
+  return classificationMap[classification as keyof typeof classificationMap] || defaultClassification;
+};
+
 function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -567,7 +580,7 @@ function ProjectDetail() {
                       </div>
                       <div className="text-gray-400">↓</div>
                       <div>
-                        <strong>Complexity ({project.request_data.project_classification === 'addition' ? 'Addition' : project.request_data.project_classification === 'renovation' ? 'Renovation' : 'Ground-Up'}):</strong> × {project.request_data.project_classification === 'addition' ? '1.15' : project.request_data.project_classification === 'renovation' ? '1.35' : '1.00'}
+                        <strong>Complexity ({getClassificationInfo(project.request_data.project_classification).name}):</strong> × {getClassificationInfo(project.request_data.project_classification).multiplier.toFixed(2)}
                       </div>
                       <div className="text-gray-400">↓</div>
                       <div className="font-bold text-lg pt-2 border-t">
@@ -602,12 +615,12 @@ function ProjectDetail() {
                           min="1.00" 
                           max="1.35" 
                           step="0.01" 
-                          value={project.request_data.project_classification === 'addition' ? 1.15 : project.request_data.project_classification === 'renovation' ? 1.35 : 1.00} 
+                          value={getClassificationInfo(project.request_data.project_classification).multiplier} 
                           disabled
                           className="w-full accent-indigo-600"
                         />
-                        <div className="text-sm mt-1 font-medium">× {project.request_data.project_classification === 'addition' ? '1.15' : project.request_data.project_classification === 'renovation' ? '1.35' : '1.00'}</div>
-                        <div className="text-xs opacity-60">{project.request_data.project_classification === 'addition' ? 'Addition' : project.request_data.project_classification === 'renovation' ? 'Renovation' : 'Ground-Up'}</div>
+                        <div className="text-sm mt-1 font-medium">× {getClassificationInfo(project.request_data.project_classification).multiplier.toFixed(2)}</div>
+                        <div className="text-xs opacity-60">{getClassificationInfo(project.request_data.project_classification).name}</div>
                       </div>
                       
                       <div className="border rounded-lg p-3 bg-indigo-50">
@@ -641,7 +654,7 @@ function ProjectDetail() {
                   <div className="px-3 py-2 rounded-lg bg-gray-50 text-xs flex flex-wrap gap-4 items-center">
                     <div><span className="opacity-70">Base:</span> RSMeans (2024 Q3) • {project.request_data.location}</div>
                     <div><span className="opacity-70">Regional:</span> Index {(project.calculation_breakdown?.multipliers?.regional || 1).toFixed(2)}</div>
-                    <div><span className="opacity-70">Complexity:</span> {project.request_data.project_classification === 'addition' ? 'Addition' : project.request_data.project_classification === 'renovation' ? 'Renovation' : 'Ground-Up'}</div>
+                    <div><span className="opacity-70">Complexity:</span> {getClassificationInfo(project.request_data.project_classification).name}</div>
                     <div className="opacity-70 ml-auto">Updated: {new Date().toLocaleDateString()}</div>
                   </div>
                 </div>
