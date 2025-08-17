@@ -11,6 +11,7 @@ class ProjectClassification(str, Enum):
     GROUND_UP = "ground_up"
     ADDITION = "addition"
     RENOVATION = "renovation"
+    TENANT_IMPROVEMENT = "tenant_improvement"
 
 
 class ClimateZone(str, Enum):
