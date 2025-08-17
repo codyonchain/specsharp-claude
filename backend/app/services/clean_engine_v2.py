@@ -57,8 +57,8 @@ class CleanEngineV2:
                 logger.info(f"Auto-detected project classification: {detected}")
                 request.project_classification = detected
         
-        # Step 1: Get base costs from config
-        base_cost = self._get_base_cost(request.building_type, request.building_subtype)
+        # Step 1: Get base costs from config (adjusted for TI if applicable)
+        base_cost = self._get_base_cost(request.building_type, request.building_subtype, request.project_classification)
         equipment_cost = self._get_equipment_cost(request.building_type, request.building_subtype)
         
         logger.info(f"[CLEAN ENGINE V2] Base costs: ${base_cost}/SF base, ${equipment_cost}/SF equipment")
@@ -185,10 +185,33 @@ class CleanEngineV2:
             }
         }
     
-    def _get_base_cost(self, building_type: str, subtype: str) -> float:
-        """Get base cost from building config"""
+    def _get_base_cost(self, building_type: str, subtype: str, classification: str = 'ground_up') -> float:
+        """Get base cost from building config, adjusted for project classification"""
         try:
-            return BUILDING_TYPES_CONFIG[building_type]['subtypes'][subtype]['base_cost']
+            ground_up_cost = BUILDING_TYPES_CONFIG[building_type]['subtypes'][subtype]['base_cost']
+            
+            # For tenant improvements, use reduced base costs (no structure/shell/site work)
+            if classification == 'tenant_improvement':
+                # TI costs are typically 40-60% of ground-up costs
+                ti_cost_ratios = {
+                    'office': 0.40,  # Office TI is 40% of ground-up (interior only)
+                    'retail': 0.45,  # Retail TI is 45% of ground-up
+                    'restaurant': 0.60,  # Restaurant TI is 60% (kitchen equipment)
+                    'healthcare': 0.50,  # Medical office TI is 50% of ground-up
+                    'industrial': 0.35,  # Warehouse TI is 35% of ground-up
+                    'residential': 0.45,  # Apartment TI is 45% of ground-up
+                    'hospitality': 0.55,  # Hotel TI is 55% of ground-up
+                    'education': 0.45,  # School TI is 45% of ground-up
+                }
+                
+                ratio = ti_cost_ratios.get(building_type, 0.45)  # Default to 45%
+                ti_cost = ground_up_cost * ratio
+                
+                logger.info(f"TI cost adjustment for {building_type}: ${ground_up_cost}/SF × {ratio} = ${ti_cost}/SF")
+                return ti_cost
+            
+            return ground_up_cost
+            
         except KeyError:
             logger.warning(f"No base cost for {building_type}/{subtype}, using default")
             # Try to find a reasonable default
