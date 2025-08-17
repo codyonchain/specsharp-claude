@@ -824,63 +824,64 @@ async def duplicate_project(
     return scope_data
 
 
-@router.get("/debug/electrical/{project_id}")
-async def debug_electrical(
-    project_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_with_cookie)
-):
-    """Debug endpoint to verify electrical calculations"""
-    from app.services.electrical_standards_service import electrical_standards_service
-    from app.services.electrical_v2_service import electrical_v2_service
-    
-    # Get project
-    project = await get_project(project_id, db, current_user)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    # Convert to dict
-    if hasattr(project, 'model_dump'):
-        project_dict = project.model_dump()
-    else:
-        project_dict = dict(project)
-    
-    # Extract key data
-    request_data = project_dict.get('request_data', {})
-    cost_breakdown = project_dict.get('cost_breakdown', {})
-    if isinstance(cost_breakdown, str):
-        try:
-            cost_breakdown = json.loads(cost_breakdown)
-        except:
-            cost_breakdown = {}
-    
-    # Run V2 calculation directly
-    v2_result = electrical_v2_service.calculate_electrical_cost(project_dict)
-    
-    # Get stored electrical cost
-    stored_electrical = cost_breakdown.get('electrical', {}).get('total', 0)
-    
-    return {
-        "project_id": project_id,
-        "building_type": request_data.get('building_type', 'Unknown'),
-        "state": request_data.get('state', project_dict.get('state', 'Unknown')),
-        "location": project_dict.get('location', 'Unknown'),
-        "square_footage": request_data.get('square_footage', 0),
-        "building_mix": request_data.get('building_mix', {}),
-        "stored_electrical_cost": stored_electrical,
-        "v2_calculation": {
-            "total_cost": v2_result.get('total', 0),
-            "base_cost": v2_result.get('subtotal', 0),
-            "regional_multiplier": v2_result.get('regional_multiplier', 1.0),
-            "cost_per_sf": v2_result.get('cost_per_sf', 0),
-            "regional_tier": v2_result.get('regional_tier', 'Unknown')
-        },
-        "expected_range": {
-            "min": 700000,
-            "max": 850000,
-            "note": "For 45k SF mixed-use in CA"
-        }
-    }
+# Debug endpoint removed - electrical services have been migrated to Clean Engine V2
+# @router.get("/debug/electrical/{project_id}")
+# async def debug_electrical(
+#     project_id: str,
+#     db: Session = Depends(get_db),
+#     current_user: User = Depends(get_current_user_with_cookie)
+# ):
+#     """Debug endpoint to verify electrical calculations"""
+#     from app.services.electrical_standards_service import electrical_standards_service
+#     from app.services.electrical_v2_service import electrical_v2_service
+#     
+#     # Get project
+#     project = await get_project(project_id, db, current_user)
+#     if not project:
+#         raise HTTPException(status_code=404, detail="Project not found")
+#     
+#     # Convert to dict
+#     if hasattr(project, 'model_dump'):
+#         project_dict = project.model_dump()
+#     else:
+#         project_dict = dict(project)
+#     
+#     # Extract key data
+#     request_data = project_dict.get('request_data', {})
+#     cost_breakdown = project_dict.get('cost_breakdown', {})
+#     if isinstance(cost_breakdown, str):
+#         try:
+#             cost_breakdown = json.loads(cost_breakdown)
+#         except:
+#             cost_breakdown = {}
+#     
+#     # Run V2 calculation directly
+#     v2_result = electrical_v2_service.calculate_electrical_cost(project_dict)
+#     
+#     # Get stored electrical cost
+#     stored_electrical = cost_breakdown.get('electrical', {}).get('total', 0)
+#     
+#     return {
+#         "project_id": project_id,
+#         "building_type": request_data.get('building_type', 'Unknown'),
+#         "state": request_data.get('state', project_dict.get('state', 'Unknown')),
+#         "location": project_dict.get('location', 'Unknown'),
+#         "square_footage": request_data.get('square_footage', 0),
+#         "building_mix": request_data.get('building_mix', {}),
+#         "stored_electrical_cost": stored_electrical,
+#         "v2_calculation": {
+#             "total_cost": v2_result.get('total', 0),
+#             "base_cost": v2_result.get('subtotal', 0),
+#             "regional_multiplier": v2_result.get('regional_multiplier', 1.0),
+#             "cost_per_sf": v2_result.get('cost_per_sf', 0),
+#             "regional_tier": v2_result.get('regional_tier', 'Unknown')
+#         },
+#         "expected_range": {
+#             "min": 700000,
+#             "max": 850000,
+#             "note": "For 45k SF mixed-use in CA"
+#         }
+#     }
 
 
 @router.get("/debug/user-projects")
