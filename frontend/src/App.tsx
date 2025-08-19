@@ -12,7 +12,6 @@ import { HomePage } from './pages/HomePage';
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const ScopeGenerator = lazy(() => import('./components/ScopeGenerator'));
 const ProjectDetail = lazy(() => import('./components/ProjectDetail'));
-const ProgressiveProjectDetail = lazy(() => import('./components/ProgressiveProjectDetail'));
 const SharedProjectView = lazy(() => import('./components/SharedProjectView'));
 const ComparisonPage = lazy(() => import('./pages/ComparisonPage'));
 const DemoPage = lazy(() => import('./pages/DemoPage').then(m => ({ default: m.DemoPage })));
@@ -134,7 +133,7 @@ function App() {
               path="/project/:projectId" 
               element={
                 isAuthenticated ? 
-                <ProgressiveProjectDetail /> : 
+                <ProjectDetail /> : 
                 <Navigate to="/login" />
               } 
             />

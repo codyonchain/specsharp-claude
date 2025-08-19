@@ -44,7 +44,8 @@ const CostDNA: React.FC<CostDNAProps> = ({ projectData }) => {
     }
     
     // Healthcare-specific factors
-    if (projectData.occupancy_type?.toLowerCase().includes('hospital')) {
+    if (projectData.building_type?.toLowerCase().includes('hospital') || 
+        projectData.occupancy_type?.toLowerCase().includes('hospital')) {
       factors.push({
         category: 'Healthcare',
         factor: 'Hospital Standards',
@@ -82,7 +83,9 @@ const CostDNA: React.FC<CostDNAProps> = ({ projectData }) => {
         description: 'Seismic design requirements'
       });
       
-      if (projectData.occupancy_type?.toLowerCase().includes('hospital') || 
+      if (projectData.building_type?.toLowerCase().includes('hospital') || 
+          projectData.building_type?.toLowerCase().includes('medical') ||
+          projectData.occupancy_type?.toLowerCase().includes('hospital') || 
           projectData.occupancy_type?.toLowerCase().includes('medical')) {
         factors.push({
           category: 'Compliance',
@@ -104,7 +107,8 @@ const CostDNA: React.FC<CostDNAProps> = ({ projectData }) => {
     }
     
     // Restaurant-specific factors
-    if (projectData.occupancy_type?.toLowerCase().includes('restaurant')) {
+    if (projectData.building_type?.toLowerCase().includes('restaurant') ||
+        projectData.occupancy_type?.toLowerCase().includes('restaurant')) {
       if (projectData.special_requirements?.toLowerCase().includes('kitchen')) {
         factors.push({
           category: 'Equipment',
@@ -159,7 +163,7 @@ const CostDNA: React.FC<CostDNAProps> = ({ projectData }) => {
       const size = Math.round(projectData.square_footage * v.sizeFactor);
       const costPerSqft = Math.round(basePrice * v.priceFactor);
       comparables.push({
-        name: `${projectData.occupancy_type || 'Commercial'} Building ${i + 1}`,
+        name: `${projectData.building_type || projectData.occupancy_type || 'Commercial'} Building ${i + 1}`,
         location: projectData.location || 'Similar Market',
         size: size,
         cost: size * costPerSqft,
@@ -177,7 +181,7 @@ const CostDNA: React.FC<CostDNAProps> = ({ projectData }) => {
     
     // Add confidence for specific data points
     if (projectData.location) confidence += 10;
-    if (projectData.occupancy_type) confidence += 10;
+    if (projectData.building_type || projectData.occupancy_type) confidence += 10;
     if (projectData.square_footage) confidence += 5;
     if (projectData.project_classification) confidence += 5;
     if (projectData.special_requirements) confidence += 5;

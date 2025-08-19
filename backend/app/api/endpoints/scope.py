@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, Body
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import or_
-from typing import List, Optional
+from typing import List, Optional, Dict
 import json
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -10,6 +11,7 @@ from fastapi_cache import FastAPICache
 
 from app.models.scope import ScopeRequest, ScopeResponse
 from app.services.clean_engine_v2 import calculate_scope
+from app.services.owner_view_engine import OwnerViewOrchestrator
 
 import logging
 logger = logging.getLogger(__name__)
@@ -18,6 +20,7 @@ from app.services.floor_plan_service import floor_plan_service
 from app.services.architectural_floor_plan_service import architectural_floor_plan_service
 from app.services.markup_service import markup_service
 from app.services.nlp_service import nlp_service
+from app.core.building_type_detector import determine_building_type, get_building_subtype
 from app.utils.cost_validation import (
     validate_project_costs, 
     detect_cost_discrepancy, 
@@ -109,6 +112,7 @@ async def generate_scope(
     logger = logging.getLogger(__name__)
     
     try:
+        logger.info(f"Scope generation request: {scope_request.building_type}/{scope_request.building_subtype} - {scope_request.square_footage} sqft in {scope_request.location}")
         # Check if user has reached free estimate limit
         user = current_user  # current_user is now the actual User object
         
@@ -125,34 +129,84 @@ async def generate_scope(
         #             "limit": FREE_ESTIMATE_LIMIT
         #         }
         #     )
-        print("=" * 60)
-        print("📨 STEP 2: BACKEND RECEIVED REQUEST")
-        print("=" * 60)
-        print(f"Raw request data: {json.dumps(scope_request.model_dump(), indent=2)}")
-        print(f"Building type received: {scope_request.building_type}")
-        print(f"Building subtype received: {getattr(scope_request, 'building_subtype', 'NOT SET')}")
-        print(f"Square footage: {scope_request.square_footage}")
-        print(f"Location: {scope_request.location}")
-        
-        logger.error(f"=== SCOPE GENERATION STARTED ===")
-        logger.error(f"Request data: {scope_request.model_dump()}")
         
         # Track generation time
         start_time = time.time()
         
-        # If building_type is not set or is default, detect from special_requirements
-        if (scope_request.building_type == "commercial" or not scope_request.building_type) and scope_request.special_requirements:
-            nlp_result = nlp_service._fallback_analysis(scope_request.special_requirements)
-            detected_type = nlp_result.get('building_type') or nlp_result.get('occupancy_type')
-            if detected_type and detected_type != 'commercial':
-                scope_request.building_type = detected_type
-                logger.error(f"[NLP] Updated building_type to: {detected_type}")
+        
+        # Check if building type is already provided by the form
+        # Also check for the legacy 'subtype' field
+        if not scope_request.building_subtype and hasattr(scope_request, 'subtype'):
+            scope_request.building_subtype = scope_request.subtype
+            logger.error(f"📝 Using legacy 'subtype' field: {scope_request.subtype}")
+        
+        if scope_request.building_type and scope_request.building_type != 'commercial' and scope_request.building_subtype:
+            # Form has already provided specific building type and subtype
+            logger.info(f"Using form-provided types: {scope_request.building_type}/{scope_request.building_subtype}")
+        elif scope_request.special_requirements:
+            # Try NLP detection from description
+            description = scope_request.special_requirements
+            logger.info(f"Attempting NLP detection on: {description[:100]}")
+            
+            # Use the original building type detection
+            building_type = determine_building_type(description)
+            subtype = get_building_subtype(description, building_type) if building_type else None
+            
+            logger.info(f"NLP detected: {building_type}/{subtype}")
+            
+            # If detection failed completely, return an error
+            if not building_type or building_type == 'other':
+                # Check if form provided a fallback
+                if not scope_request.building_type or scope_request.building_type == 'commercial':
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "error": "Could not determine building type",
+                            "message": "Please be more specific. Try including terms like 'apartment', 'office', 'hospital', 'hotel', 'warehouse', 'school', 'restaurant', etc.",
+                            "detected_type": building_type,
+                            "description": description,
+                            "suggestions": [
+                                "Include the primary use of the building",
+                                "Use specific terms like 'office building', 'apartment complex', 'medical office'",
+                                "Mention if it's residential, commercial, healthcare, education, etc."
+                            ]
+                        }
+                    )
+            else:
+                # Use detected values
+                scope_request.building_type = building_type
+                logger.info(f"[NLP] Updated building_type to: {building_type}")
                 
-                # Also extract unit mix if multi-family residential
-                if detected_occupancy == 'multi_family_residential' and nlp_result.get('unit_mix'):
+                if subtype:
+                    scope_request.building_subtype = subtype
+                    logger.info(f"[NLP] Updated building_subtype to: {subtype}")
+            
+            # Also check for unit mix if multifamily
+            if scope_request.building_type == 'multifamily':
+                nlp_result = nlp_service._fallback_analysis(description)
+                if nlp_result.get('unit_mix'):
                     # Store unit mix data in request for later use
                     if not hasattr(scope_request, 'unit_mix'):
                         scope_request.unit_mix = nlp_result['unit_mix']
+        else:
+            # No description provided - check if form provided building type
+            if not scope_request.building_type or scope_request.building_type == 'commercial':
+                # Default commercial type needs a subtype
+                if not scope_request.building_subtype or scope_request.building_subtype == 'office':
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "error": "Building type required",
+                            "message": "Please provide a description of your project or select a specific building type.",
+                            "suggestions": [
+                                "Add a project description",
+                                "Select a building type from the dropdown",
+                                "Include details like 'office building', 'apartment complex', etc."
+                            ]
+                        }
+                    )
+            # Form has provided building type, continue with it
+            logger.info(f"Using form-provided type without description: {scope_request.building_type}/{scope_request.building_subtype}")
         
         # Detect project classification from special requirements if not explicitly set
         if scope_request.special_requirements and hasattr(scope_request, 'project_classification'):
@@ -215,39 +269,31 @@ async def generate_scope(
         # Call clean engine
         result = calculate_scope(clean_request)
         
+        # Create request_data with all necessary fields
+        request_data_dict = result.get('request_data', clean_request)
+        request_data_dict.update({
+            'building_type': result['building_type'],
+            'building_subtype': result['building_subtype'],
+            'square_footage': result['square_footage'],
+            'location': result['location'],
+            'num_floors': result.get('num_floors', 1),
+            'project_classification': result.get('project_classification', 'ground_up')
+        })
+        
         # Convert dict result to ScopeResponse object
         scope_response = ScopeResponse(
             project_id=result['project_id'],
             project_name=result['project_name'],
             created_at=result['created_at'],
-            building_type=result['building_type'],
-            building_subtype=result['building_subtype'],
-            square_footage=result['square_footage'],
-            location=result['location'],
-            num_floors=result.get('num_floors', 1),
+            request_data=ScopeRequest(**request_data_dict),
             cost_per_sqft=result['cost_per_sqft'],
             subtotal=result['subtotal'],
             total_cost=result['total_cost'],
             categories=result['categories'],
-            calculation_breakdown=result.get('calculation_breakdown'),
-            project_classification=result.get('project_classification', 'ground_up'),
-            request_data=result.get('request_data', clean_request)
+            calculation_breakdown=result.get('calculation_breakdown')
         )
         
-        print("=" * 60)
-        print("📤 STEP 4: BACKEND SENDING RESPONSE")
-        print("=" * 60)
-        print(f"Scope response generated:")
-        print(f"  Building type: {scope_response.building_type if hasattr(scope_response, 'building_type') else 'NOT SET'}")
-        print(f"  Building subtype: {scope_response.building_subtype if hasattr(scope_response, 'building_subtype') else 'NOT SET'}")
-        print(f"  Cost per SF: ${scope_response.cost_per_sqft}")
-        print(f"  Total cost: ${scope_response.total_cost:,.2f}")
-        print(f"  Subtotal: ${scope_response.subtotal:,.2f}")
-        
-        if scope_request.building_type == 'education' and scope_response.cost_per_sqft < 250:
-            print("🚨 BUG DETECTED IN BACKEND: Education type but low pricing!")
-            print(f"  Expected: ~$309/SF")
-            print(f"  Got: ${scope_response.cost_per_sqft}/SF")
+        logger.info(f"Scope response generated: {request_data_dict['building_type']}/{request_data_dict['building_subtype']} - ${scope_response.cost_per_sqft}/SF, Total: ${scope_response.total_cost:,.2f}")
         
         # Generate architectural floor plan with error handling
         try:
@@ -298,7 +344,8 @@ async def generate_scope(
             'description': scope_request.special_requirements,  # Store the original input description
             'project_type': scope_request.building_type,  # Using building_type as project_type is removed
             'project_classification': scope_request.project_classification.value,  # This is always present with default
-            'building_type': scope_request.building_type,  # Store specific building type
+            'building_type': scope_request.building_type,  # Store DETECTED building type
+            'building_subtype': getattr(scope_request, 'building_subtype', None),  # Store DETECTED subtype
             'square_footage': scope_request.square_footage,
             'location': scope_request.location,
             'climate_zone': scope_request.climate_zone.value if scope_request.climate_zone else None,
@@ -364,6 +411,178 @@ async def generate_scope(
         logger.error(f"Error: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error generating scope: {str(e)}")
+
+
+@router.post("/validate-description")
+async def validate_description(description: str = Body(..., description="Project description to validate")):
+    """Test what building type would be detected from a description"""
+    building_type, subtype = detect_building_type(description)
+    
+    return {
+        "description": description,
+        "detected_type": building_type,
+        "detected_subtype": subtype,
+        "valid": building_type is not None,
+        "suggestions": [] if building_type else [
+            "Try adding building type keywords",
+            "Be more specific about the use case",
+            "Include terms like 'apartment', 'office', 'hospital', 'hotel', 'school', etc.",
+            "Mention the primary function: residential, commercial, healthcare, education",
+            "Examples: '200 unit luxury apartment complex', '50,000 sf medical office building'"
+        ]
+    }
+
+
+@router.post("/owner-view")
+async def get_owner_view(
+    building_type: Optional[str] = Body(None, description="Building type (e.g., 'healthcare')"),
+    subtype: Optional[str] = Body(None, description="Building subtype (e.g., 'hospital')"),
+    description: Optional[str] = Body(None, description="Natural language description for NLP detection"),
+    construction_cost: float = Body(..., description="Hard construction costs"),
+    square_footage: float = Body(..., description="Total square footage"),
+    trade_breakdown: Optional[Dict[str, float]] = Body(None, description="Optional trade cost breakdown"),
+    ownership_type: Optional[str] = Body("for_profit", description="Ownership type (for_profit, non_profit, government, etc.)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate owner view with soft costs, department allocation, and ROI analysis
+    
+    Request body example:
+    {
+        "building_type": "healthcare",  // optional if description provided
+        "subtype": "hospital",  // optional if description provided
+        "description": "300 bed hospital with emergency department",  // optional, uses NLP to detect type
+        "construction_cost": 100000000,
+        "square_footage": 200000,
+        "ownership_type": "non_profit",  // optional, defaults to "for_profit"
+        "trade_breakdown": {  // optional
+            "structural": 25000000,
+            "mechanical": 35000000,
+            "electrical": 15000000,
+            "plumbing": 20000000,
+            "finishes": 5000000
+        }
+    }
+    """
+    try:
+        # If description is provided, use NLP detection
+        if description and not (building_type and subtype):
+            detected_type, detected_subtype = detect_building_type(description)
+            building_type = building_type or detected_type
+            subtype = subtype or detected_subtype
+            logger.info(f"NLP detected building type: {building_type}/{subtype} from description: {description[:100]}")
+        
+        # Ensure we have building_type and subtype
+        if not building_type:
+            building_type = "office"  # Default fallback
+        if not subtype:
+            subtype = "class_b"  # Default fallback
+        
+        # Create orchestrator with detected or provided types
+        orchestrator = OwnerViewOrchestrator(building_type, subtype)
+        
+        # Generate complete owner view with ownership type
+        owner_view = orchestrator.get_complete_owner_view(
+            construction_cost=construction_cost,
+            square_footage=square_footage,
+            trade_breakdown=trade_breakdown,
+            ownership_type=ownership_type
+        )
+        
+        # Log the request
+        logger.info(f"Owner view generated for {building_type}/{subtype}: ${construction_cost:,.0f} for {square_footage:,.0f} SF")
+        
+        # Add detected types to the response
+        if description:
+            message = f"Owner view generated for {building_type}/{subtype} (detected from description)"
+        else:
+            message = f"Owner view generated for {building_type}/{subtype}"
+        
+        return {
+            "success": True,
+            "data": owner_view,
+            "message": message,
+            "detected_type": building_type,
+            "detected_subtype": subtype
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating owner view: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate owner view: {str(e)}"
+        )
+
+
+@router.get("/projects/{project_id}/owner-view")
+async def get_project_owner_view(
+    project_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get owner view for an existing project
+    """
+    try:
+        # Get project from database
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Parse building type and subtype from project metadata
+        scope_data = json.loads(project.scope_data) if project.scope_data else {}
+        
+        # Extract building type and subtype
+        building_type = scope_data.get('building_type', 'healthcare')
+        subtype = scope_data.get('building_subtype') or scope_data.get('subtype') or 'hospital'
+        
+        # Get construction cost and square footage from project
+        construction_cost = project.total_cost
+        square_footage = project.square_footage if project.square_footage else 200000
+        
+        # Get trade breakdown if available from scope_data
+        trade_breakdown = None
+        if 'trade_costs' in scope_data:
+            trade_breakdown = scope_data['trade_costs']
+        elif 'breakdown' in scope_data:
+            # Try to extract trade costs from breakdown
+            breakdown = scope_data['breakdown']
+            if isinstance(breakdown, dict):
+                trade_breakdown = {}
+                for key, value in breakdown.items():
+                    if key.lower() in ['structural', 'mechanical', 'electrical', 'plumbing', 'finishes']:
+                        trade_breakdown[key.lower()] = value.get('subtotal', 0) if isinstance(value, dict) else value
+        
+        # Generate owner view
+        orchestrator = OwnerViewOrchestrator(building_type, subtype)
+        owner_view = orchestrator.get_complete_owner_view(
+            construction_cost=construction_cost,
+            square_footage=square_footage,
+            trade_breakdown=trade_breakdown
+        )
+        
+        # Add project info to response
+        owner_view['project_info'] = {
+            'id': project.id,
+            'name': project.name,
+            'location': project.location,
+            'created_at': project.created_at.isoformat() if project.created_at else None
+        }
+        
+        return {
+            "success": True,
+            "data": owner_view,
+            "project_id": project_id,
+            "message": f"Owner view generated for project {project_id}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting owner view for project {project_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get owner view: {str(e)}"
+        )
 
 
 @router.get("/projects")
