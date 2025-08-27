@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Project } from '../../types';
 import { formatters, safeGet } from '../../utils/displayFormatters';
 import { BackendDataMapper } from '../../utils/backendDataMapper';
+import * as XLSX from 'xlsx';
 import { 
   TrendingUp, DollarSign, Building, Clock, AlertCircle,
   Heart, Headphones, Cpu, MapPin, Calendar, ChevronRight,
@@ -16,6 +18,8 @@ interface Props {
 }
 
 export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
+  const navigate = useNavigate();
+  
   // Early return if no project data
   if (!project?.analysis) {
     return (
@@ -51,18 +55,32 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   const constructionTotal = totals.hard_costs || 0;
   const softCostsTotal = totals.soft_costs || 0;
   
-  // Calculate annual revenue properly for multifamily
-  const calculateAnnualRevenue = () => {
-    if (buildingType === 'multifamily') {
-      const units = Math.round(squareFootage / 1100);
-      const monthlyRent = buildingSubtype === 'luxury_apartments' ? 3500 : 2200;
-      return units * monthlyRent * 12 * 0.93; // 93% occupancy
-    }
-    return displayData.annualRevenue || 0;
-  };
+  // TRACE CONSTRUCTION COST ISSUE
+  console.log('=== CONSTRUCTION COST TRACE ===');
+  console.log('1. Raw project data:', project);
+  console.log('2. Analysis object:', project?.analysis);
+  console.log('3. Calculations object:', calculations);
+  console.log('4. Totals object:', totals);
+  console.log('5. Hard costs value from totals:', totals?.hard_costs);
+  console.log('6. DisplayData object:', displayData);
+  console.log('7. DisplayData construction cost:', displayData?.constructionCost);
+  console.log('8. ConstructionTotal variable:', constructionTotal);
+  console.log('9. TotalProjectCost:', totalProjectCost);
+  console.log('10. SoftCostsTotal:', softCostsTotal);
+  console.log('=== END TRACE ===');
   
-  const annualRevenue = calculateAnnualRevenue();
-  const noi = annualRevenue * 0.60; // 60% NOI margin for multifamily
+  // Get values from backend calculations
+  const annualRevenue = calculations?.ownership_analysis?.annual_revenue || 
+                       calculations?.ownership_analysis?.return_metrics?.annual_revenue || 
+                       displayData.annualRevenue || 0;
+  const noi = calculations?.ownership_analysis?.return_metrics?.estimated_annual_noi || 
+             calculations?.ownership_analysis?.noi || 
+             displayData.noi || 0;
+  
+  // Revenue Requirements data
+  const revenueReq = calculations?.revenue_requirements || 
+                     calculations?.ownership_analysis?.revenue_requirements || 
+                     null;
   
   // Get department icons based on building type
   const getDepartmentIcon = (deptName: string) => {
@@ -88,21 +106,171 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     return gradients[index % gradients.length];
   };
   
-  // Soft costs breakdown
+  // Soft costs breakdown from backend
   const softCostCategories = Object.entries(soft_costs?.breakdown || soft_costs || {})
     .filter(([key]) => key !== 'total' && key !== 'soft_cost_percentage')
     .map(([key, value]) => ({
       name: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
       amount: value as number,
-      percent: softCostsTotal > 0 ? ((value as number) / softCostsTotal) * 100 : 0
+      percent: calculations?.soft_costs?.percentages?.[key] || 
+               (softCostsTotal > 0 ? ((value as number) / softCostsTotal) * 100 : 0)
     }))
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5);
 
+  // Export to Excel handler
+  const handleExportExcel = () => {
+    try {
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+      
+      // Sheet 1: Executive Summary
+      const summaryData = [
+        ['SPECSHARP PROJECT ANALYSIS'],
+        [''],
+        ['Project:', project?.name || `${formatters.squareFeet(squareFootage)} ${buildingSubtype.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`],
+        ['Location:', location],
+        ['Building Type:', `${buildingType} - ${buildingSubtype}`],
+        ['Square Footage:', formatters.squareFeet(squareFootage)],
+        ['Floors:', floors],
+        [''],
+        ['FINANCIAL SUMMARY'],
+        ['Total Investment Required', formatters.currency(totalProjectCost)],
+        ['Construction Cost', formatters.currency(constructionTotal)],
+        ['Soft Costs', formatters.currency(softCostsTotal)],
+        ['Cost per SF', formatters.costPerSF(totals.cost_per_sf)],
+        [''],
+        ['INVESTMENT METRICS'],
+        ['Expected ROI', `${(displayData.roi * 100).toFixed(1)}%`],
+        ['NPV (10-year)', formatters.currency(displayData.npv)],
+        ['Payback Period', `${displayData.paybackPeriod} years`],
+        ['IRR', `${((displayData.irr || 0.12) * 100).toFixed(1)}%`],
+        ['Annual Revenue', formatters.currency(annualRevenue)],
+        ['Annual NOI', formatters.currency(noi)],
+        [''],
+        ['DECISION', displayData.investmentDecision?.recommendation || 'Under Review'],
+        ['Reason', displayData.investmentDecision?.summary || 'Investment analysis in progress']
+      ];
+      
+      const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, ws1, 'Executive Summary');
+      
+      // Sheet 2: Department Breakdown
+      if (displayData.departmentAllocations?.length > 0) {
+        const deptData = [
+          ['DEPARTMENT COST ALLOCATION'],
+          [''],
+          ['Department', 'Cost', 'Percentage', 'Cost/SF'],
+          ...displayData.departmentAllocations.map(dept => [
+            dept.name,
+            formatters.currency(dept.cost),
+            `${dept.percentage}%`,
+            formatters.costPerSF(dept.costPerSF)
+          ])
+        ];
+        const ws2 = XLSX.utils.aoa_to_sheet(deptData);
+        XLSX.utils.book_append_sheet(wb, ws2, 'Department Costs');
+      }
+      
+      // Sheet 3: Trade Package Details
+      if (displayData.trades?.length > 0) {
+        const tradeData = [
+          ['TRADE PACKAGE BREAKDOWN'],
+          [''],
+          ['Trade', 'Cost', 'Percentage', 'Cost/SF'],
+          ...displayData.trades.map(trade => [
+            trade.name,
+            formatters.currency(trade.cost),
+            `${trade.percentage.toFixed(1)}%`,
+            formatters.costPerSF(trade.costPerSF)
+          ])
+        ];
+        const ws3 = XLSX.utils.aoa_to_sheet(tradeData);
+        XLSX.utils.book_append_sheet(wb, ws3, 'Trade Packages');
+      }
+      
+      // Sheet 4: Investment Criteria
+      const criteriaData = [
+        ['INVESTMENT CRITERIA ASSESSMENT'],
+        [''],
+        ['Metric', 'Current', 'Required', 'Status'],
+        ['ROI', `${(displayData.roi * 100).toFixed(1)}%`, '8%', displayData.roi >= 0.08 ? 'PASS' : 'FAIL'],
+        ['NPV (10-year)', formatters.currency(displayData.npv), '> $0', displayData.npv > 0 ? 'PASS' : 'FAIL'],
+        ['Payback Period', `${displayData.paybackPeriod} years`, '≤ 7 years', displayData.paybackPeriod <= 7 ? 'PASS' : 'FAIL'],
+        ['DSCR', (displayData.dscr || 1.4).toFixed(2) + 'x', '≥ 1.25x', (displayData.dscr || 1.4) >= 1.25 ? 'PASS' : 'FAIL']
+      ];
+      const ws4 = XLSX.utils.aoa_to_sheet(criteriaData);
+      XLSX.utils.book_append_sheet(wb, ws4, 'Investment Criteria');
+      
+      // Sheet 5: Improvement Recommendations
+      if (displayData.investmentDecision?.improvementsNeeded?.length > 0) {
+        const improvementData = [
+          ['PATHS TO FEASIBILITY'],
+          [''],
+          ['Priority', 'Action Required', 'Impact'],
+          ...displayData.investmentDecision.improvementsNeeded.map((imp, idx) => [
+            idx + 1,
+            imp.action,
+            imp.impact
+          ])
+        ];
+        const ws5 = XLSX.utils.aoa_to_sheet(improvementData);
+        XLSX.utils.book_append_sheet(wb, ws5, 'Improvements');
+      }
+      
+      // Sheet 6: Soft Costs Breakdown
+      if (softCostCategories.length > 0) {
+        const softCostData = [
+          ['SOFT COSTS BREAKDOWN'],
+          [''],
+          ['Category', 'Amount', 'Percentage of Soft Costs'],
+          ...softCostCategories.map(cat => [
+            cat.name,
+            formatters.currency(cat.amount),
+            `${cat.percent.toFixed(1)}%`
+          ])
+        ];
+        const ws6 = XLSX.utils.aoa_to_sheet(softCostData);
+        XLSX.utils.book_append_sheet(wb, ws6, 'Soft Costs');
+      }
+      
+      // Sheet 7: 10-Year Cash Flow Projection
+      const years = Array.from({length: 10}, (_, i) => i + 1);
+      const revenue = annualRevenue || 3600000;
+      const operatingExpenses = revenue * 0.6;
+      const debtService = displayData.debtService || 1200000;
+      
+      const cashFlowData = [
+        ['10-YEAR CASH FLOW PROJECTION'],
+        [''],
+        ['Year', ...years],
+        ['Revenue', ...years.map(y => formatters.currency(revenue * Math.pow(1.03, y-1)))],
+        ['Operating Expenses', ...years.map(y => formatters.currency(operatingExpenses * Math.pow(1.025, y-1)))],
+        ['NOI', ...years.map(y => formatters.currency(revenue * 0.4 * Math.pow(1.03, y-1)))],
+        ['Debt Service', ...years.map(_ => formatters.currency(debtService))],
+        ['Cash Flow', ...years.map(y => formatters.currency((revenue * 0.4 * Math.pow(1.03, y-1)) - debtService))]
+      ];
+      const ws7 = XLSX.utils.aoa_to_sheet(cashFlowData);
+      XLSX.utils.book_append_sheet(wb, ws7, 'Cash Flow');
+      
+      // Generate filename with date
+      const date = new Date().toISOString().split('T')[0];
+      const projectName = project?.name?.replace(/[^a-z0-9]/gi, '_') || 'Project';
+      const filename = `SpecSharp_${projectName}_${date}.xlsx`;
+      
+      // Download the file
+      XLSX.writeFile(wb, filename);
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Failed to export Excel file. Please try again.');
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Executive Investment Dashboard Header */}
-      <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 rounded-2xl p-8 text-white shadow-2xl">
+    <>
+      <div className="space-y-6">
+        {/* Executive Investment Dashboard Header */}
+        <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 rounded-2xl p-8 text-white shadow-2xl">
         <div className="flex justify-between items-start mb-8">
           <div>
             <h2 className="text-3xl font-bold mb-3">
@@ -124,13 +292,12 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             </div>
             
             <div className="flex gap-3 mt-4">
-              <button className="px-4 py-2 bg-white/10 backdrop-blur border border-white/20 text-white rounded-lg hover:bg-white/20 transition flex items-center gap-2">
+              <button 
+                onClick={handleExportExcel}
+                className="px-4 py-2 bg-white/10 backdrop-blur border border-white/20 text-white rounded-lg hover:bg-white/20 transition flex items-center gap-2"
+              >
                 <Download className="h-4 w-4" />
                 Export Excel
-              </button>
-              <button className="px-4 py-2 bg-white text-blue-700 rounded-lg hover:bg-blue-50 transition font-medium flex items-center gap-2">
-                <BarChart3 className="h-4 w-4" />
-                Compare Scenarios
               </button>
             </div>
           </div>
@@ -162,40 +329,145 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         </div>
       </div>
 
-      {/* Investment Decision Alert */}
-      <div className={`${displayData.investmentDecision === 'NO-GO' ? 'bg-red-50 border-red-500' : 'bg-green-50 border-green-500'} border-l-4 rounded-lg p-6`}>
-        <div className="flex items-start gap-3">
-          {displayData.investmentDecision === 'NO-GO' ? (
-            <AlertCircle className="h-6 w-6 text-red-600 flex-shrink-0" />
-          ) : (
-            <CheckCircle className="h-6 w-6 text-green-600 flex-shrink-0" />
-          )}
-          <div className="flex-1">
-            <h3 className={`font-bold text-lg ${displayData.investmentDecision === 'NO-GO' ? 'text-red-900' : 'text-green-900'}`}>
-              Investment Decision: {displayData.investmentDecision}
-            </h3>
-            <p className={`mt-1 ${displayData.investmentDecision === 'NO-GO' ? 'text-red-700' : 'text-green-700'}`}>
-              {displayData.decisionReason}
-            </p>
+      {/* Investment Decision Section with Enhanced Feedback */}
+      <div className="space-y-4">
+        {/* Decision Header */}
+        <div className={`${displayData.investmentDecision === 'NO-GO' ? 'bg-red-50 border-red-500' : 'bg-green-50 border-green-500'} border-l-4 rounded-lg p-6`}>
+          <div className="flex items-start gap-3">
+            {displayData.investmentDecision === 'NO-GO' ? (
+              <AlertCircle className="h-6 w-6 text-red-600 flex-shrink-0" />
+            ) : (
+              <CheckCircle className="h-6 w-6 text-green-600 flex-shrink-0" />
+            )}
+            <div className="flex-1">
+              <h3 className={`font-bold text-lg ${displayData.investmentDecision === 'NO-GO' ? 'text-red-900' : 'text-green-900'}`}>
+                Investment Decision: {displayData.investmentDecision}
+              </h3>
+              <p className={`mt-1 ${displayData.investmentDecision === 'NO-GO' ? 'text-red-700' : 'text-green-700'}`}>
+                {displayData.decisionReason}
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        {/* Metrics Table */}
+        {displayData.metricsTable && displayData.metricsTable.length > 0 && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+              <h4 className="font-semibold text-gray-900">Investment Criteria Assessment</h4>
+            </div>
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Metric</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Required</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {displayData.metricsTable.map((metric, idx) => (
+                  <tr key={idx}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{metric.metric}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{metric.current}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{metric.required}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {metric.status === 'pass' ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          <CheckCircle className="h-3 w-3 mr-1" /> Pass
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                          <XCircle className="h-3 w-3 mr-1" /> Fail
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        
+        {/* Actionable Improvements for NO-GO */}
+        {displayData.investmentDecision === 'NO-GO' && displayData.failedCriteria && displayData.failedCriteria.length > 0 && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                <Target className="h-5 w-5 text-blue-600" />
+                How to Make This Project Feasible
+              </h4>
+              <p className="text-sm text-gray-600 mt-1">Specific actions to meet investment criteria</p>
+            </div>
+            <div className="p-6 space-y-4">
+              {displayData.failedCriteria.map((failure, idx) => (
+                <div key={idx} className="flex gap-4 p-4 bg-gray-50 rounded-lg">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                      {idx + 1}
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-baseline justify-between mb-2">
+                      <span className="font-semibold text-gray-900">{failure.metric}</span>
+                      <span className="text-sm text-red-600">Gap: {failure.gap}</span>
+                    </div>
+                    <p className="text-sm text-gray-700 mb-2">{failure.fix}</p>
+                    <div className="flex gap-4 text-xs text-gray-500">
+                      <span>Current: {failure.current}</span>
+                      <span>→</span>
+                      <span>Required: {failure.required}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+            
+            {/* Legacy improvements display - now handled above */}
+            {false && displayData.investmentDecision === 'NO-GO' && displayData.improvementsNeeded && displayData.improvementsNeeded.length > 0 && (
+              <div className="mt-4 p-4 bg-white rounded-lg border border-red-200">
+                <h4 className="font-semibold text-red-900 mb-3 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" />
+                  Required Improvements:
+                </h4>
+                <div className="space-y-3">
+                  {displayData.improvementsNeeded.map((improvement, idx) => (
+                    <div key={idx} className="border-l-2 border-red-300 pl-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-gray-900">{improvement.metric}</span>
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-red-600">Current: {formatters.formatMetricValue(improvement.current, improvement.metric)}</span>
+                          <span className="text-gray-400">→</span>
+                          <span className="text-green-600">Required: {formatters.formatMetricValue(improvement.required, improvement.metric)}</span>
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-600">{improvement.suggestion}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             
             {/* Display suggestions if NO-GO */}
             {displayData.investmentDecision === 'NO-GO' && displayData.suggestions.length > 0 && (
-              <div className="mt-4 p-4 bg-white rounded-lg border border-red-200">
-                <h4 className="font-semibold text-red-900 mb-2 flex items-center gap-2">
+              <div className="mt-4 p-4 bg-white rounded-lg border border-amber-200">
+                <h4 className="font-semibold text-amber-900 mb-2 flex items-center gap-2">
                   <Lightbulb className="h-4 w-4" />
-                  How to Make This Project Pencil:
+                  Additional Optimization Strategies:
                 </h4>
                 <ul className="space-y-2">
                   {displayData.suggestions.map((suggestion, idx) => (
                     <li key={idx} className="flex items-start gap-2">
-                      <span className="text-red-600 mt-0.5">•</span>
+                      <span className="text-amber-600 mt-0.5">•</span>
                       <span className="text-sm text-gray-700">{suggestion}</span>
                     </li>
                   ))}
                 </ul>
                 
                 {displayData.requiredRent > 0 && (
-                  <div className="mt-3 pt-3 border-t border-red-200">
+                  <div className="mt-3 pt-3 border-t border-amber-200">
                     <p className="text-sm text-gray-600">
                       Required rent for 8% return: <strong>{formatters.monthlyRent(displayData.requiredRent)}</strong>
                     </p>
@@ -218,8 +490,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                 <span className="text-sm">Payback: <strong>{formatters.years(displayData.paybackPeriod)}</strong></span>
               </span>
             </div>
-          </div>
-        </div>
       </div>
 
       {/* Three Key Metrics Cards */}
@@ -308,6 +578,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             </div>
           </div>
         </div>
+
+        {/* Investment Mix */}
       </div>
 
       {/* Department Cost Allocation */}
@@ -346,6 +618,64 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Revenue Requirements Card */}
+      {revenueReq && (
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+          <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4">
+            <h3 className="text-lg font-bold text-white">Revenue Requirements</h3>
+            <p className="text-sm text-emerald-100">What you need to charge for 8% ROI</p>
+          </div>
+          <div className="p-6">
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-4 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-600 mb-1">Required {revenueReq.metric_name}</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {formatters.currency(revenueReq.required_value)}
+                  </p>
+                </div>
+                <div className="text-center p-4 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-gray-600 mb-1">Market {revenueReq.metric_name}</p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {formatters.currency(revenueReq.market_value)}
+                  </p>
+                </div>
+              </div>
+              
+              <div className={`p-4 rounded-lg ${
+                revenueReq.feasibility === 'Feasible' 
+                  ? 'bg-green-50 border border-green-200' 
+                  : 'bg-amber-50 border border-amber-200'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold">Project Feasibility:</span>
+                  <span className={`font-bold ${
+                    revenueReq.feasibility === 'Feasible' ? 'text-green-600' : 'text-amber-600'
+                  }`}>
+                    {revenueReq.feasibility}
+                  </span>
+                </div>
+                {revenueReq.gap !== undefined && (
+                  <p className="text-sm mt-2">
+                    {revenueReq.gap > 0 
+                      ? `Market rate is ${formatters.currency(Math.abs(revenueReq.gap))} (${Math.abs(revenueReq.gap_percentage).toFixed(1)}%) above requirement ✓`
+                      : `Need to achieve ${formatters.currency(Math.abs(revenueReq.gap))} (${Math.abs(revenueReq.gap_percentage).toFixed(1)}%) above market rate`
+                    }
+                  </p>
+                )}
+              </div>
+              
+              <div className="pt-4 border-t">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Simple Payback Period</span>
+                  <span className="text-lg font-bold">{formatters.years(displayData.paybackPeriod)}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -709,5 +1039,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         </div>
       </div>
     </div>
+    </>
   );
 };

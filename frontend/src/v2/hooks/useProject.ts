@@ -12,16 +12,21 @@ export function useProject(id: string | undefined) {
   const [error, setError] = useState<APIError | null>(null);
 
   useEffect(() => {
+    console.log('🎯 useProject useEffect triggered with ID:', id);
     if (!id) {
+      console.log('❌ No ID provided, skipping fetch');
       setLoading(false);
       return;
     }
 
     async function fetchProject() {
+      console.log('📡 fetchProject() starting for ID:', id);
       try {
         setLoading(true);
         setError(null);
+        console.log('🔄 Calling api.getProject()...');
         const data = await api.getProject(id);
+        console.log('📦 Data received:', data);
         setProject(data);
       } catch (err) {
         setError(err as APIError);

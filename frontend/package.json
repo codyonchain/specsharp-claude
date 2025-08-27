@@ -9,21 +9,25 @@
     "build:prod": "vite build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:v2": "vite-node src/v2/test.ts"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^3.8.0",
     "@stripe/stripe-js": "^7.6.1",
+    "@types/lodash": "^4.17.20",
     "@types/react-router-dom": "^5.3.3",
     "axios": "^1.10.0",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.23.12",
+    "lodash": "^4.17.21",
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.6.3",
     "react-toastify": "^11.0.5",
-    "recharts": "^3.1.0"
+    "recharts": "^3.1.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",
@@ -35,11 +39,13 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
+    "node-fetch": "^2.7.0",
     "postcss": "^8.5.6",
     "sharp": "^0.34.3",
     "tailwindcss": "^3.4.17",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.35.1",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vite-node": "^3.2.4"
   }
 }

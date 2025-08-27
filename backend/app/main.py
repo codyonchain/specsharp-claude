@@ -12,9 +12,10 @@ from redis import asyncio as aioredis
 import logging
 
 from app.core.config import settings
-from app.api.endpoints import auth, oauth, scope, cost, floor_plan, trade_package, comparison, markup, excel_export, pdf_export, subscription, team, share, demo
+from app.api.endpoints import auth, oauth, scope, cost, floor_plan, trade_package, comparison, markup, excel_export, pdf_export, subscription, team, share, demo, scenarios
 # Cost DNA removed - Clean Engine V2 handles all costs
 # from app.api.v1 import cost_dna
+from app.v2.api import router as v2_router  # Import V2 API router
 from app.db.database import engine, Base
 
 logger = logging.getLogger(__name__)
@@ -106,8 +107,12 @@ app.include_router(subscription.router, prefix="/api/v1/subscription", tags=["su
 app.include_router(team.router, prefix="/api/v1/team", tags=["team"])
 app.include_router(share.router, prefix="/api/v1", tags=["share"])
 app.include_router(demo.router, prefix="/api/v1/demo", tags=["demo"])
+app.include_router(scenarios.router, prefix="/api/v1", tags=["scenarios"])
 # Cost DNA removed - Clean Engine V2 handles all costs
 # app.include_router(cost_dna.router, prefix="/api/v1/cost-dna", tags=["cost-dna"])
+
+# Include V2 API router
+app.include_router(v2_router, tags=["v2"])
 
 
 @app.get("/")

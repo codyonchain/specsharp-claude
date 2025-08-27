@@ -33,9 +33,10 @@ class V2APIClient {
    */
   private async request<T>(
     endpoint: string,
-    options?: RequestInit
+    options?: RequestInit,
+    apiVersion: 'v1' | 'v2' = 'v2'
   ): Promise<T> {
-    const url = `${this.baseURL}/api/v2${endpoint}`;
+    const url = `${this.baseURL}/api/${apiVersion}${endpoint}`;
     
     try {
       const response = await fetch(url, {
@@ -226,77 +227,372 @@ class V2APIClient {
   // ============================================================================
   // PROJECT MANAGEMENT (Frontend state - could be backend later)
   // ============================================================================
+  
+  /**
+   * V1/V2 Endpoint Architecture:
+   * 
+   * V1 endpoints: Project CRUD operations (storage)
+   * - GET /api/v1/scope/projects/{id} - fetch stored project
+   * - POST /api/v1/scope/projects - save project
+   * - DELETE /api/v1/scope/projects/{id} - delete project
+   * 
+   * V2 endpoints: Calculations only (no storage)
+   * - POST /api/v2/analyze - analyze new input
+   * - POST /api/v2/calculate - detailed calculations
+   * - POST /api/v2/compare - scenario comparison
+   */
+  
+  /**
+   * Transform V1 project response to V2 structure expected by frontend
+   */
+  private adaptV1ToV2Structure(project: any): Project {
+    // Preserve the ENTIRE original structure first
+    let adaptedProject = { ...project };
+    
+    // Only fix the double-nested calculations.calculations issue if it exists
+    if (project?.analysis?.calculations?.calculations) {
+      console.log('🔧 Fixing double-nested calculations structure');
+      
+      // Merge the nested calculations level up while preserving ALL other data
+      adaptedProject = {
+        ...project,
+        analysis: {
+          ...project.analysis,
+          calculations: {
+            // First, preserve everything from the original calculations level
+            ...project.analysis.calculations,
+            // Then merge in the double-nested calculations content
+            ...project.analysis.calculations.calculations,
+            // Explicitly preserve critical top-level objects that might get overwritten
+            ownership_analysis: 
+              project.analysis.calculations.ownership_analysis || 
+              project.analysis.calculations.calculations.ownership_analysis,
+            revenue_analysis: 
+              project.analysis.calculations.revenue_analysis || 
+              project.analysis.calculations.calculations.revenue_analysis,
+            revenue_requirements: 
+              project.analysis.calculations.revenue_requirements || 
+              project.analysis.calculations.calculations.revenue_requirements,
+            project_info: 
+              project.analysis.calculations.project_info || 
+              project.analysis.calculations.calculations.project_info,
+            operational_metrics:
+              project.analysis.calculations.operational_metrics ||
+              project.analysis.calculations.calculations.operational_metrics,
+            department_allocation:
+              project.analysis.calculations.department_allocation ||
+              project.analysis.calculations.calculations.department_allocation,
+            // Ensure totals exists
+            totals: 
+              project.analysis.calculations.calculations.totals ||
+              project.analysis.calculations.totals || {
+                hard_costs: project.total_cost || project.subtotal || 0,
+                soft_costs: project.soft_costs || 0,
+                total_project_cost: project.total_cost || 0,
+                cost_per_sf: project.cost_per_sqft || 0
+              }
+          }
+        }
+      };
+      
+      // Remove the nested calculations property to avoid confusion
+      if (adaptedProject.analysis?.calculations?.calculations) {
+        delete adaptedProject.analysis.calculations.calculations;
+      }
+    }
+    
+    // Ensure basic V2 structure exists even for V1 projects
+    if (!adaptedProject?.analysis?.calculations) {
+      console.log('📦 Creating V2 structure for V1 project');
+      adaptedProject = {
+        ...adaptedProject,
+        analysis: {
+          ...adaptedProject.analysis,
+          parsed_input: adaptedProject.request_data || adaptedProject.parsed_input || {
+            square_footage: adaptedProject.square_footage || 0,
+            building_type: adaptedProject.building_type || '',
+            building_subtype: adaptedProject.building_subtype || '',
+            location: adaptedProject.location || '',
+            floors: adaptedProject.floors || 1
+          },
+          calculations: {
+            totals: {
+              hard_costs: adaptedProject.total_cost || adaptedProject.subtotal || 0,
+              soft_costs: adaptedProject.soft_costs || 0,
+              total_project_cost: adaptedProject.total_cost || 0,
+              cost_per_sf: adaptedProject.cost_per_sqft || 0
+            },
+            construction_costs: {
+              total: adaptedProject.subtotal || adaptedProject.total_cost || 0,
+              base_cost_per_sf: adaptedProject.base_cost_per_sf || adaptedProject.cost_per_sqft || 0,
+              breakdown: adaptedProject.calculation_breakdown || {}
+            },
+            soft_costs: {
+              total: adaptedProject.soft_costs || 0,
+              breakdown: adaptedProject.soft_cost_breakdown || {}
+            },
+            trade_breakdown: adaptedProject.trades || adaptedProject.categories || [],
+            confidence_score: adaptedProject.confidence_score || 95
+          }
+        }
+      };
+    }
+    
+    return adaptedProject;
+  }
 
   /**
-   * Save project to local storage (later: backend)
+   * Save project to backend
    */
   async saveProject(project: Omit<Project, 'id' | 'created_at' | 'updated_at'>): Promise<Project> {
-    tracer.trace('STORAGE_CREATE', 'Creating project object', {
-      building_type: project.analysis?.parsed_input?.building_type,
-      subtype: project.analysis?.parsed_input?.building_subtype,
-      has_analysis: !!project.analysis,
-      has_calculations: !!project.analysis?.calculations
+    // Apply adapter to incoming project to fix any structure issues BEFORE saving
+    const cleanProject = this.adaptV1ToV2Structure(project);
+    
+    tracer.trace('API_CREATE_PROJECT', 'Creating project via API', {
+      building_type: cleanProject.analysis?.parsed_input?.building_type,
+      subtype: cleanProject.analysis?.parsed_input?.building_subtype,
+      has_analysis: !!cleanProject.analysis,
+      has_calculations: !!cleanProject.analysis?.calculations,
+      has_totals: !!cleanProject.analysis?.calculations?.totals
     });
     
-    const newProject: Project = {
-      ...project,
-      id: `proj_${Date.now()}`,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    
-    tracer.trace('STORAGE_BEFORE_SAVE', 'Project object created', newProject);
-    
-    // Save to localStorage with correct key
-    const projects = this.getStoredProjects();
-    projects.push(newProject);
-    localStorage.setItem('specsharp_projects', JSON.stringify(projects));
-    
-    tracer.trace('STORAGE_AFTER_SAVE', 'Saved to localStorage', {
-      id: newProject.id,
-      total_projects: projects.length,
-      building_type: newProject.analysis?.parsed_input?.building_type
-    });
-    
-    return newProject;
+    try {
+      console.log('📡 Saving project to backend API...');
+      console.log('Original project:', project);
+      console.log('Cleaned project:', cleanProject);
+      
+      const v1SavedProject = await this.request<any>('/scope/projects', {
+        method: 'POST',
+        body: JSON.stringify(cleanProject),
+      }, 'v1');
+      
+      console.log('Backend response:', v1SavedProject);
+      
+      // Transform V1 response to V2 structure
+      const v2SavedProject = this.adaptV1ToV2Structure(v1SavedProject);
+      
+      console.log('✅ Project saved to backend with ID:', v2SavedProject.id);
+      console.log('Adapted project structure:', {
+        has_totals: !!v2SavedProject.analysis?.calculations?.totals,
+        hard_costs: v2SavedProject.analysis?.calculations?.totals?.hard_costs,
+        total_cost: v2SavedProject.analysis?.calculations?.totals?.total_project_cost
+      });
+      
+      tracer.trace('API_PROJECT_SAVED', 'Saved to backend', {
+        id: v2SavedProject.id,
+        building_type: v2SavedProject.analysis?.parsed_input?.building_type
+      });
+      
+      // Also save to localStorage as backup (save V2 structure)
+      // Note: Don't use getStoredProjects here as it applies adapter and we want to save the clean structure
+      const stored = localStorage.getItem('specsharp_projects');
+      const projects = stored ? JSON.parse(stored) : [];
+      projects.push(v2SavedProject);
+      localStorage.setItem('specsharp_projects', JSON.stringify(projects));
+      
+      return v2SavedProject;
+    } catch (error) {
+      console.error('❌ Failed to save to backend, saving to localStorage only:', error);
+      
+      // Fallback to localStorage if API fails
+      const newProject: Project = {
+        ...cleanProject,
+        id: `proj_${Date.now()}`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      
+      // Project is already clean from the start of this function
+      const finalProject = newProject;
+      
+      // Don't use getStoredProjects as it applies adapter
+      const stored = localStorage.getItem('specsharp_projects');
+      const projects = stored ? JSON.parse(stored) : [];
+      projects.push(finalProject);
+      localStorage.setItem('specsharp_projects', JSON.stringify(projects));
+      
+      console.log('📦 Saved to localStorage with ID:', finalProject.id);
+      console.log('Final project structure:', {
+        has_totals: !!finalProject.analysis?.calculations?.totals,
+        hard_costs: finalProject.analysis?.calculations?.totals?.hard_costs,
+        total_cost: finalProject.analysis?.calculations?.totals?.total_project_cost
+      });
+      
+      return finalProject;
+    }
   }
 
   /**
    * Get all projects
    */
   async getProjects(): Promise<Project[]> {
-    // From localStorage for now
-    return this.getStoredProjects();
+    try {
+      console.log('📡 Fetching all projects from backend API...');
+      const v1Projects = await this.request<any[]>('/scope/projects', {}, 'v1');
+      console.log(`✅ Received ${v1Projects.length} projects from backend`);
+      
+      // Transform each V1 project to V2 structure
+      const v2Projects = v1Projects.map(p => this.adaptV1ToV2Structure(p));
+      
+      // Debug dashboard data
+      console.log('=== DASHBOARD PROJECT LIST DEBUG ===');
+      v2Projects.forEach((project, index) => {
+        const hardCosts = project.analysis?.calculations?.totals?.hard_costs;
+        const totalCost = project.analysis?.calculations?.totals?.total_project_cost;
+        
+        console.log(`Project ${index + 1} (${project.id}):`, project.name);
+        console.log('  - Has analysis:', !!project.analysis);
+        console.log('  - Has calculations:', !!project.analysis?.calculations);
+        console.log('  - Has totals:', !!project.analysis?.calculations?.totals);
+        console.log('  - Hard costs:', hardCosts);
+        console.log('  - Total cost:', totalCost);
+        console.log('  - Has ownership_analysis:', !!project.analysis?.calculations?.ownership_analysis);
+        
+        if (hardCosts === 0 || hardCosts === null || hardCosts === undefined) {
+          console.log('  ⚠️ ZERO COST DETECTED! Full structure:');
+          console.log('  - Full analysis:', project.analysis);
+          console.log('  - Full calculations:', project.analysis?.calculations);
+          console.log('  - Raw project:', project);
+        }
+      });
+      console.log('=== END DASHBOARD DEBUG ===');
+      
+      return v2Projects;
+    } catch (error) {
+      console.error('❌ Failed to fetch projects from backend:', error);
+      
+      // Fallback to localStorage if API fails
+      console.log('⚠️ Falling back to localStorage...');
+      const v1Projects = this.getStoredProjects();
+      console.log(`📦 Found ${v1Projects.length} projects in localStorage`);
+      
+      // Note: getStoredProjects now applies the adapter internally
+      console.log('=== DASHBOARD PROJECT LIST DEBUG (localStorage) ===');
+      v1Projects.forEach((project, index) => {
+        console.log(`Project ${index + 1} (${project.id}):`);
+        console.log('  - Has analysis:', !!project.analysis);
+        console.log('  - Has calculations:', !!project.analysis?.calculations);
+        console.log('  - Has totals:', !!project.analysis?.calculations?.totals);
+        console.log('  - Hard costs:', project.analysis?.calculations?.totals?.hard_costs);
+        console.log('  - Total cost:', project.analysis?.calculations?.totals?.total_project_cost);
+        console.log('  - Has ownership_analysis:', !!project.analysis?.calculations?.ownership_analysis);
+      });
+      console.log('=== END DASHBOARD DEBUG ===');
+      
+      return v1Projects;
+    }
   }
 
   /**
    * Get single project
    */
   async getProject(id: string): Promise<Project | null> {
-    tracer.trace('STORAGE_GET_PROJECT', 'Fetching project by ID', { id });
+    console.log('🔍 DEBUG: getProject called with ID:', id);
+    tracer.trace('API_GET_PROJECT', 'Fetching project by ID from backend', { id });
     
-    const projects = this.getStoredProjects();
-    const project = projects.find(p => p.id === id) || null;
-    
-    tracer.trace('STORAGE_FOUND_PROJECT', 'Project retrieved', {
-      found: !!project,
-      id: project?.id,
-      building_type: project?.analysis?.parsed_input?.building_type,
-      subtype: project?.analysis?.parsed_input?.building_subtype,
-      has_analysis: !!project?.analysis,
-      has_calculations: !!project?.analysis?.calculations
-    });
-    
-    return project;
+    try {
+      console.log('📡 Making API call to backend for project:', id);
+      const v1Project = await this.request<any>(`/scope/projects/${id}`, {}, 'v1');
+      
+      // Transform V1 response to V2 structure
+      const v2Project = this.adaptV1ToV2Structure(v1Project);
+      
+      console.log('✅ Received project from backend:', v2Project);
+      tracer.trace('API_PROJECT_RETRIEVED', 'Project retrieved from backend', {
+        found: !!v2Project,
+        id: v2Project?.id,
+        building_type: v2Project?.analysis?.parsed_input?.building_type,
+        subtype: v2Project?.analysis?.parsed_input?.building_subtype,
+        has_analysis: !!v2Project?.analysis,
+        has_calculations: !!v2Project?.analysis?.calculations
+      });
+      
+      return v2Project;
+    } catch (error) {
+      console.error('❌ Failed to fetch project from backend:', error);
+      
+      // Fallback to localStorage if API fails
+      console.log('⚠️ Falling back to localStorage...');
+      const projects = this.getStoredProjects();
+      const v1Project = projects.find(p => p.id === id) || null;
+      
+      if (v1Project) {
+        console.log('📦 Found project in localStorage');
+        
+        // Debug: Show full structure of localStorage project
+        console.log('=== FULL PROJECT STRUCTURE ===');
+        console.log('Full project:', JSON.stringify(v1Project, null, 2));
+        
+        // Debug: Find all cost-related values in the structure
+        console.log('=== SEARCHING FOR COST VALUES ===');
+        const findCosts = (obj: any, path = '') => {
+          for (let key in obj) {
+            if (obj[key] && typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
+              findCosts(obj[key], path ? `${path}.${key}` : key);
+            } else if (typeof obj[key] === 'number' && obj[key] > 1000) {
+              console.log(`Found large number at ${path ? path + '.' : ''}${key}:`, obj[key]);
+            }
+            // Also look for any key containing 'cost', 'total', or 'subtotal'
+            if (key.toLowerCase().includes('cost') || 
+                key.toLowerCase().includes('total') || 
+                key.toLowerCase().includes('subtotal')) {
+              console.log(`Found cost-related field at ${path ? path + '.' : ''}${key}:`, obj[key]);
+            }
+          }
+        };
+        findCosts(v1Project);
+        console.log('=== END COST SEARCH ===');
+        
+        // Transform V1 structure to V2 if needed
+        const v2Project = this.adaptV1ToV2Structure(v1Project);
+        
+        console.log('=== LOCALSTORAGE PROJECT DATA TRACE ===');
+        console.log('1. Original V1 project:', v1Project);
+        console.log('2. Transformed V2 project:', v2Project);
+        console.log('3. Has analysis?', !!v2Project?.analysis);
+        console.log('4. Has calculations?', !!v2Project?.analysis?.calculations);
+        console.log('5. Has totals?', !!v2Project?.analysis?.calculations?.totals);
+        console.log('6. Hard costs value:', v2Project?.analysis?.calculations?.totals?.hard_costs);
+        console.log('7. Soft costs value:', v2Project?.analysis?.calculations?.totals?.soft_costs);
+        console.log('8. Total project cost:', v2Project?.analysis?.calculations?.totals?.total_project_cost);
+        console.log('=== END LOCALSTORAGE TRACE ===');
+        
+        return v2Project;
+      } else {
+        console.log('❌ Project not found in localStorage either');
+        return null;
+      }
+    }
   }
 
   /**
    * Delete project
    */
   async deleteProject(id: string): Promise<void> {
-    const projects = this.getStoredProjects();
-    const filtered = projects.filter(p => p.id !== id);
-    localStorage.setItem('specsharp_projects', JSON.stringify(filtered));
+    try {
+      console.log('📡 Deleting project from backend:', id);
+      await this.request(`/scope/projects/${id}`, {
+        method: 'DELETE',
+      }, 'v1');
+      console.log('✅ Project deleted from backend');
+      
+      // Also remove from localStorage
+      // Don't use getStoredProjects as it applies adapter unnecessarily
+      const stored = localStorage.getItem('specsharp_projects');
+      const projects = stored ? JSON.parse(stored) : [];
+      const filtered = projects.filter((p: any) => p.id !== id);
+      localStorage.setItem('specsharp_projects', JSON.stringify(filtered));
+    } catch (error) {
+      console.error('❌ Failed to delete from backend:', error);
+      
+      // Still remove from localStorage
+      // Don't use getStoredProjects as it applies adapter unnecessarily
+      const stored = localStorage.getItem('specsharp_projects');
+      const projects = stored ? JSON.parse(stored) : [];
+      const filtered = projects.filter((p: any) => p.id !== id);
+      localStorage.setItem('specsharp_projects', JSON.stringify(filtered));
+      console.log('📦 Removed from localStorage');
+    }
   }
 
   /**
@@ -304,7 +600,11 @@ class V2APIClient {
    */
   private getStoredProjects(): Project[] {
     const stored = localStorage.getItem('specsharp_projects');
-    return stored ? JSON.parse(stored) : [];
+    if (!stored) return [];
+    
+    const projects = JSON.parse(stored);
+    // Apply adapter to each project to fix any structure issues
+    return projects.map(p => this.adaptV1ToV2Structure(p));
   }
 }
 

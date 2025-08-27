@@ -30,43 +30,67 @@ export const NewProject: React.FC = () => {
   const [finishLevel, setFinishLevel] = useState<'standard' | 'premium' | 'luxury'>('standard');
   const [projectComplexity, setProjectComplexity] = useState<'ground_up' | 'renovation' | 'addition'>('ground_up');
   
-  // Example prompts with variety
+  // NLP detection state
+  const [detectedFeatures, setDetectedFeatures] = useState({
+    size: false,
+    type: false,
+    location: false
+  });
+  
+  // Monitor input for NLP detection
+  useEffect(() => {
+    const input = description.toLowerCase();
+    setDetectedFeatures({
+      size: /\d+[\s,]*(?:sf|square|feet|unit|key|bed|room)/i.test(description),
+      type: /(apartment|office|hospital|school|retail|industrial|hotel|restaurant|warehouse|medical|clinic|surgery|emergency|distribution|strip\s*mall)/i.test(input),
+      location: /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,?\s*[A-Z]{2}\b/.test(description) || 
+                /(nashville|memphis|austin|atlanta|denver|dallas|franklin|murfreesboro)/i.test(input)
+    });
+  }, [description]);
+  
+  // Example prompts with better structure
   const examplePrompts = [
     { 
       icon: <Heart className="h-6 w-6" />, 
-      text: 'Build a 200,000 SF hospital with emergency department in Nashville', 
+      text: '200,000 SF hospital with emergency department in Nashville', 
+      highlights: ['200,000 SF', 'hospital', 'emergency department', 'Nashville'],
       type: 'healthcare',
       color: 'text-red-600 bg-red-50'
     },
     { 
-      icon: <GraduationCap className="h-6 w-6" />, 
-      text: 'Build a 75,000 SF elementary school for 500 students', 
-      type: 'educational',
+      icon: <Building2 className="h-6 w-6" />, 
+      text: '95,000 SF Class A office building with structured parking in Memphis', 
+      highlights: ['95,000 SF', 'Class A office', 'structured parking', 'Memphis'],
+      type: 'commercial',
       color: 'text-blue-600 bg-blue-50'
     },
     { 
-      icon: <Building2 className="h-6 w-6" />, 
-      text: 'Build a 95,000 SF Class A office building in Memphis', 
-      type: 'commercial',
-      color: 'text-green-600 bg-green-50'
-    },
-    { 
       icon: <Home className="h-6 w-6" />, 
-      text: 'Build a 300,000 SF luxury apartment complex with amenities', 
+      text: '300-unit luxury apartment complex with amenities and garage in Austin', 
+      highlights: ['300-unit', 'luxury apartment', 'amenities', 'garage', 'Austin'],
       type: 'residential',
       color: 'text-purple-600 bg-purple-50'
     },
     { 
       icon: <Factory className="h-6 w-6" />, 
-      text: 'Build a 150,000 SF distribution center with 30 loading docks', 
+      text: '150,000 SF distribution center with 30 loading docks in Atlanta', 
+      highlights: ['150,000 SF', 'distribution center', '30 loading docks', 'Atlanta'],
       type: 'industrial',
       color: 'text-gray-600 bg-gray-50'
     },
     { 
       icon: <ShoppingBag className="h-6 w-6" />, 
-      text: 'Build a 25,000 SF strip mall shopping center', 
+      text: '25,000 SF strip mall with 5 retail spaces in suburban Dallas', 
+      highlights: ['25,000 SF', 'strip mall', '5 retail spaces', 'Dallas'],
       type: 'retail',
       color: 'text-orange-600 bg-orange-50'
+    },
+    { 
+      icon: <GraduationCap className="h-6 w-6" />, 
+      text: '75,000 SF elementary school for 500 students in Denver', 
+      highlights: ['75,000 SF', 'elementary school', '500 students', 'Denver'],
+      type: 'educational',
+      color: 'text-green-600 bg-green-50'
     }
   ];
   
@@ -331,17 +355,60 @@ export const NewProject: React.FC = () => {
             </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Describe Your Project</h2>
-              <p className="text-sm text-gray-500">Use natural language or try an example below</p>
+              <p className="text-sm text-gray-500">Use natural language to describe what you want to build</p>
             </div>
+          </div>
+          
+          {/* Input guidance */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <p className="text-sm font-medium text-blue-900 mb-2">Include these key details for accurate analysis:</p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 border border-blue-300 rounded-full text-xs font-medium text-blue-700">
+                📏 Size (SF or units)
+              </span>
+              <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 border border-blue-300 rounded-full text-xs font-medium text-blue-700">
+                🏢 Building type
+              </span>
+              <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 border border-blue-300 rounded-full text-xs font-medium text-blue-700">
+                📍 City, State
+              </span>
+              <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 border border-gray-300 rounded-full text-xs font-medium text-gray-700">
+                ✨ Finish level
+              </span>
+              <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 border border-gray-300 rounded-full text-xs font-medium text-gray-700">
+                🚗 Parking needs
+              </span>
+              <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 border border-gray-300 rounded-full text-xs font-medium text-gray-700">
+                ⚡ Special features
+              </span>
+            </div>
+            <p className="text-xs text-blue-800">
+              <strong>Good example:</strong> "200-unit luxury apartment complex with parking garage and amenity deck in Nashville, TN"
+            </p>
           </div>
           
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Example: Build a 75,000 SF elementary school for 500 students in Nashville"
+            placeholder="Start with: [Size] [Type] in [Location]..."
             className="w-full h-32 px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition"
             disabled={analyzing}
           />
+          
+          {/* Detection status */}
+          {description.length > 0 && (
+            <div className="flex items-center gap-4 mt-2">
+              <span className={`inline-flex items-center gap-1 text-xs ${detectedFeatures.size ? 'text-green-600' : 'text-gray-400'}`}>
+                {detectedFeatures.size ? '✓' : '○'} Size detected
+              </span>
+              <span className={`inline-flex items-center gap-1 text-xs ${detectedFeatures.type ? 'text-green-600' : 'text-gray-400'}`}>
+                {detectedFeatures.type ? '✓' : '○'} Building type detected
+              </span>
+              <span className={`inline-flex items-center gap-1 text-xs ${detectedFeatures.location ? 'text-green-600' : 'text-gray-400'}`}>
+                {detectedFeatures.location ? '✓' : '○'} Location detected
+              </span>
+            </div>
+          )}
           
           {/* Example prompts */}
           <div className="mt-6">
@@ -352,16 +419,31 @@ export const NewProject: React.FC = () => {
                   key={idx}
                   onClick={() => handleExampleClick(example)}
                   disabled={analyzing}
-                  className={`flex items-start gap-3 p-3 rounded-lg transition text-left group hover:shadow-md ${
-                    analyzing ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.02]'
+                  className={`flex items-start gap-3 p-3 rounded-lg transition text-left group hover:shadow-md border border-gray-200 ${
+                    analyzing ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.02] hover:border-blue-300'
                   }`}
                 >
-                  <div className={`p-2 rounded-lg ${example.color}`}>
+                  <div className={`p-2 rounded-lg flex-shrink-0 ${example.color}`}>
                     {example.icon}
                   </div>
-                  <span className="text-sm text-gray-600 group-hover:text-gray-900 line-clamp-2">
-                    {example.text}
-                  </span>
+                  <div className="text-sm text-gray-600 group-hover:text-gray-900 line-clamp-2">
+                    {example.text.split(' ').map((word, i) => {
+                      const isHighlighted = example.highlights?.some(h => 
+                        h.toLowerCase().includes(word.toLowerCase()) || 
+                        word.toLowerCase().includes(h.toLowerCase().replace(/[^a-z0-9]/g, ''))
+                      );
+                      return (
+                        <span key={i}>
+                          {isHighlighted ? (
+                            <strong className="font-semibold text-gray-900">{word}</strong>
+                          ) : (
+                            word
+                          )}
+                          {i < example.text.split(' ').length - 1 && ' '}
+                        </span>
+                      );
+                    })}
+                  </div>
                 </button>
               ))}
             </div>

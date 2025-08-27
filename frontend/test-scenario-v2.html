@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test V2 Scenario Builder</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+        h1 { color: #1e40af; }
+        .section { background: #f3f4f6; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .code { background: #1f2937; color: #10b981; padding: 15px; border-radius: 4px; overflow-x: auto; font-family: 'Monaco', monospace; font-size: 13px; }
+        button { background: #3b82f6; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; margin: 5px; }
+        button:hover { background: #2563eb; }
+        .success { color: #10b981; font-weight: bold; }
+        .error { color: #ef4444; font-weight: bold; }
+        .result { background: white; padding: 15px; border-radius: 6px; margin-top: 10px; border: 1px solid #e5e7eb; }
+    </style>
+</head>
+<body>
+    <h1>🧪 V2 Scenario Builder Test</h1>
+    
+    <div class="section">
+        <h2>Test Setup</h2>
+        <p>This tests the new V2 Scenario API that works with localStorage projects.</p>
+        <button onclick="createTestProject()">1. Create Test Project</button>
+        <button onclick="testScenarioCreation()">2. Create Scenario</button>
+        <button onclick="testScenarioList()">3. List Scenarios</button>
+        <button onclick="testScenarioComparison()">4. Compare Scenarios</button>
+        <button onclick="clearTestData()">Clear All Test Data</button>
+        <div id="setup-result" class="result" style="display:none;"></div>
+    </div>
+
+    <div class="section">
+        <h2>Console Output</h2>
+        <div id="console" class="code"></div>
+    </div>
+
+    <script type="module">
+        // Make functions available globally
+        window.log = (message, data = null) => {
+            const consoleDiv = document.getElementById('console');
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.innerHTML = `<span style="color:#6b7280">[${timestamp}]</span> ${message}`;
+            if (data) {
+                const dataDiv = document.createElement('pre');
+                dataDiv.style.marginLeft = '20px';
+                dataDiv.style.color = '#60a5fa';
+                dataDiv.textContent = JSON.stringify(data, null, 2);
+                entry.appendChild(dataDiv);
+            }
+            consoleDiv.appendChild(entry);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        };
+
+        window.testProjectId = 'proj_test_' + Date.now();
+
+        window.createTestProject = () => {
+            const project = {
+                id: window.testProjectId,
+                project_id: window.testProjectId,
+                name: 'Test Medical Office Building',
+                building_type: 'Medical Office',
+                square_footage: 25000,
+                floors: 3,
+                finish_level: 'standard',
+                parking_type: 'surface',
+                project_classification: 'ground_up',
+                location: 'Nashville, TN',
+                total_project_cost: 8750000,
+                cost_per_sqft: 350,
+                construction_cost: 7000000,
+                soft_costs: 1400000,
+                contingency: 350000,
+                roi: 0.12,
+                payback_period: 8.3,
+                createdAt: new Date().toISOString()
+            };
+
+            // Save to localStorage
+            const existingProjects = JSON.parse(localStorage.getItem('specsharp_projects') || '[]');
+            existingProjects.push(project);
+            localStorage.setItem('specsharp_projects', JSON.stringify(existingProjects));
+
+            log('<span class="success">✅ Test project created</span>', project);
+            document.getElementById('setup-result').style.display = 'block';
+            document.getElementById('setup-result').innerHTML = `
+                <strong>Project Created:</strong> ${project.name}<br>
+                <strong>ID:</strong> ${project.id}<br>
+                <strong>Cost:</strong> $${(project.total_project_cost / 1000000).toFixed(1)}M
+            `;
+        };
+
+        window.testScenarioCreation = async () => {
+            log('Creating test scenarios...');
+            
+            // Import the V2 API service
+            const scenarioV2Api = (await import('./src/services/scenarioV2Api.ts')).default;
+            
+            try {
+                // Create Premium Finishes scenario
+                const scenario1 = await scenarioV2Api.createScenario(
+                    window.testProjectId,
+                    'Premium Finishes',
+                    'Upgraded to premium finishes throughout',
+                    {
+                        square_footage: 25000,
+                        finish_level: 'premium',
+                        parking_type: 'surface',
+                        floors: 3,
+                        project_classification: 'ground_up'
+                    }
+                );
+                log('<span class="success">✅ Premium scenario created</span>', scenario1);
+
+                // Create No Parking scenario
+                const scenario2 = await scenarioV2Api.createScenario(
+                    window.testProjectId,
+                    'No Parking',
+                    'Remove parking to reduce costs',
+                    {
+                        square_footage: 25000,
+                        finish_level: 'standard',
+                        parking_type: 'none',
+                        floors: 3,
+                        project_classification: 'ground_up'
+                    }
+                );
+                log('<span class="success">✅ No Parking scenario created</span>', scenario2);
+
+                // Create Larger Building scenario
+                const scenario3 = await scenarioV2Api.createScenario(
+                    window.testProjectId,
+                    '20% Larger',
+                    'Increase size by 20%',
+                    {
+                        square_footage: 30000,
+                        finish_level: 'standard',
+                        parking_type: 'surface',
+                        floors: 3,
+                        project_classification: 'ground_up'
+                    }
+                );
+                log('<span class="success">✅ Larger Building scenario created</span>', scenario3);
+
+            } catch (error) {
+                log('<span class="error">❌ Error creating scenarios:</span>', error);
+            }
+        };
+
+        window.testScenarioList = async () => {
+            log('Listing scenarios...');
+            const scenarioV2Api = (await import('./src/services/scenarioV2Api.ts')).default;
+            
+            try {
+                const scenarios = await scenarioV2Api.listScenarios(window.testProjectId);
+                log(`<span class="success">✅ Found ${scenarios.length} scenarios</span>`, scenarios);
+            } catch (error) {
+                log('<span class="error">❌ Error listing scenarios:</span>', error);
+            }
+        };
+
+        window.testScenarioComparison = async () => {
+            log('Comparing scenarios...');
+            const scenarioV2Api = (await import('./src/services/scenarioV2Api.ts')).default;
+            
+            try {
+                const scenarios = await scenarioV2Api.listScenarios(window.testProjectId);
+                if (scenarios.length >= 2) {
+                    const comparison = await scenarioV2Api.compareScenarios(
+                        window.testProjectId,
+                        scenarios.slice(0, 3).map(s => s.id),
+                        'Test Comparison'
+                    );
+                    log('<span class="success">✅ Comparison generated</span>', comparison);
+                } else {
+                    log('<span class="error">Need at least 2 scenarios to compare</span>');
+                }
+            } catch (error) {
+                log('<span class="error">❌ Error comparing scenarios:</span>', error);
+            }
+        };
+
+        window.clearTestData = () => {
+            // Clear test project
+            const projects = JSON.parse(localStorage.getItem('specsharp_projects') || '[]');
+            const filtered = projects.filter(p => !p.id.startsWith('proj_test_'));
+            localStorage.setItem('specsharp_projects', JSON.stringify(filtered));
+            
+            // Clear test scenarios
+            const scenarios = JSON.parse(localStorage.getItem('specsharp_scenarios') || '{}');
+            for (const key in scenarios) {
+                if (key.startsWith('proj_test_')) {
+                    delete scenarios[key];
+                }
+            }
+            localStorage.setItem('specsharp_scenarios', JSON.stringify(scenarios));
+            
+            log('<span class="success">✅ Test data cleared</span>');
+            document.getElementById('setup-result').style.display = 'none';
+        };
+
+        // Initial message
+        log('Test suite ready. Click buttons in order to test the V2 Scenario Builder.');
+    </script>
+</body>
+</html>

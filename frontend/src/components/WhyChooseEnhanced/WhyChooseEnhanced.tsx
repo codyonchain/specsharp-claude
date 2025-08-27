@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, useInView } from 'framer-motion';
-import { Zap, Brain, Share2, FileSpreadsheet, Link2 as LinkIcon, FileText } from 'lucide-react';
+import { } from 'lucide-react';
 import './WhyChooseEnhanced.css';
 
 const WhyChooseEnhanced: React.FC = () => {
@@ -8,14 +8,14 @@ const WhyChooseEnhanced: React.FC = () => {
   const isInView = useInView(sectionRef, { once: true, margin: "-100px" });
   
   const [animatedValues, setAnimatedValues] = useState({
-    traditional: { time: 0, accuracy: 0, scenarios: 0 },
-    specsharp: { time: 0, accuracy: 0, scenarios: 0 }
+    traditional: { investment: 0, scenarios: 0, costs: 0, guidance: 0 },
+    specsharp: { investment: 100, scenarios: 100, costs: 100, guidance: 100 }
   });
   
   const [statsValues, setStatsValues] = useState({
-    speed: 0,
-    accuracy: 0,
-    projectSize: 0
+    dealsSaved: 0,
+    approved: 0,
+    presentations: 0
   });
   
   useEffect(() => {
@@ -23,8 +23,8 @@ const WhyChooseEnhanced: React.FC = () => {
       // Animate comparison bars
       const timer1 = setTimeout(() => {
         setAnimatedValues({
-          traditional: { time: 100, accuracy: 75, scenarios: 10 },
-          specsharp: { time: 3, accuracy: 94, scenarios: 100 }
+          traditional: { investment: 20, scenarios: 10, costs: 30, guidance: 0 },
+          specsharp: { investment: 100, scenarios: 100, costs: 100, guidance: 100 }
         });
       }, 200);
       
@@ -38,28 +38,28 @@ const WhyChooseEnhanced: React.FC = () => {
   const animateStats = () => {
     const duration = 2000;
     const steps = 60;
-    const targets = { speed: 50, accuracy: 94, projectSize: 2.3 };
+    const targets = { dealsSaved: 450, approved: 87, presentations: 2400 };
     
-    let current = { speed: 0, accuracy: 0, projectSize: 0 };
+    let current = { dealsSaved: 0, approved: 0, presentations: 0 };
     const increments = {
-      speed: targets.speed / steps,
-      accuracy: targets.accuracy / steps,
-      projectSize: targets.projectSize / steps
+      dealsSaved: targets.dealsSaved / steps,
+      approved: targets.approved / steps,
+      presentations: targets.presentations / steps
     };
     
     const timer = setInterval(() => {
-      current.speed += increments.speed;
-      current.accuracy += increments.accuracy;
-      current.projectSize += increments.projectSize;
+      current.dealsSaved += increments.dealsSaved;
+      current.approved += increments.approved;
+      current.presentations += increments.presentations;
       
-      if (current.speed >= targets.speed) {
+      if (current.dealsSaved >= targets.dealsSaved) {
         setStatsValues(targets);
         clearInterval(timer);
       } else {
         setStatsValues({
-          speed: Math.floor(current.speed),
-          accuracy: Math.floor(current.accuracy),
-          projectSize: parseFloat(current.projectSize.toFixed(1))
+          dealsSaved: Math.floor(current.dealsSaved),
+          approved: Math.floor(current.approved),
+          presentations: Math.floor(current.presentations)
         });
       }
     }, duration / steps);
@@ -69,70 +69,86 @@ const WhyChooseEnhanced: React.FC = () => {
     <section className="why-choose-enhanced py-12 bg-gray-50" ref={sectionRef}>
       <div className="container mx-auto px-4">
         <h2 className="text-3xl font-bold text-center mb-8 text-gray-800">
-          Why Construction Professionals Choose SpecSharp
+          Why Developers & Investors Choose SpecSharp
         </h2>
         
         {/* Visual Comparison Grid */}
-        <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-8 mb-12">
+        <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-8 mb-12">
           
           {/* Traditional Method - Left Side */}
-          <div className="comparison-side traditional opacity-70">
-            <h3 className="text-sm text-gray-500 mb-4 uppercase tracking-wide">Traditional Estimating</h3>
-            <div className="space-y-4">
-              {/* Time Bar */}
+          <div className="comparison-side traditional">
+            <h3 className="text-lg font-bold text-gray-700 mb-6 text-center">TRADITIONAL APPROACH</h3>
+            <div className="space-y-5">
+              {/* Investment Analysis */}
               <div className="metric-bar">
-                <div className="flex justify-between text-sm mb-1">
-                  <span>Time</span>
-                  <span className="text-red-600 font-semibold">3+ hours</span>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="font-medium">Investment Analysis</span>
+                  <span className="text-red-600 font-semibold">Manual Excel</span>
                 </div>
-                <div className="h-2 bg-red-200 rounded-full overflow-hidden">
+                <div className="h-3 bg-red-100 rounded-full overflow-hidden">
                   <motion.div 
-                    className="h-2 bg-red-500 rounded-full"
+                    className="h-3 bg-red-500 rounded-full"
                     initial={{ width: 0 }}
-                    animate={{ width: `${animatedValues.traditional.time}%` }}
+                    animate={{ width: `${animatedValues.traditional.investment}%` }}
                     transition={{ duration: 0.8, ease: "easeOut" }}
                   />
                 </div>
               </div>
               
-              {/* Accuracy Bar */}
+              {/* Scenario Comparison */}
               <div className="metric-bar">
-                <div className="flex justify-between text-sm mb-1">
-                  <span>Accuracy</span>
-                  <span className="text-orange-600 font-semibold">~75%</span>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="font-medium">Scenario Comparison</span>
+                  <span className="text-orange-600 font-semibold">Hours per scenario</span>
                 </div>
-                <div className="h-2 bg-orange-200 rounded-full overflow-hidden">
+                <div className="h-3 bg-orange-100 rounded-full overflow-hidden">
                   <motion.div 
-                    className="h-2 bg-orange-500 rounded-full"
+                    className="h-3 bg-orange-500 rounded-full"
                     initial={{ width: 0 }}
-                    animate={{ width: `${animatedValues.traditional.accuracy}%` }}
+                    animate={{ width: `${animatedValues.traditional.scenarios}%` }}
                     transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
                   />
                 </div>
               </div>
               
-              {/* Coverage Bar */}
+              {/* Complete Costs */}
               <div className="metric-bar">
-                <div className="flex justify-between text-sm mb-1">
-                  <span>Scenarios</span>
-                  <span className="text-gray-600 font-semibold">1 version</span>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="font-medium">Complete Costs</span>
+                  <span className="text-yellow-600 font-semibold">Construction only</span>
                 </div>
-                <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div className="h-3 bg-yellow-100 rounded-full overflow-hidden">
                   <motion.div 
-                    className="h-2 bg-gray-500 rounded-full"
+                    className="h-3 bg-yellow-500 rounded-full"
                     initial={{ width: 0 }}
-                    animate={{ width: `${animatedValues.traditional.scenarios}%` }}
+                    animate={{ width: `${animatedValues.traditional.costs}%` }}
                     transition={{ duration: 0.8, ease: "easeOut", delay: 0.4 }}
                   />
                 </div>
               </div>
               
+              {/* Decision Guidance */}
+              <div className="metric-bar">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="font-medium">Decision Guidance</span>
+                  <span className="text-gray-600 font-semibold">None</span>
+                </div>
+                <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                  <motion.div 
+                    className="h-3 bg-gray-400 rounded-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${animatedValues.traditional.guidance}%` }}
+                    transition={{ duration: 0.8, ease: "easeOut", delay: 0.6 }}
+                  />
+                </div>
+              </div>
+              
               {/* Pain Points */}
-              <div className="mt-4 p-3 bg-red-50 rounded-lg">
-                <ul className="text-xs text-red-700 space-y-1">
-                  <li>• Manual spreadsheets</li>
-                  <li>• Version control issues</li>
-                  <li>• Inconsistent pricing</li>
+              <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <ul className="text-sm text-red-700 space-y-2">
+                  <li>❌ Pay architects before knowing if project works</li>
+                  <li>❌ Missing soft costs surprises at closing</li>
+                  <li>❌ No clear path when project doesn't pencil</li>
                 </ul>
               </div>
             </div>
@@ -140,166 +156,124 @@ const WhyChooseEnhanced: React.FC = () => {
           
           {/* SpecSharp - Right Side */}
           <div className="comparison-side specsharp">
-            <h3 className="text-sm font-semibold text-blue-600 mb-4 uppercase tracking-wide">With SpecSharp</h3>
-            <div className="space-y-4">
-              {/* Time Bar */}
+            <h3 className="text-lg font-bold text-blue-600 mb-6 text-center">WITH SPECSHARP</h3>
+            <div className="space-y-5">
+              {/* Investment Analysis */}
               <div className="metric-bar">
-                <div className="flex justify-between text-sm mb-1">
-                  <span>Time</span>
-                  <span className="text-green-600 font-semibold">60 seconds</span>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="font-medium">Investment Analysis</span>
+                  <span className="text-green-600 font-semibold">Instant IRR/NPV</span>
                 </div>
-                <div className="h-2 bg-green-200 rounded-full overflow-hidden">
+                <div className="h-3 bg-green-100 rounded-full overflow-hidden">
                   <motion.div 
-                    className="h-2 bg-green-500 rounded-full animate-pulse"
+                    className="h-3 bg-green-500 rounded-full"
                     initial={{ width: 0 }}
-                    animate={{ width: `${animatedValues.specsharp.time}%` }}
+                    animate={{ width: `${animatedValues.specsharp.investment}%` }}
                     transition={{ duration: 0.8, ease: "easeOut" }}
                   />
                 </div>
               </div>
               
-              {/* Accuracy Bar */}
+              {/* Scenario Comparison */}
               <div className="metric-bar">
-                <div className="flex justify-between text-sm mb-1">
-                  <span>Accuracy</span>
-                  <span className="text-green-600 font-semibold">94%</span>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="font-medium">Scenario Comparison</span>
+                  <span className="text-green-600 font-semibold">10+ in 60 seconds</span>
                 </div>
-                <div className="h-2 bg-green-200 rounded-full overflow-hidden">
+                <div className="h-3 bg-green-100 rounded-full overflow-hidden">
                   <motion.div 
-                    className="h-2 bg-green-500 rounded-full"
+                    className="h-3 bg-green-500 rounded-full"
                     initial={{ width: 0 }}
-                    animate={{ width: `${animatedValues.specsharp.accuracy}%` }}
+                    animate={{ width: `${animatedValues.specsharp.scenarios}%` }}
                     transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
                   />
                 </div>
               </div>
               
-              {/* Coverage Bar */}
+              {/* Complete Costs */}
               <div className="metric-bar">
-                <div className="flex justify-between text-sm mb-1">
-                  <span>Scenarios</span>
-                  <span className="text-green-600 font-semibold">10+ versions</span>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="font-medium">Complete Costs</span>
+                  <span className="text-green-600 font-semibold">All-in with land & financing</span>
                 </div>
-                <div className="h-2 bg-green-200 rounded-full overflow-hidden">
+                <div className="h-3 bg-green-100 rounded-full overflow-hidden">
                   <motion.div 
-                    className="h-2 bg-green-500 rounded-full"
+                    className="h-3 bg-green-500 rounded-full"
                     initial={{ width: 0 }}
-                    animate={{ width: `${animatedValues.specsharp.scenarios}%` }}
+                    animate={{ width: `${animatedValues.specsharp.costs}%` }}
                     transition={{ duration: 0.8, ease: "easeOut", delay: 0.4 }}
                   />
                 </div>
               </div>
               
+              {/* Decision Guidance */}
+              <div className="metric-bar">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="font-medium">Decision Guidance</span>
+                  <span className="text-green-600 font-semibold">Specific improvements</span>
+                </div>
+                <div className="h-3 bg-green-100 rounded-full overflow-hidden">
+                  <motion.div 
+                    className="h-3 bg-green-500 rounded-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${animatedValues.specsharp.guidance}%` }}
+                    transition={{ duration: 0.8, ease: "easeOut", delay: 0.6 }}
+                  />
+                </div>
+              </div>
+              
               {/* Benefits */}
-              <div className="mt-4 p-3 bg-green-50 rounded-lg">
-                <ul className="text-xs text-green-700 space-y-1">
-                  <li>✓ AI-powered intelligence</li>
-                  <li>✓ Real-time collaboration</li>
-                  <li>✓ Consistent methodology</li>
+              <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <ul className="text-sm text-green-700 space-y-2">
+                  <li>✅ Know if deal works before LOI</li>
+                  <li>✅ Complete investment picture day one</li>
+                  <li>✅ Clear path to make any project feasible</li>
                 </ul>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Key Stats Row with Enhanced Visuals */}
-        <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+        {/* Key Metrics Section */}
+        <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
           
-          {/* Speed Wins Deals */}
+          {/* Deals Saved */}
           <motion.div 
-            className="stat-card text-center"
+            className="metric-card text-center bg-white p-6 rounded-xl shadow-lg"
             initial={{ opacity: 0, y: 20 }}
             animate={isInView ? { opacity: 1, y: 0 } : {}}
             transition={{ delay: 0.6 }}
           >
-            <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-3">
-              <Zap className="w-6 h-6 text-blue-600" />
-            </div>
-            <h3 className="font-semibold text-lg mb-2 text-gray-800">Speed Wins Deals</h3>
-            <div className="text-3xl font-bold text-blue-600 mb-1">{statsValues.speed}x</div>
-            <p className="text-sm text-gray-600 mb-2">Faster than manual</p>
-            <div className="testimonial-chip p-2 bg-blue-50 rounded text-xs text-blue-700">
-              "Won 3 deals this week by responding first"
-              <div className="text-blue-500 mt-1">- Turner Construction</div>
-            </div>
+            <span className="text-4xl mb-3 block">💰</span>
+            <h3 className="font-bold text-xl mb-3 text-gray-800">Deals Saved</h3>
+            <div className="text-4xl font-bold text-red-600 mb-2">${statsValues.dealsSaved}M</div>
+            <p className="text-sm text-gray-600">In avoided bad investments</p>
           </motion.div>
 
-          {/* AI-Backed Accuracy */}
+          {/* Projects Approved */}
           <motion.div 
-            className="stat-card text-center"
+            className="metric-card text-center bg-white p-6 rounded-xl shadow-lg"
             initial={{ opacity: 0, y: 20 }}
             animate={isInView ? { opacity: 1, y: 0 } : {}}
             transition={{ delay: 0.7 }}
           >
-            <div className="inline-flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mb-3">
-              <Brain className="w-6 h-6 text-green-600" />
-            </div>
-            <h3 className="font-semibold text-lg mb-2 text-gray-800">AI-Backed Accuracy</h3>
-            <div className="text-3xl font-bold text-green-600 mb-1">{statsValues.accuracy}%</div>
-            <p className="text-sm text-gray-600 mb-2">Match rate with actuals</p>
-            {/* Mini sparkline showing improvement */}
-            <div className="flex justify-center gap-1 mb-2">
-              <motion.div 
-                className="w-2 h-8 bg-gray-300 rounded"
-                initial={{ height: 0 }}
-                animate={isInView ? { height: 32 } : {}}
-                transition={{ delay: 0.8 }}
-              />
-              <motion.div 
-                className="w-2 h-10 bg-gray-400 rounded"
-                initial={{ height: 0 }}
-                animate={isInView ? { height: 40 } : {}}
-                transition={{ delay: 0.9 }}
-              />
-              <motion.div 
-                className="w-2 h-12 bg-green-400 rounded"
-                initial={{ height: 0 }}
-                animate={isInView ? { height: 48 } : {}}
-                transition={{ delay: 1.0 }}
-              />
-              <motion.div 
-                className="w-2 h-14 bg-green-500 rounded"
-                initial={{ height: 0 }}
-                animate={isInView ? { height: 56 } : {}}
-                transition={{ delay: 1.1 }}
-              />
-              <motion.div 
-                className="w-2 h-16 bg-green-600 rounded animate-pulse"
-                initial={{ height: 0 }}
-                animate={isInView ? { height: 64 } : {}}
-                transition={{ delay: 1.2 }}
-              />
-            </div>
-            <p className="text-xs text-gray-500">Getting smarter daily</p>
+            <span className="text-4xl mb-3 block">✅</span>
+            <h3 className="font-bold text-xl mb-3 text-gray-800">Projects Approved</h3>
+            <div className="text-4xl font-bold text-green-600 mb-2">{statsValues.approved}%</div>
+            <p className="text-sm text-gray-600">After scenario optimization</p>
           </motion.div>
 
-          {/* Professional Results */}
+          {/* Board Presentations */}
           <motion.div 
-            className="stat-card text-center"
+            className="metric-card text-center bg-white p-6 rounded-xl shadow-lg"
             initial={{ opacity: 0, y: 20 }}
             animate={isInView ? { opacity: 1, y: 0 } : {}}
             transition={{ delay: 0.8 }}
           >
-            <div className="inline-flex items-center justify-center w-12 h-12 bg-purple-100 rounded-full mb-3">
-              <Share2 className="w-6 h-6 text-purple-600" />
-            </div>
-            <h3 className="font-semibold text-lg mb-2 text-gray-800">Professional Results</h3>
-            <div className="text-3xl font-bold text-purple-600 mb-1">${statsValues.projectSize}M</div>
-            <p className="text-sm text-gray-600 mb-2">Avg. project size</p>
-            <div className="flex flex-col gap-1">
-              <div className="inline-flex items-center justify-center gap-2 text-xs">
-                <span className="export-badge">
-                  <FileSpreadsheet className="w-3 h-3 inline mr-1" />Excel
-                </span>
-                <span className="export-badge">
-                  <LinkIcon className="w-3 h-3 inline mr-1" />Share
-                </span>
-                <span className="export-badge">
-                  <FileText className="w-3 h-3 inline mr-1" />PDF
-                </span>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">Investor-ready exports</p>
-            </div>
+            <span className="text-4xl mb-3 block">📊</span>
+            <h3 className="font-bold text-xl mb-3 text-gray-800">Board Presentations</h3>
+            <div className="text-4xl font-bold text-blue-600 mb-2">{statsValues.presentations.toLocaleString()}+</div>
+            <p className="text-sm text-gray-600">Generated for investment committees</p>
           </motion.div>
         </div>
       </div>

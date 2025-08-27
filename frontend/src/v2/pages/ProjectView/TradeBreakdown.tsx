@@ -1,18 +1,23 @@
 import React from 'react';
 import { formatCurrency, formatPercent } from '../../utils/formatters';
+import { formatters } from '../../utils/displayFormatters';
 
 interface Props {
   trades: Record<string, number>;
+  calculations?: any; // Backend calculations object
 }
 
-export const TradeBreakdown: React.FC<Props> = ({ trades }) => {
-  const total = Object.values(trades).reduce((sum, val) => sum + val, 0);
+export const TradeBreakdown: React.FC<Props> = ({ trades, calculations }) => {
+  // Use backend total instead of reducing
+  const total = calculations?.construction_costs?.trades_total || 
+               calculations?.totals?.hard_costs || 
+               Object.values(trades).reduce((sum, val) => sum + val, 0);
   
   const tradeData = Object.entries(trades)
     .map(([name, amount]) => ({
       name: name.charAt(0).toUpperCase() + name.slice(1).replace('_', ' '),
       amount,
-      percentage: amount / total
+      percentage: calculations?.trade_breakdown?.percentages?.[name.toLowerCase()] || (amount / total)
     }))
     .sort((a, b) => b.amount - a.amount);
 
@@ -25,7 +30,7 @@ export const TradeBreakdown: React.FC<Props> = ({ trades }) => {
           <div key={trade.name}>
             <div className="flex justify-between items-center mb-1">
               <span className="text-sm font-medium text-gray-700">{trade.name}</span>
-              <span className="text-sm text-gray-600">{formatCurrency(trade.amount)}</span>
+              <span className="text-sm text-gray-600">{formatters.currency(trade.amount)}</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div
@@ -34,7 +39,7 @@ export const TradeBreakdown: React.FC<Props> = ({ trades }) => {
               />
             </div>
             <div className="flex justify-end mt-1">
-              <span className="text-xs text-gray-500">{formatPercent(trade.percentage)}</span>
+              <span className="text-xs text-gray-500">{formatters.percentage(trade.percentage)}</span>
             </div>
           </div>
         ))}

@@ -89,6 +89,7 @@ class Project(Base):
     created_by = relationship("User", back_populates="created_projects", foreign_keys=[created_by_id])
     floor_plans = relationship("FloorPlan", back_populates="project")
     markup_overrides = relationship("ProjectMarkupOverrides", back_populates="project", uselist=False)
+    scenarios = relationship("ProjectScenario", back_populates="project", cascade="all, delete-orphan")
 
 
 class FloorPlan(Base):

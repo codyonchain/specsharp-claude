@@ -72,6 +72,58 @@ export const formatters = {
   number: (val: number | undefined | null): string => {
     if (val === undefined || val === null || isNaN(val)) return 'N/A';
     return Math.round(val).toLocaleString();
+  },
+
+  // Date formatters
+  relativeTime: (dateString: string | undefined | null): string => {
+    if (!dateString) return 'Unknown';
+    
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+    if (diffMinutes < 60) {
+      return `Updated ${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`;
+    } else if (diffHours < 24) {
+      return `Updated ${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+    } else if (diffDays === 1) {
+      return 'Updated yesterday';
+    } else if (diffDays < 7) {
+      return `Updated ${diffDays} days ago`;
+    } else {
+      return `Updated ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+    }
+  },
+  
+  // Format metric values based on metric type
+  formatMetricValue: (val: number | undefined | null, metricName: string): string => {
+    if (val === undefined || val === null || isNaN(val)) return 'N/A';
+    
+    const metric = metricName.toLowerCase();
+    
+    if (metric.includes('roi') || metric.includes('irr')) {
+      return formatters.percentage(val);
+    } else if (metric.includes('npv')) {
+      return formatters.currency(val);
+    } else if (metric.includes('dscr')) {
+      return formatters.multiplier(val);
+    } else if (metric.includes('payback') || metric.includes('period')) {
+      return formatters.years(val);
+    } else if (metric.includes('occupancy')) {
+      return formatters.percentage(val);
+    } else {
+      // Default to number with appropriate formatting
+      if (Math.abs(val) >= 1000) {
+        return formatters.currency(val);
+      } else if (val < 1 && val > 0) {
+        return formatters.percentage(val);
+      } else {
+        return val.toFixed(1);
+      }
+    }
   }
 };
 

@@ -12,8 +12,15 @@ interface Props {
 }
 
 export const ConstructionView: React.FC<Props> = ({ project }) => {
-  const { parsed_input, calculations } = project.analysis;
   const [expandedTrade, setExpandedTrade] = useState<string | null>(null);
+  
+  // ADD ONLY THIS CHECK
+  if (!project?.analysis) {
+    return <div className="p-6">Loading trade breakdown...</div>;
+  }
+  
+  // NOW safe to destructure
+  const { parsed_input, calculations } = project.analysis;
 
   // ========================================
   // PULL FROM SAME CALCULATION ENGINE

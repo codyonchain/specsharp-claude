@@ -13,7 +13,7 @@ const HowItWorksInteractive: React.FC = () => {
     confidence: 0
   });
   
-  const fullText = "52,000 sf hospital addition with 3 OR surgical suite and imaging center in Manchester NH";
+  const fullText = "200-unit luxury apartment complex with amenity deck, parking garage, and ground floor retail in Manchester NH";
   
   // Typing animation effect
   useEffect(() => {
@@ -38,11 +38,12 @@ const HowItWorksInteractive: React.FC = () => {
   
   const showDetections = () => {
     const factors = [
-      { icon: '🏥', text: 'Healthcare Facility', delay: 0 },
-      { icon: '➕', text: 'Addition Project (+15%)', delay: 100 },
-      { icon: '🔪', text: 'Surgical Requirements', delay: 200 },
+      { icon: '🏘️', text: 'Multifamily Residential', delay: 0 },
+      { icon: '🎯', text: '200 Units Configured', delay: 100 },
+      { icon: '🚗', text: 'Structured Parking (+$45K/unit)', delay: 200 },
       { icon: '📍', text: 'Manchester Market Data', delay: 300 },
-      { icon: '❄️', text: 'Winter Conditions Factor', delay: 400 }
+      { icon: '🏪', text: 'Mixed-Use Component', delay: 400 },
+      { icon: '❄️', text: 'Winter Conditions Factor', delay: 500 }
     ];
     
     factors.forEach(factor => {
@@ -60,7 +61,7 @@ const HowItWorksInteractive: React.FC = () => {
   const animateCounters = () => {
     const duration = 1500;
     const steps = 60;
-    const targets = { total: 28500000, perSF: 570, confidence: 92 };
+    const targets = { total: 47200000, perSF: 262, confidence: 94 };
     
     let current = { total: 0, perSF: 0, confidence: 0 };
     const increments = {
@@ -133,7 +134,7 @@ const HowItWorksInteractive: React.FC = () => {
           </AnimatePresence>
         </div>
         
-        {/* Step 2: Show Live Results */}
+        {/* Step 2: Compare Your Options Instantly */}
         <AnimatePresence>
           {showResults && (
             <motion.div 
@@ -143,109 +144,203 @@ const HowItWorksInteractive: React.FC = () => {
             >
               <div className="step-header">
                 <div className="step-number">2</div>
-                <h3>Get Instant Intelligence</h3>
+                <h3>Compare Your Options Instantly</h3>
               </div>
               
-              <div className="results-preview">
-                {/* Cost DNA Visualization */}
-                <div className="cost-dna-preview">
-                  <CostDNAMini />
-                </div>
+              <div className="scenarios-comparison">
+                {/* Current Plan */}
+                <motion.div 
+                  className="scenario-card base"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                >
+                  <h4>Current Plan</h4>
+                  <div className="scenario-metrics">
+                    <div className="metric">
+                      <span className="label">Total Investment</span>
+                      <span className="value">$47.2M</span>
+                    </div>
+                    <div className="metric">
+                      <span className="label">Cost/Unit</span>
+                      <span className="value">$236K</span>
+                    </div>
+                    <div className="metric">
+                      <span className="label">IRR</span>
+                      <span className="value warning">6.8%</span>
+                    </div>
+                    <div className="metric decision">
+                      <span className="label">Decision</span>
+                      <span className="value no-go">NO-GO ✗</span>
+                    </div>
+                  </div>
+                </motion.div>
                 
-                {/* Key Metrics */}
-                <div className="instant-insights">
-                  <div className="insight-card">
-                    <span className="big-number">
-                      ${(displayValue.total / 1000000).toFixed(1)}M
-                    </span>
-                    <span className="label">Total Cost</span>
+                {/* No Parking Garage */}
+                <motion.div 
+                  className="scenario-card optimized"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  <div className="recommended-badge">Recommended</div>
+                  <h4>No Parking Garage</h4>
+                  <div className="scenario-metrics">
+                    <div className="metric">
+                      <span className="label">Total Investment</span>
+                      <span className="value">$39.1M</span>
+                      <span className="delta good">-$8.1M</span>
+                    </div>
+                    <div className="metric">
+                      <span className="label">Cost/Unit</span>
+                      <span className="value">$196K</span>
+                      <span className="delta good">-$40K</span>
+                    </div>
+                    <div className="metric">
+                      <span className="label">IRR</span>
+                      <span className="value success">11.3%</span>
+                      <span className="delta good">+4.5%</span>
+                    </div>
+                    <div className="metric decision">
+                      <span className="label">Decision</span>
+                      <span className="value go">GO ✓</span>
+                    </div>
                   </div>
-                  <div className="insight-card">
-                    <span className="big-number">
-                      ${displayValue.perSF}/SF
-                    </span>
-                    <span className="label">Cost/SF</span>
-                  </div>
-                  <div className="insight-card">
-                    <span className="big-number">
-                      {displayValue.confidence}%
-                    </span>
-                    <span className="label">Confidence</span>
-                  </div>
-                </div>
+                </motion.div>
                 
-                {/* Trade Breakdown Preview */}
-                <div className="breakdown-preview">
-                  <div className="trade-item">
-                    <span>Mechanical (Medical Grade HVAC)</span>
-                    <motion.span 
-                      className="amount"
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                    >
-                      $8.2M
-                    </motion.span>
+                {/* Add 20 Units */}
+                <motion.div 
+                  className="scenario-card premium"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                >
+                  <h4>Add 20 Units</h4>
+                  <div className="scenario-metrics">
+                    <div className="metric">
+                      <span className="label">Total Investment</span>
+                      <span className="value">$52.4M</span>
+                      <span className="delta bad">+$5.2M</span>
+                    </div>
+                    <div className="metric">
+                      <span className="label">Cost/Unit</span>
+                      <span className="value">$238K</span>
+                      <span className="delta">—</span>
+                    </div>
+                    <div className="metric">
+                      <span className="label">IRR</span>
+                      <span className="value warning">8.1%</span>
+                      <span className="delta good">+1.3%</span>
+                    </div>
+                    <div className="metric decision">
+                      <span className="label">Decision</span>
+                      <span className="value warning">MARGINAL</span>
+                    </div>
                   </div>
-                  <div className="trade-item">
-                    <span>Surgical Suite Build-Out</span>
-                    <motion.span 
-                      className="amount"
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.1 }}
-                    >
-                      $3.1M
-                    </motion.span>
-                  </div>
-                  <div className="trade-item">
-                    <span>Structural Reinforcement</span>
-                    <motion.span 
-                      className="amount"
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.2 }}
-                    >
-                      $2.4M
-                    </motion.span>
-                  </div>
-                  <div className="see-more">+ 47 more detailed line items...</div>
-                </div>
+                </motion.div>
               </div>
               
-              {/* Step 3: Export Preview */}
+              <p className="step-caption">
+                See how each decision impacts returns. Export all scenarios for your investment committee.
+              </p>
+              
+              {/* Step 3: Get Actionable Investment Guidance */}
               <div className="export-section">
                 <div className="step-header">
                   <div className="step-number">3</div>
-                  <h3>Share Professional Results</h3>
+                  <h3>Get Actionable Investment Guidance</h3>
                 </div>
                 
-                <div className="export-showcase">
-                  <div className="export-previews">
+                <motion.div 
+                  className="investment-analysis"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.4 }}
+                >
+                  <div className="analysis-header">
+                    <span className="status-badge no-go">Investment Decision: NO-GO</span>
+                    <h4>2 Criteria Not Met (Current Plan)</h4>
+                  </div>
+                  
+                  <div className="criteria-feedback">
                     <motion.div 
-                      className="preview-card"
-                      whileHover={{ scale: 1.05 }}
+                      className="criterion failed"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.5 }}
                     >
-                      <div className="preview-icon excel">📊</div>
-                      <span>Excel with Live Formulas</span>
+                      <span className="icon">❌</span>
+                      <div className="details">
+                        <strong>IRR: 6.8%</strong>
+                        <span className="requirement">Minimum required: 10%</span>
+                      </div>
                     </motion.div>
                     
                     <motion.div 
-                      className="preview-card"
-                      whileHover={{ scale: 1.05 }}
+                      className="criterion failed"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.6 }}
                     >
-                      <div className="preview-icon pdf">📄</div>
-                      <span>Professional PDF Report</span>
+                      <span className="icon">❌</span>
+                      <div className="details">
+                        <strong>Cost/Unit: $236K</strong>
+                        <span className="requirement">Maximum target: $225K</span>
+                      </div>
                     </motion.div>
                     
                     <motion.div 
-                      className="preview-card"
-                      whileHover={{ scale: 1.05 }}
+                      className="criterion passed"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.7 }}
                     >
-                      <div className="preview-icon share">🔗</div>
-                      <span>Instant Share Links</span>
+                      <span className="icon">✅</span>
+                      <div className="details">
+                        <strong>Debt Yield: 7.8%</strong>
+                        <span className="requirement">Minimum required: 7.0%</span>
+                      </div>
                     </motion.div>
                   </div>
-                </div>
+                  
+                  <motion.div 
+                    className="improvement-paths"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.8 }}
+                  >
+                    <h4>3 Ways to Make This Project Work:</h4>
+                    <ul>
+                      <li>Switch to surface parking: Save <strong>$8.1M</strong> ($40K per unit)</li>
+                      <li>Increase rents by <strong>$125/month</strong> (still below market)</li>
+                      <li>Reduce amenity package by <strong>$2.3M</strong> (remove rooftop deck)</li>
+                    </ul>
+                  </motion.div>
+                  
+                  <motion.div 
+                    className="export-options"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.9 }}
+                  >
+                    <button className="export-btn powerpoint">
+                      <span className="icon">📊</span>
+                      <span>Export to PowerPoint</span>
+                    </button>
+                    <button className="export-btn excel">
+                      <span className="icon">📈</span>
+                      <span>Download Excel Model</span>
+                    </button>
+                    <button className="export-btn pdf">
+                      <span className="icon">📄</span>
+                      <span>Executive Summary PDF</span>
+                    </button>
+                  </motion.div>
+                </motion.div>
+                
+                <p className="step-caption">
+                  Specific, quantified guidance to get your project approved. Ready for your board in seconds.
+                </p>
               </div>
             </motion.div>
           )}
@@ -283,42 +378,42 @@ const CostDNAMini: React.FC = () => {
 
   const trades = [
     {
-      name: 'Mechanical (Medical HVAC)',
-      amount: '$8.2M',
-      percentage: 46,
-      description: 'Medical-grade systems',
-      color: 'from-green-400 to-emerald-500',
+      name: 'Parking Garage',
+      amount: '$8.1M',
+      percentage: 17,
+      description: '$45K per unit',
+      color: 'from-gray-400 to-gray-500',
       delay: 0.2
     },
     {
-      name: 'Structural',
-      amount: '$5.2M',
-      percentage: 29,
-      description: 'Reinforced for equipment',
+      name: 'Structural & Shell',
+      amount: '$14.2M',
+      percentage: 30,
+      description: 'Concrete podium',
       color: 'from-blue-400 to-blue-500',
       delay: 0.4
     },
     {
-      name: 'Plumbing',
-      amount: '$3.1M',
-      percentage: 17,
-      description: 'Medical gas & drainage',
+      name: 'Unit Interiors',
+      amount: '$11.8M',
+      percentage: 25,
+      description: 'Luxury finishes',
       color: 'from-purple-400 to-purple-500',
       delay: 0.6
     },
     {
-      name: 'Electrical',
-      amount: '$2.1M',
-      percentage: 12,
-      description: 'Redundant power systems',
-      color: 'from-yellow-400 to-orange-500',
+      name: 'MEP Systems',
+      amount: '$7.1M',
+      percentage: 15,
+      description: 'All utilities',
+      color: 'from-green-400 to-emerald-500',
       delay: 0.8
     },
     {
-      name: 'Finishes & General',
-      amount: '$9.9M',
-      percentage: 35,
-      description: 'Medical surfaces',
+      name: 'Amenities & Retail',
+      amount: '$6.0M',
+      percentage: 13,
+      description: 'Pool, gym, retail',
       color: 'from-indigo-400 to-indigo-500',
       delay: 1.0
     }
@@ -368,7 +463,7 @@ const CostDNAMini: React.FC = () => {
       >
         <div className="flex justify-between items-center text-white">
           <span className="text-sm">Total Project Cost:</span>
-          <span className="text-lg font-bold">$28.5M</span>
+          <span className="text-lg font-bold">$47.2M</span>
         </div>
       </motion.div>
     </div>

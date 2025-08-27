@@ -4,7 +4,7 @@ import { useProject } from '../../hooks/useProject';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { ErrorMessage } from '../../components/common/ErrorMessage';
 import { ProjectHeader } from './ProjectHeader';
-import { ExecutiveViewComplete as ExecutiveView } from './ExecutiveViewComplete';
+import { ExecutiveViewComplete } from './ExecutiveViewComplete';
 import { ConstructionView } from './ConstructionView';
 
 export const ProjectView: React.FC = () => {
@@ -39,7 +39,7 @@ export const ProjectView: React.FC = () => {
       
       <div className="max-w-7xl mx-auto px-4 py-6">
         {activeView === 'executive' ? (
-          <ExecutiveView project={project} />
+          <ExecutiveViewComplete project={project} />
         ) : (
           <ConstructionView project={project} />
         )}

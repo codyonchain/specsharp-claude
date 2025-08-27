@@ -128,9 +128,9 @@ MASTER_CONFIG = {
     BuildingType.HEALTHCARE: {
         'hospital': BuildingConfig(
             display_name='Hospital',
-            base_cost_per_sf=550,
-            cost_range=(450, 650),
-            equipment_cost_per_sf=180,
+            base_cost_per_sf=1150,
+            cost_range=(1050, 1250),
+            equipment_cost_per_sf=200,
             typical_floors=5,
             
             trades=TradeBreakdown(
@@ -187,7 +187,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.96,
                 'Memphis': 0.94,
                 'Knoxville': 0.93,
@@ -208,9 +208,9 @@ MASTER_CONFIG = {
         
         'medical_office': BuildingConfig(
             display_name='Medical Office Building',
-            base_cost_per_sf=325,
-            cost_range=(275, 375),
-            equipment_cost_per_sf=45,
+            base_cost_per_sf=425,
+            cost_range=(375, 475),
+            equipment_cost_per_sf=75,
             typical_floors=3,
             
             trades=TradeBreakdown(
@@ -250,7 +250,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.96,
                 'Memphis': 0.94,
                 'New York': 1.30,
@@ -260,9 +260,9 @@ MASTER_CONFIG = {
         
         'urgent_care': BuildingConfig(
             display_name='Urgent Care Center',
-            base_cost_per_sf=285,
-            cost_range=(250, 320),
-            equipment_cost_per_sf=35,
+            base_cost_per_sf=385,
+            cost_range=(350, 420),
+            equipment_cost_per_sf=65,
             typical_floors=1,
             
             trades=TradeBreakdown(
@@ -302,7 +302,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.93,
                 'New York': 1.25,
@@ -359,7 +359,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.90,
                 'New York': 1.45,
@@ -420,7 +420,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.90,
                 'Memphis': 0.88,
                 'New York': 1.40,
@@ -474,7 +474,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.88,
                 'Memphis': 0.86,
                 'New York': 1.35,
@@ -531,7 +531,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.92,
                 'New York': 1.45,
@@ -584,7 +584,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.90,
                 'New York': 1.40,
@@ -641,7 +641,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.90,
                 'New York': 1.35,
@@ -693,7 +693,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.90,
                 'Memphis': 0.88,
                 'New York': 1.30,
@@ -710,7 +710,7 @@ MASTER_CONFIG = {
             display_name='Quick Service Restaurant',
             base_cost_per_sf=300,
             cost_range=(250, 350),
-            equipment_cost_per_sf=75,
+            equipment_cost_per_sf=25,  # Kitchen equipment mostly in base cost
             typical_floors=1,
             
             trades=TradeBreakdown(
@@ -722,15 +722,15 @@ MASTER_CONFIG = {
             ),
             
             soft_costs=SoftCosts(
-                design_fees=0.06,
-                permits=0.025,
-                legal=0.015,
-                financing=0.025,
-                contingency=0.08,
-                testing=0.01,
-                construction_management=0.03,
-                startup=0.02
-            ),
+                design_fees=0.05,      # 5% - simpler design than complex buildings
+                permits=0.015,         # 1.5%
+                legal=0.005,           # 0.5%
+                financing=0.02,        # 2% - shorter construction period
+                contingency=0.05,      # 5% - well-understood building type
+                testing=0.005,         # 0.5% - kitchen equipment testing
+                construction_management=0.025,  # 2.5%
+                startup=0.01           # 1% - training, initial inventory
+            ),  # Total: 18% soft costs
             
             ownership_types={
                 OwnershipType.FOR_PROFIT: FinancingTerms(
@@ -750,7 +750,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.35,
@@ -760,9 +760,9 @@ MASTER_CONFIG = {
         
         'full_service': BuildingConfig(
             display_name='Full Service Restaurant',
-            base_cost_per_sf=425,
-            cost_range=(375, 475),
-            equipment_cost_per_sf=125,
+            base_cost_per_sf=385,  # Optimized for industry standards ($450-500/SF total)
+            cost_range=(350, 425),
+            equipment_cost_per_sf=25,  # Optimized - kitchen equipment mostly in base cost
             typical_floors=1,
             
             trades=TradeBreakdown(
@@ -774,15 +774,15 @@ MASTER_CONFIG = {
             ),
             
             soft_costs=SoftCosts(
-                design_fees=0.07,
-                permits=0.025,
-                legal=0.015,
-                financing=0.03,
-                contingency=0.09,
-                testing=0.01,
-                construction_management=0.035,
-                startup=0.025
-            ),
+                design_fees=0.05,      # 5% - simpler design than complex buildings
+                permits=0.015,         # 1.5%
+                legal=0.005,           # 0.5%
+                financing=0.02,        # 2% - shorter construction period
+                contingency=0.05,      # 5% - well-understood building type
+                testing=0.005,         # 0.5% - kitchen equipment testing
+                construction_management=0.025,  # 2.5%
+                startup=0.01           # 1% - training, initial inventory
+            ),  # Total: 18% soft costs
             
             ownership_types={
                 OwnershipType.FOR_PROFIT: FinancingTerms(
@@ -802,11 +802,115 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.93,
                 'New York': 1.40,
                 'San Francisco': 1.45
+            }
+        ),
+        
+        'bar_tavern': BuildingConfig(
+            display_name='Bar/Tavern',
+            base_cost_per_sf=350,  # Adjusted to industry standard
+            cost_range=(325, 375),
+            equipment_cost_per_sf=25,  # Bar equipment included in base cost
+            typical_floors=1,
+            
+            trades=TradeBreakdown(
+                structural=0.22,
+                mechanical=0.25,
+                electrical=0.18,
+                plumbing=0.15,
+                finishes=0.20
+            ),
+            
+            soft_costs=SoftCosts(
+                design_fees=0.05,      # 5% - simpler design than complex buildings
+                permits=0.02,          # 2% - includes liquor license
+                legal=0.01,            # 1% - includes liquor license legal
+                financing=0.02,        # 2% - shorter construction period
+                contingency=0.05,      # 5% - well-understood building type
+                testing=0.005,         # 0.5% - bar equipment testing
+                construction_management=0.025,  # 2.5%
+                startup=0.01           # 1% - training, initial inventory
+            ),  # Total: 19% soft costs (slightly higher for liquor licensing)
+            
+            ownership_types={
+                OwnershipType.FOR_PROFIT: FinancingTerms(
+                    debt_ratio=0.65,
+                    debt_rate=0.065,
+                    equity_ratio=0.35,
+                    target_dscr=1.25,
+                    target_roi=0.14
+                )
+            },
+            
+            nlp=NLPConfig(
+                keywords=['bar', 'tavern', 'pub', 'lounge', 'nightclub', 
+                         'cocktail bar', 'sports bar', 'brewpub'],
+                priority=13,
+                incompatible_classes=[]
+            ),
+            
+            regional_multipliers={
+                'Nashville': 1.03,
+                'Manchester': 0.94,
+                'Memphis': 0.92,
+                'New York': 1.38,
+                'San Francisco': 1.42
+            }
+        ),
+        
+        'cafe': BuildingConfig(
+            display_name='Cafe/Coffee Shop',
+            base_cost_per_sf=300,  # Adjusted to industry standard
+            cost_range=(275, 325),
+            equipment_cost_per_sf=20,  # Coffee equipment mostly in base cost
+            typical_floors=1,
+            
+            trades=TradeBreakdown(
+                structural=0.23,
+                mechanical=0.22,
+                electrical=0.16,
+                plumbing=0.14,
+                finishes=0.25
+            ),
+            
+            soft_costs=SoftCosts(
+                design_fees=0.045,     # 4.5% - simpler cafe design
+                permits=0.015,         # 1.5%
+                legal=0.005,           # 0.5%
+                financing=0.02,        # 2% - shorter construction period
+                contingency=0.045,     # 4.5% - simple, well-understood
+                testing=0.005,         # 0.5% - coffee equipment testing
+                construction_management=0.02,   # 2%
+                startup=0.01           # 1% - training, initial inventory
+            ),  # Total: 16% soft costs (lower for simpler cafes)
+            
+            ownership_types={
+                OwnershipType.FOR_PROFIT: FinancingTerms(
+                    debt_ratio=0.68,
+                    debt_rate=0.063,
+                    equity_ratio=0.32,
+                    target_dscr=1.22,
+                    target_roi=0.11
+                )
+            },
+            
+            nlp=NLPConfig(
+                keywords=['cafe', 'coffee shop', 'coffee house', 'espresso bar',
+                         'coffee bar', 'bakery cafe', 'tea shop'],
+                priority=12,
+                incompatible_classes=[]
+            ),
+            
+            regional_multipliers={
+                'Nashville': 1.03,
+                'Manchester': 0.93,
+                'Memphis': 0.91,
+                'New York': 1.35,
+                'San Francisco': 1.40
             }
         )
     },
@@ -859,7 +963,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.90,
                 'New York': 1.25,
@@ -913,7 +1017,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.93,
                 'Memphis': 0.91,  # Memphis is distribution hub
                 'New York': 1.28,
@@ -973,7 +1077,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.35,
@@ -1034,7 +1138,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.93,
                 'Memphis': 0.91,
                 'New York': 1.30,
@@ -1088,7 +1192,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.32,
@@ -1153,7 +1257,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.93,
                 'New York': 1.45,
@@ -1215,7 +1319,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.93,
                 'Memphis': 0.91,
                 'New York': 1.40,
@@ -1277,12 +1381,12 @@ MASTER_CONFIG = {
             nlp=NLPConfig(
                 keywords=['elementary school', 'primary school', 'grade school',
                          'K-5', 'K-6', 'elementary'],
-                priority=21,
+                priority=2,
                 incompatible_classes=[ProjectClass.TENANT_IMPROVEMENT]
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.38,
@@ -1340,12 +1444,12 @@ MASTER_CONFIG = {
             nlp=NLPConfig(
                 keywords=['middle school', 'junior high', 'intermediate school',
                          'grades 6-8', 'grades 7-9'],
-                priority=22,
+                priority=2,
                 incompatible_classes=[ProjectClass.TENANT_IMPROVEMENT]
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.38,
@@ -1404,12 +1508,12 @@ MASTER_CONFIG = {
             nlp=NLPConfig(
                 keywords=['high school', 'secondary school', 'senior high',
                          'grades 9-12', 'preparatory school'],
-                priority=23,
+                priority=2,
                 incompatible_classes=[ProjectClass.TENANT_IMPROVEMENT]
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.40,
@@ -1481,7 +1585,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.93,
                 'New York': 1.42,
@@ -1544,7 +1648,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.93,
                 'Memphis': 0.91,
                 'New York': 1.35,
@@ -1610,7 +1714,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.93,
                 'Memphis': 0.91,
                 'New York': 1.45,
@@ -1670,7 +1774,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.48,
@@ -1730,7 +1834,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.93,
                 'New York': 1.45,
@@ -1791,7 +1895,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.48,
@@ -1860,7 +1964,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.92,  # No transit
                 'Memphis': 0.93,
                 'New York': 1.50,  # High transit value
@@ -1926,7 +2030,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.93,
                 'New York': 1.25,  # Less premium for data centers
@@ -1995,7 +2099,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.93,
                 'New York': 1.40,
@@ -2057,7 +2161,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.90,
                 'Memphis': 0.88,
                 'New York': 1.30,
@@ -2118,7 +2222,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.90,
                 'New York': 1.35,
@@ -2179,7 +2283,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,  # Music city
+                'Nashville': 1.03,  # Music city
                 'Manchester': 0.92,
                 'Memphis': 0.94,
                 'New York': 1.45,
@@ -2246,7 +2350,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.38,
@@ -2307,7 +2411,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.93,
                 'Memphis': 0.91,
                 'New York': 1.40,
@@ -2370,7 +2474,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.93,
                 'Memphis': 0.91,
                 'New York': 1.38,
@@ -2442,7 +2546,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.90,
                 'New York': 1.35,
@@ -2504,7 +2608,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.42,
@@ -2571,7 +2675,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.90,
                 'New York': 1.35,
@@ -2640,7 +2744,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.93,
                 'Memphis': 0.91,
                 'New York': 1.38,
@@ -2710,7 +2814,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.40,
@@ -2782,7 +2886,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.90,
                 'New York': 1.35,
@@ -2852,7 +2956,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.93,
                 'New York': 1.45,
@@ -2919,7 +3023,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.90,
                 'Memphis': 0.88,
                 'New York': 1.25,
@@ -2987,7 +3091,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.90,
                 'New York': 1.35,
@@ -3049,7 +3153,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.45,  # High land value
@@ -3111,7 +3215,7 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.00,
+                'Nashville': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.90,
                 'New York': 1.40,  # Space premium

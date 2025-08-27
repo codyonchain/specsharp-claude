@@ -7,6 +7,7 @@ import { Dashboard } from './pages/Dashboard/Dashboard';
 import { NewProject } from './pages/NewProject/NewProject';
 import { ProjectView } from './pages/ProjectView/ProjectView';
 import { Diagnostics } from './pages/Diagnostics';
+// Removed ScenarioComparison - using ScenarioBuilder modal instead
 
 // Import the existing HomePage from the main src/pages
 import { HomePage } from '../pages/HomePage';
@@ -75,6 +76,8 @@ export const App: React.FC = () => {
               <Navigate to="/login" replace />
             } 
           />
+          
+          {/* Removed Scenario Comparison route - using ScenarioBuilder modal instead */}
           
           {/* Diagnostics route - for debugging */}
           <Route 

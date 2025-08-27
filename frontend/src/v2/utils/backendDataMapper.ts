@@ -23,6 +23,27 @@ export interface DisplayData {
   investmentDecision: 'GO' | 'NO-GO' | 'PENDING';
   decisionReason: string;
   suggestions: string[];
+  improvementsNeeded: Array<{
+    metric: string;
+    current: number;
+    required: number;
+    gap: number;
+    suggestion: string;
+  }>;
+  failedCriteria?: Array<{
+    metric: string;
+    current: string;
+    required: string;
+    gap: string;
+    fix: string;
+  }>;
+  metricsTable?: Array<{
+    metric: string;
+    current: string;
+    required: string;
+    status: 'pass' | 'fail';
+  }>;
+  feasibilityScore?: number;
   
   // Building-specific metrics
   unitCount: number;
@@ -86,14 +107,86 @@ export class BackendDataMapper {
     }
     
     const calculations = analysis?.calculations || {};
-    const ownership = calculations?.ownership_analysis || {};
+    
+    // Add comprehensive tracing for ROI and financial metrics
+    console.log('=== ROI & FINANCIAL METRICS TRACE ===');
+    console.log('Full analysis object:', analysis);
+    console.log('Full calculations object:', calculations);
+    
+    // Check both possible paths due to double-nested structure
+    const path1_roi = calculations?.ownership_analysis?.return_metrics?.estimated_roi;
+    const path2_roi = calculations?.calculations?.ownership_analysis?.return_metrics?.estimated_roi;
+    
+    console.log('1. ROI at calculations.ownership_analysis:', path1_roi);
+    console.log('2. ROI at calculations.calculations.ownership_analysis:', path2_roi);
+    
+    // Check where other metrics are
+    const path1_npv = calculations?.ownership_analysis?.return_metrics?.ten_year_npv;
+    const path2_npv = calculations?.calculations?.ownership_analysis?.return_metrics?.ten_year_npv;
+    
+    console.log('3. NPV at path1:', path1_npv);
+    console.log('4. NPV at path2:', path2_npv);
+    
+    // Check payback period
+    const path1_payback = calculations?.ownership_analysis?.return_metrics?.payback_period;
+    const path2_payback = calculations?.calculations?.ownership_analysis?.return_metrics?.payback_period;
+    
+    console.log('5. Payback at path1:', path1_payback);
+    console.log('6. Payback at path2:', path2_payback);
+    
+    // Check IRR
+    const path1_irr = calculations?.ownership_analysis?.return_metrics?.irr;
+    const path2_irr = calculations?.calculations?.ownership_analysis?.return_metrics?.irr;
+    
+    console.log('7. IRR at path1:', path1_irr);
+    console.log('8. IRR at path2:', path2_irr);
+    
+    // Check DSCR
+    const path1_dscr = calculations?.ownership_analysis?.debt_metrics?.calculated_dscr;
+    const path2_dscr = calculations?.calculations?.ownership_analysis?.debt_metrics?.calculated_dscr;
+    
+    console.log('9. DSCR at path1:', path1_dscr);
+    console.log('10. DSCR at path2:', path2_dscr);
+    
+    // Show actual vs expected structure
+    console.log('11. Full ownership_analysis at level 1:', calculations?.ownership_analysis);
+    console.log('12. Full ownership_analysis at level 2:', calculations?.calculations?.ownership_analysis);
+    
+    // Check for annual revenue
+    const path1_revenue = calculations?.ownership_analysis?.annual_revenue;
+    const path2_revenue = calculations?.calculations?.ownership_analysis?.annual_revenue;
+    
+    console.log('13. Annual revenue at path1:', path1_revenue);
+    console.log('14. Annual revenue at path2:', path2_revenue);
+    
+    // Check NOI
+    const path1_noi = calculations?.ownership_analysis?.return_metrics?.estimated_annual_noi;
+    const path2_noi = calculations?.calculations?.ownership_analysis?.return_metrics?.estimated_annual_noi;
+    
+    console.log('15. NOI at path1:', path1_noi);
+    console.log('16. NOI at path2:', path2_noi);
+    
+    console.log('=== END ROI & FINANCIAL METRICS TRACE ===');
+    
+    // Now extract with proper fallback to both paths
+    const ownership = calculations?.ownership_analysis || calculations?.calculations?.ownership_analysis || {};
     const returnMetrics = ownership?.return_metrics || {};
     const debtMetrics = ownership?.debt_metrics || {};
     const investmentAnalysis = ownership?.investment_analysis || {};
-    const projectInfo = ownership?.project_info || calculations?.project_info || {};
-    const operationalMetrics = ownership?.operational_metrics || calculations?.operational_metrics || {};
+    const projectInfo = ownership?.project_info || calculations?.project_info || calculations?.calculations?.project_info || {};
+    const operationalMetrics = ownership?.operational_metrics || calculations?.operational_metrics || calculations?.calculations?.operational_metrics || {};
     const parsedInput = analysis?.parsed_input || {};
-    const totals = calculations?.totals || {};
+    const totals = calculations?.totals || calculations?.calculations?.totals || {};
+    
+    // TRACE DATA MAPPING
+    console.log('=== BACKEND DATA MAPPER TRACE ===');
+    console.log('Mapper input analysis:', analysis);
+    console.log('Calculations extracted:', calculations);
+    console.log('Totals object:', totals);
+    console.log('Looking for hard_costs at totals.hard_costs:', totals?.hard_costs);
+    console.log('Looking for soft_costs at totals.soft_costs:', totals?.soft_costs);
+    console.log('Looking for total_project_cost at totals.total_project_cost:', totals?.total_project_cost);
+    console.log('=== END MAPPER TRACE ===');
     
     // Extract financial metrics with proper paths
     const roi = this.extractROI(returnMetrics);
@@ -106,10 +199,11 @@ export class BackendDataMapper {
     const annualRevenue = this.extractAnnualRevenue(returnMetrics, projectInfo, ownership);
     const noi = safeGet(returnMetrics, 'estimated_annual_noi', 0) || 
                 safeGet(ownership, 'noi', 0);
-    const operatingMargin = annualRevenue > 0 ? (noi / annualRevenue) : 0.6;
+    const operatingMargin = operationalMetrics?.operating_margin || 
+                           safeGet(ownership, 'operational_metrics.operating_margin', 0.6);
     
     // Extract investment analysis
-    const investmentDecision = investmentAnalysis.decision || 
+    const investmentDecision = investmentAnalysis.recommendation || investmentAnalysis.decision || 
                                (roi >= 0.08 && npv > 0 ? 'GO' : 'NO-GO');
     
     // Extract unit metrics
@@ -117,8 +211,11 @@ export class BackendDataMapper {
     const unitLabel = safeGet(projectInfo, 'unit_label', 'Units');
     const unitType = safeGet(projectInfo, 'unit_type', 'units');
     const totalCost = safeGet(totals, 'total_project_cost', 0);
-    const revenuePerUnit = annualRevenue / Math.max(unitCount, 1);
-    const costPerUnit = totalCost / Math.max(unitCount, 1);
+    const revenuePerUnit = safeGet(projectInfo, 'revenue_per_unit', 0) || 
+                          safeGet(operationalMetrics, 'revenue_per_unit', 0) || 
+                          (annualRevenue / Math.max(unitCount, 1));
+    const costPerUnit = safeGet(projectInfo, 'cost_per_unit', 0) || 
+                       (totalCost / Math.max(unitCount, 1));
     
     // Extract operational metrics
     const breakEvenOccupancy = safeGet(investmentAnalysis, 'breakeven_metrics.occupancy', 0.85);
@@ -150,12 +247,18 @@ export class BackendDataMapper {
       paybackPeriod,
       dscr,
       annualRevenue,
-      monthlyRevenue: annualRevenue / 12,
+      monthlyRevenue: safeGet(operationalMetrics, 'monthly_revenue', 0) || 
+                     safeGet(projectInfo, 'monthly_revenue', 0) || 
+                     (annualRevenue / 12),
       noi,
       operatingMargin,
       investmentDecision,
-      decisionReason: investmentAnalysis.reason || this.generateDecisionReason(roi, npv, dscr),
+      decisionReason: investmentAnalysis.summary || investmentAnalysis.reason || this.generateDecisionReason(roi, npv, dscr),
       suggestions: Array.isArray(investmentAnalysis.suggestions) ? investmentAnalysis.suggestions : [],
+      improvementsNeeded: Array.isArray(investmentAnalysis.improvements_needed) ? investmentAnalysis.improvements_needed : [],
+      failedCriteria: Array.isArray(investmentAnalysis.failed_criteria) ? investmentAnalysis.failed_criteria : [],
+      metricsTable: Array.isArray(investmentAnalysis.metrics_table) ? investmentAnalysis.metrics_table : [],
+      feasibilityScore: investmentAnalysis.feasibility_score,
       unitCount,
       unitLabel,
       unitType,
@@ -194,6 +297,7 @@ export class BackendDataMapper {
       investmentDecision: 'PENDING',
       decisionReason: 'Awaiting analysis...',
       suggestions: [],
+      improvementsNeeded: [],
       unitCount: 0,
       unitLabel: 'Units',
       unitType: 'units',

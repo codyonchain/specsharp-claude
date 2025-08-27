@@ -14,6 +14,7 @@ from app.v2.config.master_config import (
     get_regional_multiplier,
     validate_project_class
 )
+from app.v2.services.financial_analyzer import FinancialAnalyzer
 from typing import Optional, Dict, Any, List
 from dataclasses import asdict
 import logging
@@ -31,6 +32,7 @@ class UnifiedEngine:
         """Initialize the unified engine"""
         self.config = MASTER_CONFIG
         self.calculation_trace = []  # Track every calculation for debugging
+        self.financial_analyzer = FinancialAnalyzer()  # Add financial analyzer
         
     def calculate_project(self, 
                          building_type: BuildingType,
@@ -128,18 +130,74 @@ class UnifiedEngine:
         # Calculate soft costs
         soft_costs = self._calculate_soft_costs(construction_cost, building_config.soft_costs)
         
-        # Calculate totals
-        total_hard_costs = construction_cost + equipment_cost + special_features_cost
-        total_soft_costs = sum(soft_costs.values())
+        # For healthcare facilities, equipment is a soft cost (medical equipment)
+        # For other building types, it's part of hard costs
+        if building_type == BuildingType.HEALTHCARE:
+            soft_costs['medical_equipment'] = equipment_cost
+            total_hard_costs = construction_cost + special_features_cost
+            total_soft_costs = sum(soft_costs.values())
+        else:
+            total_hard_costs = construction_cost + equipment_cost + special_features_cost
+            total_soft_costs = sum(soft_costs.values())
+        
         total_project_cost = total_hard_costs + total_soft_costs
         
-        # Calculate ownership/financing analysis
+        # Validate restaurant costs are within reasonable ranges
+        if building_type == BuildingType.RESTAURANT:
+            cost_per_sf = total_project_cost / square_footage
+            min_cost = 250  # Minimum reasonable restaurant cost
+            max_cost = 700  # Maximum reasonable restaurant cost (except fine dining)
+            
+            if cost_per_sf < min_cost:
+                self._log_trace(f"Restaurant cost too low: ${cost_per_sf:.0f}/SF, adjusting to minimum", {
+                    'original_cost_per_sf': cost_per_sf,
+                    'minimum': min_cost
+                })
+                # Adjust costs proportionally
+                adjustment_factor = (min_cost * square_footage) / total_project_cost
+                total_hard_costs *= adjustment_factor
+                total_soft_costs *= adjustment_factor
+                total_project_cost = min_cost * square_footage
+            elif cost_per_sf > max_cost and subtype != 'fine_dining':
+                self._log_trace(f"Restaurant cost too high: ${cost_per_sf:.0f}/SF, capping at maximum", {
+                    'original_cost_per_sf': cost_per_sf,
+                    'maximum': max_cost
+                })
+                # Cap costs proportionally
+                adjustment_factor = (max_cost * square_footage) / total_project_cost
+                total_hard_costs *= adjustment_factor
+                total_soft_costs *= adjustment_factor
+                total_project_cost = max_cost * square_footage
+        
+        # Calculate ownership/financing analysis with enhanced financial metrics
         ownership_analysis = None
         if ownership_type in building_config.ownership_types:
+            # Get basic ownership metrics
             ownership_analysis = self._calculate_ownership(
                 total_project_cost,
                 building_config.ownership_types[ownership_type]
             )
+            
+            # Enhance with comprehensive financial analysis
+            financial_data = {
+                'building_type': building_type.value,
+                'subtype': subtype,
+                'square_footage': square_footage,
+                'total_project_cost': total_project_cost
+            }
+            financial_metrics = self.financial_analyzer.analyze_investment(financial_data)
+            
+            # Merge financial analysis into ownership analysis
+            if financial_metrics:
+                ownership_analysis.update(financial_metrics['ownership_analysis'])
+                # Add additional calculated sections
+                ownership_analysis['project_info'] = financial_metrics.get('project_info', {})
+                ownership_analysis['department_allocation'] = financial_metrics.get('department_allocation', [])
+                ownership_analysis['operational_metrics'] = financial_metrics.get('operational_metrics', {})
+                # Add revenue_analysis section
+                ownership_analysis['revenue_analysis'] = financial_metrics.get('revenue_analysis', {})
+                # Add revenue_requirements section
+                ownership_analysis['revenue_requirements'] = financial_metrics.get('revenue_requirements', {})
         
         # Build comprehensive response
         result = {
@@ -153,24 +211,33 @@ class UnifiedEngine:
                 'floors': floors,
                 'typical_floors': building_config.typical_floors
             },
-            'construction_costs': {
-                'base_cost_per_sf': base_cost_per_sf,
-                'class_multiplier': class_multiplier,
-                'regional_multiplier': regional_multiplier,
-                'final_cost_per_sf': final_cost_per_sf,
-                'construction_total': construction_cost,
-                'equipment_total': equipment_cost,
-                'special_features_total': special_features_cost
-            },
-            'trade_breakdown': trades,
-            'soft_costs': soft_costs,
-            'totals': {
-                'hard_costs': total_hard_costs,
-                'soft_costs': total_soft_costs,
-                'total_project_cost': total_project_cost,
-                'cost_per_sf': total_project_cost / square_footage if square_footage > 0 else 0
+            'calculations': {
+                'construction_costs': {
+                    'base_cost_per_sf': base_cost_per_sf,
+                    'class_multiplier': class_multiplier,
+                    'regional_multiplier': regional_multiplier,
+                    'final_cost_per_sf': final_cost_per_sf,
+                    'construction_total': construction_cost,
+                    'equipment_total': equipment_cost,
+                    'special_features_total': special_features_cost
+                },
+                'trade_breakdown': trades,  # Moved under calculations
+                'soft_costs': soft_costs,
+                'totals': {
+                    'hard_costs': total_hard_costs,
+                    'soft_costs': total_soft_costs,
+                    'total_project_cost': total_project_cost,
+                    'cost_per_sf': total_project_cost / square_footage if square_footage > 0 else 0
+                }
             },
             'ownership_analysis': ownership_analysis,
+            # Add revenue_analysis at top level for easy access
+            'revenue_analysis': ownership_analysis.get('revenue_analysis', {}) if ownership_analysis else {},
+            # Add revenue_requirements at top level for easy access
+            'revenue_requirements': ownership_analysis.get('revenue_requirements', {}) if ownership_analysis else {},
+            # Add department and operational metrics at top level for easy frontend access
+            'department_allocation': ownership_analysis.get('department_allocation', []) if ownership_analysis else [],
+            'operational_metrics': ownership_analysis.get('operational_metrics', {}) if ownership_analysis else {},
             'calculation_trace': self.calculation_trace,
             'timestamp': datetime.now().isoformat()
         }

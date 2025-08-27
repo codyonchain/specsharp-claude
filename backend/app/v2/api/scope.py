@@ -6,13 +6,14 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from app.v2.engines.unified_engine import unified_engine
-from app.v2.services.nlp_service import nlp_service
+from app.v2.services.phrase_parser import phrase_parser
 from app.v2.config.master_config import (
     BuildingType,
     ProjectClass,
     OwnershipType,
     MASTER_CONFIG
 )
+from app.core.building_taxonomy import normalize_building_type, validate_building_type
 import logging
 
 logger = logging.getLogger(__name__)
@@ -65,8 +66,22 @@ async def analyze_project(request: AnalyzeRequest):
         "Build a 50,000 sf hospital with emergency department in Nashville"
     """
     try:
-        # Parse the description
-        parsed = nlp_service.parse_description(request.description)
+        # Parse the description using phrase-first parser
+        parsed = phrase_parser.parse(request.description)
+        
+        # Normalize building type using taxonomy
+        if parsed.get('building_type'):
+            original_type = parsed['building_type']
+            canonical_type, canonical_subtype = validate_building_type(
+                parsed['building_type'],
+                parsed.get('subtype')
+            )
+            parsed['building_type'] = canonical_type
+            if canonical_subtype:
+                parsed['subtype'] = canonical_subtype
+            
+            if original_type != canonical_type:
+                logger.info(f"Normalized building type from '{original_type}' to '{canonical_type}'")
         
         # Apply defaults if needed
         if not parsed.get('square_footage') and request.default_square_footage:
@@ -99,11 +114,15 @@ async def analyze_project(request: AnalyzeRequest):
             special_features=parsed.get('special_features', [])
         )
         
+        # Add building_subtype for frontend compatibility
+        parsed_with_compat = parsed.copy()
+        parsed_with_compat['building_subtype'] = parsed.get('subtype')
+        
         # Return comprehensive result
         return ProjectResponse(
             success=True,
             data={
-                'parsed_input': parsed,
+                'parsed_input': parsed_with_compat,
                 'calculations': result,
                 'confidence': parsed.get('confidence', 0),
                 'debug': {
@@ -330,10 +349,10 @@ async def test_nlp(
     text: str = Query(..., description="Text to parse")
 ):
     """
-    Test endpoint for NLP parsing (useful for debugging)
+    Test endpoint for phrase parsing (useful for debugging)
     """
     try:
-        result = nlp_service.extract_all_metrics(text)
+        result = phrase_parser.parse(text)
         
         return ProjectResponse(
             success=True,
