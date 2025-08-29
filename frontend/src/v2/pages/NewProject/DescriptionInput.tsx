@@ -8,53 +8,43 @@ interface Props {
 }
 
 const EXAMPLES = [
+  // Nashville/Tennessee Area Examples
   {
     category: "Healthcare",
     text: "Build a 200,000 SF hospital with emergency department in Nashville"
   },
   {
-    category: "Healthcare",
-    text: "Build a 50,000 SF medical office building with imaging center in Nashville"
-  },
-  {
-    category: "Multifamily",
-    text: "Build a 300,000 SF luxury apartment complex with 300 units and rooftop amenities in Nashville"
-  },
-  {
-    category: "Multifamily",
-    text: "Build a 150,000 SF affordable housing development with 200 units in Memphis"
+    category: "Restaurant",
+    text: "Build a 4,200 SF full-service restaurant with bar and patio in Franklin TN"
   },
   {
     category: "Office",
-    text: "Build a 50,000 SF Class A office building with 5 floors in downtown Nashville"
+    text: "Build an 85,000 SF Class A office tower with structured parking in Nashville"
   },
   {
-    category: "Office", 
-    text: "Build a 100,000 SF Class A office tower with 20 floors in New York"
+    category: "Multifamily",
+    text: "Build a 250-unit luxury apartment complex with amenity deck in Brentwood TN"
   },
+  // Southern NH Examples
   {
-    category: "Retail",
-    text: "Build a 25,000 SF shopping center with anchor tenant space in Nashville"
+    category: "Medical",
+    text: "Build a 45,000 SF medical office building with imaging center in Manchester NH"
   },
   {
     category: "Industrial",
-    text: "Build a 150,000 SF distribution center with 40 foot clear height near Nashville airport"
+    text: "Build a 120,000 SF distribution warehouse with 24 loading docks in Nashua NH"
   },
   {
-    category: "Hospitality",
-    text: "Build a 100,000 SF full service hotel with 150 rooms and restaurant in Nashville"
+    category: "Retail",
+    text: "Build a 35,000 SF neighborhood shopping center with grocery anchor in Concord NH"
   },
   {
     category: "Educational",
-    text: "Build a 75,000 SF elementary school for 500 students in Nashville"
+    text: "Build a 65,000 SF middle school for 800 students in Bedford NH"
   },
   {
-    category: "Parking",
-    text: "Build a 200,000 SF parking garage with 600 spaces on 5 levels in Nashville"
-  },
-  {
-    category: "Specialty",
-    text: "Build a 50,000 SF data center with redundant power systems in Nashville"
+    category: "Housing",
+    text: "Build a 180-unit workforce housing development with community center in Salem NH"
   }
 ];
 

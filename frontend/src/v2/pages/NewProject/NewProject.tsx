@@ -44,12 +44,13 @@ export const NewProject: React.FC = () => {
       size: /\d+[\s,]*(?:sf|square|feet|unit|key|bed|room)/i.test(description),
       type: /(apartment|office|hospital|school|retail|industrial|hotel|restaurant|warehouse|medical|clinic|surgery|emergency|distribution|strip\s*mall)/i.test(input),
       location: /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,?\s*[A-Z]{2}\b/.test(description) || 
-                /(nashville|memphis|austin|atlanta|denver|dallas|franklin|murfreesboro)/i.test(input)
+                /(nashville|franklin|brentwood|murfreesboro|manchester|nashua|concord|bedford|salem)/i.test(input)
     });
   }, [description]);
   
-  // Example prompts with better structure
+  // Example prompts focused on target markets
   const examplePrompts = [
+    // Nashville/Tennessee Area Examples
     { 
       icon: <Heart className="h-6 w-6" />, 
       text: '200,000 SF hospital with emergency department in Nashville', 
@@ -58,39 +59,61 @@ export const NewProject: React.FC = () => {
       color: 'text-red-600 bg-red-50'
     },
     { 
+      icon: <ShoppingBag className="h-6 w-6" />, 
+      text: '4,200 SF full-service restaurant with bar and patio in Franklin TN', 
+      highlights: ['4,200 SF', 'restaurant', 'bar and patio', 'Franklin TN'],
+      type: 'restaurant',
+      color: 'text-orange-600 bg-orange-50'
+    },
+    { 
       icon: <Building2 className="h-6 w-6" />, 
-      text: '95,000 SF Class A office building with structured parking in Memphis', 
-      highlights: ['95,000 SF', 'Class A office', 'structured parking', 'Memphis'],
+      text: '85,000 SF Class A office tower with structured parking in Nashville', 
+      highlights: ['85,000 SF', 'Class A office', 'structured parking', 'Nashville'],
       type: 'commercial',
       color: 'text-blue-600 bg-blue-50'
     },
     { 
       icon: <Home className="h-6 w-6" />, 
-      text: '300-unit luxury apartment complex with amenities and garage in Austin', 
-      highlights: ['300-unit', 'luxury apartment', 'amenities', 'garage', 'Austin'],
+      text: '250-unit luxury apartment complex with amenity deck in Brentwood TN', 
+      highlights: ['250-unit', 'luxury apartment', 'amenity deck', 'Brentwood TN'],
       type: 'residential',
       color: 'text-purple-600 bg-purple-50'
     },
+    // Southern NH Examples
+    { 
+      icon: <Heart className="h-6 w-6" />, 
+      text: '45,000 SF medical office building with imaging center in Manchester NH', 
+      highlights: ['45,000 SF', 'medical office', 'imaging center', 'Manchester NH'],
+      type: 'healthcare',
+      color: 'text-red-600 bg-red-50'
+    },
     { 
       icon: <Factory className="h-6 w-6" />, 
-      text: '150,000 SF distribution center with 30 loading docks in Atlanta', 
-      highlights: ['150,000 SF', 'distribution center', '30 loading docks', 'Atlanta'],
+      text: '120,000 SF distribution warehouse with 24 loading docks in Nashua NH', 
+      highlights: ['120,000 SF', 'warehouse', '24 loading docks', 'Nashua NH'],
       type: 'industrial',
       color: 'text-gray-600 bg-gray-50'
     },
     { 
       icon: <ShoppingBag className="h-6 w-6" />, 
-      text: '25,000 SF strip mall with 5 retail spaces in suburban Dallas', 
-      highlights: ['25,000 SF', 'strip mall', '5 retail spaces', 'Dallas'],
+      text: '35,000 SF neighborhood shopping center with grocery anchor in Concord NH', 
+      highlights: ['35,000 SF', 'shopping center', 'grocery anchor', 'Concord NH'],
       type: 'retail',
       color: 'text-orange-600 bg-orange-50'
     },
     { 
       icon: <GraduationCap className="h-6 w-6" />, 
-      text: '75,000 SF elementary school for 500 students in Denver', 
-      highlights: ['75,000 SF', 'elementary school', '500 students', 'Denver'],
+      text: '65,000 SF middle school for 800 students in Bedford NH', 
+      highlights: ['65,000 SF', 'middle school', '800 students', 'Bedford NH'],
       type: 'educational',
       color: 'text-green-600 bg-green-50'
+    },
+    { 
+      icon: <Home className="h-6 w-6" />, 
+      text: '180-unit workforce housing development with community center in Salem NH', 
+      highlights: ['180-unit', 'workforce housing', 'community center', 'Salem NH'],
+      type: 'residential',
+      color: 'text-purple-600 bg-purple-50'
     }
   ];
   
