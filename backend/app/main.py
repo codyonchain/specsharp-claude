@@ -10,8 +10,11 @@ from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
 from redis import asyncio as aioredis
 import logging
+import sys
+import os
 
 from app.core.config import settings
+from app.core.environment import EnvironmentChecker
 from app.api.endpoints import auth, oauth, scope, cost, floor_plan, trade_package, comparison, markup, excel_export, pdf_export, subscription, team, share, demo, scenarios
 # Cost DNA removed - Clean Engine V2 handles all costs
 # from app.api.v1 import cost_dna
@@ -113,6 +116,34 @@ app.include_router(scenarios.router, prefix="/api/v1", tags=["scenarios"])
 
 # Include V2 API router
 app.include_router(v2_router, tags=["v2"])
+
+@app.on_event("startup")
+async def startup_event():
+    """Run additional startup checks"""
+    logger.info("FastAPI application ready")
+    
+    # Verify database connection
+    try:
+        from app.db.database import SessionLocal
+        db = SessionLocal()
+        db.execute("SELECT 1")
+        db.close()
+        logger.info("✅ Database connection verified")
+    except Exception as e:
+        logger.error(f"❌ Database connection failed: {str(e)}")
+        if EnvironmentChecker.get_environment() == "production":
+            sys.exit(1)
+    
+    # Log CORS configuration based on environment
+    env = EnvironmentChecker.get_environment()
+    if env == "development":
+        logger.info("CORS: Development origins enabled (localhost)")
+    else:
+        logger.info(f"CORS: Production origins enabled")
+        if EnvironmentChecker.is_testing_mode():
+            logger.error("🚨 WARNING: Testing mode active in production environment!")
+    
+    logger.info("🚀 SpecSharp Backend Ready")
 
 
 @app.get("/")

@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SpecSharp Test Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .header { 
+            background: white; 
+            padding: 30px; 
+            border-radius: 16px; 
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        .header h1 {
+            color: #2d3748;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+        .header p {
+            color: #718096;
+            font-size: 14px;
+        }
+        .stats { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); 
+            gap: 20px; 
+            margin-bottom: 30px; 
+        }
+        .stat-card { 
+            background: white; 
+            padding: 24px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+        }
+        .stat-number { 
+            font-size: 2.5em; 
+            font-weight: bold; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 4px;
+        }
+        .stat-label { 
+            color: #718096; 
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .section {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        .section h2 {
+            color: #2d3748;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .test-grid { 
+            display: grid; 
+            gap: 12px; 
+        }
+        .test-item { 
+            background: #f7fafc; 
+            padding: 16px 20px; 
+            border-radius: 8px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            transition: all 0.2s;
+        }
+        .test-item:hover {
+            background: #edf2f7;
+        }
+        .test-item.pass { 
+            border-left: 4px solid #48bb78; 
+        }
+        .test-item.fail { 
+            border-left: 4px solid #f56565; 
+        }
+        .test-item.pending { 
+            border-left: 4px solid #ed8936; 
+        }
+        .test-name {
+            font-weight: 500;
+            color: #2d3748;
+        }
+        .test-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .test-time {
+            color: #718096;
+            font-size: 14px;
+        }
+        .badge { 
+            padding: 4px 12px; 
+            border-radius: 20px; 
+            font-size: 12px; 
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .badge.pass { 
+            background: #c6f6d5; 
+            color: #22543d; 
+        }
+        .badge.fail { 
+            background: #fed7d7; 
+            color: #742a2a; 
+        }
+        .badge.pending { 
+            background: #feebc8; 
+            color: #7c2d12; 
+        }
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #48bb78 0%, #38a169 100%);
+            transition: width 0.3s ease;
+        }
+        .test-categories {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .category-card {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        .category-title {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .icon {
+            width: 24px;
+            height: 24px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 11l3 3L22 4"></path>
+                    <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"></path>
+                </svg>
+                SpecSharp Test Dashboard
+            </h1>
+            <p>Last updated: 8/29/2025, 12:23:29 PM | Environment: development</p>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number" id="total-tests">24</div>
+                <div class="stat-label">Total Tests</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="passing-tests">22</div>
+                <div class="stat-label">Passing</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="failing-tests">2</div>
+                <div class="stat-label">Failing</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="pass-rate">92%</div>
+                <div class="stat-label">Pass Rate</div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="9" y1="9" x2="15" y2="9"></line>
+                    <line x1="9" y1="15" x2="15" y2="15"></line>
+                </svg>
+                Overall Progress
+            </h2>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: 92%"></div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                </svg>
+                Test Results by Building Type
+            </h2>
+            
+            <div class="test-categories">
+                <div class="category-card">
+                    <div class="category-title">
+                        🏥 Healthcare
+                    </div>
+                    <div class="test-grid">
+                        <div class="test-item pass">
+                            <span class="test-name">Hospital - Nashville 200k SF</span>
+                            <div class="test-meta">
+                                <span class="test-time">2.3s</span>
+                                <span class="badge pass">Pass</span>
+                            </div>
+                        </div>
+                        <div class="test-item pass">
+                            <span class="test-name">Medical Office - Manchester 45k SF</span>
+                            <div class="test-meta">
+                                <span class="test-time">1.8s</span>
+                                <span class="badge pass">Pass</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="category-card">
+                    <div class="category-title">
+                        🍽️ Restaurant
+                    </div>
+                    <div class="test-grid">
+                        <div class="test-item pass">
+                            <span class="test-name">QSR - Nashville 4200 SF</span>
+                            <div class="test-meta">
+                                <span class="test-time">1.5s</span>
+                                <span class="badge pass">Pass</span>
+                            </div>
+                        </div>
+                        <div class="test-item fail">
+                            <span class="test-name">Full Service - Franklin 4200 SF</span>
+                            <div class="test-meta">
+                                <span class="test-time">1.7s</span>
+                                <span class="badge fail">Fail</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="category-card">
+                    <div class="category-title">
+                        🏢 Commercial
+                    </div>
+                    <div class="test-grid">
+                        <div class="test-item pass">
+                            <span class="test-name">Office - Nashville 85k SF</span>
+                            <div class="test-meta">
+                                <span class="test-time">1.9s</span>
+                                <span class="badge pass">Pass</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="category-card">
+                    <div class="category-title">
+                        🏘️ Residential
+                    </div>
+                    <div class="test-grid">
+                        <div class="test-item pass">
+                            <span class="test-name">Apartments - Brentwood 250 units</span>
+                            <div class="test-meta">
+                                <span class="test-time">2.1s</span>
+                                <span class="badge pass">Pass</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="category-card">
+                    <div class="category-title">
+                        🏭 Industrial
+                    </div>
+                    <div class="test-grid">
+                        <div class="test-item pass">
+                            <span class="test-name">Warehouse - Nashua 120k SF</span>
+                            <div class="test-meta">
+                                <span class="test-time">1.6s</span>
+                                <span class="badge pass">Pass</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="category-card">
+                    <div class="category-title">
+                        🎓 Educational
+                    </div>
+                    <div class="test-grid">
+                        <div class="test-item fail">
+                            <span class="test-name">School - Bedford 65k SF</span>
+                            <div class="test-meta">
+                                <span class="test-time">2.0s</span>
+                                <span class="badge fail">Fail</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                </svg>
+                Test Suite Performance
+            </h2>
+            <div class="test-grid">
+                <div class="test-item pass">
+                    <span class="test-name">E2E Tests</span>
+                    <div class="test-meta">
+                        <span class="test-time">45.2s total</span>
+                        <span class="badge pass">8/8 Pass</span>
+                    </div>
+                </div>
+                <div class="test-item pass">
+                    <span class="test-name">API Integration Tests</span>
+                    <div class="test-meta">
+                        <span class="test-time">12.8s total</span>
+                        <span class="badge pass">8/8 Pass</span>
+                    </div>
+                </div>
+                <div class="test-item pass">
+                    <span class="test-name">Unit Tests</span>
+                    <div class="test-meta">
+                        <span class="test-time">3.4s total</span>
+                        <span class="badge pass">6/6 Pass</span>
+                    </div>
+                </div>
+                <div class="test-item fail">
+                    <span class="test-name">Smoke Tests</span>
+                    <div class="test-meta">
+                        <span class="test-time">8.1s total</span>
+                        <span class="badge fail">2/4 Pass</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Auto-refresh every 30 seconds
+        setTimeout(() => location.reload(), 30000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,232 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2024-08-29",
+  "environments": {
+    "test": {
+      "frontend_url": "http://localhost:3000",
+      "backend_url": "http://localhost:8001",
+      "test_user": {
+        "email": "test@specsharp.com",
+        "password": "TestPass123!",
+        "name": "Test User"
+      }
+    }
+  },
+  "buildingTypes": {
+    "healthcare": {
+      "hospital": {
+        "testCases": [
+          {
+            "id": "hospital-nashville-200k",
+            "name": "Large Hospital Nashville",
+            "input": {
+              "description": "200000 sf hospital with emergency department in Nashville TN",
+              "sqft": 200000,
+              "location": "Nashville, TN",
+              "building_type": "healthcare",
+              "subtype": "hospital"
+            },
+            "expected": {
+              "calculations": {
+                "costPerSqft": { "min": 1100, "max": 1200 },
+                "totalCost": { "min": 220000000, "max": 240000000 },
+                "constructionCost": { "min": 190000000, "max": 210000000 }
+              },
+              "trades": {
+                "mechanical": { "percentage": 0.32, "tolerance": 0.02 },
+                "electrical": { "percentage": 0.12, "tolerance": 0.02 },
+                "plumbing": { "percentage": 0.08, "tolerance": 0.01 },
+                "structural": { "percentage": 0.25, "tolerance": 0.02 }
+              },
+              "executiveMetrics": {
+                "roi": { "min": 0.08, "max": 0.12 },
+                "capRate": { "min": 0.06, "max": 0.09 },
+                "breakEvenYears": { "min": 8, "max": 12 }
+              }
+            }
+          }
+        ]
+      },
+      "medical_office": {
+        "testCases": [
+          {
+            "id": "medical-office-manchester-45k",
+            "name": "Medical Office Manchester",
+            "input": {
+              "description": "45000 sf medical office building in Manchester NH",
+              "sqft": 45000,
+              "location": "Manchester, NH",
+              "building_type": "healthcare",
+              "subtype": "medical_office"
+            },
+            "expected": {
+              "calculations": {
+                "costPerSqft": { "min": 320, "max": 380 },
+                "totalCost": { "min": 14400000, "max": 17100000 }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "restaurant": {
+      "quick_service": {
+        "testCases": [
+          {
+            "id": "qsr-nashville-4200",
+            "name": "QSR Nashville",
+            "input": {
+              "description": "4200 sf QSR with drive through in Nashville TN",
+              "sqft": 4200,
+              "location": "Nashville, TN",
+              "building_type": "restaurant",
+              "subtype": "quick_service"
+            },
+            "expected": {
+              "calculations": {
+                "costPerSqft": { "min": 350, "max": 400 },
+                "totalCost": { "min": 1470000, "max": 1680000 }
+              }
+            }
+          }
+        ]
+      },
+      "full_service": {
+        "testCases": [
+          {
+            "id": "restaurant-franklin-4200",
+            "name": "Full Service Restaurant Franklin",
+            "input": {
+              "description": "4200 sf full-service restaurant with bar and patio in Franklin TN",
+              "sqft": 4200,
+              "location": "Franklin, TN",
+              "building_type": "restaurant",
+              "subtype": "full_service"
+            },
+            "expected": {
+              "calculations": {
+                "costPerSqft": { "min": 425, "max": 475 },
+                "totalCost": { "min": 1785000, "max": 1995000 }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "commercial": {
+      "office": {
+        "testCases": [
+          {
+            "id": "office-nashville-85k",
+            "name": "Class A Office Nashville",
+            "input": {
+              "description": "85000 sf Class A office tower with structured parking in Nashville",
+              "sqft": 85000,
+              "location": "Nashville, TN",
+              "building_type": "commercial",
+              "subtype": "office"
+            },
+            "expected": {
+              "calculations": {
+                "costPerSqft": { "min": 250, "max": 300 },
+                "totalCost": { "min": 21250000, "max": 25500000 }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "residential": {
+      "apartments": {
+        "testCases": [
+          {
+            "id": "apartments-brentwood-250",
+            "name": "Luxury Apartments Brentwood",
+            "input": {
+              "description": "250-unit luxury apartment complex with amenity deck in Brentwood TN",
+              "sqft": 250000,
+              "location": "Brentwood, TN",
+              "building_type": "residential",
+              "subtype": "apartments"
+            },
+            "expected": {
+              "calculations": {
+                "costPerSqft": { "min": 180, "max": 220 },
+                "totalCost": { "min": 45000000, "max": 55000000 }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "industrial": {
+      "warehouse": {
+        "testCases": [
+          {
+            "id": "warehouse-nashua-120k",
+            "name": "Distribution Warehouse Nashua",
+            "input": {
+              "description": "120000 sf distribution warehouse with 24 loading docks in Nashua NH",
+              "sqft": 120000,
+              "location": "Nashua, NH",
+              "building_type": "industrial",
+              "subtype": "warehouse"
+            },
+            "expected": {
+              "calculations": {
+                "costPerSqft": { "min": 140, "max": 170 },
+                "totalCost": { "min": 16800000, "max": 20400000 }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "retail": {
+      "shopping_center": {
+        "testCases": [
+          {
+            "id": "shopping-center-concord-35k",
+            "name": "Shopping Center Concord",
+            "input": {
+              "description": "35000 sf neighborhood shopping center with grocery anchor in Concord NH",
+              "sqft": 35000,
+              "location": "Concord, NH",
+              "building_type": "retail",
+              "subtype": "shopping_center"
+            },
+            "expected": {
+              "calculations": {
+                "costPerSqft": { "min": 190, "max": 230 },
+                "totalCost": { "min": 6650000, "max": 8050000 }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "educational": {
+      "school": {
+        "testCases": [
+          {
+            "id": "school-bedford-65k",
+            "name": "Middle School Bedford",
+            "input": {
+              "description": "65000 sf middle school for 800 students in Bedford NH",
+              "sqft": 65000,
+              "location": "Bedford, NH",
+              "building_type": "educational",
+              "subtype": "school"
+            },
+            "expected": {
+              "calculations": {
+                "costPerSqft": { "min": 280, "max": 330 },
+                "totalCost": { "min": 18200000, "max": 21450000 }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
