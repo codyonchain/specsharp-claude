@@ -1,5 +1,10 @@
 # SpecSharp Deployment Guide
 
+## Current Branch Structure
+- `main`: Local development branch (auth bypass enabled)
+- `deployment-prep`: Production preparation branch
+- Tag `v1.0-pre-deployment`: Last known working state
+
 ## Current Production URLs
 
 - **Frontend**: https://specsharp.ai (and https://www.specsharp.ai)
@@ -97,6 +102,27 @@ cd backend
 source venv/bin/activate
 uvicorn app.main:app --reload --port 8001
 ```
+
+## Deployment Checklist
+- [ ] Environment variables configured in Vercel/Railway
+- [ ] TESTING=false in production
+- [ ] OAuth credentials set
+- [ ] Database migrated
+- [ ] API URL configured
+- [ ] CORS updated for production domain
+
+## Rollback Plan
+If deployment fails:
+```bash
+git checkout main
+git reset --hard v1.0-pre-deployment
+```
+
+## DO NOT
+- Deploy with TESTING=true
+- Commit real .env files
+- Deploy from main branch (use deployment-prep)
+- Skip the test suite
 
 ## Recent Fixes Applied
 
