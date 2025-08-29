@@ -82,3 +82,13 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Environment files with real values
+.env
+.env.local
+.env.development
+.env.production.local
+
+# But allow examples
+!.env.example
+!.env.production.example
