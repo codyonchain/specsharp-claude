@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useState, useEffect, lazy, Suspense } from 'react';
 import './App.css';
 import { logger } from '@/utils/logger';
+import EnvironmentChecker from '@/utils/environment';
 
 // Eager load critical components
 import Login from './components/Login';
@@ -45,6 +46,14 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Run environment checks on app start
+    EnvironmentChecker.logStartupConfig();
+    
+    if (!EnvironmentChecker.validateConfig()) {
+      console.error('Environment configuration invalid!');
+      // Could show user an error screen in production
+    }
+    
     // OAuth callback debug logging
     logger.log('=== OAuth Callback Debug ===');
     logger.log('Current URL:', window.location.href);
