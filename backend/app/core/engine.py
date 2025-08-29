@@ -5,7 +5,7 @@ import logging
 from functools import lru_cache
 from app.models.scope import (
     ScopeRequest, ScopeResponse, ScopeCategory,
-    BuildingSystem, ProjectType, ClimateZone, ProjectClassification
+    BuildingSystem, ClimateZone, ProjectClassification
 )
 from datetime import datetime
 import uuid
@@ -74,10 +74,10 @@ class DeterministicScopeEngine:
     def _initialize_cost_multipliers(self) -> Dict[str, Dict[str, float]]:
         return {
             "project_type": {
-                ProjectType.RESIDENTIAL: 0.9,
-                ProjectType.COMMERCIAL: 1.0,
-                ProjectType.INDUSTRIAL: 0.5,  # Warehouses are much cheaper
-                ProjectType.MIXED_USE: 1.0,   # Will be calculated based on mix
+                "residential": 0.9,
+                "commercial": 1.0,
+                "industrial": 0.5,  # Warehouses are much cheaper
+                "mixed_use": 1.0,   # Will be calculated based on mix
             },
             "project_classification": {
                 "ground_up": 1.0,     # Base cost for new construction
@@ -375,22 +375,22 @@ class DeterministicScopeEngine:
         multiplier *= location_multiplier
         
         # For mixed use, calculate weighted average
-        if request.project_type == ProjectType.MIXED_USE and request.building_mix:
+        if request.project_type == "mixed_use" and request.building_mix:
             weighted_multiplier = 0
             # Map building types to their appropriate project type multipliers
             building_to_project_type = {
-                'warehouse': ProjectType.INDUSTRIAL,  # Use industrial multiplier (0.5) for warehouses
-                'office': ProjectType.COMMERCIAL,     # Use commercial multiplier (1.0) for offices
-                'retail': ProjectType.COMMERCIAL,
-                'restaurant': ProjectType.COMMERCIAL,
-                'residential': ProjectType.RESIDENTIAL,
-                'multi_family_residential': ProjectType.RESIDENTIAL,
-                'industrial': ProjectType.INDUSTRIAL,
-                'light_industrial': ProjectType.INDUSTRIAL
+                'warehouse': "industrial",  # Use industrial multiplier (0.5) for warehouses
+                'office': "commercial",     # Use commercial multiplier (1.0) for offices
+                'retail': "commercial",
+                'restaurant': "commercial",
+                'residential': "residential",
+                'multi_family_residential': "residential",
+                'industrial': "industrial",
+                'light_industrial': "industrial"
             }
             for building_type, percentage in request.building_mix.items():
-                type_enum = building_to_project_type.get(building_type, ProjectType.COMMERCIAL)
-                weighted_multiplier += self.cost_multipliers["project_type"].get(type_enum, 1.0) * percentage
+                type_str = building_to_project_type.get(building_type, "commercial")
+                weighted_multiplier += self.cost_multipliers["project_type"].get(type_str, 1.0) * percentage
             multiplier *= weighted_multiplier
         else:
             multiplier *= self.cost_multipliers["project_type"].get(request.project_type, 1.0)
@@ -578,7 +578,7 @@ class DeterministicScopeEngine:
         
         # Check if we should use V2 engine for specific building types
         # Skip V2 for mixed-use buildings - they need the weighted calculation logic
-        if hasattr(request, 'occupancy_type') and request.occupancy_type and request.project_type != ProjectType.MIXED_USE:
+        if hasattr(request, 'occupancy_type') and request.occupancy_type and request.project_type != "mixed_use":
             occupancy_lower = request.occupancy_type.lower()
             logger.info(f"[SCOPE ENGINE] Occupancy type detected: {occupancy_lower}")
             
@@ -639,11 +639,11 @@ class DeterministicScopeEngine:
                     quantity = request.square_footage / request.num_floors
                 
                 # Apply restaurant or mixed-use adjustments using space type rates
-                if is_restaurant and request.project_type != ProjectType.MIXED_USE:
+                if is_restaurant and request.project_type != "mixed_use":
                     # For pure restaurant projects, skip the hardcoded space rates
                     # The building type service will provide the correct rates
                     pass
-                elif request.project_type == ProjectType.MIXED_USE and request.building_mix:
+                elif request.project_type == "mixed_use" and request.building_mix:
                     # Calculate weighted average cost based on space mix
                     weighted_rate = 0
                     logger.info(f"[MIXED-USE] Processing {category_name} for building mix: {request.building_mix}")
@@ -672,7 +672,7 @@ class DeterministicScopeEngine:
                     else:
                         logger.warning(f"[MIXED-USE] No weighted rate calculated for {category_name}")
                 
-                elif category_name == "plumbing" and system_copy["name"] == "Fixtures" and request.project_type == ProjectType.MIXED_USE and request.building_mix:
+                elif category_name == "plumbing" and system_copy["name"] == "Fixtures" and request.project_type == "mixed_use" and request.building_mix:
                         mixed_reqs = self._calculate_mixed_use_requirements(request, "plumbing")
                         if "bathrooms_per_sqft" in mixed_reqs:
                             # Adjust plumbing fixtures based on bathroom requirements
@@ -681,7 +681,7 @@ class DeterministicScopeEngine:
                             adjustment_factor = mixed_reqs["bathrooms_per_sqft"] / base_bathrooms_per_sqft
                             system_copy["base_cost_per_sqft"] = system_copy["base_cost_per_sqft"] * adjustment_factor
                     
-                elif category_name == "electrical" and "Power" in system_copy["name"] and request.project_type == ProjectType.MIXED_USE and request.building_mix:
+                elif category_name == "electrical" and "Power" in system_copy["name"] and request.project_type == "mixed_use" and request.building_mix:
                         mixed_reqs = self._calculate_mixed_use_requirements(request, "electrical")
                         if "watts_per_sqft" in mixed_reqs:
                             # Adjust electrical based on power requirements
@@ -1679,13 +1679,13 @@ class DeterministicScopeEngine:
                 return occupancy_mapping[request.occupancy_type.lower()]
         
         # Check project type
-        if request.project_type == ProjectType.INDUSTRIAL:
+        if request.project_type == "industrial":
             return 'warehouse'
-        elif request.project_type == ProjectType.COMMERCIAL:
+        elif request.project_type == "commercial":
             return 'commercial'
-        elif request.project_type == ProjectType.RESIDENTIAL:
+        elif request.project_type == "residential":
             return 'office'  # Use office as proxy for residential
-        elif request.project_type == ProjectType.MIXED_USE and request.building_mix:
+        elif request.project_type == "mixed_use" and request.building_mix:
             # For mixed use, use the dominant type
             max_percentage = 0
             dominant_type = 'commercial'

@@ -14,7 +14,7 @@ from app.db.models import User, Project
 from app.services.nlp_service import nlp_service
 from app.services.climate_service import climate_service
 from app.core.engine import engine as scope_engine
-from app.models.scope import ScopeRequest, ProjectType
+from app.models.scope import ScopeRequest
 from app.core.config import settings
 
 router = APIRouter()
@@ -99,9 +99,9 @@ async def generate_demo_scope(
         climate_zone = climate_service.determine_climate_zone(extracted_data["location"])
         
         # Check if it's mixed-use based on building_mix
-        project_type = ProjectType.COMMERCIAL
+        project_type = "commercial"
         if extracted_data.get("building_mix"):
-            project_type = ProjectType.MIXED_USE
+            project_type = "mixed_use"
         
         # Create scope request
         print(f"[DEMO] Creating scope request with location: '{extracted_data['location']}'")
