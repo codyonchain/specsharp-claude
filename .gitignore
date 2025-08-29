@@ -88,6 +88,7 @@ venv.bak/
 .env.local
 .env.development
 .env.production.local
+.env.oauth-test
 
 # But allow examples
 !.env.example

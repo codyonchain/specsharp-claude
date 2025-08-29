@@ -15,6 +15,8 @@ import secrets
 import httpx
 
 from app.core.config import settings
+from app.core.oauth_config import OAuthConfig
+from app.core.environment import EnvironmentChecker
 from app.models.auth import User
 from app.db.database import get_db
 from app.db.models import User as DBUser
@@ -93,10 +95,49 @@ def get_or_create_oauth_user(db: Session, email: str, full_name: str, oauth_id: 
 
 @router.get("/login/google")
 @limiter.limit("5/minute")  # Strict rate limiting for auth endpoints
-async def oauth_login(request: Request):
-    """Initiate Google OAuth login flow"""
+async def oauth_login(request: Request, db: Session = Depends(get_db)):
+    """Initiate Google OAuth login flow or return test user in bypass mode"""
+    
+    # Check if we should use OAuth bypass
+    if not OAuthConfig.is_oauth_enabled():
+        if EnvironmentChecker.is_testing_mode():
+            logger.info("Using auth bypass (testing mode)")
+            
+            # Create or get test user
+            test_user = get_or_create_oauth_user(
+                db=db,
+                email="test@specsharp.com",
+                full_name="Test User",
+                oauth_id="test-oauth-id-123",
+                profile_picture=None
+            )
+            
+            # Create token for test user
+            access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+            access_token = create_access_token(
+                data={"sub": test_user.email}, 
+                expires_delta=access_token_expires
+            )
+            
+            # Return redirect response with token (simulate OAuth callback)
+            redirect_url = f"{settings.frontend_url}?token={access_token}&auth=bypass"
+            return RedirectResponse(url=redirect_url)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OAuth not configured and testing mode disabled"
+            )
+    
+    # Normal OAuth flow
     try:
         logger.info("Starting Google OAuth login flow")
+        oauth_config = OAuthConfig.get_google_config()
+        if not oauth_config:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="OAuth configuration missing"
+            )
+        
         client = oauth.create_client('google')
         
         # Use different redirect URI based on environment
