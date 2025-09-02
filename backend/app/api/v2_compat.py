@@ -8,13 +8,15 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from typing import Dict, Any
 import logging
+import time
 
 from app.db.database import get_db
 from app.models.auth import User
 from app.api.endpoints.auth import get_current_user_with_cookie
-from app.api.endpoints.scope import generate_scope
-from app.models.scope import ScopeRequest
+from app.models.scope import ScopeRequest, ScopeResponse
 from app.services.nlp_service import NLPService
+from app.services.scope_service import ScopeService
+from app.db.models import Project
 
 logger = logging.getLogger(__name__)
 
@@ -54,13 +56,30 @@ async def analyze_compatibility(
             building_features=parsed.get("features", [])
         )
         
-        # Call the V1 scope generation
-        scope_response = await generate_scope(
-            request=request,
-            scope_request=scope_request,
-            db=db,
-            current_user=current_user
+        # Generate the scope using the service directly
+        scope_service = ScopeService()
+        scope_response = scope_service.generate_scope(scope_request)
+        
+        # Save to database
+        project = Project(
+            user_id=current_user.id,
+            project_id=scope_response.project_id,
+            project_name=scope_response.project_name,
+            description=description,
+            square_footage=scope_request.square_footage,
+            location=scope_request.location,
+            building_type=scope_request.building_type or "office",
+            subtotal=scope_response.subtotal,
+            contingency_percentage=10,
+            contingency_amount=scope_response.subtotal * 0.1,
+            total_cost=scope_response.total_cost,
+            cost_per_sqft=scope_response.cost_per_sqft,
+            project_classification=scope_request.project_classification,
+            scope_data=scope_response.dict(),
+            created_at=time.time()
         )
+        db.add(project)
+        db.commit()
         
         # Transform response to V2 format
         v2_response = {
@@ -127,13 +146,9 @@ async def calculate_compatibility(
             building_features=features
         )
         
-        # Call the V1 scope generation
-        scope_response = await generate_scope(
-            request=request,
-            scope_request=scope_request,
-            db=db,
-            current_user=current_user
-        )
+        # Generate the scope using the service
+        scope_service = ScopeService()
+        scope_response = scope_service.generate_scope(scope_request)
         
         # Transform to V2 format
         return {
