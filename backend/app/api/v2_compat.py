@@ -15,8 +15,9 @@ from app.models.auth import User
 from app.api.endpoints.auth import get_current_user_with_cookie
 from app.models.scope import ScopeRequest, ScopeResponse
 from app.services.nlp_service import NLPService
-from app.services.scope_service import ScopeService
+from app.services.clean_engine_v2 import calculate_scope
 from app.db.models import Project
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +57,36 @@ async def analyze_compatibility(
             building_features=parsed.get("features", [])
         )
         
-        # Generate the scope using the service directly
-        scope_service = ScopeService()
-        scope_response = scope_service.generate_scope(scope_request)
+        # Generate the scope using clean engine v2
+        clean_request = {
+            'building_type': scope_request.building_type,
+            'building_subtype': scope_request.building_subtype or scope_request.building_type,
+            'square_footage': scope_request.square_footage,
+            'location': scope_request.location,
+            'num_floors': scope_request.num_floors,
+            'ceiling_height': scope_request.ceiling_height,
+            'project_classification': scope_request.project_classification,
+            'finish_level': scope_request.finish_level,
+            'features': scope_request.building_features or []
+        }
+        
+        result = calculate_scope(clean_request)
+        
+        # Create a scope response from the result
+        scope_response = ScopeResponse(
+            project_id=result['project_id'],
+            project_name=scope_request.project_name or "New Project",
+            created_at=result['created_at'],
+            generated_at=result['generated_at'],
+            request_data=result['request_data'],
+            categories=result['categories'],
+            subtotal=result['subtotal'],
+            total_cost=result['total_cost'],
+            cost_per_sqft=result['cost_per_sqft'],
+            confidence_score=result.get('confidence_score', 95),
+            floor_plan=result.get('floor_plan'),
+            calculation_breakdown=result.get('calculation_breakdown')
+        )
         
         # Save to database
         project = Project(
@@ -146,9 +174,36 @@ async def calculate_compatibility(
             building_features=features
         )
         
-        # Generate the scope using the service
-        scope_service = ScopeService()
-        scope_response = scope_service.generate_scope(scope_request)
+        # Generate the scope using clean engine v2
+        clean_request = {
+            'building_type': scope_request.building_type,
+            'building_subtype': scope_request.building_subtype or scope_request.building_type,
+            'square_footage': scope_request.square_footage,
+            'location': scope_request.location,
+            'num_floors': scope_request.num_floors,
+            'ceiling_height': scope_request.ceiling_height,
+            'project_classification': scope_request.project_classification,
+            'finish_level': scope_request.finish_level,
+            'features': scope_request.building_features or []
+        }
+        
+        result = calculate_scope(clean_request)
+        
+        # Create a scope response from the result
+        scope_response = ScopeResponse(
+            project_id=result['project_id'],
+            project_name=scope_request.project_name,
+            created_at=result['created_at'],
+            generated_at=result['generated_at'],
+            request_data=result['request_data'],
+            categories=result['categories'],
+            subtotal=result['subtotal'],
+            total_cost=result['total_cost'],
+            cost_per_sqft=result['cost_per_sqft'],
+            confidence_score=result.get('confidence_score', 95),
+            floor_plan=result.get('floor_plan'),
+            calculation_breakdown=result.get('calculation_breakdown')
+        )
         
         # Transform to V2 format
         return {
