@@ -16,7 +16,7 @@ import os
 from app.core.config import settings
 from app.core.environment import EnvironmentChecker
 from app.api.endpoints import auth, oauth, scope, cost, floor_plan, trade_package, comparison, markup, excel_export, pdf_export, subscription, team, share, demo, scenarios
-from app.api import v2_compat  # V2 compatibility layer
+from app.api import v2_simple  # Simplified V2 compatibility layer
 # Cost DNA removed - Clean Engine V2 handles all costs
 # from app.api.v1 import cost_dna
 from app.db.database import engine, Base
@@ -111,8 +111,8 @@ app.include_router(team.router, prefix="/api/v1/team", tags=["team"])
 app.include_router(share.router, prefix="/api/v1", tags=["share"])
 app.include_router(demo.router, prefix="/api/v1/demo", tags=["demo"])
 app.include_router(scenarios.router, prefix="/api/v1", tags=["scenarios"])
-# V2 compatibility layer
-app.include_router(v2_compat.router, tags=["v2-compat"])
+# V2 compatibility layer (simplified)
+app.include_router(v2_simple.router, tags=["v2-compat"])
 # Cost DNA removed - Clean Engine V2 handles all costs
 # app.include_router(cost_dna.router, prefix="/api/v1/cost-dna", tags=["cost-dna"])
 
