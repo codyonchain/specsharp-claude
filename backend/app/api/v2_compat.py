@@ -116,7 +116,7 @@ async def v2_analyze(
             scope_response = calculate_scope({
                 "building_type": building_type,
                 "square_footage": size,
-                "location": location.get("city", "Nashville") if isinstance(location, dict) else "Nashville".get("city", "Nashville") if isinstance(location, dict) else "Nashville",
+                "location": location.get("city", "Nashville") if isinstance(location, dict) else "Nashville",
                 "num_floors": stories,
                 "building_subtype": building_subtype,
                 "project_classification": parsed_data.get("project_classification", "ground_up"),
@@ -189,11 +189,11 @@ async def v2_analyze(
         response = V2AnalyzeResponse(
             project_id=project_id,
             project_name=project_name,
-            "building_subtype": building_subtype,
+            building_type=building_type,
             building_subtype=building_subtype,
-            "location": location.get("city", "Nashville") if isinstance(location, dict) else "Nashville",
+            location=location,
             size=size,
-            "num_floors": stories,
+            stories=stories,
             data=project_data,
             scope=scope_data,
             calculations=calculations
