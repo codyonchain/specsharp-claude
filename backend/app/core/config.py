@@ -37,6 +37,7 @@ class Settings(BaseSettings):
             "http://localhost:5173", 
             "https://specsharp.ai", 
             "https://www.specsharp.ai",
+            "https://api.specsharp.ai",
             "https://specsharp.vercel.app"
         ]
         
@@ -44,7 +45,8 @@ class Settings(BaseSettings):
         if self.environment == "production":
             default_origins.extend([
                 "https://specsharp.ai",
-                "https://www.specsharp.ai"
+                "https://www.specsharp.ai",
+                "https://api.specsharp.ai"
             ])
         
         return list(set(default_origins))  # Remove duplicates
