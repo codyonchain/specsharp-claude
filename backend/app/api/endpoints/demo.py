@@ -13,7 +13,7 @@ from app.db.database import get_db
 from app.db.models import User, Project
 from app.services.nlp_service import nlp_service
 from app.services.climate_service import climate_service
-from app.core.engine import engine as scope_engine
+from app.services.clean_engine_v2 import calculate_scope
 from app.models.scope import ScopeRequest
 from app.core.config import settings
 
@@ -81,11 +81,7 @@ async def generate_demo_scope(
         # Extract building type - fallback analysis already includes it
         building_type = extracted_data.get("building_type", "commercial")
         
-        # For restaurants, map to the correct occupancy type
-        if building_type == "restaurant":
-            occupancy_type = "restaurant"
-        else:
-            occupancy_type = building_type
+        # Just use building_type directly (occupancy_type was redundant)
         
         # Ensure we have required fields
         if not extracted_data.get("square_footage"):
@@ -106,11 +102,11 @@ async def generate_demo_scope(
         # Create scope request
         print(f"[DEMO] Creating scope request with location: '{extracted_data['location']}'")
         scope_req = ScopeRequest(
-            project_name=f"Demo: {occupancy_type.replace('_', ' ').title()} in {extracted_data['location']}",
+            project_name=f"Demo: {building_type.replace('_', ' ').title()} in {extracted_data['location']}",
             building_type=building_type,
             square_footage=extracted_data["square_footage"],
             num_floors=extracted_data["num_floors"],
-            occupancy_type=occupancy_type,
+            # occupancy_type removed (was redundant with building_type)
             location=extracted_data["location"],
             climate_zone=climate_zone,
             special_requirements=description,
@@ -119,7 +115,52 @@ async def generate_demo_scope(
         print(f"[DEMO] Scope request location: '{scope_req.location}'")
         
         # Generate scope using the engine
-        scope_response = scope_engine.generate_scope(scope_req)
+        # Convert to dict for clean_engine_v2
+        request_dict = {
+            'building_type': scope_req.building_type,
+            'building_subtype': scope_req.building_subtype or scope_req.building_type,
+            'square_footage': scope_req.square_footage,
+            'location': scope_req.location,
+            'num_floors': scope_req.num_floors or 1,
+            'features': scope_req.building_features or [],
+            'finish_level': getattr(scope_req, 'finish_level', 'standard'),
+            'project_classification': str(getattr(scope_req, 'project_classification', 'ground_up')),
+            'project_name': scope_req.project_name or demo['name']
+        }
+        
+        # Calculate scope using clean_engine_v2
+        calc_result = calculate_scope(request_dict)
+        
+        # Create a response object matching the expected format
+        from app.models.scope import ScopeResponse, ScopeCategory, BuildingSystem
+        from datetime import datetime
+        
+        categories = []
+        for cat_data in calc_result.get('categories', []):
+            systems = []
+            for sys_data in cat_data.get('systems', []):
+                systems.append(BuildingSystem(
+                    name=sys_data['name'],
+                    quantity=sys_data['quantity'],
+                    unit=sys_data['unit'],
+                    unit_cost=sys_data['unit_cost'],
+                    total_cost=sys_data['total_cost'],
+                    confidence_score=95,
+                    confidence_label="High"
+                ))
+            categories.append(ScopeCategory(
+                name=cat_data['name'],
+                systems=systems
+            ))
+        
+        scope_response = ScopeResponse(
+            project_id=calc_result.get('project_id'),
+            project_name=calc_result.get('project_name'),
+            created_at=datetime.utcnow(),
+            request_data=scope_req,
+            categories=categories,
+            contingency_percentage=calc_result.get('contingency_percentage', 10)
+        )
         scope_data = scope_response.model_dump()
         print(f"[DEMO] Scope response location: '{scope_response.request_data.location}'")
         
@@ -136,12 +177,12 @@ async def generate_demo_scope(
         print(f"[DEMO] About to store project with location: '{extracted_data['location']}'")
         project_data = {
             "project_id": demo_project_id,
-            "project_name": f"Demo: {occupancy_type.replace('_', ' ').title()} in {extracted_data['location']}",
+            "project_name": f"Demo: {building_type.replace('_', ' ').title()} in {extracted_data['location']}",
             "description": description,
             "square_footage": extracted_data["square_footage"],
             "num_floors": extracted_data["num_floors"],
             "location": extracted_data["location"],
-            "building_type": occupancy_type,
+            "building_type": building_type,
             "total_cost": scope_data["total_cost"],
             "cost_per_sqft": scope_data["cost_per_sqft"],
             "categories": scope_data["categories"],

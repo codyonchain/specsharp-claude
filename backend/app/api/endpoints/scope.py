@@ -45,7 +45,6 @@ def create_project_safely(db, project_data):
     essential_fields = {
         'project_id': project_data.get('project_id'),
         'name': project_data.get('name'),
-        'project_type': project_data.get('project_type'),
         'square_footage': project_data.get('square_footage'),
         'location': project_data.get('location'),
         'total_cost': project_data.get('total_cost'),
@@ -60,7 +59,6 @@ def create_project_safely(db, project_data):
         'description': project_data.get('description'),
         'project_classification': project_data.get('project_classification', 'ground_up'),
         'building_type': project_data.get('building_type'),
-        'occupancy_type': project_data.get('occupancy_type'),
         'climate_zone': project_data.get('climate_zone'),
         'subtotal': project_data.get('subtotal'),
         'contingency_percentage': project_data.get('contingency_percentage', 10.0),
@@ -299,7 +297,6 @@ async def generate_scope(
         try:
             floor_plan_data = architectural_floor_plan_service.generate_architectural_plan(
                 square_footage=scope_request.square_footage,
-                project_type=scope_request.building_type,
                 building_mix=getattr(scope_request, 'building_mix', None)
             )
             scope_response.floor_plan = floor_plan_data
@@ -310,7 +307,6 @@ async def generate_scope(
             # Use old floor plan service as fallback
             floor_plan_data = floor_plan_service.generate_floor_plan(
                 square_footage=scope_request.square_footage,
-                project_type=scope_request.building_type,
                 building_mix=getattr(scope_request, 'building_mix', None)
             )
             scope_response.floor_plan = floor_plan_data
@@ -342,7 +338,6 @@ async def generate_scope(
             'project_id': scope_response.project_id,
             'name': scope_request.project_name,
             'description': scope_request.special_requirements,  # Store the original input description
-            'project_type': scope_request.building_type,  # Using building_type as project_type is removed
             'project_classification': scope_request.project_classification.value,  # This is always present with default
             'building_type': scope_request.building_type,  # Store DETECTED building type
             'building_subtype': getattr(scope_request, 'building_subtype', None),  # Store DETECTED subtype
@@ -640,10 +635,8 @@ async def list_projects(
                 "id": p.Project.id,
                 "project_id": p.Project.project_id,
                 "name": p.Project.name,
-                "project_type": p.Project.project_type,
                 "project_classification": getattr(p.Project, 'project_classification', 'ground_up'),  # Handle missing column
                 "building_type": p.Project.building_type,
-                "occupancy_type": p.Project.occupancy_type,
                 "description": p.Project.description,
                 "square_footage": p.Project.square_footage,
                 "location": p.Project.location,
@@ -749,10 +742,8 @@ async def search_projects(
             "id": p.Project.id,
             "project_id": p.Project.project_id,
             "name": p.Project.name,
-            "project_type": p.Project.project_type,
             "project_classification": p.Project.project_classification,  # Add this field
             "building_type": p.Project.building_type,
-            "occupancy_type": p.Project.occupancy_type,
             "description": p.Project.description,
             "square_footage": p.Project.square_footage,
             "location": p.Project.location,
@@ -850,7 +841,6 @@ async def get_project(
             building_mix = request_data.get('building_mix') if request_data else None
             floor_plan_data = architectural_floor_plan_service.generate_architectural_plan(
                 square_footage=project.square_footage,
-                project_type=project.project_type,
                 building_mix=building_mix
             )
         except Exception as e:
@@ -860,7 +850,6 @@ async def get_project(
             building_mix = request_data.get('building_mix') if request_data else None
             floor_plan_data = floor_plan_service.generate_floor_plan(
                 square_footage=project.square_footage,
-                project_type=project.project_type,
                 building_mix=building_mix
             )
         scope_data['floor_plan'] = floor_plan_data
@@ -955,14 +944,12 @@ async def recalculate_project(
         try:
             floor_plan_data = architectural_floor_plan_service.generate_architectural_plan(
                 square_footage=scope_request.square_footage,
-                project_type=scope_request.building_type,
                 building_mix=getattr(scope_request, 'building_mix', None)
             )
             new_scope_response.floor_plan = floor_plan_data
         except Exception as e:
             floor_plan_data = floor_plan_service.generate_floor_plan(
                 square_footage=scope_request.square_footage,
-                project_type=scope_request.building_type,
                 building_mix=getattr(scope_request, 'building_mix', None)
             )
             new_scope_response.floor_plan = floor_plan_data
@@ -1007,9 +994,7 @@ async def duplicate_project(
         'project_id': new_project_id,
         'name': duplicate_name or f"{original_project.name} (Copy)",
         'description': getattr(original_project, 'description', None),
-        'project_type': original_project.project_type,
         'building_type': getattr(original_project, 'building_type', None),
-        'occupancy_type': getattr(original_project, 'occupancy_type', None),
         'square_footage': original_project.square_footage,
         'location': original_project.location,
         'climate_zone': original_project.climate_zone,

@@ -153,20 +153,20 @@ class HealthcareCostService:
         self.trade_breakdowns = HEALTHCARE_TRADE_BREAKDOWNS
         self.classifier = HealthcareFacilityClassifier()
     
-    def determine_facility_type(self, description: str, occupancy_type: str = None) -> HealthcareFacilityType:
+    def determine_facility_type(self, description: str, building_type: str = None) -> HealthcareFacilityType:
         """
         Determine the healthcare facility type from description
         
         Args:
             description: Natural language project description
-            occupancy_type: Explicit occupancy type if provided
+            building_type: Explicit building type if provided
             
         Returns:
             HealthcareFacilityType enum value
         """
         if not description:
-            # Default based on occupancy type
-            if occupancy_type and 'hospital' in occupancy_type.lower():
+            # Default based on building type
+            if building_type and 'hospital' in building_type.lower():
                 return HealthcareFacilityType.HOSPITAL
             return HealthcareFacilityType.MEDICAL_OFFICE
         
@@ -191,21 +191,21 @@ class HealthcareCostService:
     
     def get_healthcare_cost(self, 
                            description: str,
-                           occupancy_type: str = None,
+                           building_type: str = None,
                            square_footage: float = 0) -> Dict[str, any]:
         """
         Calculate healthcare facility cost based on type and description
         
         Args:
             description: Natural language project description
-            occupancy_type: Explicit occupancy type if provided
+            building_type: Explicit building type if provided
             square_footage: Building square footage
             
         Returns:
             Dictionary with cost details
         """
         # Determine facility type
-        facility_type = self.determine_facility_type(description, occupancy_type)
+        facility_type = self.determine_facility_type(description, building_type)
         
         # Get base cost
         base_cost = self.get_base_cost(facility_type)

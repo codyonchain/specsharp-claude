@@ -200,7 +200,7 @@ class NLPService:
             # Get detailed healthcare analysis
             healthcare_details = healthcare_cost_service.get_healthcare_cost(
                 description=text,
-                occupancy_type="healthcare"
+                building_type="healthcare"
             )
             
             return {
@@ -401,7 +401,6 @@ class NLPService:
         if healthcare_details:
             extracted["is_healthcare"] = True
             extracted["building_type"] = "healthcare"
-            extracted["occupancy_type"] = "healthcare"
             extracted["healthcare_details"] = healthcare_details
             extracted["base_cost_per_sf"] = healthcare_details.get("base_cost_per_sf")
             # Healthcare facilities detected, skip generic building type detection
@@ -416,20 +415,15 @@ class NLPService:
         if building_mix:
             extracted["building_mix"] = building_mix
         
-        # Determine occupancy type if not already set
-        if not extracted.get("occupancy_type"):
-            if extracted.get("is_healthcare"):
-                extracted["occupancy_type"] = "healthcare"
-            elif extracted.get("building_type"):
-                extracted["occupancy_type"] = extracted["building_type"]
+        # occupancy_type field removed - using building_type directly
         
         # Generate smart project name
         suggested_name = self.generate_project_name(text, extracted)
         extracted["suggested_project_name"] = suggested_name
         
-        # Add detail suggestions based on occupancy type
-        occupancy = extracted.get("occupancy_type", "")
-        extracted["detail_suggestions"] = self.get_detail_suggestions(occupancy)
+        # Add detail suggestions based on building type  
+        building_type = extracted.get("building_type", "")
+        extracted["detail_suggestions"] = self.get_detail_suggestions(building_type)
         
         return extracted
     
@@ -496,25 +490,25 @@ class NLPService:
         extracted = self.extract_project_details(text)
         
         # Use centralized building type detection
-        occupancy_type = determine_building_type(text)
-        building_subtype = get_building_subtype(occupancy_type, text) if occupancy_type != 'commercial' else None
+        building_type = determine_building_type(text)
+        building_subtype = get_building_subtype(building_type, text) if building_type != 'commercial' else None
         
-        print(f"[NLP] Detected {occupancy_type} building type for: {text}")
+        print(f"[NLP] Detected {building_type} building type for: {text}")
         if building_subtype:
             print(f"[NLP] Building subtype: {building_subtype}")
         
         # Parse unit mix for multi-family residential
-        if occupancy_type == 'multi_family_residential':
+        if building_type == 'multi_family_residential':
             unit_mix = self.parse_unit_mix(text)
             extracted["unit_mix"] = unit_mix
             print(f"[NLP] Parsed unit mix: {unit_mix}")
         
-        # Determine project type based on occupancy type
-        if occupancy_type == 'warehouse':
+        # Determine project type based on building type
+        if building_type == 'warehouse':
             project_type = "industrial"
-        elif occupancy_type == 'multi_family_residential':
+        elif building_type == 'multi_family_residential':
             project_type = "commercial"  # Multi-family is considered commercial construction
-        elif occupancy_type in ['healthcare', 'educational', 'restaurant', 'retail', 'office']:
+        elif building_type in ['healthcare', 'educational', 'restaurant', 'retail', 'office']:
             project_type = "commercial"
         elif any(word in text.lower() for word in ["home", "house", "single family"]):
             project_type = "residential"
@@ -538,7 +532,8 @@ class NLPService:
             "analysis_method": "pattern_matching"
         }
         
-        result["occupancy_type"] = occupancy_type
+        result["building_type"] = building_type
+        # occupancy_type removed - use building_type directly
         if building_subtype:
             result["building_subtype"] = building_subtype
         
@@ -994,7 +989,7 @@ class NLPService:
         # Extract key components
         project_type = parsed_data.get('project_classification', 'Project')
         location = parsed_data.get('location', '')
-        occupancy = parsed_data.get('occupancy_type', '')
+        building_type_name = parsed_data.get('building_type', '')
         square_footage = parsed_data.get('square_footage', 0)
         
         # Determine the primary subject (what's being built)
@@ -1070,7 +1065,7 @@ class NLPService:
                 building_name = 'Dental Office'
         
         if not building_name:
-            building_name = occupancy.title() if occupancy else 'Commercial Building'
+            building_name = building_type_name.title() if building_type_name else 'Commercial Building'
         
         # Check for special features to add to name
         special_features = []
@@ -1174,7 +1169,7 @@ class NLPService:
         
         return name
     
-    def get_detail_suggestions(self, occupancy_type: str) -> list:
+    def get_detail_suggestions(self, building_type: str) -> list:
         """
         Suggest what details users should include for better estimates
         """
@@ -1229,7 +1224,7 @@ class NLPService:
             ]
         }
         
-        return suggestions.get(occupancy_type, [
+        return suggestions.get(building_type, [
             'Specific use case',
             'Special equipment or features',
             'Quality level (economy, standard, premium)',

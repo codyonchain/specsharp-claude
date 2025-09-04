@@ -53,10 +53,10 @@ class Project(Base):
     name = Column(String, nullable=False)
     scenario_name = Column(String, nullable=True)  # For scenario comparisons (e.g., "Conservative", "Aggressive")
     description = Column(Text, nullable=True)  # Original input description
-    project_type = Column(String, nullable=False)
+    project_type = Column(String, nullable=True)  # DEPRECATED - to be removed (was misused for building_type)
     project_classification = Column(String, nullable=False, default='ground_up')  # ground_up, addition, renovation
     building_type = Column(String, nullable=True)  # Specific building type (hospital, school, etc.)
-    occupancy_type = Column(String, nullable=True)  # Same as building_type for consistency
+    occupancy_type = Column(String, nullable=True)  # DEPRECATED - to be removed (redundant with building_type)
     square_footage = Column(Float, nullable=False)
     location = Column(String, nullable=False)
     climate_zone = Column(String, nullable=True)
