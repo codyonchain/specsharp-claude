@@ -96,9 +96,25 @@ app.add_middleware(
     secret_key=settings.session_secret_key or settings.secret_key
 )
 
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(oauth.router, prefix="/api/v1/oauth", tags=["oauth"])
+app.include_router(scope.router, prefix="/api/v1/scope", tags=["scope"])
+app.include_router(cost.router, prefix="/api/v1/cost", tags=["cost"])
+app.include_router(floor_plan.router, prefix="/api/v1/floor-plan", tags=["floor-plan"])
+app.include_router(trade_package.router, prefix="/api/v1/trade-package", tags=["trade-package"])
+app.include_router(comparison.router, prefix="/api/v1/comparison", tags=["comparison"])
+app.include_router(markup.router, prefix="/api/v1/markup", tags=["markup"])
+app.include_router(excel_export.router, prefix="/api/v1/excel", tags=["excel"])
+app.include_router(pdf_export.router, prefix="/api/v1/pdf", tags=["pdf"])
+app.include_router(subscription.router, prefix="/api/v1/subscription", tags=["subscription"])
+app.include_router(team.router, prefix="/api/v1/team", tags=["team"])
+app.include_router(share.router, prefix="/api/v1", tags=["share"])
+app.include_router(demo.router, prefix="/api/v1/demo", tags=["demo"])
+app.include_router(scenarios.router, prefix="/api/v1", tags=["scenarios"])
 # V2 compatibility layer
 app.include_router(v2_compat.router, tags=["v2-compat"])
 # Cost DNA removed - Clean Engine V2 handles all costs
+# app.include_router(cost_dna.router, prefix="/api/v1/cost-dna", tags=["cost-dna"])
 
 @app.on_event("startup")
 async def startup_event():

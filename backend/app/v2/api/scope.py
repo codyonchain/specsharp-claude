@@ -2,9 +2,12 @@
 Clean API endpoint that uses the new system
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends, Header
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
+from datetime import datetime
+import uuid
+from sqlalchemy.orm import Session
 from app.v2.engines.unified_engine import unified_engine
 from app.v2.services.phrase_parser import phrase_parser
 from app.v2.config.master_config import (
@@ -14,6 +17,8 @@ from app.v2.config.master_config import (
     MASTER_CONFIG
 )
 from app.core.building_taxonomy import normalize_building_type, validate_building_type
+from app.db.models import Project
+from app.db.database import get_db
 import logging
 
 logger = logging.getLogger(__name__)
@@ -366,3 +371,201 @@ async def test_nlp(
             data={},
             errors=[str(e)]
         )
+
+# ============================================================================
+# CRUD OPERATIONS - Complete V2 API
+# ============================================================================
+
+@router.get("/scope/projects")
+async def get_all_projects(
+    user_id: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """Get all projects for a user"""
+    projects = db.query(Project).filter(
+        Project.user_id == user_id
+    ).order_by(Project.created_at.desc()).all()
+    
+    return ProjectResponse(
+        success=True,
+        data=[format_project_response(p) for p in projects]
+    )
+
+@router.get("/scope/projects/{project_id}")
+async def get_single_project(
+    project_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get a specific project"""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        return ProjectResponse(
+            success=False,
+            data={},
+            errors=["Project not found"]
+        )
+    
+    return ProjectResponse(
+        success=True,
+        data=format_project_response(project)
+    )
+
+@router.delete("/scope/projects/{project_id}")
+async def delete_project(
+    project_id: str,
+    db: Session = Depends(get_db)
+):
+    """Delete a project"""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        return ProjectResponse(
+            success=False,
+            data={},
+            errors=["Project not found"]
+        )
+    
+    db.delete(project)
+    db.commit()
+    
+    return ProjectResponse(
+        success=True,
+        data={"message": "Project deleted"}
+    )
+
+@router.post("/scope/generate")
+async def generate_scope(
+    request: AnalyzeRequest,
+    db: Session = Depends(get_db)
+):
+    """Generate scope and save to database (V2 version of V1's generate)"""
+    try:
+        # Parse the description using phrase-first parser
+        parsed = phrase_parser.parse(request.description)
+        
+        # Normalize building type using taxonomy
+        if parsed.get('building_type'):
+            canonical_type, canonical_subtype = validate_building_type(
+                parsed['building_type'],
+                parsed.get('subtype')
+            )
+            parsed['building_type'] = canonical_type
+            if canonical_subtype:
+                parsed['subtype'] = canonical_subtype
+        
+        # Calculate using unified engine
+        result = unified_engine.calculate_project(
+            building_type=BuildingType(parsed['building_type']),
+            subtype=parsed['subtype'],
+            square_footage=parsed['square_footage'],
+            location=parsed['location'],
+            project_class=ProjectClass(parsed.get('project_class', 'ground_up')),
+            floors=parsed.get('floors'),
+            ownership_type=OwnershipType(parsed.get('ownership_type', 'for_profit')),
+            special_features=parsed.get('special_features', [])
+        )
+        
+        # Create and save project to database
+        project = Project(
+            id=str(uuid.uuid4()),
+            user_id=getattr(request, 'user_id', 'default-user'),
+            project_name=parsed.get('suggested_project_name', 'Generated Project'),
+            description=request.description,
+            location=parsed['location'],
+            square_footage=parsed['square_footage'],
+            building_type=parsed['building_type'],
+            occupancy_type=parsed['building_type'],  # V2 uses building_type as occupancy_type
+            subtype=parsed.get('subtype'),
+            total_cost=result['totals']['total_project_cost'],
+            construction_cost=result['construction_costs']['construction_total'],
+            cost_per_sqft=result['totals']['cost_per_sf'],
+            calculation_data=result,  # Store full calculation
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        
+        db.add(project)
+        db.commit()
+        db.refresh(project)
+        
+        return ProjectResponse(
+            success=True,
+            data=format_project_response(project)
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in generate_scope: {str(e)}")
+        return ProjectResponse(
+            success=False,
+            data={},
+            errors=[str(e)]
+        )
+
+@router.post("/scope/owner-view")
+async def get_owner_view(
+    request: dict,
+    db: Session = Depends(get_db)
+):
+    """Get owner-friendly view of project"""
+    project_id = request.get('project_id')
+    if not project_id:
+        return ProjectResponse(
+            success=False,
+            data={},
+            errors=["project_id required"]
+        )
+    
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        return ProjectResponse(
+            success=False,
+            data={},
+            errors=["Project not found"]
+        )
+    
+    # Use unified_engine for owner view calculations
+    try:
+        # Get ownership analysis from stored calculation data
+        owner_data = project.calculation_data.get('ownership_analysis', {})
+        
+        return ProjectResponse(
+            success=True,
+            data={
+                'project_id': project.id,
+                'project_name': project.project_name,
+                'total_cost': project.total_cost,
+                'cost_per_sf': project.cost_per_sqft,
+                'ownership_analysis': owner_data,
+                'financial_metrics': owner_data.get('financial_metrics', {}),
+                'revenue_requirements': owner_data.get('revenue_requirements', {})
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in get_owner_view: {str(e)}")
+        return ProjectResponse(
+            success=False,
+            data={},
+            errors=[str(e)]
+        )
+
+def format_project_response(project: Project) -> dict:
+    """Format database project to match frontend expectations"""
+    return {
+        'project_id': project.id,
+        'project_name': project.project_name,
+        'description': project.description,
+        'location': project.location,
+        'created_at': project.created_at.isoformat(),
+        'updated_at': project.updated_at.isoformat(),
+        'square_footage': project.square_footage,
+        'building_type': project.building_type,
+        'occupancy_type': project.occupancy_type,
+        'subtype': project.subtype,
+        'total_cost': project.total_cost,
+        'construction_cost': project.construction_cost,
+        'cost_per_sqft': project.cost_per_sqft,
+        'trade_packages': project.calculation_data.get('trade_breakdown', []) if project.calculation_data else [],
+        'regional_multiplier': project.calculation_data.get('regional_multiplier', 1.0) if project.calculation_data else 1.0,
+        'is_healthcare': project.occupancy_type == 'healthcare',
+        'success': True
+    }
