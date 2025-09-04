@@ -1,7 +1,7 @@
 from typing import Dict, List, Optional, Any, Tuple
 import copy
 from app.models.scope import ScopeRequest, ScopeResponse
-from app.services.clean_engine_v2 import calculate_scope
+from app.v2.engines.unified_engine import unified_engine
 from app.services.floor_plan_service import floor_plan_service
 import json
 
@@ -83,8 +83,24 @@ class ComparisonService:
             'project_name': scope_request.project_name or f"Scenario {index}"
         }
         
-        # Calculate scope
-        calc_result = calculate_scope(request_dict)
+        # Calculate scope using unified_engine (V2)
+        from app.v2.config.master_config import BuildingType, ProjectClass, OwnershipType
+        
+        # Convert to unified_engine format
+        building_type = BuildingType(request_dict.get('building_type', 'office'))
+        project_class = ProjectClass(request_dict.get('project_class', 'ground_up'))
+        ownership_type = OwnershipType(request_dict.get('ownership_type', 'for_profit'))
+        
+        calc_result = unified_engine.calculate_project(
+            building_type=building_type,
+            subtype=request_dict.get('subtype', 'class_b'),
+            square_footage=request_dict.get('square_footage', 100000),
+            location=request_dict.get('location', 'Nashville'),
+            project_class=project_class,
+            floors=request_dict.get('floors'),
+            ownership_type=ownership_type,
+            special_features=request_dict.get('special_features', [])
+        )
         
         # Fix categories to have subtotal field (for compatibility)
         categories = calc_result.get('categories', [])

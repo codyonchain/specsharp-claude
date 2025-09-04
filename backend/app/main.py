@@ -15,8 +15,8 @@ import os
 
 from app.core.config import settings
 from app.core.environment import EnvironmentChecker
-from app.api.endpoints import auth, oauth, scope, cost, floor_plan, trade_package, comparison, markup, excel_export, pdf_export, subscription, team, share, demo, scenarios
-from app.api import v2_compat  # V2 compatibility layer
+# V1 endpoints removed - using V2 only
+from app.v2.api.scope import router as v2_scope_router  # Real V2 API
 # Cost DNA removed - Clean Engine V2 handles all costs
 # from app.api.v1 import cost_dna
 from app.db.database import engine, Base
@@ -96,8 +96,8 @@ app.add_middleware(
     secret_key=settings.session_secret_key or settings.secret_key
 )
 
-# V2 compatibility layer
-app.include_router(v2_compat.router, tags=["v2-compat"])
+# V2 API - Real endpoints using unified_engine
+app.include_router(v2_scope_router, tags=["v2-api"])
 # Cost DNA removed - Clean Engine V2 handles all costs
 
 @app.on_event("startup")

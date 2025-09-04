@@ -550,22 +550,68 @@ async def get_owner_view(
 
 def format_project_response(project: Project) -> dict:
     """Format database project to match frontend expectations"""
-    return {
+    
+    # Convert trade_breakdown to categories format that frontend expects
+    calculation_data = project.calculation_data or {}
+    trade_data = calculation_data.get('trade_breakdown', {})
+    categories = []
+    
+    # Convert flat trade_breakdown to nested categories structure
+    if isinstance(trade_data, dict):
+        for trade_name, amount in trade_data.items():
+            categories.append({
+                'name': trade_name.replace('_', ' ').title(),
+                'systems': [{
+                    'name': trade_name.replace('_', ' ').title(),
+                    'total_cost': amount,
+                    'unit_cost': amount,
+                    'quantity': 1
+                }]
+            })
+    
+    response = {
+        # IDs and metadata - both snake_case and camelCase for compatibility
         'project_id': project.id,
+        'projectId': project.id,
         'project_name': project.project_name,
+        'projectName': project.project_name,
         'description': project.description,
         'location': project.location,
         'created_at': project.created_at.isoformat(),
+        'createdAt': project.created_at.isoformat(),
         'updated_at': project.updated_at.isoformat(),
+        'updatedAt': project.updated_at.isoformat(),
+        
+        # Building info
         'square_footage': project.square_footage,
+        'squareFootage': project.square_footage,
         'building_type': project.building_type,
+        'buildingType': project.building_type,
         'occupancy_type': project.occupancy_type,
+        'occupancyType': project.occupancy_type,
         'subtype': project.subtype,
+        
+        # Cost fields - both formats
         'total_cost': project.total_cost,
-        'construction_cost': project.construction_cost,
+        'totalCost': project.total_cost,
         'cost_per_sqft': project.cost_per_sqft,
-        'trade_packages': project.calculation_data.get('trade_breakdown', []) if project.calculation_data else [],
-        'regional_multiplier': project.calculation_data.get('regional_multiplier', 1.0) if project.calculation_data else 1.0,
-        'is_healthcare': project.occupancy_type == 'healthcare',
+        'costPerSqft': project.cost_per_sqft,
+        'construction_cost': project.construction_cost,
+        'constructionCost': project.construction_cost,
+        'subtotal': project.construction_cost,  # Frontend expects this field
+        
+        # Trade data in frontend-expected format
+        'categories': categories,  # Primary format frontend uses
+        'trade_packages': categories,  # Backup field name
+        
+        # Additional calculated fields
+        'regional_multiplier': calculation_data.get('regional_multiplier', 1.0),
+        'regionalMultiplier': calculation_data.get('regional_multiplier', 1.0),
+        'is_healthcare': project.building_type == 'healthcare',
+        'isHealthcare': project.building_type == 'healthcare',
+        
+        # Success flag
         'success': True
     }
+    
+    return response
