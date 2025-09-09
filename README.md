@@ -1,15 +1,29 @@
-# SpecSharp - AI-Powered Construction Cost Estimation Platform
+# SpecSharp - Construction Cost & Investment Analysis Platform
 
-SpecSharp is a modern web application that provides instant, deterministic construction cost estimates using AI-powered natural language processing. Built for general contractors, developers, and construction professionals, SpecSharp transforms project descriptions into detailed cost breakdowns in seconds.
+SpecSharp provides instant, accurate construction cost estimates and investment analysis for commercial real estate projects. Input a project description and get detailed cost breakdowns, revenue projections, and ROI analysis in seconds.
+
+## Architecture
+
+### Single Source of Truth Design
+- **master_config.py**: Contains ALL building data (costs, revenue, margins) for 57 building subtypes
+- **unified_engine.py**: Single calculation engine for ALL metrics
+- **No parallel systems**: One config, one engine, one data flow
+
+### Key Features
+- **13 Building Types**: Healthcare, Multifamily, Office, Retail, Restaurant, Industrial, Hospitality, Educational, Mixed Use, Specialty, Civic, Recreation, Parking
+- **57 Subtypes**: From hospitals to cafes, each with specific cost and revenue models
+- **Quality Adjustments**: Premium construction commands premium revenue
+- **Regional Multipliers**: Adjusts for local market conditions
+- **Complete Financial Analysis**: Construction costs, soft costs, revenue projections, NOI, ROI, payback period
 
 ## 🚀 Features
 
 ### Core Functionality
 - **Natural Language Processing**: Describe your project in plain English and get instant cost estimates
-- **Deterministic Pricing**: Consistent, rule-based pricing engine for reliable estimates
-- **Mixed-Use Support**: Handle complex projects with multiple building types (office, warehouse, restaurant, etc.)
+- **Universal Revenue Calculation**: Building-specific revenue models for investment analysis
+- **Quality Factor Adjustments**: Premium construction (>20% above base cost) gets premium rates
+- **Mixed-Use Support**: Handle complex projects with multiple building types
 - **Regional Cost Adjustments**: Automatic price adjustments based on project location
-- **Professional Floor Plans**: AI-generated architectural floor plans with proper room layouts
 
 ### Advanced Features
 - **Trade Package Generation**: Create detailed PDF packages for electrical, mechanical, plumbing, structural, finishes, and general conditions trades
@@ -83,8 +97,15 @@ SpecSharp is a modern web application that provides instant, deterministic const
 specsharp/
 ├── backend/
 │   ├── app/
-│   │   ├── api/          # API endpoints
-│   │   ├── core/         # Core business logic & pricing engine
+│   │   ├── v2/
+│   │   │   ├── config/
+│   │   │   │   └── master_config.py     # All building data
+│   │   │   ├── engines/
+│   │   │   │   └── unified_engine.py    # All calculations
+│   │   │   └── api/
+│   │   │       └── scope.py             # API endpoints
+│   │   ├── api/          # Legacy V1 API endpoints
+│   │   ├── core/         # Core business logic
 │   │   ├── db/           # Database models & migrations
 │   │   └── services/     # Business services
 │   ├── tests/            # Backend tests
@@ -102,6 +123,39 @@ specsharp/
 ├── start-backend.sh     # Start backend only
 ├── start-frontend.sh    # Start frontend only
 └── CLAUDE.md            # AI assistant instructions
+```
+
+## Revenue Calculation System
+
+### How It Works
+1. User inputs project description (e.g., "4200 SF full service restaurant")
+2. NLP detects building type and subtype
+3. unified_engine calculates:
+   - Construction costs from master_config base rates
+   - Quality factor based on actual vs base cost
+   - Revenue using building-specific metrics (per SF, per unit, per bed, etc.)
+   - Operating margins (base or premium based on quality)
+   - ROI metrics (NOI, cash-on-cash return, payback period)
+
+### Revenue Metrics by Type
+- **Healthcare**: Revenue per bed, visit, procedure, or scan
+- **Multifamily**: Monthly rent per unit
+- **Office/Retail**: Annual rent per SF
+- **Restaurant**: Sales per SF
+- **Hospitality**: Revenue per room
+- **Educational**: Funding per student
+- **Industrial**: Lease rate per SF
+- **Parking**: Revenue per space
+
+### Data Flow
+```
+master_config.py (data) 
+    ↓
+unified_engine.py (calculations)
+    ↓
+API response (multiple paths for compatibility)
+    ↓
+Frontend display (ExecutiveViewComplete.tsx)
 ```
 
 ## 🔧 Development
@@ -172,6 +226,35 @@ alembic upgrade head
    ```
    75,000 sq ft warehouse with 10% office space in Phoenix
    ```
+
+## Testing Revenue Calculations
+
+### V2 API Testing
+```bash
+# Test restaurant
+curl -X POST http://localhost:8001/api/v2/scope/generate \
+  -d '{"description": "4200 sf full service restaurant"}'
+
+# Expected: ~$2.1M revenue, 12% margin, $252K NOI
+
+# Test multifamily  
+curl -X POST http://localhost:8001/api/v2/scope/generate \
+  -d '{"description": "100000 sf luxury apartments"}'
+
+# Expected: ~$4.5M revenue, 35% margin, $1.6M NOI
+
+# Test office
+curl -X POST http://localhost:8001/api/v2/scope/generate \
+  -d '{"description": "50000 sf class a office"}'
+
+# Expected: ~$1.9M revenue, 65% margin, $1.3M NOI
+
+# Test healthcare
+curl -X POST http://localhost:8001/api/v2/scope/generate \
+  -d '{"description": "25000 sf medical office building"}'
+
+# Expected: ~$1.1M revenue, 65% margin, $703K NOI
+```
 
 ### Using the Application
 
@@ -283,7 +366,14 @@ npm run test:coverage
 
 ## 📝 API Documentation
 
-### Core Endpoints
+### V2 API (Current)
+- `POST /api/v2/scope/generate` - Generate new project estimate
+- `GET /api/v2/scope/projects` - List all projects
+- `GET /api/v2/scope/projects/{id}` - Get project details
+- `GET /api/v2/scope/projects/{id}/owner-view` - Get investment analysis
+- `POST /api/v2/analyze` - Analyze project description
+
+### Legacy V1 Endpoints
 
 #### Authentication
 - `POST /api/v1/auth/register` - Register new user
@@ -341,5 +431,16 @@ This project is proprietary software. All rights reserved.
 
 ---
 
-**Current Version**: 1.0.0  
-**Last Updated**: July 2025
+## Recent Changes (September 2025)
+
+### Revenue System Refactor
+- Unified all revenue calculations into master_config + unified_engine
+- Removed parallel systems (owner_view_engine, owner_metrics_config)
+- Added quality factors for premium construction
+- Fixed frontend hardcoded values
+- All 57 building subtypes now have complete revenue models
+
+---
+
+**Current Version**: 2.0.0  
+**Last Updated**: September 2025
