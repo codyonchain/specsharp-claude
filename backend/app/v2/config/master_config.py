@@ -116,6 +116,37 @@ class BuildingConfig:
     
     # Special features that add cost
     special_features: Optional[Dict[str, float]] = None
+    
+    # Revenue and financial metrics - base values
+    base_revenue_per_sf_annual: Optional[float] = None
+    base_revenue_per_unit_monthly: Optional[float] = None
+    base_revenue_per_bed_annual: Optional[float] = None
+    base_revenue_per_room_annual: Optional[float] = None
+    base_revenue_per_student_annual: Optional[float] = None
+    base_revenue_per_visit: Optional[float] = None
+    base_revenue_per_procedure: Optional[float] = None
+    base_revenue_per_scan: Optional[float] = None
+    base_revenue_per_seat_annual: Optional[float] = None
+    base_revenue_per_space_monthly: Optional[float] = None
+    base_sales_per_sf_annual: Optional[float] = None
+    
+    # Unit metrics
+    units_per_sf: Optional[float] = None
+    beds_per_sf: Optional[float] = None
+    rooms_per_sf: Optional[float] = None
+    students_per_sf: Optional[float] = None
+    seats_per_sf: Optional[float] = None
+    spaces_per_sf: Optional[float] = None
+    visits_per_day: Optional[int] = None
+    procedures_per_day: Optional[int] = None
+    scans_per_day: Optional[int] = None
+    days_per_year: Optional[int] = None
+    
+    # Operational metrics - base and premium
+    occupancy_rate_base: Optional[float] = None
+    occupancy_rate_premium: Optional[float] = None
+    operating_margin_base: Optional[float] = None
+    operating_margin_premium: Optional[float] = None
 
 # ============================================================================
 # MASTER CONFIGURATION
@@ -206,7 +237,15 @@ MASTER_CONFIG = {
                 'laboratory': 25,
                 'cathlab': 90,
                 'pharmacy': 40
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_bed_annual=650000,
+            beds_per_sf=0.00075,
+            occupancy_rate_base=0.85,
+            occupancy_rate_premium=0.88,
+            operating_margin_base=0.20,
+            operating_margin_premium=0.25
         ),
         
         'surgical_center': BuildingConfig(
@@ -275,7 +314,16 @@ MASTER_CONFIG = {
                 'recovery_room': 40,
                 'pre_op': 35,
                 'sterile_processing': 60
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_procedure=3500,
+            procedures_per_day=12,
+            days_per_year=250,
+            occupancy_rate_base=0.80,
+            occupancy_rate_premium=0.85,
+            operating_margin_base=0.35,
+            operating_margin_premium=0.40
         ),
         
         'medical_center': BuildingConfig(
@@ -345,7 +393,14 @@ MASTER_CONFIG = {
                 'imaging': 35,
                 'laboratory': 25,
                 'specialty_clinic': 30
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=55,
+            occupancy_rate_base=0.88,
+            occupancy_rate_premium=0.92,
+            operating_margin_base=0.25,
+            operating_margin_premium=0.30
         ),
         
         'imaging_center': BuildingConfig(
@@ -407,7 +462,16 @@ MASTER_CONFIG = {
                 'pet_scan': 90,
                 'mammography': 35,
                 'ultrasound': 20
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_scan=800,
+            scans_per_day=25,
+            days_per_year=260,
+            occupancy_rate_base=0.75,
+            occupancy_rate_premium=0.85,
+            operating_margin_base=0.40,
+            operating_margin_premium=0.45
         ),
         
         'outpatient_clinic': BuildingConfig(
@@ -476,7 +540,16 @@ MASTER_CONFIG = {
                 'procedure_room': 25,
                 'laboratory': 20,
                 'pharmacy': 30
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_visit=250,
+            visits_per_day=40,
+            days_per_year=260,
+            occupancy_rate_base=0.80,
+            occupancy_rate_premium=0.90,
+            operating_margin_base=0.22,
+            operating_margin_premium=0.28
         ),
         
         'urgent_care': BuildingConfig(
@@ -537,7 +610,16 @@ MASTER_CONFIG = {
                 'x_ray': 25,
                 'laboratory': 20,
                 'pharmacy': 25
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_visit=150,
+            visits_per_day=50,
+            days_per_year=365,
+            occupancy_rate_base=0.70,
+            occupancy_rate_premium=0.85,
+            operating_margin_base=0.25,
+            operating_margin_premium=0.30
         ),
         
         'medical_office': BuildingConfig(
@@ -597,7 +679,14 @@ MASTER_CONFIG = {
                 'exam_room': 10,
                 'procedure_room': 20,
                 'lab_space': 15
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=45,
+            occupancy_rate_base=0.92,
+            occupancy_rate_premium=0.95,
+            operating_margin_base=0.65,
+            operating_margin_premium=0.70
         ),
         
         'dental_office': BuildingConfig(
@@ -658,7 +747,14 @@ MASTER_CONFIG = {
                 'sterilization': 10,
                 'x_ray': 12,
                 'lab': 15
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=85,
+            occupancy_rate_base=0.90,
+            occupancy_rate_premium=0.95,
+            operating_margin_base=0.30,
+            operating_margin_premium=0.38
         ),
         
         'rehabilitation': BuildingConfig(
@@ -727,7 +823,15 @@ MASTER_CONFIG = {
                 'hydrotherapy': 50,
                 'treatment_rooms': 20,
                 'assessment_suite': 25
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_bed_annual=280000,
+            beds_per_sf=0.001,
+            occupancy_rate_base=0.82,
+            occupancy_rate_premium=0.88,
+            operating_margin_base=0.18,
+            operating_margin_premium=0.25
         ),
         
         'nursing_home': BuildingConfig(
@@ -796,7 +900,15 @@ MASTER_CONFIG = {
                 'therapy_room': 20,
                 'dining_hall': 15,
                 'activity_room': 12
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_bed_annual=95000,
+            beds_per_sf=0.0015,
+            occupancy_rate_base=0.88,
+            occupancy_rate_premium=0.92,
+            operating_margin_base=0.12,
+            operating_margin_premium=0.18
         )
     },
     
@@ -862,7 +974,15 @@ MASTER_CONFIG = {
                 'fitness_center': 20,
                 'parking_garage': 45,
                 'concierge': 15
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_unit_monthly=3500,
+            units_per_sf=0.00111,
+            occupancy_rate_base=0.93,
+            occupancy_rate_premium=0.90,
+            operating_margin_base=0.35,
+            operating_margin_premium=0.42
         ),
         
         'market_rate_apartments': BuildingConfig(
@@ -914,7 +1034,15 @@ MASTER_CONFIG = {
                 'Memphis': 0.88,
                 'New York': 1.40,
                 'San Francisco': 1.45
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_unit_monthly=2000,
+            units_per_sf=0.00125,
+            occupancy_rate_base=0.95,
+            occupancy_rate_premium=0.93,
+            operating_margin_base=0.40,
+            operating_margin_premium=0.45
         ),
         
         'affordable_housing': BuildingConfig(
@@ -968,7 +1096,15 @@ MASTER_CONFIG = {
                 'Memphis': 0.86,
                 'New York': 1.35,
                 'San Francisco': 1.40
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_unit_monthly=1200,
+            units_per_sf=0.00143,
+            occupancy_rate_base=0.97,
+            occupancy_rate_premium=0.96,
+            operating_margin_base=0.30,
+            operating_margin_premium=0.35
         )
     },
     
@@ -1026,7 +1162,14 @@ MASTER_CONFIG = {
                 'New York': 1.45,
                 'San Francisco': 1.50,
                 'Chicago': 1.25
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=42,
+            occupancy_rate_base=0.88,
+            occupancy_rate_premium=0.92,
+            operating_margin_base=0.65,
+            operating_margin_premium=0.70
         ),
         
         'class_b': BuildingConfig(
@@ -1078,7 +1221,14 @@ MASTER_CONFIG = {
                 'Memphis': 0.90,
                 'New York': 1.40,
                 'San Francisco': 1.45
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=28,
+            occupancy_rate_base=0.85,
+            occupancy_rate_premium=0.88,
+            operating_margin_base=0.60,
+            operating_margin_premium=0.65
         )
     },
     
@@ -1135,7 +1285,15 @@ MASTER_CONFIG = {
                 'Memphis': 0.90,
                 'New York': 1.35,
                 'San Francisco': 1.40
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=35,
+            base_sales_per_sf_annual=350,
+            occupancy_rate_base=0.92,
+            occupancy_rate_premium=0.95,
+            operating_margin_base=0.65,
+            operating_margin_premium=0.70
         ),
         
         'big_box': BuildingConfig(
@@ -1187,7 +1345,15 @@ MASTER_CONFIG = {
                 'Memphis': 0.88,
                 'New York': 1.30,
                 'San Francisco': 1.35
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=25,
+            base_sales_per_sf_annual=200,
+            occupancy_rate_base=0.95,
+            occupancy_rate_premium=0.98,
+            operating_margin_base=0.60,
+            operating_margin_premium=0.65
         )
     },
     
@@ -1244,7 +1410,14 @@ MASTER_CONFIG = {
                 'Memphis': 0.92,
                 'New York': 1.35,
                 'San Francisco': 1.40
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=600,
+            occupancy_rate_base=0.90,
+            occupancy_rate_premium=0.95,
+            operating_margin_base=0.12,
+            operating_margin_premium=0.18
         ),
         
         'full_service': BuildingConfig(
@@ -1296,7 +1469,14 @@ MASTER_CONFIG = {
                 'Memphis': 0.93,
                 'New York': 1.40,
                 'San Francisco': 1.45
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=400,
+            occupancy_rate_base=0.85,
+            occupancy_rate_premium=0.90,
+            operating_margin_base=0.08,
+            operating_margin_premium=0.12
         ),
         
         'bar_tavern': BuildingConfig(
@@ -1348,7 +1528,14 @@ MASTER_CONFIG = {
                 'Memphis': 0.92,
                 'New York': 1.38,
                 'San Francisco': 1.42
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=450,
+            occupancy_rate_base=0.80,
+            occupancy_rate_premium=0.88,
+            operating_margin_base=0.15,
+            operating_margin_premium=0.20
         ),
         
         'cafe': BuildingConfig(
@@ -1400,7 +1587,14 @@ MASTER_CONFIG = {
                 'Memphis': 0.91,
                 'New York': 1.35,
                 'San Francisco': 1.40
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=350,
+            occupancy_rate_base=0.80,
+            occupancy_rate_premium=0.85,
+            operating_margin_base=0.15,
+            operating_margin_premium=0.22
         )
     },
     
@@ -1459,7 +1653,14 @@ MASTER_CONFIG = {
                 'San Francisco': 1.30,
                 'Chicago': 1.10,
                 'Miami': 1.05
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=8,
+            occupancy_rate_base=0.94,
+            occupancy_rate_premium=0.97,
+            operating_margin_base=0.70,
+            operating_margin_premium=0.75
         ),
         
         'distribution_center': BuildingConfig(
@@ -1519,7 +1720,14 @@ MASTER_CONFIG = {
                 'automated_sorting': 25,
                 'refrigerated_area': 35,
                 'loading_docks': 15
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=10,
+            occupancy_rate_base=0.96,
+            occupancy_rate_premium=0.98,
+            operating_margin_base=0.68,
+            operating_margin_premium=0.72
         ),
         
         'manufacturing': BuildingConfig(
@@ -1580,7 +1788,14 @@ MASTER_CONFIG = {
                 'heavy_power': 40,
                 'crane_bays': 30,
                 'compressed_air': 20
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=12,
+            occupancy_rate_base=0.92,
+            occupancy_rate_premium=0.95,
+            operating_margin_base=0.65,
+            operating_margin_premium=0.70
         ),
         
         'flex_space': BuildingConfig(
@@ -1634,7 +1849,14 @@ MASTER_CONFIG = {
                 'San Francisco': 1.35,
                 'Chicago': 1.12,
                 'Miami': 1.07
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=15,
+            occupancy_rate_base=0.88,
+            occupancy_rate_premium=0.92,
+            operating_margin_base=0.60,
+            operating_margin_premium=0.65
         ),
         
         'cold_storage': BuildingConfig(
@@ -1694,7 +1916,14 @@ MASTER_CONFIG = {
                 'blast_freezer': 50,
                 'multiple_temp_zones': 30,
                 'automated_retrieval': 40
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=18,
+            occupancy_rate_base=0.95,
+            occupancy_rate_premium=0.98,
+            operating_margin_base=0.55,
+            operating_margin_premium=0.60
         )
     },
     
@@ -1761,7 +1990,15 @@ MASTER_CONFIG = {
                 'spa': 60,
                 'conference_center': 45,
                 'rooftop_bar': 55
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_room_annual=120000,
+            rooms_per_sf=0.002,
+            occupancy_rate_base=0.75,
+            occupancy_rate_premium=0.82,
+            operating_margin_base=0.30,
+            operating_margin_premium=0.38
         ),
         
         'limited_service_hotel': BuildingConfig(
@@ -1822,7 +2059,15 @@ MASTER_CONFIG = {
                 'fitness_center': 15,
                 'business_center': 10,
                 'pool': 25
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_room_annual=65000,
+            rooms_per_sf=0.0025,
+            occupancy_rate_base=0.70,
+            occupancy_rate_premium=0.78,
+            operating_margin_base=0.35,
+            operating_margin_premium=0.42
         )
     },
     
@@ -1890,7 +2135,15 @@ MASTER_CONFIG = {
                 'playground': 20,
                 'computer_lab': 25,
                 'library': 25
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_student_annual=12000,
+            students_per_sf=0.00667,
+            occupancy_rate_base=0.95,
+            occupancy_rate_premium=0.98,
+            operating_margin_base=0.05,
+            operating_margin_premium=0.08
         ),
         
         'middle_school': BuildingConfig(
@@ -1954,7 +2207,15 @@ MASTER_CONFIG = {
                 'computer_lab': 25,
                 'auditorium': 45,
                 'athletic_field': 30
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_student_annual=13000,
+            students_per_sf=0.00625,
+            occupancy_rate_base=0.95,
+            occupancy_rate_premium=0.98,
+            operating_margin_base=0.05,
+            operating_margin_premium=0.08
         ),
         
         'high_school': BuildingConfig(
@@ -2018,7 +2279,15 @@ MASTER_CONFIG = {
                 'science_labs': 40,
                 'vocational_shops': 45,
                 'media_center': 30
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_student_annual=14000,
+            students_per_sf=0.005,
+            occupancy_rate_base=0.95,
+            occupancy_rate_premium=0.98,
+            operating_margin_base=0.05,
+            operating_margin_premium=0.08
         ),
         
         'university': BuildingConfig(
@@ -2089,7 +2358,15 @@ MASTER_CONFIG = {
                 'clean_room': 100,
                 'library': 40,
                 'student_center': 35
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_student_annual=25000,
+            students_per_sf=0.004,
+            occupancy_rate_base=0.90,
+            occupancy_rate_premium=0.95,
+            operating_margin_base=0.15,
+            operating_margin_premium=0.20
         ),
         
         'community_college': BuildingConfig(
@@ -2151,7 +2428,15 @@ MASTER_CONFIG = {
                 'computer_lab': 25,
                 'library': 20,
                 'student_services': 15
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_student_annual=8000,
+            students_per_sf=0.005,
+            occupancy_rate_base=0.85,
+            occupancy_rate_premium=0.92,
+            operating_margin_base=0.08,
+            operating_margin_premium=0.12
         )
     },
     
@@ -2216,7 +2501,14 @@ MASTER_CONFIG = {
                 'rooftop_deck': 30,
                 'parking_podium': 40,
                 'retail_plaza': 25
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=35,
+            occupancy_rate_base=0.90,
+            occupancy_rate_premium=0.93,
+            operating_margin_base=0.35,
+            operating_margin_premium=0.42
         ),
         
         'office_residential': BuildingConfig(
@@ -2276,7 +2568,14 @@ MASTER_CONFIG = {
                 'amenity_deck': 35,
                 'business_center': 20,
                 'conference_facility': 30
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=35,
+            occupancy_rate_base=0.90,
+            occupancy_rate_premium=0.93,
+            operating_margin_base=0.35,
+            operating_margin_premium=0.42
         ),
         
         'hotel_retail': BuildingConfig(
@@ -2337,7 +2636,14 @@ MASTER_CONFIG = {
                 'restaurant': 50,
                 'spa': 55,
                 'retail_arcade': 30
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=35,
+            occupancy_rate_base=0.90,
+            occupancy_rate_premium=0.93,
+            operating_margin_base=0.35,
+            operating_margin_premium=0.42
         ),
         
         'urban_mixed': BuildingConfig(
@@ -2398,7 +2704,14 @@ MASTER_CONFIG = {
                 'green_roof': 35,
                 'parking_structure': 45,
                 'transit_connection': 30
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=35,
+            occupancy_rate_base=0.90,
+            occupancy_rate_premium=0.93,
+            operating_margin_base=0.35,
+            operating_margin_premium=0.42
         ),
         
         'transit_oriented': BuildingConfig(
@@ -2467,7 +2780,14 @@ MASTER_CONFIG = {
                 'bike_facility': 20,
                 'pedestrian_bridge': 45,
                 'public_art': 15
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=35,
+            occupancy_rate_base=0.90,
+            occupancy_rate_premium=0.93,
+            operating_margin_base=0.35,
+            operating_margin_premium=0.42
         )
     },
     
@@ -2533,7 +2853,14 @@ MASTER_CONFIG = {
                 'redundant_power': 150,
                 'security_system': 75,
                 'fiber_connectivity': 100
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=150,
+            occupancy_rate_base=0.95,
+            occupancy_rate_premium=0.98,
+            operating_margin_base=0.45,
+            operating_margin_premium=0.55
         ),
         
         'laboratory': BuildingConfig(
@@ -2603,7 +2930,14 @@ MASTER_CONFIG = {
                 'biosafety_level_3': 200,
                 'vibration_isolation': 100,
                 'emergency_shower': 25
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=75,
+            occupancy_rate_base=0.88,
+            occupancy_rate_premium=0.94,
+            operating_margin_base=0.35,
+            operating_margin_premium=0.42
         ),
         
         'self_storage': BuildingConfig(
@@ -2664,7 +2998,14 @@ MASTER_CONFIG = {
                 'vehicle_storage': 15,
                 'security_system': 10,
                 'automated_access': 12
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=18,
+            occupancy_rate_base=0.90,
+            occupancy_rate_premium=0.95,
+            operating_margin_base=0.60,
+            operating_margin_premium=0.70
         ),
         
         'car_dealership': BuildingConfig(
@@ -2725,7 +3066,14 @@ MASTER_CONFIG = {
                 'detail_bay': 25,
                 'parts_warehouse': 20,
                 'car_wash': 30
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=250,
+            occupancy_rate_base=1.0,
+            occupancy_rate_premium=1.0,
+            operating_margin_base=0.08,
+            operating_margin_premium=0.12
         ),
         
         'broadcast_facility': BuildingConfig(
@@ -2787,7 +3135,14 @@ MASTER_CONFIG = {
                 'green_screen': 30,
                 'acoustic_treatment': 40,
                 'broadcast_tower': 100
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=100,
+            occupancy_rate_base=0.95,
+            occupancy_rate_premium=0.98,
+            operating_margin_base=0.25,
+            operating_margin_premium=0.35
         )
     },
     
@@ -2853,7 +3208,14 @@ MASTER_CONFIG = {
                 'secure_area': 35,
                 'public_plaza': 25,
                 'records_vault': 30
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=0,
+            occupancy_rate_base=1.0,
+            occupancy_rate_premium=1.0,
+            operating_margin_base=0,
+            operating_margin_premium=0
         ),
         
         'public_safety': BuildingConfig(
@@ -2915,7 +3277,14 @@ MASTER_CONFIG = {
                 'training_tower': 40,
                 'emergency_generator': 35,
                 'sally_port': 30
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=0,
+            occupancy_rate_base=1.0,
+            occupancy_rate_premium=1.0,
+            operating_margin_base=0,
+            operating_margin_premium=0
         ),
         
         'library': BuildingConfig(
@@ -2978,7 +3347,14 @@ MASTER_CONFIG = {
                 'childrens_area': 20,
                 'meeting_rooms': 15,
                 'archives': 30
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=0,
+            occupancy_rate_base=1.0,
+            occupancy_rate_premium=1.0,
+            operating_margin_base=0,
+            operating_margin_premium=0
         ),
         
         'community_center': BuildingConfig(
@@ -3050,7 +3426,14 @@ MASTER_CONFIG = {
                 'multipurpose_room': 20,
                 'fitness_center': 20,
                 'outdoor_pavilion': 15
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=0,
+            occupancy_rate_base=1.0,
+            occupancy_rate_premium=1.0,
+            operating_margin_base=0,
+            operating_margin_premium=0
         ),
         
         'courthouse': BuildingConfig(
@@ -3112,7 +3495,14 @@ MASTER_CONFIG = {
                 'holding_cells': 40,
                 'judges_chambers': 30,
                 'security_screening': 35
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=0,
+            occupancy_rate_base=1.0,
+            occupancy_rate_premium=1.0,
+            operating_margin_base=0,
+            operating_margin_premium=0
         )
     },
     
@@ -3179,7 +3569,14 @@ MASTER_CONFIG = {
                 'group_fitness': 20,
                 'spa_area': 35,
                 'juice_bar': 15
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=60,
+            occupancy_rate_base=0.75,
+            occupancy_rate_premium=0.85,
+            operating_margin_base=0.20,
+            operating_margin_premium=0.30
         ),
         
         'sports_complex': BuildingConfig(
@@ -3248,7 +3645,14 @@ MASTER_CONFIG = {
                 'weight_room': 25,
                 'locker_complex': 30,
                 'concessions': 20
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=40,
+            occupancy_rate_base=0.70,
+            occupancy_rate_premium=0.80,
+            operating_margin_base=0.15,
+            operating_margin_premium=0.25
         ),
         
         'aquatic_center': BuildingConfig(
@@ -3318,7 +3722,14 @@ MASTER_CONFIG = {
                 'lazy_river': 40,
                 'water_slides': 45,
                 'therapy_pool': 35
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=45,
+            occupancy_rate_base=0.65,
+            occupancy_rate_premium=0.75,
+            operating_margin_base=0.10,
+            operating_margin_premium=0.18
         ),
         
         'recreation_center': BuildingConfig(
@@ -3390,7 +3801,14 @@ MASTER_CONFIG = {
                 'craft_room': 12,
                 'dance_studio': 20,
                 'outdoor_courts': 25
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_sf_annual=35,
+            occupancy_rate_base=0.70,
+            occupancy_rate_premium=0.80,
+            operating_margin_base=0.12,
+            operating_margin_premium=0.20
         ),
         
         'stadium': BuildingConfig(
@@ -3460,7 +3878,15 @@ MASTER_CONFIG = {
                 'press_box': 40,
                 'video_board': 100,
                 'retractable_roof': 200
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_seat_annual=500,
+            seats_per_sf=0.05,
+            occupancy_rate_base=0.40,
+            occupancy_rate_premium=0.50,
+            operating_margin_base=0.20,
+            operating_margin_premium=0.30
         )
     },
     
@@ -3526,7 +3952,15 @@ MASTER_CONFIG = {
                 'valet_booth': 15,
                 'ev_charging': 10,
                 'security_system': 8
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_space_monthly=100,
+            spaces_per_sf=0.003,
+            occupancy_rate_base=0.80,
+            occupancy_rate_premium=0.90,
+            operating_margin_base=0.80,
+            operating_margin_premium=0.85
         ),
         
         'parking_garage': BuildingConfig(
@@ -3595,7 +4029,15 @@ MASTER_CONFIG = {
                 'car_wash': 25,
                 'retail_space': 30,
                 'green_roof': 20
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_space_monthly=150,
+            spaces_per_sf=0.0033,
+            occupancy_rate_base=0.85,
+            occupancy_rate_premium=0.92,
+            operating_margin_base=0.75,
+            operating_margin_premium=0.80
         ),
         
         'underground_parking': BuildingConfig(
@@ -3657,7 +4099,15 @@ MASTER_CONFIG = {
                 'vehicle_lifts': 30,
                 'security_booth': 15,
                 'ventilation_upgrade': 25
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_space_monthly=200,
+            spaces_per_sf=0.0035,
+            occupancy_rate_base=0.90,
+            occupancy_rate_premium=0.95,
+            operating_margin_base=0.70,
+            operating_margin_premium=0.75
         ),
         
         'automated_parking': BuildingConfig(
@@ -3718,7 +4168,15 @@ MASTER_CONFIG = {
                 'redundant_systems': 35,
                 'valet_interface': 20,
                 'ev_charging_integration': 15
-            }
+            },
+
+            # Revenue metrics
+            base_revenue_per_space_monthly=250,
+            spaces_per_sf=0.005,
+            occupancy_rate_base=0.95,
+            occupancy_rate_premium=0.98,
+            operating_margin_base=0.65,
+            operating_margin_premium=0.72
         )
     }
 }

@@ -69,13 +69,26 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   console.log('10. SoftCostsTotal:', softCostsTotal);
   console.log('=== END TRACE ===');
   
-  // Get values from backend calculations
-  const annualRevenue = calculations?.ownership_analysis?.annual_revenue || 
-                       calculations?.ownership_analysis?.return_metrics?.annual_revenue || 
-                       displayData.annualRevenue || 0;
-  const noi = calculations?.ownership_analysis?.return_metrics?.estimated_annual_noi || 
-             calculations?.ownership_analysis?.noi || 
-             displayData.noi || 0;
+  // Get values from backend calculations using correct data paths
+  const annualRevenue = 
+    calculations?.roi_analysis?.financial_metrics?.annual_revenue ||
+    calculations?.revenue_analysis?.annual_revenue ||
+    calculations?.financial_metrics?.annual_revenue ||
+    calculations?.annual_revenue ||
+    0; // No hardcoded value, just 0 if missing
+  const noi = 
+    calculations?.roi_analysis?.financial_metrics?.net_income ||
+    calculations?.revenue_analysis?.net_income ||
+    calculations?.return_metrics?.estimated_annual_noi ||
+    calculations?.net_income || 
+    0;
+  
+  // Operating margin from backend calculations
+  const operatingMargin = 
+    calculations?.roi_analysis?.financial_metrics?.operating_margin ||
+    calculations?.revenue_analysis?.operating_margin ||
+    calculations?.operating_margin ||
+    0.08; // Default 8% for unknown types
   
   // Revenue Requirements data
   const revenueReq = calculations?.revenue_requirements || 
@@ -236,9 +249,13 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       
       // Sheet 7: 10-Year Cash Flow Projection
       const years = Array.from({length: 10}, (_, i) => i + 1);
-      const revenue = annualRevenue || 3600000;
-      const operatingExpenses = revenue * 0.6;
-      const debtService = displayData.debtService || 1200000;
+      const revenue = annualRevenue || 0;
+      const operatingExpenses = revenue * (1 - operatingMargin);
+      const debtService = 
+        calculations?.debt_metrics?.annual_debt_service ||
+        calculations?.ownership_analysis?.debt_metrics?.annual_debt_service ||
+        displayData.debtService || 
+        0;
       
       const cashFlowData = [
         ['10-YEAR CASH FLOW PROJECTION'],
@@ -246,9 +263,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         ['Year', ...years],
         ['Revenue', ...years.map(y => formatters.currency(revenue * Math.pow(1.03, y-1)))],
         ['Operating Expenses', ...years.map(y => formatters.currency(operatingExpenses * Math.pow(1.025, y-1)))],
-        ['NOI', ...years.map(y => formatters.currency(revenue * 0.4 * Math.pow(1.03, y-1)))],
+        ['NOI', ...years.map(y => formatters.currency(revenue * operatingMargin * Math.pow(1.03, y-1)))],
         ['Debt Service', ...years.map(_ => formatters.currency(debtService))],
-        ['Cash Flow', ...years.map(y => formatters.currency((revenue * 0.4 * Math.pow(1.03, y-1)) - debtService))]
+        ['Cash Flow', ...years.map(y => formatters.currency((revenue * operatingMargin * Math.pow(1.03, y-1)) - debtService))]
       ];
       const ws7 = XLSX.utils.aoa_to_sheet(cashFlowData);
       XLSX.utils.book_append_sheet(wb, ws7, 'Cash Flow');
@@ -511,7 +528,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             <div className="space-y-2 pt-4 border-t">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Operating Margin</span>
-                <span className="font-bold">{formatters.percentage(0.60)}</span>
+                <span className="font-bold">{formatters.percentage(operatingMargin)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Net Income</span>

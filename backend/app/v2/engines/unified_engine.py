@@ -14,7 +14,7 @@ from app.v2.config.master_config import (
     get_regional_multiplier,
     validate_project_class
 )
-from app.v2.services.financial_analyzer import FinancialAnalyzer
+# from app.v2.services.financial_analyzer import FinancialAnalyzer  # TODO: Implement this
 from typing import Optional, Dict, Any, List
 from dataclasses import asdict
 import logging
@@ -32,7 +32,7 @@ class UnifiedEngine:
         """Initialize the unified engine"""
         self.config = MASTER_CONFIG
         self.calculation_trace = []  # Track every calculation for debugging
-        self.financial_analyzer = FinancialAnalyzer()  # Add financial analyzer
+        # self.financial_analyzer = FinancialAnalyzer()  # TODO: Add financial analyzer
         
     def calculate_project(self, 
                          building_type: BuildingType,
@@ -178,26 +178,27 @@ class UnifiedEngine:
                 building_config.ownership_types[ownership_type]
             )
             
-            # Enhance with comprehensive financial analysis
-            financial_data = {
+            # Calculate comprehensive revenue analysis using master_config
+            revenue_data = self.calculate_ownership_analysis({
                 'building_type': building_type.value,
                 'subtype': subtype,
                 'square_footage': square_footage,
-                'total_project_cost': total_project_cost
-            }
-            financial_metrics = self.financial_analyzer.analyze_investment(financial_data)
+                'total_cost': total_project_cost,
+                'subtotal': construction_cost,  # Construction cost before contingency
+                'regional_multiplier': regional_multiplier
+            })
             
-            # Merge financial analysis into ownership analysis
-            if financial_metrics:
-                ownership_analysis.update(financial_metrics['ownership_analysis'])
-                # Add additional calculated sections
-                ownership_analysis['project_info'] = financial_metrics.get('project_info', {})
-                ownership_analysis['department_allocation'] = financial_metrics.get('department_allocation', [])
-                ownership_analysis['operational_metrics'] = financial_metrics.get('operational_metrics', {})
-                # Add revenue_analysis section
-                ownership_analysis['revenue_analysis'] = financial_metrics.get('revenue_analysis', {})
-                # Add revenue_requirements section
-                ownership_analysis['revenue_requirements'] = financial_metrics.get('revenue_requirements', {})
+            # Merge revenue analysis into ownership analysis
+            if revenue_data and 'revenue_analysis' in revenue_data:
+                ownership_analysis['revenue_analysis'] = revenue_data['revenue_analysis']
+                ownership_analysis['return_metrics'].update(revenue_data['return_metrics'])
+                ownership_analysis['roi_analysis'] = {
+                    'financial_metrics': {
+                        'annual_revenue': revenue_data['revenue_analysis']['annual_revenue'],
+                        'operating_margin': revenue_data['revenue_analysis']['operating_margin'],
+                        'net_income': revenue_data['revenue_analysis']['net_income']
+                    }
+                }
         
         # Build comprehensive response - FLATTENED structure to match frontend expectations
         result = {
@@ -234,6 +235,8 @@ class UnifiedEngine:
             'revenue_analysis': ownership_analysis.get('revenue_analysis', {}) if ownership_analysis else {},
             # Add revenue_requirements at top level for easy access
             'revenue_requirements': ownership_analysis.get('revenue_requirements', {}) if ownership_analysis else {},
+            # Add roi_analysis at top level for frontend compatibility
+            'roi_analysis': ownership_analysis.get('roi_analysis', {}) if ownership_analysis else {},
             # Add department and operational metrics at top level for easy frontend access
             'department_allocation': ownership_analysis.get('department_allocation', []) if ownership_analysis else [],
             'operational_metrics': ownership_analysis.get('operational_metrics', {}) if ownership_analysis else {},
@@ -400,6 +403,171 @@ class UnifiedEngine:
                 }
             },
             'timestamp': datetime.now().isoformat()
+        }
+    
+    def calculate_ownership_analysis(self, calculations: dict) -> dict:
+        """Calculate ownership and revenue analysis using master_config data"""
+        
+        building_type = calculations.get('building_type')
+        subtype = calculations.get('subtype')
+        square_footage = calculations.get('square_footage', 0)
+        total_cost = calculations.get('total_cost', 0)
+        construction_cost = calculations.get('subtotal', 0)
+        
+        # Get the config for this building/subtype
+        building_enum = self._get_building_enum(building_type)
+        if not building_enum or building_enum not in MASTER_CONFIG:
+            return self._empty_ownership_analysis()
+        
+        subtype_config = MASTER_CONFIG[building_enum].get(subtype)
+        if not subtype_config:
+            return self._empty_ownership_analysis()
+        
+        # Calculate quality factor based on actual vs base cost
+        base_cost_psf = subtype_config.base_cost_per_sf
+        actual_cost_psf = construction_cost / square_footage if square_footage > 0 else base_cost_psf
+        quality_factor = pow(actual_cost_psf / base_cost_psf, 0.5) if base_cost_psf > 0 else 1.0
+        
+        # Determine if premium (>20% above base cost)
+        is_premium = quality_factor > 1.2
+        
+        # Get occupancy and margin based on quality
+        occupancy_rate = subtype_config.occupancy_rate_premium if is_premium else subtype_config.occupancy_rate_base
+        operating_margin = subtype_config.operating_margin_premium if is_premium else subtype_config.operating_margin_base
+        
+        # Calculate revenue based on building type
+        annual_revenue = self._calculate_revenue_by_type(
+            building_enum, subtype_config, square_footage, quality_factor, occupancy_rate
+        )
+        
+        # Apply regional multiplier if available
+        regional_multiplier = calculations.get('regional_multiplier', 1.0)
+        annual_revenue *= regional_multiplier
+        
+        # Calculate financial metrics
+        net_income = annual_revenue * operating_margin
+        
+        return {
+            'revenue_analysis': {
+                'annual_revenue': round(annual_revenue, 2),
+                'revenue_per_sf': round(annual_revenue / square_footage, 2) if square_footage > 0 else 0,
+                'operating_margin': operating_margin,
+                'net_income': round(net_income, 2),
+                'occupancy_rate': occupancy_rate,
+                'quality_factor': round(quality_factor, 2),
+                'is_premium': is_premium
+            },
+            'return_metrics': {
+                'estimated_annual_noi': round(net_income, 2),
+                'cash_on_cash_return': round((net_income / total_cost) * 100, 2) if total_cost > 0 else 0,
+                'cap_rate': round((net_income / total_cost) * 100, 2) if total_cost > 0 else 0
+            }
+        }
+
+    def _calculate_revenue_by_type(self, building_enum, config, square_footage, quality_factor, occupancy_rate):
+        """Calculate revenue based on the specific building type's metrics"""
+        
+        # Healthcare - uses beds, visits, procedures, or scans
+        if building_enum == BuildingType.HEALTHCARE:
+            if hasattr(config, 'base_revenue_per_bed_annual') and config.base_revenue_per_bed_annual and hasattr(config, 'beds_per_sf') and config.beds_per_sf:
+                beds = square_footage * config.beds_per_sf
+                base_revenue = beds * config.base_revenue_per_bed_annual
+            elif hasattr(config, 'base_revenue_per_visit') and config.base_revenue_per_visit and hasattr(config, 'visits_per_day') and config.visits_per_day and hasattr(config, 'days_per_year') and config.days_per_year:
+                annual_visits = config.visits_per_day * config.days_per_year
+                base_revenue = annual_visits * config.base_revenue_per_visit
+            elif hasattr(config, 'base_revenue_per_procedure') and config.base_revenue_per_procedure and hasattr(config, 'procedures_per_day') and config.procedures_per_day and hasattr(config, 'days_per_year') and config.days_per_year:
+                annual_procedures = config.procedures_per_day * config.days_per_year
+                base_revenue = annual_procedures * config.base_revenue_per_procedure
+            elif hasattr(config, 'base_revenue_per_scan') and config.base_revenue_per_scan and hasattr(config, 'scans_per_day') and config.scans_per_day and hasattr(config, 'days_per_year') and config.days_per_year:
+                annual_scans = config.scans_per_day * config.days_per_year
+                base_revenue = annual_scans * config.base_revenue_per_scan
+            elif hasattr(config, 'base_revenue_per_sf_annual') and config.base_revenue_per_sf_annual:
+                base_revenue = square_footage * config.base_revenue_per_sf_annual
+            else:
+                # Fallback for healthcare with missing revenue config
+                base_revenue = 0
+        
+        # Multifamily - uses monthly rent per unit
+        elif building_enum == BuildingType.MULTIFAMILY:
+            units = square_footage * config.units_per_sf
+            monthly_rent = config.base_revenue_per_unit_monthly
+            base_revenue = units * monthly_rent * 12
+        
+        # Hospitality - uses revenue per room
+        elif building_enum == BuildingType.HOSPITALITY:
+            rooms = square_footage * config.rooms_per_sf
+            base_revenue = rooms * config.base_revenue_per_room_annual
+        
+        # Educational - uses revenue per student
+        elif building_enum == BuildingType.EDUCATIONAL:
+            students = square_footage * config.students_per_sf
+            base_revenue = students * config.base_revenue_per_student_annual
+        
+        # Parking - uses revenue per space
+        elif building_enum == BuildingType.PARKING:
+            if hasattr(config, 'base_revenue_per_space_monthly'):
+                spaces = square_footage * config.spaces_per_sf
+                base_revenue = spaces * config.base_revenue_per_space_monthly * 12
+            else:
+                base_revenue = 0
+        
+        # Recreation - special handling for stadium
+        elif building_enum == BuildingType.RECREATION:
+            if hasattr(config, 'base_revenue_per_seat_annual'):
+                seats = square_footage * config.seats_per_sf
+                base_revenue = seats * config.base_revenue_per_seat_annual
+            else:
+                base_revenue = square_footage * config.base_revenue_per_sf_annual
+        
+        # Civic - no revenue (government funded)
+        elif building_enum == BuildingType.CIVIC:
+            return 0
+        
+        # Default - uses revenue per SF (Office, Retail, Restaurant, Industrial, etc.)
+        else:
+            base_revenue = square_footage * config.base_revenue_per_sf_annual
+        
+        # Apply quality factor and occupancy
+        adjusted_revenue = base_revenue * quality_factor * occupancy_rate
+        
+        return adjusted_revenue
+
+    def _get_building_enum(self, building_type_str: str):
+        """Convert string building type to BuildingType enum"""
+        type_map = {
+            'healthcare': BuildingType.HEALTHCARE,
+            'multifamily': BuildingType.MULTIFAMILY,
+            'office': BuildingType.OFFICE,
+            'retail': BuildingType.RETAIL,
+            'restaurant': BuildingType.RESTAURANT,
+            'industrial': BuildingType.INDUSTRIAL,
+            'hospitality': BuildingType.HOSPITALITY,
+            'educational': BuildingType.EDUCATIONAL,
+            'mixed_use': BuildingType.MIXED_USE,
+            'specialty': BuildingType.SPECIALTY,
+            'civic': BuildingType.CIVIC,
+            'recreation': BuildingType.RECREATION,
+            'parking': BuildingType.PARKING
+        }
+        return type_map.get(building_type_str.lower())
+
+    def _empty_ownership_analysis(self):
+        """Return empty ownership analysis structure"""
+        return {
+            'revenue_analysis': {
+                'annual_revenue': 0,
+                'revenue_per_sf': 0,
+                'operating_margin': 0,
+                'net_income': 0,
+                'occupancy_rate': 0,
+                'quality_factor': 1.0,
+                'is_premium': False
+            },
+            'return_metrics': {
+                'estimated_annual_noi': 0,
+                'cash_on_cash_return': 0,
+                'cap_rate': 0
+            }
         }
     
     def get_available_building_types(self) -> Dict[str, List[str]]:
