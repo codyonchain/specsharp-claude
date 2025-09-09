@@ -40,7 +40,7 @@ const WhyChooseEnhanced: React.FC = () => {
     const steps = 60;
     const targets = { dealsSaved: 450, approved: 87, presentations: 2400 };
     
-    let current = { dealsSaved: 0, approved: 0, presentations: 0 };
+    const current = { dealsSaved: 0, approved: 0, presentations: 0 };
     const increments = {
       dealsSaved: targets.dealsSaved / steps,
       approved: targets.approved / steps,

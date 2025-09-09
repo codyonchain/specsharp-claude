@@ -232,9 +232,9 @@ class V2APIClient {
    * V1/V2 Endpoint Architecture:
    * 
    * V1 endpoints: Project CRUD operations (storage)
-   * - GET /api/v1/scope/projects/{id} - fetch stored project
-   * - POST /api/v1/scope/projects - save project
-   * - DELETE /api/v1/scope/projects/{id} - delete project
+   * - GET /api/v2/scope/projects/{id} - fetch stored project
+   * - POST /api/v2/scope/projects - save project
+   * - DELETE /api/v2/scope/projects/{id} - delete project
    * 
    * V2 endpoints: Calculations only (no storage)
    * - POST /api/v2/analyze - analyze new input
@@ -427,12 +427,25 @@ class V2APIClient {
    */
   async getProjects(): Promise<Project[]> {
     try {
-      console.log('📡 Fetching all projects from backend API...');
-      const v1Projects = await this.request<any[]>('/scope/projects', {}, 'v1');
-      console.log(`✅ Received ${v1Projects.length} projects from backend`);
+      console.log('📡 Fetching all projects from V2 backend API...');
+      const v2Response = await this.request<any>('/scope/projects', {}, 'v2');
       
-      // Transform each V1 project to V2 structure
-      const v2Projects = v1Projects.map(p => this.adaptV1ToV2Structure(p));
+      // Handle V2 response structure - might be wrapped in data key
+      const projectsData = v2Response.data || v2Response;
+      const projectsList = Array.isArray(projectsData) ? projectsData : [projectsData];
+      
+      console.log(`✅ Received ${projectsList.length} projects from V2 backend`);
+      
+      // Map V2 projects to expected structure
+      const v2Projects = projectsList.map(project => ({
+        ...project,
+        analysis: {
+          calculations: project.calculation_data || project
+        },
+        calculation_data: project.calculation_data,
+        roi_analysis: project.calculation_data?.roi_analysis,
+        revenue_analysis: project.calculation_data?.revenue_analysis
+      }));
       
       // Debug dashboard data
       console.log('=== DASHBOARD PROJECT LIST DEBUG ===');
@@ -491,23 +504,38 @@ class V2APIClient {
     tracer.trace('API_GET_PROJECT', 'Fetching project by ID from backend', { id });
     
     try {
-      console.log('📡 Making API call to backend for project:', id);
-      const v1Project = await this.request<any>(`/scope/projects/${id}`, {}, 'v1');
+      console.log('📡 Making API call to V2 backend for project:', id);
+      const v2Project = await this.request<any>(`/scope/projects/${id}`, {}, 'v2');
       
-      // Transform V1 response to V2 structure
-      const v2Project = this.adaptV1ToV2Structure(v1Project);
+      // Handle V2 response structure
+      const projectData = v2Project.data || v2Project;
       
-      console.log('✅ Received project from backend:', v2Project);
-      tracer.trace('API_PROJECT_RETRIEVED', 'Project retrieved from backend', {
-        found: !!v2Project,
-        id: v2Project?.id,
-        building_type: v2Project?.analysis?.parsed_input?.building_type,
-        subtype: v2Project?.analysis?.parsed_input?.building_subtype,
-        has_analysis: !!v2Project?.analysis,
-        has_calculations: !!v2Project?.analysis?.calculations
+      console.log('✅ Received V2 project from backend:', v2Project);
+      console.log('📊 Project data structure:', projectData);
+      tracer.trace('API_PROJECT_RETRIEVED', 'Project retrieved from V2 backend', {
+        found: !!projectData,
+        id: projectData?.id,
+        building_type: projectData?.building_type,
+        subtype: projectData?.subtype,
+        has_calculation_data: !!projectData?.calculation_data,
+        has_revenue_analysis: !!projectData?.calculation_data?.revenue_analysis
       });
       
-      return v2Project;
+      // Map V2 response to expected frontend structure
+      const mappedProject = {
+        ...projectData,
+        analysis: {
+          // Map calculation_data to where frontend expects it
+          calculations: projectData.calculation_data || projectData
+        },
+        // Also preserve at top level for compatibility
+        calculation_data: projectData.calculation_data,
+        roi_analysis: projectData.calculation_data?.roi_analysis,
+        revenue_analysis: projectData.calculation_data?.revenue_analysis
+      };
+      
+      console.log('🔧 Mapped V2 project structure:', mappedProject);
+      return mappedProject;
     } catch (error) {
       console.error('❌ Failed to fetch project from backend:', error);
       
@@ -526,7 +554,7 @@ class V2APIClient {
         // Debug: Find all cost-related values in the structure
         console.log('=== SEARCHING FOR COST VALUES ===');
         const findCosts = (obj: any, path = '') => {
-          for (let key in obj) {
+          for (const key in obj) {
             if (obj[key] && typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
               findCosts(obj[key], path ? `${path}.${key}` : key);
             } else if (typeof obj[key] === 'number' && obj[key] > 1000) {

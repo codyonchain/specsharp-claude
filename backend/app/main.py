@@ -97,7 +97,7 @@ app.add_middleware(
 )
 
 # V2 API - Real endpoints using unified_engine
-app.include_router(v2_scope_router, tags=["v2-api"])
+app.include_router(v2_scope_router, prefix="/api/v2", tags=["v2-api"])
 # Cost DNA removed - Clean Engine V2 handles all costs
 
 @app.on_event("startup")

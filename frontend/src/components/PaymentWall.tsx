@@ -40,7 +40,7 @@ const CheckoutForm: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) => {
 
     try {
       // Create subscription on backend
-      const response = await fetch('http://localhost:8001/api/v1/subscription/create', {
+      const response = await fetch('http://localhost:8001/api/v2/subscription/create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -84,9 +84,9 @@ export const OAuthDebugger: React.FC = () => {
         <h4 style={{ color: '#60a5fa', margin: '0 0 5px 0' }}>Expected OAuth Flow</h4>
         <ol style={{ margin: '5px 0 0 20px', padding: 0 }}>
           <li>Frontend: https://specsharp.ai/login</li>
-          <li>→ Backend: https://api.specsharp.ai/api/v1/oauth/login/google</li>
+          <li>→ Backend: https://api.specsharp.ai/api/v2/oauth/login/google</li>
           <li>→ Google: accounts.google.com with redirect_uri</li>
-          <li>→ Backend: https://api.specsharp.ai/api/v1/oauth/callback/google</li>
+          <li>→ Backend: https://api.specsharp.ai/api/v2/oauth/callback/google</li>
           <li>→ Frontend: https://specsharp.ai/?token=...</li>
         </ol>
       </div>

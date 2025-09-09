@@ -72,6 +72,7 @@ class Project(Base):
     
     scope_data = Column(Text, nullable=False)  # Full scope response JSON
     cost_data = Column(Text, nullable=True)  # Detailed cost breakdown JSON
+    calculation_data = Column(Text, nullable=True)  # New unified calculation data storage
     
     # Legacy user association (for migration)
     user_id = Column(Integer, ForeignKey("users.id"))
@@ -89,7 +90,7 @@ class Project(Base):
     created_by = relationship("User", back_populates="created_projects", foreign_keys=[created_by_id])
     floor_plans = relationship("FloorPlan", back_populates="project")
     markup_overrides = relationship("ProjectMarkupOverrides", back_populates="project", uselist=False)
-    scenarios = relationship("ProjectScenario", back_populates="project", cascade="all, delete-orphan")
+    # scenarios = relationship("ProjectScenario", back_populates="project", cascade="all, delete-orphan")  # Commented out - ProjectScenario model removed
 
 
 class FloorPlan(Base):

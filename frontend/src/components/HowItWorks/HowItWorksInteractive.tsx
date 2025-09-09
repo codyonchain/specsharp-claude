@@ -63,7 +63,7 @@ const HowItWorksInteractive: React.FC = () => {
     const steps = 60;
     const targets = { total: 47200000, perSF: 262, confidence: 94 };
     
-    let current = { total: 0, perSF: 0, confidence: 0 };
+    const current = { total: 0, perSF: 0, confidence: 0 };
     const increments = {
       total: targets.total / steps,
       perSF: targets.perSF / steps,

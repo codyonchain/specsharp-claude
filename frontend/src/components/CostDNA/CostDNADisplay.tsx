@@ -46,7 +46,7 @@ export const CostDNADisplay: React.FC<CostDNAProps> = ({ projectData, costDNA })
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
       
-      const response = await fetch('/api/v1/cost-dna/generate', {
+      const response = await fetch('/api/v2/cost-dna/generate', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

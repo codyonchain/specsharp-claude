@@ -5,7 +5,7 @@ from enum import Enum
 from app.core.config import settings
 from app.core.floor_parser import extract_floors
 from app.core.building_type_detector import determine_building_type, get_building_subtype
-from app.services.healthcare_cost_service import healthcare_cost_service
+# from app.services.healthcare_cost_service import healthcare_cost_service  # Removed - using unified engine
 
 # Optional imports
 try:
@@ -197,23 +197,129 @@ class NLPService:
                     break
         
         if is_healthcare:
-            # Get detailed healthcare analysis
-            healthcare_details = healthcare_cost_service.get_healthcare_cost(
-                description=text,
-                building_type="healthcare"
-            )
-            
+            # Return basic healthcare info without detailed cost analysis
+            # (Cost analysis now handled by unified engine)
             return {
                 "is_healthcare": True,
                 "healthcare_type": healthcare_type,
-                "facility_type": healthcare_details.get("facility_type"),
-                "base_cost_per_sf": healthcare_details.get("adjusted_cost_per_sf"),
-                "features": healthcare_details.get("features"),
-                "complexity": healthcare_details.get("complexity"),
-                "trade_breakdown": healthcare_details.get("trade_breakdown")
+                "facility_type": healthcare_type,  # Use type as facility type
+                "base_cost_per_sf": None,  # Will be calculated by unified engine
+                "features": [],  # Features detected elsewhere
+                "complexity": "standard",  # Default complexity
+                "trade_breakdown": None  # Will be calculated by unified engine
             }
         
         return None
+    
+    def detect_building_type_with_subtype(self, text: str) -> tuple:
+        """
+        Detect building type, subtype, and classification from text.
+        Returns (building_type, subtype, classification)
+        ALWAYS returns a valid subtype, never None
+        """
+        text_lower = text.lower()
+        
+        # Default values
+        building_type = 'office'
+        subtype = 'class_b'  # Default office subtype
+        
+        # Detect classification (keep existing method for this)
+        classification = self.detect_project_classification(text)
+        
+        # HEALTHCARE - Check first as it's often missed
+        if any(word in text_lower for word in ['dental', 'dentist']) and 'office' in text_lower:
+            building_type = 'healthcare'
+            subtype = 'dental_office'
+        elif 'hospital' in text_lower:
+            building_type = 'healthcare'
+            subtype = 'hospital'
+        elif any(phrase in text_lower for phrase in ['medical office', 'medical building', 'medical center']):
+            building_type = 'healthcare'
+            subtype = 'medical_office'
+        elif any(phrase in text_lower for phrase in ['surgery center', 'surgical center']):
+            building_type = 'healthcare'
+            subtype = 'surgery_center'
+        elif any(phrase in text_lower for phrase in ['urgent care', 'urgentcare']):
+            building_type = 'healthcare'
+            subtype = 'urgent_care'
+        elif any(phrase in text_lower for phrase in ['imaging center', 'diagnostic center']):
+            building_type = 'healthcare'
+            subtype = 'imaging_center'
+            
+        # OFFICE
+        elif 'class a' in text_lower and 'office' in text_lower:
+            building_type = 'office'
+            subtype = 'class_a'
+        elif 'class c' in text_lower and 'office' in text_lower:
+            building_type = 'office'
+            subtype = 'class_c'
+        elif 'office' in text_lower:
+            building_type = 'office'
+            subtype = 'class_b'  # Default office is Class B
+            
+        # RESTAURANT
+        elif any(phrase in text_lower for phrase in ['quick service', 'qsr', 'fast food', 'fast casual']):
+            building_type = 'restaurant'
+            subtype = 'quick_service'
+        elif any(phrase in text_lower for phrase in ['full service', 'full-service', 'sit-down', 'casual dining']):
+            building_type = 'restaurant'
+            subtype = 'full_service'
+        elif any(phrase in text_lower for phrase in ['bar', 'tavern', 'pub', 'brewery']):
+            building_type = 'restaurant'
+            subtype = 'bar_tavern'
+        elif 'fine dining' in text_lower:
+            building_type = 'restaurant'
+            subtype = 'full_service'  # Fine dining is a type of full service
+        elif 'restaurant' in text_lower:
+            building_type = 'restaurant'
+            subtype = 'full_service'  # Default restaurant
+            
+        # MULTIFAMILY
+        elif 'luxury' in text_lower and any(word in text_lower for word in ['apartment', 'multifamily', 'multi-family']):
+            building_type = 'multifamily'
+            subtype = 'luxury'
+        elif 'affordable' in text_lower and any(word in text_lower for word in ['apartment', 'multifamily', 'multi-family']):
+            building_type = 'multifamily'
+            subtype = 'affordable'
+        elif any(word in text_lower for word in ['apartment', 'multifamily', 'multi-family']):
+            building_type = 'multifamily'
+            subtype = 'market_rate'  # Default apartments
+            
+        # RETAIL
+        elif any(phrase in text_lower for phrase in ['big box', 'big-box', 'anchor store']):
+            building_type = 'retail'
+            subtype = 'big_box'
+        elif 'strip' in text_lower and any(word in text_lower for word in ['center', 'mall', 'retail']):
+            building_type = 'retail'
+            subtype = 'strip_center'
+        elif any(word in text_lower for word in ['retail', 'shop', 'store']):
+            building_type = 'retail'
+            subtype = 'inline_retail'  # Default retail
+            
+        # INDUSTRIAL
+        elif 'distribution' in text_lower or 'warehouse' in text_lower:
+            building_type = 'industrial'
+            subtype = 'distribution'
+        elif 'manufacturing' in text_lower or 'factory' in text_lower:
+            building_type = 'industrial'
+            subtype = 'manufacturing'
+        elif 'flex' in text_lower and any(word in text_lower for word in ['space', 'industrial', 'building']):
+            building_type = 'industrial'
+            subtype = 'flex_space'
+            
+        # HOSPITALITY
+        elif any(word in text_lower for word in ['hotel', 'motel']):
+            if 'luxury' in text_lower or 'resort' in text_lower:
+                building_type = 'hospitality'
+                subtype = 'luxury_hotel'
+            elif 'budget' in text_lower or 'economy' in text_lower:
+                building_type = 'hospitality'
+                subtype = 'economy_hotel'
+            else:
+                building_type = 'hospitality'
+                subtype = 'business_hotel'  # Default hotel
+                
+        return building_type, subtype, classification
     
     def detect_project_classification(self, text: str) -> str:
         """
@@ -397,32 +503,34 @@ class NLPService:
             print(f"[NLP] Extracted location: '{location}' from text: '{text}'")
         
         # Check for healthcare facilities first (highest priority)
-        healthcare_details = self.detect_healthcare_type(text)
-        if healthcare_details:
+        # Use the new comprehensive detection that always returns subtype
+        building_type, subtype, classification = self.detect_building_type_with_subtype(text)
+        
+        # Always set building type, subtype, and classification
+        extracted["building_type"] = building_type
+        extracted["subtype"] = subtype  # Always included, never None
+        extracted["building_subtype"] = subtype  # Keep for backwards compatibility
+        extracted["project_classification"] = classification
+        extracted["classification"] = classification
+        extracted["project_class"] = classification  # Also as project_class
+        
+        # Check if it's healthcare to add additional details
+        if building_type == 'healthcare':
             extracted["is_healthcare"] = True
-            extracted["building_type"] = "healthcare"
-            extracted["healthcare_details"] = healthcare_details
-            extracted["base_cost_per_sf"] = healthcare_details.get("base_cost_per_sf")
-            # Healthcare facilities detected, skip generic building type detection
-        else:
-            # Extract building type using the centralized detector
-            building_type = determine_building_type(text)
-            if building_type and building_type != 'commercial':  # Don't return generic 'commercial'
-                extracted["building_type"] = building_type
+            healthcare_details = self.detect_healthcare_type(text)
+            if healthcare_details:
+                extracted["healthcare_details"] = healthcare_details
         
         # Extract building mix for mixed-use projects
         building_mix = self._extract_building_mix(text)
         if building_mix:
             extracted["building_mix"] = building_mix
         
-        # occupancy_type field removed - using building_type directly
-        
         # Generate smart project name
         suggested_name = self.generate_project_name(text, extracted)
         extracted["suggested_project_name"] = suggested_name
         
-        # Add detail suggestions based on building type  
-        building_type = extracted.get("building_type", "")
+        # Add detail suggestions based on building type
         extracted["detail_suggestions"] = self.get_detail_suggestions(building_type)
         
         return extracted
@@ -489,24 +597,21 @@ class NLPService:
     def _fallback_analysis(self, text: str) -> Dict[str, Any]:
         extracted = self.extract_project_details(text)
         
-        # Use centralized building type detection
-        building_type = determine_building_type(text)
-        building_subtype = get_building_subtype(building_type, text) if building_type != 'commercial' else None
+        # Use new comprehensive detection that always returns subtype
+        building_type, subtype, classification = self.detect_building_type_with_subtype(text)
         
-        print(f"[NLP] Detected {building_type} building type for: {text}")
-        if building_subtype:
-            print(f"[NLP] Building subtype: {building_subtype}")
+        print(f"[NLP] Detected {building_type}/{subtype} ({classification}) for: {text}")
         
         # Parse unit mix for multi-family residential
-        if building_type == 'multi_family_residential':
+        if building_type == 'multifamily':
             unit_mix = self.parse_unit_mix(text)
             extracted["unit_mix"] = unit_mix
             print(f"[NLP] Parsed unit mix: {unit_mix}")
         
         # Determine project type based on building type
-        if building_type == 'warehouse':
+        if building_type == 'industrial':
             project_type = "industrial"
-        elif building_type == 'multi_family_residential':
+        elif building_type == 'multifamily':
             project_type = "commercial"  # Multi-family is considered commercial construction
         elif building_type in ['healthcare', 'educational', 'restaurant', 'retail', 'office']:
             project_type = "commercial"
@@ -516,8 +621,6 @@ class NLPService:
             project_type = "mixed_use"
         else:
             project_type = "commercial"
-        
-        # Restaurant was already detected by determine_building_type if applicable
         
         quality_level = "standard"
         if any(word in text.lower() for word in ["luxury", "premium", "high-end", "fine dining"]):
@@ -533,9 +636,10 @@ class NLPService:
         }
         
         result["building_type"] = building_type
-        # occupancy_type removed - use building_type directly
-        if building_subtype:
-            result["building_subtype"] = building_subtype
+        result["subtype"] = subtype  # Always included, never None
+        result["building_subtype"] = subtype  # Keep for backwards compatibility
+        result["project_classification"] = classification  # Add classification
+        result["classification"] = classification  # Also as 'classification'
         
         # Add service level if detected
         if extracted.get("service_level"):
@@ -567,6 +671,12 @@ class NLPService:
         # Add unit mix data if available
         if extracted.get("unit_mix"):
             result["unit_mix"] = extracted["unit_mix"]
+        
+        # Add essential fields for V2 API compatibility
+        result["square_footage"] = extracted.get("square_footage", 10000)  # Default 10k if not found
+        result["location"] = extracted.get("location", "Nashville, TN")  # Default location
+        result["floors"] = extracted.get("floors", 1)  # Default 1 floor
+        result["project_class"] = classification  # Ensure project_class is set
             
         return result
     

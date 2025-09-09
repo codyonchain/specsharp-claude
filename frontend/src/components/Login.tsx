@@ -16,7 +16,7 @@ function Login({ setIsAuthenticated }: LoginProps) {
     
     // Debug logging for OAuth flow
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8001';
-    const oauthEndpoint = '/api/v1/oauth/login/google';
+    const oauthEndpoint = '/api/v2/oauth/login/google';
     const fullOAuthUrl = `${apiUrl}${oauthEndpoint}`;
     
     console.log('=== OAuth Debug Information ===');

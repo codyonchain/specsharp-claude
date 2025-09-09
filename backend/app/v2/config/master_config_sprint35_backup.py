@@ -6,7 +6,7 @@ This replaces: building_types_config.py, owner_metrics_config.py, and NLP detect
 
 from enum import Enum
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple
 
 # ============================================================================
 # ENUMS
@@ -149,7 +149,7 @@ class BuildingConfig:
     operating_margin_premium: Optional[float] = None
     
     # Financial metrics configuration
-    financial_metrics: Optional[Dict[str, Any]] = None
+    financial_metrics: Optional[Dict[str, any]] = None
 
 # ============================================================================
 # MASTER CONFIGURATION
@@ -242,17 +242,6 @@ MASTER_CONFIG = {
                 'pharmacy': 40
             },
             
-            # Financial metrics configuration
-            financial_metrics={
-                'primary_unit': 'beds',
-                'units_per_sf': 0.00075,  # This matches beds_per_sf below
-                'revenue_per_unit_annual': 425000,
-                'target_occupancy': 0.85,
-                'breakeven_occupancy': 0.73,
-                'market_rate_type': 'daily_rate',
-                'market_rate_default': 1500,
-                'display_name': 'Per Bed Requirements'
-            },
 
             # Revenue metrics
             base_revenue_per_sf_annual=900,
@@ -297,6 +286,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.40,
                     target_dscr=1.30,
                     target_roi=0.12,
+            financial_metrics={
+                'primary_unit': 'operating_rooms',
+                'units_per_sf': 0.00003,
+                'revenue_per_unit_annual': 3500000,
+                'target_utilization': 0.75,
+                'breakeven_utilization': 0.60,
+                'market_rate_type': 'case_rate',
+                'market_rate_default': 3500,
+                'display_name': 'Per OR Requirements'
+            },
                 ),
                 OwnershipType.NON_PROFIT: FinancingTerms(
                     debt_ratio=0.70,
@@ -376,6 +375,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.35,
                     target_dscr=1.25,
                     target_roi=0.09,
+            financial_metrics={
+                'primary_unit': 'beds',
+                'units_per_sf': 0.0006,
+                'revenue_per_unit_annual': 380000,
+                'target_occupancy': 0.82,
+                'breakeven_occupancy': 0.70,
+                'market_rate_type': 'daily_rate',
+                'market_rate_default': 1400,
+                'display_name': 'Per Bed Requirements'
+            },
                 ),
                 OwnershipType.NON_PROFIT: FinancingTerms(
                     debt_ratio=0.75,
@@ -453,6 +462,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.45,
                     target_dscr=1.35,
                     target_roi=0.14,
+            financial_metrics={
+                'primary_unit': 'scanners',
+                'units_per_sf': 0.0002,
+                'revenue_per_unit_annual': 1800000,
+                'target_utilization': 0.70,
+                'breakeven_utilization': 0.55,
+                'market_rate_type': 'scan_rate',
+                'market_rate_default': 800,
+                'display_name': 'Per Scanner Requirements'
+            },
                 )
             },
             
@@ -525,6 +544,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.30,
                     target_dscr=1.20,
                     target_roi=0.10,
+            financial_metrics={
+                'primary_unit': 'exam_rooms',
+                'units_per_sf': 0.0015,
+                'revenue_per_unit_annual': 180000,
+                'target_utilization': 0.80,
+                'breakeven_utilization': 0.65,
+                'market_rate_type': 'visit_rate',
+                'market_rate_default': 150,
+                'display_name': 'Per Exam Room Requirements'
+            },
                 ),
                 OwnershipType.NON_PROFIT: FinancingTerms(
                     debt_ratio=0.75,
@@ -604,6 +633,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.30,
                     target_dscr=1.20,
                     target_roi=0.11,
+            financial_metrics={
+                'primary_unit': 'treatment_bays',
+                'units_per_sf': 0.001,
+                'revenue_per_unit_annual': 450000,
+                'target_utilization': 0.75,
+                'breakeven_utilization': 0.60,
+                'market_rate_type': 'visit_rate',
+                'market_rate_default': 175,
+                'display_name': 'Per Treatment Bay Requirements'
+            },
                 )
             },
             
@@ -675,6 +714,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.30,
                     target_dscr=1.20,
                     target_roi=0.09,
+            financial_metrics={
+                'primary_unit': 'providers',
+                'units_per_sf': 0.0005,
+                'revenue_per_unit_annual': 650000,
+                'target_utilization': 0.85,
+                'breakeven_utilization': 0.70,
+                'market_rate_type': 'visit_rate',
+                'market_rate_default': 125,
+                'display_name': 'Per Provider Requirements'
+            },
                 )
             },
             
@@ -742,6 +791,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.35,
                     target_dscr=1.22,
                     target_roi=0.11,
+            financial_metrics={
+                'primary_unit': 'chairs',
+                'units_per_sf': 0.0008,
+                'revenue_per_unit_annual': 380000,
+                'target_utilization': 0.80,
+                'breakeven_utilization': 0.65,
+                'market_rate_type': 'procedure_rate',
+                'market_rate_default': 250,
+                'display_name': 'Per Chair Requirements'
+            },
                 )
             },
             
@@ -810,6 +869,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.35,
                     target_dscr=1.23,
                     target_roi=0.10,
+            financial_metrics={
+                'primary_unit': 'therapy_stations',
+                'units_per_sf': 0.0006,
+                'revenue_per_unit_annual': 220000,
+                'target_utilization': 0.75,
+                'breakeven_utilization': 0.60,
+                'market_rate_type': 'session_rate',
+                'market_rate_default': 120,
+                'display_name': 'Per Station Requirements'
+            },
                 ),
                 OwnershipType.NON_PROFIT: FinancingTerms(
                     debt_ratio=0.75,
@@ -888,6 +957,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.30,
                     target_dscr=1.20,
                     target_roi=0.09,
+            financial_metrics={
+                'primary_unit': 'beds',
+                'units_per_sf': 0.0025,
+                'revenue_per_unit_annual': 75000,
+                'target_occupancy': 0.90,
+                'breakeven_occupancy': 0.80,
+                'market_rate_type': 'daily_rate',
+                'market_rate_default': 250,
+                'display_name': 'Per Bed Requirements'
+            },
                 ),
                 OwnershipType.NON_PROFIT: FinancingTerms(
                     debt_ratio=0.75,
@@ -971,6 +1050,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.25,
                     target_dscr=1.25,
                     target_roi=0.12,
+            financial_metrics={
+                'primary_unit': 'units',
+                'units_per_sf': 0.00111,
+                'revenue_per_unit_annual': 42000,
+                'target_occupancy': 0.93,
+                'breakeven_occupancy': 0.87,
+                'market_rate_type': 'monthly_rent',
+                'market_rate_default': 3500,
+                'display_name': 'Per Unit Requirements'
+            },
                 )
             },
             
@@ -1041,6 +1130,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.25,
                     target_dscr=1.20,
                     target_roi=0.10,
+            financial_metrics={
+                'primary_unit': 'units',
+                'units_per_sf': 0.00125,
+                'revenue_per_unit_annual': 19800,
+                'target_occupancy': 0.94,
+                'breakeven_occupancy': 0.88,
+                'market_rate_type': 'monthly_rent',
+                'market_rate_default': 1650,
+                'display_name': 'Per Unit Requirements'
+            },
                 )
             },
             
@@ -1104,6 +1203,16 @@ MASTER_CONFIG = {
                     grants_ratio=0.25,  # LIHTC, etc.
                     target_dscr=1.15,
                     target_roi=0.0,
+            financial_metrics={
+                'primary_unit': 'units',
+                'units_per_sf': 0.00143,
+                'revenue_per_unit_annual': 11400,
+                'target_occupancy': 0.97,
+                'breakeven_occupancy': 0.92,
+                'market_rate_type': 'monthly_rent',
+                'market_rate_default': 950,
+                'display_name': 'Per Unit Requirements'
+            },
                 )
             },
             
@@ -1170,6 +1279,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.30,
                     target_dscr=1.25,
                     target_roi=0.08,
+            financial_metrics={
+                'primary_unit': 'rsf',
+                'units_per_sf': 0.85,
+                'revenue_per_unit_annual': 45,
+                'target_occupancy': 0.90,
+                'breakeven_occupancy': 0.75,
+                'market_rate_type': 'annual_psf',
+                'market_rate_default': 45,
+                'display_name': 'Lease Rate Requirements'
+            },
                 )
             },
             
@@ -1230,6 +1349,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.28,
                     target_dscr=1.20,
                     target_roi=0.09,
+            financial_metrics={
+                'primary_unit': 'rsf',
+                'units_per_sf': 0.83,
+                'revenue_per_unit_annual': 32,
+                'target_occupancy': 0.88,
+                'breakeven_occupancy': 0.73,
+                'market_rate_type': 'annual_psf',
+                'market_rate_default': 32,
+                'display_name': 'Lease Rate Requirements'
+            },
                 )
             },
             
@@ -1294,6 +1423,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.30,
                     target_dscr=1.25,
                     target_roi=0.10,
+            financial_metrics={
+                'primary_unit': 'leasable_sf',
+                'units_per_sf': 0.90,
+                'revenue_per_unit_annual': 28,
+                'target_occupancy': 0.92,
+                'breakeven_occupancy': 0.80,
+                'market_rate_type': 'annual_psf',
+                'market_rate_default': 28,
+                'display_name': 'Lease Rate Requirements'
+            },
                 )
             },
             
@@ -1354,6 +1493,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.28,
                     target_dscr=1.20,
                     target_roi=0.09,
+            financial_metrics={
+                'primary_unit': 'leasable_sf',
+                'units_per_sf': 0.95,
+                'revenue_per_unit_annual': 18,
+                'target_occupancy': 0.95,
+                'breakeven_occupancy': 0.85,
+                'market_rate_type': 'annual_psf',
+                'market_rate_default': 18,
+                'display_name': 'Lease Rate Requirements'
+            },
                 )
             },
             
@@ -1660,6 +1809,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.25,
                     target_dscr=1.25,
                     target_roi=0.10,
+            financial_metrics={
+                'primary_unit': 'leasable_sf',
+                'units_per_sf': 0.95,
+                'revenue_per_unit_annual': 8,
+                'target_occupancy': 0.92,
+                'breakeven_occupancy': 0.80,
+                'market_rate_type': 'annual_psf',
+                'market_rate_default': 8,
+                'display_name': 'Lease Rate Requirements'
+            },
                 )
             },
             
@@ -1721,6 +1880,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.25,
                     target_dscr=1.25,
                     target_roi=0.11,
+            financial_metrics={
+                'primary_unit': 'leasable_sf',
+                'units_per_sf': 0.96,
+                'revenue_per_unit_annual': 7,
+                'target_occupancy': 0.95,
+                'breakeven_occupancy': 0.82,
+                'market_rate_type': 'annual_psf',
+                'market_rate_default': 7,
+                'display_name': 'Lease Rate Requirements'
+            },
                 )
             },
             
@@ -1788,17 +1957,45 @@ MASTER_CONFIG = {
                     equity_ratio=0.30,
                     target_dscr=1.20,
                     target_roi=0.12,
+            financial_metrics={
+                'primary_unit': 'production_sf',
+                'units_per_sf': 0.80,
+                'revenue_per_unit_annual': 12,
+                'target_occupancy': 0.90,
+                'breakeven_occupancy': 0.75,
+                'market_rate_type': 'annual_psf',
+                'market_rate_default': 12,
+                'display_name': 'Lease Rate Requirements'
+            },
+            
+            
             
             # Financial metrics
+            financial_metrics={
+                'primary_unit': 'seats',
+                'units_per_sf': 0.028,
+                'revenue_per_unit_annual': 22000,
+                'target_utilization': 0.7,
+                'breakeven_utilization': 0.55,
+                'market_rate_type': 'revenue_per_seat',
+                'market_rate_default': 22000,
+                'display_name': 'Per Seat Requirements'
+            },
+            
+            
             
             
             # Financial metrics
-            
-            
-            # Financial metrics
-            
-            
-            # Financial metrics
+            financial_metrics={
+                'primary_unit': 'seats',
+                'units_per_sf': 0.033,
+                'revenue_per_unit_annual': 12000,
+                'target_utilization': 0.8,
+                'breakeven_utilization': 0.65,
+                'market_rate_type': 'revenue_per_seat',
+                'market_rate_default': 12000,
+                'display_name': 'Per Seat Requirements'
+            },
             
                 )
             },
@@ -1868,6 +2065,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.28,
                     target_dscr=1.22,
                     target_roi=0.10,
+            financial_metrics={
+                'primary_unit': 'leasable_sf',
+                'units_per_sf': 0.92,
+                'revenue_per_unit_annual': 14,
+                'target_occupancy': 0.88,
+                'breakeven_occupancy': 0.75,
+                'market_rate_type': 'annual_psf',
+                'market_rate_default': 14,
+                'display_name': 'Lease Rate Requirements'
+            },
                 )
             },
             
@@ -1929,6 +2136,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.30,
                     target_dscr=1.25,
                     target_roi=0.12,
+            financial_metrics={
+                'primary_unit': 'refrigerated_sf',
+                'units_per_sf': 0.85,
+                'revenue_per_unit_annual': 16,
+                'target_occupancy': 0.94,
+                'breakeven_occupancy': 0.82,
+                'market_rate_type': 'annual_psf',
+                'market_rate_default': 16,
+                'display_name': 'Cold Storage Rate Requirements'
+            },
                 )
             },
             
@@ -2001,6 +2218,17 @@ MASTER_CONFIG = {
                     equity_ratio=0.35,
                     target_dscr=1.30,
                     target_roi=0.11,
+            financial_metrics={
+                'primary_unit': 'rooms',
+                'units_per_sf': 0.002,
+                'revenue_per_unit_annual': 38325,
+                'target_occupancy': 0.70,
+                'breakeven_occupancy': 0.62,
+                'market_rate_type': 'adr',
+                'market_rate_default': 145,
+                'revpar_target': 101.50,
+                'display_name': 'Per Room Requirements'
+            },
                 )
             },
             
@@ -2072,6 +2300,17 @@ MASTER_CONFIG = {
                     equity_ratio=0.30,
                     target_dscr=1.25,
                     target_roi=0.12,
+            financial_metrics={
+                'primary_unit': 'rooms',
+                'units_per_sf': 0.0025,
+                'revenue_per_unit_annual': 23360,
+                'target_occupancy': 0.68,
+                'breakeven_occupancy': 0.58,
+                'market_rate_type': 'adr',
+                'market_rate_default': 95,
+                'revpar_target': 64.60,
+                'display_name': 'Per Room Requirements'
+            },
                 )
             },
             
@@ -2151,6 +2390,16 @@ MASTER_CONFIG = {
                 )
             },
             
+            financial_metrics={
+                'primary_unit': 'students',
+                'units_per_sf': 0.01,
+                'revenue_per_unit_annual': 12000,
+                'target_utilization': 0.90,
+                'breakeven_utilization': 0.80,
+                'market_rate_type': 'per_student',
+                'market_rate_default': 12000,
+                'display_name': 'Per Student Requirements'
+            },
             
             nlp=NLPConfig(
                 keywords=['elementary school', 'primary school', 'grade school',
@@ -2221,6 +2470,16 @@ MASTER_CONFIG = {
                     grants_ratio=0.15,
                     target_dscr=1.15,
                     target_roi=0.0,
+            financial_metrics={
+                'primary_unit': 'students',
+                'units_per_sf': 0.008,
+                'revenue_per_unit_annual': 13000,
+                'target_utilization': 0.88,
+                'breakeven_utilization': 0.78,
+                'market_rate_type': 'per_student',
+                'market_rate_default': 13000,
+                'display_name': 'Per Student Requirements'
+            },
                 )
             },
             
@@ -2294,6 +2553,16 @@ MASTER_CONFIG = {
                     grants_ratio=0.15,
                     target_dscr=1.15,
                     target_roi=0.0,
+            financial_metrics={
+                'primary_unit': 'students',
+                'units_per_sf': 0.007,
+                'revenue_per_unit_annual': 14000,
+                'target_utilization': 0.85,
+                'breakeven_utilization': 0.75,
+                'market_rate_type': 'per_student',
+                'market_rate_default': 14000,
+                'display_name': 'Per Student Requirements'
+            },
                 )
             },
             
@@ -2368,6 +2637,16 @@ MASTER_CONFIG = {
                     grants_ratio=0.05,
                     target_dscr=1.20,
                     target_roi=0.0,
+            financial_metrics={
+                'primary_unit': 'students',
+                'units_per_sf': 0.005,
+                'revenue_per_unit_annual': 25000,
+                'target_utilization': 0.92,
+                'breakeven_utilization': 0.82,
+                'market_rate_type': 'tuition',
+                'market_rate_default': 25000,
+                'display_name': 'Per Student Requirements'
+            },
                 ),
                 OwnershipType.FOR_PROFIT: FinancingTerms(
                     debt_ratio=0.65,
@@ -2447,6 +2726,16 @@ MASTER_CONFIG = {
                     grants_ratio=0.10,
                     target_dscr=1.15,
                     target_roi=0.0,
+            financial_metrics={
+                'primary_unit': 'students',
+                'units_per_sf': 0.006,
+                'revenue_per_unit_annual': 8000,
+                'target_utilization': 0.85,
+                'breakeven_utilization': 0.75,
+                'market_rate_type': 'tuition',
+                'market_rate_default': 8000,
+                'display_name': 'Per Student Requirements'
+            },
                 )
             },
             
@@ -2592,7 +2881,6 @@ MASTER_CONFIG = {
                 )
             },
             
-            # Financial metrics
             
             
             nlp=NLPConfig(
@@ -2662,7 +2950,6 @@ MASTER_CONFIG = {
                 )
             },
             
-            # Financial metrics
             
             
             nlp=NLPConfig(
@@ -2733,7 +3020,6 @@ MASTER_CONFIG = {
                 )
             },
             
-            # Financial metrics
             
             
             nlp=NLPConfig(
@@ -2812,7 +3098,6 @@ MASTER_CONFIG = {
                 )
             },
             
-            # Financial metrics
             
             
             nlp=NLPConfig(
@@ -2839,7 +3124,6 @@ MASTER_CONFIG = {
                 'public_art': 15
             },
 
-            # Financial metrics
             
             # Revenue metrics
             base_revenue_per_sf_annual=35,
@@ -2967,7 +3251,6 @@ MASTER_CONFIG = {
                 )
             },
             
-            # Financial metrics
             
             
             nlp=NLPConfig(
@@ -3039,7 +3322,6 @@ MASTER_CONFIG = {
                 )
             },
             
-            # Financial metrics
             
             
             nlp=NLPConfig(
@@ -3110,7 +3392,6 @@ MASTER_CONFIG = {
                 )
             },
             
-            # Financial metrics
             
             
             nlp=NLPConfig(
@@ -3181,7 +3462,6 @@ MASTER_CONFIG = {
                 )
             },
             
-            # Financial metrics
             
             
             nlp=NLPConfig(
@@ -3218,7 +3498,6 @@ MASTER_CONFIG = {
         )
     },
             
-            # Financial metrics
             
     
     # ------------------------------------------------------------------------
@@ -3258,6 +3537,16 @@ MASTER_CONFIG = {
                     equity_ratio=0.20,
                     target_dscr=1.15,
                     target_roi=0.0,
+            financial_metrics={
+                'primary_unit': 'usable_sf',
+                'units_per_sf': 0.80,
+                'revenue_per_unit_annual': 0,
+                'target_utilization': 0.85,
+                'breakeven_utilization': 0.70,
+                'market_rate_type': 'budget_allocation',
+                'market_rate_default': 0,
+                'display_name': 'Space Utilization Requirements'
+            },
                 )
             },
             
@@ -3399,7 +3688,6 @@ MASTER_CONFIG = {
                 )
             },
             
-            # Financial metrics
             
             
             nlp=NLPConfig(
@@ -3481,7 +3769,6 @@ MASTER_CONFIG = {
                 )
             },
             
-            # Financial metrics
             
             
             nlp=NLPConfig(
@@ -3553,7 +3840,6 @@ MASTER_CONFIG = {
                 )
             },
             
-            # Financial metrics
             
             
             nlp=NLPConfig(
@@ -3590,7 +3876,6 @@ MASTER_CONFIG = {
         )
     },
             
-            # Financial metrics
             
     
     # ------------------------------------------------------------------------
@@ -3709,7 +3994,6 @@ MASTER_CONFIG = {
                 )
             },
             
-            # Financial metrics
             
             
             nlp=NLPConfig(
@@ -3789,7 +4073,6 @@ MASTER_CONFIG = {
                 )
             },
             
-            # Financial metrics
             
             
             nlp=NLPConfig(
@@ -3871,7 +4154,6 @@ MASTER_CONFIG = {
                 )
             },
             
-            # Financial metrics
             
             
             nlp=NLPConfig(
@@ -3951,7 +4233,6 @@ MASTER_CONFIG = {
                 )
             },
             
-            # Financial metrics
             
             
             nlp=NLPConfig(
@@ -3990,7 +4271,6 @@ MASTER_CONFIG = {
         )
     },
             
-            # Financial metrics
             
     
     # ------------------------------------------------------------------------
@@ -4110,7 +4390,6 @@ MASTER_CONFIG = {
                 )
             },
             
-            # Financial metrics
             
             
             nlp=NLPConfig(
@@ -4184,7 +4463,6 @@ MASTER_CONFIG = {
                 )
             },
             
-            # Financial metrics
             
             
             nlp=NLPConfig(
@@ -4258,7 +4536,6 @@ MASTER_CONFIG = {
                 )
             },
             
-            # Financial metrics
             
             
             nlp=NLPConfig(

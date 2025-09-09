@@ -129,7 +129,7 @@ function ComparisonTool({ projectData, onClose }: ComparisonToolProps) {
         features: s.features
       }));
 
-      const response = await fetch(`http://localhost:8001/api/v1/comparison/compare/${projectData.project_id}`, {
+      const response = await fetch(`http://localhost:8001/api/v2/comparison/compare/${projectData.project_id}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -155,7 +155,7 @@ function ComparisonTool({ projectData, onClose }: ComparisonToolProps) {
 
   const applyTemplate = async (templateName: string) => {
     try {
-      const response = await fetch('http://localhost:8001/api/v1/comparison/templates', {
+      const response = await fetch('http://localhost:8001/api/v2/comparison/templates', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }

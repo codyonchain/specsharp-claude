@@ -1,5 +1,5 @@
 // Test auth endpoint
-fetch('http://localhost:8000/api/v1/auth/token', {
+fetch('http://localhost:8000/api/v2/auth/token', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/x-www-form-urlencoded',
@@ -17,7 +17,7 @@ const formData = new FormData();
 formData.append('username', 'test2@example.com');
 formData.append('password', 'password123');
 
-axios.post('http://localhost:8000/api/v1/auth/token', formData, {
+axios.post('http://localhost:8000/api/v2/auth/token', formData, {
   headers: { 'Content-Type': 'multipart/form-data' },
 })
 .then(res => console.log('Axios success:', res.data))

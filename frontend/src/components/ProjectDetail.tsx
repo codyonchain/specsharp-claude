@@ -165,10 +165,10 @@ function ProjectDetail() {
                    100000; // Default fallback
       
       // Use detected building type from project (NOT hardcoded)
-      let buildingType = project.building_type || 
+      const buildingType = project.building_type || 
                         project.request_data?.building_type || 
                         'office';  // Changed default from healthcare to office
-      let subtype = project.building_subtype || 
+      const subtype = project.building_subtype || 
                    project.request_data?.building_subtype || 
                    project.subtype ||  // Also check for 'subtype' field
                    'class_b';  // Changed default from hospital to class_b
@@ -226,17 +226,11 @@ function ProjectDetail() {
       });
       
       // Use absolute URL to ensure correct endpoint
-      const response = await fetch('http://localhost:8001/api/v1/scope/owner-view', {
+      const response = await fetch('http://localhost:8001/api/v2/scope/owner-view', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          building_type: buildingType,
-          subtype: subtype,
-          description: project.description || project.request_data?.special_requirements,  // Include for NLP fallback
-          construction_cost: constructionCost,
-          square_footage: sqft,
-          trade_breakdown: Object.keys(tradeBreakdown).length > 0 ? tradeBreakdown : undefined,
-          ownership_type: ownership || ownershipType
+          project_id: projectId  // V2 owner-view only needs project_id
         })
       });
       

@@ -702,7 +702,7 @@ function ScopeGenerator() {
       setParsedData(parsed);
       
       // Auto-populate form fields based on NLP parsing
-      let updatedFormData = { ...formData };
+      const updatedFormData = { ...formData };
       
       if (parsed.square_footage) {
         console.log('🔍 NLP parsed square footage:', parsed.square_footage);
@@ -867,13 +867,13 @@ function ScopeGenerator() {
     }
     
     // We're in form mode, proceed with submission
-    let submitData = formData;
+    const submitData = formData;
     
     setLoading(true);
     setError('');
 
     // Parse building mix from special requirements if it's a mixed_use project
-    let finalFormData = { ...submitData };
+    const finalFormData = { ...submitData };
     if (submitData.project_type === 'mixed_use' && submitData.special_requirements && !submitData.building_mix) {
       const parsedData = parseNaturalLanguage(submitData.special_requirements);
       if (parsedData.building_mix) {

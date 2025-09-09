@@ -36,7 +36,7 @@ class AuthService {
   private async loginWithBypass(): Promise<void> {
     try {
       // Call the OAuth endpoint which will detect bypass mode
-      const response = await fetch(`${this.apiUrl}/api/v1/oauth/login/google`, {
+      const response = await fetch(`${this.apiUrl}/api/v2/oauth/login/google`, {
         method: 'GET',
         credentials: 'include',
       });
@@ -75,7 +75,7 @@ class AuthService {
   private async loginWithOAuth(): Promise<void> {
     try {
       // Redirect to backend OAuth endpoint
-      window.location.href = `${this.apiUrl}/api/v1/oauth/login/google`;
+      window.location.href = `${this.apiUrl}/api/v2/oauth/login/google`;
     } catch (error) {
       console.error('OAuth login error:', error);
       throw new Error('Failed to initiate OAuth login');
@@ -115,7 +115,7 @@ class AuthService {
     
     // Fetch user info
     try {
-      const response = await fetch(`${this.apiUrl}/api/v1/auth/me`, {
+      const response = await fetch(`${this.apiUrl}/api/v2/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }

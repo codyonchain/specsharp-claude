@@ -279,3 +279,25 @@ export interface AsyncState<T> {
   loading: boolean;
   error: APIError | null;
 }
+
+// ============================================================================
+// FINANCIAL REQUIREMENTS TYPES
+// ============================================================================
+
+export interface FinancialRequirementsMetric {
+  label: string;
+  value: string;
+  status?: 'green' | 'yellow' | 'red';
+  tooltip?: string;
+}
+
+export interface FinancialRequirementsSection {
+  title: string;
+  metrics: FinancialRequirementsMetric[];
+}
+
+export interface FinancialRequirements {
+  primary_metrics: FinancialRequirementsSection;
+  performance_targets: FinancialRequirementsSection;
+  market_analysis: FinancialRequirementsSection;
+}

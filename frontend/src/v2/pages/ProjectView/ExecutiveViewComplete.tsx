@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Project } from '../../types';
+import { Project, FinancialRequirements } from '../../types';
 import { formatters, safeGet } from '../../utils/displayFormatters';
 import { BackendDataMapper } from '../../utils/backendDataMapper';
+import { FinancialRequirementsCard } from './FinancialRequirementsCard';
 import * as XLSX from 'xlsx';
 import { 
   TrendingUp, DollarSign, Building, Clock, AlertCircle,
@@ -125,6 +126,13 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   const revenueReq = calculations?.revenue_requirements || 
                      calculations?.ownership_analysis?.revenue_requirements || 
                      null;
+
+  // Financial Requirements data (for healthcare facilities)
+  const financialRequirements: FinancialRequirements | null = 
+    calculations?.financial_requirements ||
+    analysis?.calculations?.financial_requirements ||
+    project?.financial_requirements ||
+    null;
   
   // Get department icons based on building type
   const getDepartmentIcon = (deptName: string) => {
@@ -726,6 +734,14 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Financial Requirements Card - Healthcare Only */}
+      {buildingType === 'healthcare' && financialRequirements && (
+        <FinancialRequirementsCard 
+          requirements={financialRequirements}
+          isVisible={true}
+        />
       )}
 
       {/* Major Soft Cost Categories */}
