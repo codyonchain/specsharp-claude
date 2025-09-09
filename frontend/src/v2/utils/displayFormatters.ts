@@ -26,7 +26,8 @@ export const formatters = {
   percentage: (val: number | undefined | null, decimals: number = 1): string => {
     if (val === undefined || val === null || isNaN(val)) return 'N/A';
     // Handle if value is already in percentage form (e.g., 8.2 instead of 0.082)
-    const value = val > 1 ? val : val * 100;
+    // Use Math.abs() to check magnitude regardless of sign (fixes negative IRR display)
+    const value = Math.abs(val) > 1 ? val : val * 100;
     return `${value.toFixed(decimals)}%`;
   },
   

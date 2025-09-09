@@ -199,6 +199,10 @@ class UnifiedEngine:
                         'net_income': revenue_data['revenue_analysis']['net_income']
                     }
                 }
+                # Add the new metrics from our enhanced analysis
+                ownership_analysis['revenue_requirements'] = revenue_data.get('revenue_requirements', {})
+                ownership_analysis['operational_efficiency'] = revenue_data.get('operational_efficiency', {})
+                ownership_analysis['operational_metrics'] = revenue_data.get('operational_metrics', {})
         
         # Build comprehensive response - FLATTENED structure to match frontend expectations
         result = {
@@ -237,6 +241,8 @@ class UnifiedEngine:
             'revenue_requirements': ownership_analysis.get('revenue_requirements', {}) if ownership_analysis else {},
             # Add roi_analysis at top level for frontend compatibility
             'roi_analysis': ownership_analysis.get('roi_analysis', {}) if ownership_analysis else {},
+            # Add operational efficiency at top level
+            'operational_efficiency': ownership_analysis.get('operational_efficiency', {}) if ownership_analysis else {},
             # Add department and operational metrics at top level for easy frontend access
             'department_allocation': ownership_analysis.get('department_allocation', []) if ownership_analysis else [],
             'operational_metrics': ownership_analysis.get('operational_metrics', {}) if ownership_analysis else {},
@@ -447,6 +453,50 @@ class UnifiedEngine:
         # Calculate financial metrics
         net_income = annual_revenue * operating_margin
         
+        # Calculate NPV using config discount_rate
+        years = 10  # Standard projection period
+        discount_rate = getattr(subtype_config, 'discount_rate', 0.08)
+        
+        npv = self.calculate_npv(
+            initial_investment=total_cost,
+            annual_cash_flow=net_income,
+            years=years,
+            discount_rate=discount_rate
+        )
+        
+        # Calculate IRR
+        irr = self.calculate_irr(
+            initial_investment=total_cost,
+            annual_cash_flow=net_income,
+            years=years
+        )
+        
+        # Calculate Revenue Requirements
+        revenue_requirements = self.calculate_revenue_requirements(
+            total_cost=total_cost,
+            config=subtype_config,
+            square_footage=square_footage
+        )
+        
+        # Calculate Operational Efficiency
+        operational_efficiency = self.calculate_operational_efficiency(
+            revenue=annual_revenue,
+            config=subtype_config
+        )
+        
+        # Calculate payback period
+        payback_period = round(total_cost / net_income, 1) if net_income > 0 else 999
+        
+        # Calculate display-ready operational metrics
+        operational_metrics = self.calculate_operational_metrics_for_display(
+            building_type=building_type,
+            subtype=subtype,
+            operational_efficiency=operational_efficiency,
+            square_footage=square_footage,
+            annual_revenue=annual_revenue,
+            units=calculations.get('units', 0)
+        )
+        
         return {
             'revenue_analysis': {
                 'annual_revenue': round(annual_revenue, 2),
@@ -460,8 +510,14 @@ class UnifiedEngine:
             'return_metrics': {
                 'estimated_annual_noi': round(net_income, 2),
                 'cash_on_cash_return': round((net_income / total_cost) * 100, 2) if total_cost > 0 else 0,
-                'cap_rate': round((net_income / total_cost) * 100, 2) if total_cost > 0 else 0
-            }
+                'cap_rate': round((net_income / total_cost) * 100, 2) if total_cost > 0 else 0,
+                'npv': npv,
+                'irr': round(irr * 100, 2),  # Convert to percentage
+                'payback_period': payback_period
+            },
+            'revenue_requirements': revenue_requirements,
+            'operational_efficiency': operational_efficiency,  # Keep raw data
+            'operational_metrics': operational_metrics  # ADD formatted display data
         }
 
     def _calculate_revenue_by_type(self, building_enum, config, square_footage, quality_factor, occupancy_rate):
@@ -566,9 +622,337 @@ class UnifiedEngine:
             'return_metrics': {
                 'estimated_annual_noi': 0,
                 'cash_on_cash_return': 0,
-                'cap_rate': 0
+                'cap_rate': 0,
+                'npv': 0,
+                'irr': 0,
+                'payback_period': 999
+            },
+            'revenue_requirements': {
+                'required_value': 0,
+                'metric_name': 'Annual Revenue Required',
+                'target_roi': 0,
+                'operating_margin': 0,
+                'break_even_revenue': 0,
+                'required_monthly': 0
+            },
+            'operational_efficiency': {
+                'total_expenses': 0,
+                'operating_margin': 0,
+                'efficiency_score': 0,
+                'expense_ratio': 0
             }
         }
+    
+    def calculate_npv(self, initial_investment: float, annual_cash_flow: float, 
+                      years: int, discount_rate: float) -> float:
+        """Calculate Net Present Value using discount rate from config"""
+        npv = -initial_investment
+        for year in range(1, years + 1):
+            npv += annual_cash_flow / ((1 + discount_rate) ** year)
+        return round(npv, 2)
+
+    def calculate_irr(self, initial_investment: float, annual_cash_flow: float, 
+                      years: int = 10) -> float:
+        """Calculate Internal Rate of Return using Newton-Raphson approximation"""
+        # Simple approximation for constant cash flows
+        if annual_cash_flow <= 0 or initial_investment <= 0:
+            return 0.0
+        
+        # Newton-Raphson method for IRR
+        rate = 0.1  # Initial guess
+        for _ in range(20):  # Max iterations
+            npv = -initial_investment
+            dnpv = 0
+            for year in range(1, years + 1):
+                npv += annual_cash_flow / ((1 + rate) ** year)
+                dnpv -= year * annual_cash_flow / ((1 + rate) ** (year + 1))
+            
+            if abs(npv) < 0.01:  # Converged
+                break
+            
+            rate = rate - npv / dnpv if dnpv != 0 else rate
+        
+        return round(rate, 4)
+
+    def calculate_revenue_requirements(self, total_cost: float, config, square_footage: float) -> dict:
+        """Calculate revenue needed to achieve target ROI from config"""
+        target_roi = getattr(config, 'target_roi', 0.08)
+        
+        # Calculate required annual return
+        required_annual_return = total_cost * target_roi
+        
+        # Calculate operating margin (1 - total expense ratio)
+        total_expense_ratio = 0
+        
+        # Add all expense ratios from config
+        expense_fields = [
+            'labor_cost_ratio', 'utility_cost_ratio', 'maintenance_cost_ratio',
+            'management_fee_ratio', 'insurance_cost_ratio', 'property_tax_ratio',
+            'supply_cost_ratio', 'food_cost_ratio', 'beverage_cost_ratio',
+            'franchise_fee_ratio', 'equipment_lease_ratio', 'marketing_ratio',
+            'reserves_ratio', 'security_ratio', 'supplies_ratio',
+            'floor_plan_interest_ratio', 'materials_ratio', 'program_costs_ratio',
+            'equipment_ratio', 'chemicals_ratio', 'event_costs_ratio',
+            'software_fees_ratio', 'other_expenses_ratio'
+        ]
+        
+        for field in expense_fields:
+            if hasattr(config, field):
+                ratio = getattr(config, field)
+                if ratio and ratio > 0:
+                    total_expense_ratio += ratio
+        
+        operating_margin = 1 - total_expense_ratio
+        
+        # Required revenue to achieve target ROI
+        required_revenue = required_annual_return / operating_margin if operating_margin > 0 else 0
+        
+        # Calculate market value based on typical revenue for this building type
+        market_revenue_per_sf = getattr(config, 'base_revenue_per_sf_annual', 0)
+        market_value = market_revenue_per_sf * square_footage if market_revenue_per_sf > 0 else 0
+        
+        # Calculate feasibility and gap
+        feasibility = 'Feasible' if market_value >= required_revenue else 'Challenging'
+        gap = market_value - required_revenue
+        gap_percentage = (gap / required_revenue * 100) if required_revenue > 0 else 0
+        
+        return {
+            'required_value': round(required_revenue, 2),
+            'required_revenue_per_sf': round(required_revenue / square_footage, 2) if square_footage > 0 else 0,
+            'metric_name': 'Annual Revenue Required',
+            'target_roi': target_roi,
+            'operating_margin': round(operating_margin, 3),
+            'break_even_revenue': round(total_cost * 0.1, 2),  # Simple 10% of cost
+            'required_monthly': round(required_revenue / 12, 2),
+            'market_value': round(market_value, 2),  # ADD THIS
+            'feasibility': feasibility,  # ADD THIS
+            'gap': round(gap, 2),  # ADD THIS
+            'gap_percentage': round(gap_percentage, 1)  # ADD THIS
+        }
+
+    def calculate_operational_metrics_for_display(self, building_type: str, subtype: str, 
+                                                 operational_efficiency: dict, 
+                                                 square_footage: float, 
+                                                 annual_revenue: float, 
+                                                 units: int = 0) -> dict:
+        """
+        Calculate display-ready operational metrics based on building type.
+        Returns formatted metrics ready for frontend display.
+        """
+        
+        # Base metrics all building types have
+        operational_metrics = {
+            'staffing': [],
+            'revenue': {},
+            'kpis': []
+        }
+        
+        # Get data from operational_efficiency with safe defaults
+        labor_cost = operational_efficiency.get('labor_cost', 0) or 0
+        total_expenses = operational_efficiency.get('total_expenses', 0) or 0
+        operating_margin = operational_efficiency.get('operating_margin', 0) or 0
+        efficiency_score = operational_efficiency.get('efficiency_score', 0) or 0
+        expense_ratio = operational_efficiency.get('expense_ratio', 0) or 0
+        
+        # Building-type specific metrics
+        if building_type == 'restaurant':
+            food_cost = operational_efficiency.get('food_cost', 0)
+            beverage_cost = operational_efficiency.get('beverage_cost', 0)
+            
+            # Calculate restaurant-specific metrics
+            food_cost_ratio = (food_cost / annual_revenue) if annual_revenue > 0 else 0
+            labor_cost_ratio = (labor_cost / annual_revenue) if annual_revenue > 0 else 0
+            prime_cost_ratio = food_cost_ratio + labor_cost_ratio
+            
+            operational_metrics['staffing'] = [
+                {'label': 'Labor Cost', 'value': f'${labor_cost:,.0f}'},
+                {'label': 'Labor % of Revenue', 'value': f'{labor_cost_ratio * 100:.1f}%'}
+            ]
+            
+            operational_metrics['revenue'] = {
+                'Food Cost': f'{food_cost_ratio * 100:.1f}%',
+                'Beverage Cost': f'{(beverage_cost / annual_revenue * 100):.1f}%' if annual_revenue > 0 else '0%',
+                'Labor Cost': f'{labor_cost_ratio * 100:.1f}%',
+                'Operating Margin': f'{operating_margin * 100:.1f}%'
+            }
+            
+            operational_metrics['kpis'] = [
+                {
+                    'label': 'Food Cost Ratio',
+                    'value': f'{food_cost_ratio * 100:.0f}%',
+                    'color': 'green' if (food_cost_ratio or 0) < 0.28 else 'yellow' if (food_cost_ratio or 0) < 0.32 else 'red'
+                },
+                {
+                    'label': 'Prime Cost',
+                    'value': f'{prime_cost_ratio * 100:.0f}%',
+                    'color': 'green' if (prime_cost_ratio or 0) < 0.60 else 'yellow' if (prime_cost_ratio or 0) < 0.65 else 'red'
+                },
+                {
+                    'label': 'Efficiency',
+                    'value': f'{efficiency_score:.0f}%',
+                    'color': 'green' if (efficiency_score or 0) > 15 else 'yellow' if (efficiency_score or 0) > 10 else 'red'
+                }
+            ]
+            
+        elif building_type == 'healthcare':
+            # Healthcare calculations based on industry standards
+            beds = round(square_footage / 600)  # Industry standard: ~600 SF per bed
+            nursing_fte = round(labor_cost * 0.4 / 75000) if labor_cost > 0 else 1  # 40% of labor is nursing, avg salary $75k
+            total_fte = round(labor_cost / 60000) if labor_cost > 0 else 1  # Average healthcare worker salary
+            
+            operational_metrics['staffing'] = [
+                {'label': 'Total FTEs Required', 'value': str(total_fte)},
+                {'label': 'Beds per Nurse', 'value': f'{beds / nursing_fte:.1f}' if nursing_fte > 0 else 'N/A'}
+            ]
+            
+            operational_metrics['revenue'] = {
+                'Revenue per Employee': f'${annual_revenue / total_fte:,.0f}' if total_fte > 0 else 'N/A',
+                'Revenue per Bed': f'${annual_revenue / beds:,.0f}' if beds > 0 else 'N/A',
+                'Labor Cost Ratio': f'{(labor_cost / annual_revenue * 100):.0f}%' if annual_revenue > 0 else 'N/A',
+                'Operating Margin': f'{operating_margin * 100:.1f}%'
+            }
+            
+            operational_metrics['kpis'] = [
+                {'label': 'ALOS Target', 'value': '3.8 days', 'color': 'green'},
+                {'label': 'Occupancy', 'value': '85%', 'color': 'green'},
+                {'label': 'Efficiency', 'value': f'{efficiency_score:.0f}%', 
+                 'color': 'green' if (efficiency_score or 0) > 20 else 'yellow' if (efficiency_score or 0) > 15 else 'red'}
+            ]
+            
+        elif building_type == 'multifamily':
+            # Use units if provided, otherwise estimate
+            if units == 0:
+                units = round(square_footage / 1000)  # Average apartment size
+            
+            units_per_manager = 50  # Industry standard
+            maintenance_staff = max(1, round(units / 30))  # 1 per 30 units
+            
+            operational_metrics['staffing'] = [
+                {'label': 'Units per Manager', 'value': str(units_per_manager)},
+                {'label': 'Maintenance Staff', 'value': str(maintenance_staff)}
+            ]
+            
+            operational_metrics['revenue'] = {
+                'Revenue per Unit': f'${annual_revenue / units:,.0f}/yr' if units > 0 else 'N/A',
+                'Average Rent': f'${annual_revenue / units / 12:,.0f}/mo' if units > 0 else 'N/A',
+                'Occupancy Target': '93%',
+                'Operating Margin': f'{operating_margin * 100:.1f}%'
+            }
+            
+            operational_metrics['kpis'] = [
+                {
+                    'label': 'NOI Margin',
+                    'value': f'{operating_margin * 100:.0f}%',
+                    'color': 'green' if (operating_margin or 0) > 0.60 else 'yellow' if (operating_margin or 0) > 0.50 else 'red'
+                },
+                {
+                    'label': 'Expense Ratio',
+                    'value': f'{expense_ratio * 100:.0f}%',
+                    'color': 'green' if (expense_ratio or 0) < 0.40 else 'yellow' if (expense_ratio or 0) < 0.50 else 'red'
+                }
+            ]
+            
+        elif building_type == 'office':
+            operational_metrics['staffing'] = [
+                {'label': 'Property Mgmt', 'value': f'${operational_efficiency.get("management_fee", 0):,.0f}'},
+                {'label': 'Maintenance', 'value': f'${operational_efficiency.get("maintenance_cost", 0):,.0f}'}
+            ]
+            
+            operational_metrics['revenue'] = {
+                'Rent per SF': f'${annual_revenue / square_footage:.2f}/yr' if square_footage > 0 else 'N/A',
+                'Operating Expenses': f'${total_expenses:,.0f}',
+                'CAM Charges': f'${total_expenses / square_footage:.2f}/SF' if square_footage > 0 else 'N/A',
+                'Operating Margin': f'{operating_margin * 100:.1f}%'
+            }
+            
+            operational_metrics['kpis'] = [
+                {
+                    'label': 'Efficiency',
+                    'value': f'{efficiency_score:.0f}%',
+                    'color': 'green' if (efficiency_score or 0) > 15 else 'yellow' if (efficiency_score or 0) > 10 else 'red'
+                },
+                {
+                    'label': 'Expense/SF',
+                    'value': f'${total_expenses / square_footage:.2f}' if square_footage > 0 else 'N/A',
+                    'color': 'yellow'
+                }
+            ]
+            
+        else:
+            # Generic metrics for other building types
+            operational_metrics['staffing'] = [
+                {'label': 'Labor Cost', 'value': f'${labor_cost:,.0f}'},
+                {'label': 'Management', 'value': f'${operational_efficiency.get("management_fee", 0):,.0f}'}
+            ]
+            
+            operational_metrics['revenue'] = {
+                'Total Expenses': f'${total_expenses:,.0f}',
+                'Operating Margin': f'{operating_margin * 100:.1f}%',
+                'Efficiency Score': f'{efficiency_score:.0f}%'
+            }
+            
+            operational_metrics['kpis'] = [
+                {
+                    'label': 'Expense Ratio',
+                    'value': f'{expense_ratio * 100:.0f}%',
+                    'color': 'green' if (expense_ratio or 0) < 0.80 else 'yellow' if (expense_ratio or 0) < 0.90 else 'red'
+                }
+            ]
+        
+        return operational_metrics
+
+    def calculate_operational_efficiency(self, revenue: float, config) -> dict:
+        """Calculate operational efficiency metrics from config ratios"""
+        result = {
+            'total_expenses': 0,
+            'operating_margin': 0,
+            'efficiency_score': 0,
+            'expense_ratio': 0
+        }
+        
+        # Calculate each expense category from config
+        expense_mappings = [
+            ('labor_cost', 'labor_cost_ratio'),
+            ('utility_cost', 'utility_cost_ratio'),
+            ('maintenance_cost', 'maintenance_cost_ratio'),
+            ('management_fee', 'management_fee_ratio'),
+            ('insurance_cost', 'insurance_cost_ratio'),
+            ('property_tax', 'property_tax_ratio'),
+            ('supply_cost', 'supply_cost_ratio'),
+            ('food_cost', 'food_cost_ratio'),
+            ('beverage_cost', 'beverage_cost_ratio'),
+            ('franchise_fee', 'franchise_fee_ratio'),
+            ('equipment_lease', 'equipment_lease_ratio'),
+            ('marketing_cost', 'marketing_ratio'),
+            ('reserves', 'reserves_ratio'),
+            ('security', 'security_ratio'),
+            ('supplies', 'supplies_ratio'),
+            ('floor_plan_interest', 'floor_plan_interest_ratio'),
+            ('materials', 'materials_ratio'),
+            ('program_costs', 'program_costs_ratio'),
+            ('equipment', 'equipment_ratio'),
+            ('chemicals', 'chemicals_ratio'),
+            ('event_costs', 'event_costs_ratio'),
+            ('software_fees', 'software_fees_ratio'),
+            ('other_expenses', 'other_expenses_ratio'),
+        ]
+        
+        # Calculate expenses
+        total_expenses = 0
+        for name, attr in expense_mappings:
+            if hasattr(config, attr):
+                ratio = getattr(config, attr)
+                if ratio and ratio > 0:
+                    cost = revenue * ratio
+                    result[name] = round(cost, 2)
+                    total_expenses += cost
+        
+        result['total_expenses'] = round(total_expenses, 2)
+        result['operating_margin'] = round(1 - (total_expenses / revenue) if revenue > 0 else 0, 3)
+        result['efficiency_score'] = round((1 - (total_expenses / revenue)) * 100 if revenue > 0 else 0, 1)
+        result['expense_ratio'] = round(total_expenses / revenue if revenue > 0 else 0, 3)
+        
+        return result
     
     def get_available_building_types(self) -> Dict[str, List[str]]:
         """

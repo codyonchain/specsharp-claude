@@ -20,8 +20,8 @@ interface Props {
 export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   const navigate = useNavigate();
   
-  // Early return if no project data
-  if (!project?.analysis) {
+  // Early return if no project data - check multiple paths for data
+  if (!project?.analysis && !project?.calculation_data) {
     return (
       <div className="p-8 text-center text-gray-500">
         <p>Loading project data...</p>
@@ -29,14 +29,16 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     );
   }
 
-  const { analysis } = project;
+  // Get analysis from project or use project itself if it has the data
+  const analysis = project?.analysis || { calculations: project?.calculation_data } || project;
   
   // Map backend data through our mapper
   const displayData = BackendDataMapper.mapToDisplay(analysis);
   
-  // Extract additional raw data we need
+  // Extract additional raw data we need - check multiple paths for data
   const parsed = analysis?.parsed_input || {};
-  const calculations = analysis?.calculations || {};
+  // Look for calculations in multiple places due to data mapping
+  const calculations = analysis?.calculations || project?.calculation_data || project || {};
   const totals = calculations?.totals || {};
   const construction_costs = calculations?.construction_costs || {};
   const soft_costs = calculations?.soft_costs || {};
@@ -69,6 +71,27 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   console.log('10. SoftCostsTotal:', softCostsTotal);
   console.log('=== END TRACE ===');
   
+  // DETAILED REVENUE DEBUG
+  console.log('=== DETAILED REVENUE DEBUG ===');
+  console.log('Full project prop:', project);
+  console.log('project.calculation_data:', project?.calculation_data);
+  console.log('project.roi_analysis:', project?.roi_analysis);
+  console.log('project.revenue_analysis:', project?.revenue_analysis);
+  console.log('analysis object:', analysis);
+  console.log('analysis.calculations:', analysis?.calculations);
+  console.log('calculations object (merged):', calculations);
+  console.log('calculations keys:', Object.keys(calculations || {}));
+  
+  // Check all possible revenue paths
+  console.log('Path checks:');
+  console.log('  roi_analysis exists:', !!calculations?.roi_analysis);
+  console.log('  financial_metrics exists:', !!calculations?.roi_analysis?.financial_metrics);
+  console.log('  annual_revenue in financial_metrics:', calculations?.roi_analysis?.financial_metrics?.annual_revenue);
+  console.log('  revenue_analysis exists:', !!calculations?.revenue_analysis);
+  console.log('  annual_revenue in revenue_analysis:', calculations?.revenue_analysis?.annual_revenue);
+  console.log('  direct annual_revenue:', calculations?.annual_revenue);
+  console.log('=== END REVENUE DEBUG ===');
+  
   // Get values from backend calculations using correct data paths
   const annualRevenue = 
     calculations?.roi_analysis?.financial_metrics?.annual_revenue ||
@@ -76,6 +99,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     calculations?.financial_metrics?.annual_revenue ||
     calculations?.annual_revenue ||
     0; // No hardcoded value, just 0 if missing
+    
+  console.log('=== FINAL REVENUE VALUES ===');
+  console.log('annualRevenue calculated as:', annualRevenue);
+  console.log('operatingMargin will be calculated from paths...');
   const noi = 
     calculations?.roi_analysis?.financial_metrics?.net_income ||
     calculations?.revenue_analysis?.net_income ||
@@ -89,6 +116,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     calculations?.revenue_analysis?.operating_margin ||
     calculations?.operating_margin ||
     0.08; // Default 8% for unknown types
+    
+  console.log('operatingMargin calculated as:', operatingMargin);
+  console.log('noi calculated as:', noi);
+  console.log('=== END FINAL VALUES ===');
   
   // Revenue Requirements data
   const revenueReq = calculations?.revenue_requirements || 
@@ -157,7 +188,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         ['Expected ROI', `${(displayData.roi * 100).toFixed(1)}%`],
         ['NPV (10-year)', formatters.currency(displayData.npv)],
         ['Payback Period', `${displayData.paybackPeriod} years`],
-        ['IRR', `${((displayData.irr || 0.12) * 100).toFixed(1)}%`],
+        ['IRR', `${(displayData.irr || 12).toFixed(1)}%`],
         ['Annual Revenue', formatters.currency(annualRevenue)],
         ['Annual NOI', formatters.currency(noi)],
         [''],

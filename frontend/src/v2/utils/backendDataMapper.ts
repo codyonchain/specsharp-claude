@@ -120,9 +120,9 @@ export class BackendDataMapper {
     console.log('1. ROI at calculations.ownership_analysis:', path1_roi);
     console.log('2. ROI at calculations.calculations.ownership_analysis:', path2_roi);
     
-    // Check where other metrics are
-    const path1_npv = calculations?.ownership_analysis?.return_metrics?.ten_year_npv;
-    const path2_npv = calculations?.calculations?.ownership_analysis?.return_metrics?.ten_year_npv;
+    // Check where other metrics are - backend uses 'npv' not 'ten_year_npv'
+    const path1_npv = calculations?.ownership_analysis?.return_metrics?.npv;
+    const path2_npv = calculations?.calculations?.ownership_analysis?.return_metrics?.npv;
     
     console.log('3. NPV at path1:', path1_npv);
     console.log('4. NPV at path2:', path2_npv);
@@ -174,7 +174,8 @@ export class BackendDataMapper {
     const debtMetrics = ownership?.debt_metrics || {};
     const investmentAnalysis = ownership?.investment_analysis || {};
     const projectInfo = ownership?.project_info || calculations?.project_info || calculations?.calculations?.project_info || {};
-    const operationalMetrics = ownership?.operational_metrics || calculations?.operational_metrics || calculations?.calculations?.operational_metrics || {};
+    // Backend sends operational_efficiency, not operational_metrics
+    const operationalEfficiency = ownership?.operational_efficiency || calculations?.operational_efficiency || calculations?.calculations?.operational_efficiency || {};
     const parsedInput = analysis?.parsed_input || {};
     const totals = calculations?.totals || calculations?.calculations?.totals || {};
     
@@ -188,19 +189,19 @@ export class BackendDataMapper {
     console.log('Looking for total_project_cost at totals.total_project_cost:', totals?.total_project_cost);
     console.log('=== END MAPPER TRACE ===');
     
-    // Extract financial metrics with proper paths
+    // Extract financial metrics with proper paths - backend uses 'npv' not 'ten_year_npv'
     const roi = this.extractROI(returnMetrics);
-    const npv = safeGet(returnMetrics, 'ten_year_npv', 0);
+    const npv = safeGet(returnMetrics, 'npv', 0);
     const irr = safeGet(returnMetrics, 'irr', 0);
     const paybackPeriod = this.extractPaybackPeriod(returnMetrics, calculations);
     const dscr = safeGet(debtMetrics, 'calculated_dscr', 1.0);
     
-    // Extract revenue metrics
-    const annualRevenue = this.extractAnnualRevenue(returnMetrics, projectInfo, ownership);
+    // Extract revenue metrics - pass calculations to include roi_analysis
+    const annualRevenue = this.extractAnnualRevenue(returnMetrics, projectInfo, calculations);
     const noi = safeGet(returnMetrics, 'estimated_annual_noi', 0) || 
                 safeGet(ownership, 'noi', 0);
-    const operatingMargin = operationalMetrics?.operating_margin || 
-                           safeGet(ownership, 'operational_metrics.operating_margin', 0.6);
+    const operatingMargin = operationalEfficiency?.operating_margin || 
+                           safeGet(ownership, 'operational_efficiency.operating_margin', 0.6);
     
     // Extract investment analysis
     const investmentDecision = investmentAnalysis.recommendation || investmentAnalysis.decision || 
@@ -212,7 +213,7 @@ export class BackendDataMapper {
     const unitType = safeGet(projectInfo, 'unit_type', 'units');
     const totalCost = safeGet(totals, 'total_project_cost', 0);
     const revenuePerUnit = safeGet(projectInfo, 'revenue_per_unit', 0) || 
-                          safeGet(operationalMetrics, 'revenue_per_unit', 0) || 
+                          safeGet(operationalEfficiency, 'revenue_per_unit', 0) || 
                           (annualRevenue / Math.max(unitCount, 1));
     const costPerUnit = safeGet(projectInfo, 'cost_per_unit', 0) || 
                        (totalCost / Math.max(unitCount, 1));
@@ -225,16 +226,15 @@ export class BackendDataMapper {
     // Extract departments with fallback
     const departments = this.extractDepartments(calculations, ownership);
     
-    // Extract staffing metrics
-    const staffingMetrics = Array.isArray(operationalMetrics?.staffing) ? 
-                           operationalMetrics.staffing : [];
+    // Get operational metrics from backend (already formatted for display)
+    const operationalMetrics = ownership?.operational_metrics || 
+                              calculations?.operational_metrics ||
+                              { staffing: [], revenue: {}, kpis: [] };
     
-    // Extract revenue metrics
-    const revenueMetrics = operationalMetrics?.revenue || {};
-    
-    // Extract KPIs
-    const kpis = Array.isArray(operationalMetrics?.kpis) ? 
-                 operationalMetrics.kpis : [];
+    // Extract metrics for backward compatibility
+    const staffingMetrics = operationalMetrics.staffing || [];
+    const revenueMetrics = operationalMetrics.revenue || {};
+    const kpis = operationalMetrics.kpis || [];
     
     // Extract core project data
     const squareFootage = safeGet(parsedInput, 'square_footage', 0);
@@ -247,7 +247,7 @@ export class BackendDataMapper {
       paybackPeriod,
       dscr,
       annualRevenue,
-      monthlyRevenue: safeGet(operationalMetrics, 'monthly_revenue', 0) || 
+      monthlyRevenue: safeGet(operationalEfficiency, 'monthly_revenue', 0) || 
                      safeGet(projectInfo, 'monthly_revenue', 0) || 
                      (annualRevenue / 12),
       noi,
@@ -346,9 +346,21 @@ export class BackendDataMapper {
     return 0;
   }
   
-  private static extractAnnualRevenue(returnMetrics: any, projectInfo: any, ownership: any): number {
-    // Try multiple possible locations
-    return safeGet(ownership, 'annual_revenue', 0) ||
+  private static extractAnnualRevenue(returnMetrics: any, projectInfo: any, calculations: any): number {
+    // Try multiple possible locations including roi_analysis path
+    const roiAnalysis = calculations?.roi_analysis || {};
+    const financialMetrics = roiAnalysis?.financial_metrics || {};
+    const ownership = calculations?.ownership_analysis || {};
+    
+    console.log('=== EXTRACT ANNUAL REVENUE DEBUG ===');
+    console.log('calculations passed:', calculations);
+    console.log('roi_analysis found:', !!roiAnalysis);
+    console.log('financial_metrics found:', !!financialMetrics);
+    console.log('annual_revenue in financial_metrics:', financialMetrics?.annual_revenue);
+    console.log('=== END EXTRACT DEBUG ===');
+    
+    return financialMetrics?.annual_revenue ||
+           safeGet(ownership, 'annual_revenue', 0) ||
            safeGet(returnMetrics, 'annual_revenue', 0) ||
            safeGet(projectInfo, 'annual_revenue', 0) ||
            safeGet(returnMetrics, 'estimated_annual_revenue', 0) ||
