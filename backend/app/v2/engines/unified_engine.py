@@ -245,6 +245,10 @@ class UnifiedEngine:
             'roi_analysis': ownership_analysis.get('roi_analysis', {}) if ownership_analysis else {},
             # Add operational efficiency at top level
             'operational_efficiency': ownership_analysis.get('operational_efficiency', {}) if ownership_analysis else {},
+            # Add return metrics at top level for investment visibility
+            'return_metrics': ownership_analysis.get('return_metrics', {}) if ownership_analysis else {},
+            # Add roi metrics at top level for investment analysis
+            'roi_metrics': ownership_analysis.get('roi_metrics', {}) if ownership_analysis else {},
             # Add department and operational metrics at top level for easy frontend access
             'department_allocation': ownership_analysis.get('department_allocation', []) if ownership_analysis else [],
             'operational_metrics': ownership_analysis.get('operational_metrics', {}) if ownership_analysis else {},
@@ -498,7 +502,8 @@ class UnifiedEngine:
         # Calculate Operational Efficiency
         operational_efficiency = self.calculate_operational_efficiency(
             revenue=annual_revenue,
-            config=subtype_config
+            config=subtype_config,
+            subtype=subtype
         )
         
         # Calculate payback period
@@ -740,7 +745,8 @@ class UnifiedEngine:
             'management_fee_ratio', 'insurance_cost_ratio', 'property_tax_ratio',
             'supply_cost_ratio', 'food_cost_ratio', 'beverage_cost_ratio',
             'franchise_fee_ratio', 'equipment_lease_ratio', 'marketing_ratio',
-            'reserves_ratio', 'security_ratio', 'supplies_ratio',
+            'reserves_ratio', 'security_ratio', 'supplies_ratio', 'janitorial_ratio',
+            'rooms_operations_ratio', 'food_beverage_ratio', 'sales_marketing_ratio',
             'floor_plan_interest_ratio', 'materials_ratio', 'program_costs_ratio',
             'equipment_ratio', 'chemicals_ratio', 'event_costs_ratio',
             'software_fees_ratio', 'other_expenses_ratio'
@@ -970,7 +976,7 @@ class UnifiedEngine:
         
         return operational_metrics
 
-    def calculate_operational_efficiency(self, revenue: float, config) -> dict:
+    def calculate_operational_efficiency(self, revenue: float, config, subtype: str = None) -> dict:
         """Calculate operational efficiency metrics from config ratios"""
         result = {
             'total_expenses': 0,
@@ -978,6 +984,12 @@ class UnifiedEngine:
             'efficiency_score': 0,
             'expense_ratio': 0
         }
+        
+        # For manufacturing, separate facility expenses from business operations
+        exclude_from_facility_opex = []
+        if subtype == 'manufacturing':
+            # These are business operations, not real estate facility expenses
+            exclude_from_facility_opex = ['labor_cost_ratio', 'raw_materials_ratio']
         
         # Calculate each expense category from config
         expense_mappings = [
@@ -996,19 +1008,30 @@ class UnifiedEngine:
             ('reserves', 'reserves_ratio'),
             ('security', 'security_ratio'),
             ('supplies', 'supplies_ratio'),
+            ('janitorial', 'janitorial_ratio'),
+            ('rooms_operations', 'rooms_operations_ratio'),
+            ('food_beverage', 'food_beverage_ratio'),
+            ('sales_marketing', 'sales_marketing_ratio'),
             ('floor_plan_interest', 'floor_plan_interest_ratio'),
             ('materials', 'materials_ratio'),
+            ('raw_materials', 'raw_materials_ratio'),  # Added this mapping
             ('program_costs', 'program_costs_ratio'),
             ('equipment', 'equipment_ratio'),
             ('chemicals', 'chemicals_ratio'),
             ('event_costs', 'event_costs_ratio'),
             ('software_fees', 'software_fees_ratio'),
             ('other_expenses', 'other_expenses_ratio'),
+            ('monitoring_cost', 'monitoring_cost_ratio'),  # Added for cold storage
+            ('connectivity', 'connectivity_ratio'),  # Added for data center
         ]
         
         # Calculate expenses
         total_expenses = 0
         for name, attr in expense_mappings:
+            # Skip business operation expenses for manufacturing
+            if attr in exclude_from_facility_opex:
+                continue
+                
             if hasattr(config, attr):
                 ratio = getattr(config, attr)
                 if ratio and ratio > 0:

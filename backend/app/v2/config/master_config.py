@@ -158,6 +158,18 @@ class BuildingConfig:
     food_cost_ratio: Optional[float] = None
     equipment_lease_ratio: Optional[float] = None
     marketing_ratio: Optional[float] = None
+    franchise_fee_ratio: Optional[float] = None
+    security_ratio: Optional[float] = None
+    beverage_cost_ratio: Optional[float] = None
+    property_tax_ratio: Optional[float] = None
+    reserves_ratio: Optional[float] = None
+    janitorial_ratio: Optional[float] = None
+    rooms_operations_ratio: Optional[float] = None
+    food_beverage_ratio: Optional[float] = None
+    sales_marketing_ratio: Optional[float] = None
+    raw_materials_ratio: Optional[float] = None
+    monitoring_cost_ratio: Optional[float] = None
+    connectivity_ratio: Optional[float] = None
     
     # Financial metrics configuration
     financial_metrics: Optional[Dict[str, Any]] = None
@@ -1065,7 +1077,7 @@ MASTER_CONFIG = {
                     debt_rate=0.055,
                     equity_ratio=0.25,
                     target_dscr=1.25,
-                    target_roi=0.12,
+                    target_roi=0.06,  # Market standard 6% for luxury apartments
                 )
             },
             
@@ -1100,7 +1112,18 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.93,
             occupancy_rate_premium=0.90,
             operating_margin_base=0.35,
-            operating_margin_premium=0.42
+            operating_margin_premium=0.42,
+            
+            # Expense ratios for operational efficiency calculations
+            management_fee_ratio=0.04,       # 4% - professional property management
+            maintenance_cost_ratio=0.08,     # 8% - higher for luxury finishes
+            utility_cost_ratio=0.03,         # 3% - common area utilities
+            insurance_cost_ratio=0.02,       # 2% - property insurance
+            property_tax_ratio=0.10,         # 10% - varies by location
+            marketing_ratio=0.02,            # 2% - leasing and advertising
+            reserves_ratio=0.03,             # 3% - capital reserves
+            security_ratio=0.02,             # 2% - concierge/security
+            supply_cost_ratio=0.01           # 1% - office and maintenance supplies
         ),
         
         'market_rate_apartments': BuildingConfig(
@@ -1161,7 +1184,17 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.95,
             occupancy_rate_premium=0.93,
             operating_margin_base=0.40,
-            operating_margin_premium=0.45
+            operating_margin_premium=0.45,
+            
+            # Expense ratios for operational efficiency calculations
+            management_fee_ratio=0.05,       # 5% - standard property management
+            maintenance_cost_ratio=0.07,     # 7% - regular maintenance
+            utility_cost_ratio=0.04,         # 4% - utilities (some tenant paid)
+            insurance_cost_ratio=0.02,       # 2% - standard coverage
+            property_tax_ratio=0.12,         # 12% - typical property tax
+            marketing_ratio=0.02,            # 2% - advertising and leasing
+            reserves_ratio=0.02,             # 2% - capital reserves
+            supply_cost_ratio=0.01           # 1% - supplies
         ),
         
         'affordable_housing': BuildingConfig(
@@ -1224,7 +1257,18 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.97,
             occupancy_rate_premium=0.96,
             operating_margin_base=0.30,
-            operating_margin_premium=0.35
+            operating_margin_premium=0.35,
+            
+            # Expense ratios for operational efficiency calculations
+            management_fee_ratio=0.06,       # 6% - compliance adds complexity
+            maintenance_cost_ratio=0.09,     # 9% - deferred maintenance common
+            utility_cost_ratio=0.05,         # 5% - owner pays more utilities
+            insurance_cost_ratio=0.03,       # 3% - higher risk profile
+            property_tax_ratio=0.08,         # 8% - often tax advantaged
+            marketing_ratio=0.01,            # 1% - high demand, low marketing
+            reserves_ratio=0.04,             # 4% - required reserves
+            security_ratio=0.01,             # 1% - basic security
+            supply_cost_ratio=0.01           # 1% - basic supplies
         )
     },
     
@@ -1283,13 +1327,35 @@ MASTER_CONFIG = {
                 'San Francisco': 1.50,
                 'Chicago': 1.25
             },
+            
+            special_features={
+                'fitness_center': 35,       # On-site gym
+                'cafeteria': 30,            # Food service area
+                'conference_center': 40,    # Large meeting facilities
+                'structured_parking': 45,   # Parking garage
+                'green_roof': 35,           # Rooftop garden
+                'outdoor_terrace': 25,      # Outdoor work/break area
+                'executive_floor': 45,      # C-suite buildout
+                'data_center': 55,          # On-site server room
+                'concierge': 20,            # Lobby concierge desk
+            },
 
             # Revenue metrics
             base_revenue_per_sf_annual=42,
             occupancy_rate_base=0.88,
             occupancy_rate_premium=0.92,
             operating_margin_base=0.65,
-            operating_margin_premium=0.70
+            operating_margin_premium=0.70,
+            
+            # Expense ratios for operational efficiency calculations
+            utility_cost_ratio=0.08,         # 8% - HVAC, electric, water for premium space
+            property_tax_ratio=0.12,         # 12% - higher value = higher tax
+            insurance_cost_ratio=0.02,       # 2% - property and liability
+            maintenance_cost_ratio=0.06,     # 6% - elevators, HVAC, common areas
+            management_fee_ratio=0.03,       # 3% - professional property management
+            janitorial_ratio=0.04,          # 4% - daily cleaning services
+            security_ratio=0.02,            # 2% - 24/7 security and access control
+            reserves_ratio=0.02             # 2% - capital improvements
         ),
         
         'class_b': BuildingConfig(
@@ -1342,13 +1408,32 @@ MASTER_CONFIG = {
                 'New York': 1.40,
                 'San Francisco': 1.45
             },
+            
+            special_features={
+                'fitness_center': 30,       # Basic gym
+                'cafeteria': 25,            # Break room/kitchen
+                'conference_room': 20,      # Meeting rooms
+                'surface_parking': 15,      # Additional parking
+                'storage_space': 10,        # Extra storage
+                'security_desk': 15,        # Lobby security
+            },
 
             # Revenue metrics
             base_revenue_per_sf_annual=28,
             occupancy_rate_base=0.85,
             occupancy_rate_premium=0.88,
             operating_margin_base=0.60,
-            operating_margin_premium=0.65
+            operating_margin_premium=0.65,
+            
+            # Expense ratios for operational efficiency calculations
+            utility_cost_ratio=0.10,         # 10% - less efficient systems
+            property_tax_ratio=0.14,         # 14% - moderate value properties
+            insurance_cost_ratio=0.02,       # 2% - standard coverage
+            maintenance_cost_ratio=0.08,     # 8% - older systems need more maintenance
+            management_fee_ratio=0.04,       # 4% - property management
+            janitorial_ratio=0.03,          # 3% - standard cleaning
+            security_ratio=0.01,            # 1% - basic security
+            reserves_ratio=0.03             # 3% - higher reserves for older buildings
         )
     },
     
@@ -1405,6 +1490,15 @@ MASTER_CONFIG = {
                 'Memphis': 0.90,
                 'New York': 1.35,
                 'San Francisco': 1.40
+            },
+            
+            special_features={
+                'covered_walkway': 20,      # Covered storefronts
+                'loading_dock': 25,         # Shared loading area
+                'monument_signage': 15,     # Main sign structure
+                'outdoor_seating': 20,      # Common area seating
+                'drive_thru': 40,           # For end-cap tenants
+                'storage_units': 15,        # Back storage areas
             },
 
             # Revenue metrics
@@ -1465,6 +1559,16 @@ MASTER_CONFIG = {
                 'Memphis': 0.88,
                 'New York': 1.30,
                 'San Francisco': 1.35
+            },
+            
+            special_features={
+                'loading_dock': 20,         # Multiple dock doors
+                'mezzanine': 25,            # Upper level storage
+                'auto_center': 45,          # Auto service bays
+                'garden_center': 30,        # Outdoor sales area
+                'warehouse_racking': 15,    # High-bay storage
+                'refrigerated_storage': 35, # Cold storage areas
+                'curbside_pickup': 20,      # Dedicated pickup area
             },
 
             # Revenue metrics
@@ -1531,13 +1635,32 @@ MASTER_CONFIG = {
                 'New York': 1.35,
                 'San Francisco': 1.40
             },
+            
+            special_features={
+                'drive_thru': 40,           # Drive-thru lane and window
+                'outdoor_seating': 20,      # Patio seating area
+                'play_area': 35,            # Children's playground
+                'double_drive_thru': 55,    # Dual drive-thru lanes
+                'digital_menu_boards': 15,  # Digital ordering displays
+            },
 
             # Revenue metrics
             base_revenue_per_sf_annual=600,
             occupancy_rate_base=0.90,
             occupancy_rate_premium=0.95,
             operating_margin_base=0.12,
-            operating_margin_premium=0.18
+            operating_margin_premium=0.18,
+            
+            # Expense ratios for operational efficiency calculations
+            food_cost_ratio=0.28,            # 28% - industry target for QSR
+            labor_cost_ratio=0.30,           # 30% - lower due to simpler operations
+            beverage_cost_ratio=0.08,        # 8% - soft drinks high margin
+            management_fee_ratio=0.04,       # 4% - often franchise management
+            utility_cost_ratio=0.04,         # 4% - cooking equipment usage
+            maintenance_cost_ratio=0.03,     # 3% - equipment maintenance
+            marketing_ratio=0.04,            # 4% - local and national advertising
+            franchise_fee_ratio=0.06,        # 6% - typical franchise royalty
+            insurance_cost_ratio=0.02        # 2% - general liability
         ),
         
         'full_service': BuildingConfig(
@@ -1590,13 +1713,34 @@ MASTER_CONFIG = {
                 'New York': 1.40,
                 'San Francisco': 1.45
             },
+            
+            special_features={
+                'outdoor_seating': 25,      # Patio/sidewalk dining
+                'bar': 35,                  # Full bar setup
+                'private_dining': 30,       # Private dining rooms
+                'wine_cellar': 45,          # Temperature-controlled wine storage
+                'live_kitchen': 25,         # Open/exhibition kitchen
+                'rooftop_dining': 50,       # Rooftop terrace dining
+                'valet_parking': 20,        # Valet setup
+            },
 
             # Revenue metrics
             base_revenue_per_sf_annual=400,
             occupancy_rate_base=0.85,
             occupancy_rate_premium=0.90,
             operating_margin_base=0.08,
-            operating_margin_premium=0.12
+            operating_margin_premium=0.12,
+            
+            # Expense ratios for operational efficiency calculations
+            food_cost_ratio=0.32,            # 32% - higher quality ingredients
+            labor_cost_ratio=0.33,           # 33% - servers, hosts, bussers
+            beverage_cost_ratio=0.15,        # 15% - includes alcohol program
+            management_fee_ratio=0.05,       # 5% - general management
+            utility_cost_ratio=0.04,         # 4% - full kitchen operations
+            maintenance_cost_ratio=0.03,     # 3% - facility and equipment
+            marketing_ratio=0.03,            # 3% - local marketing
+            insurance_cost_ratio=0.02,       # 2% - including liquor liability
+            supply_cost_ratio=0.02           # 2% - napkins, utensils, etc.
         ),
         
         'bar_tavern': BuildingConfig(
@@ -1649,13 +1793,33 @@ MASTER_CONFIG = {
                 'New York': 1.38,
                 'San Francisco': 1.42
             },
+            
+            special_features={
+                'outdoor_seating': 25,      # Patio/beer garden
+                'live_music_stage': 30,     # Performance stage
+                'game_room': 25,            # Pool tables, darts, etc.
+                'rooftop_bar': 50,          # Rooftop bar area
+                'private_party_room': 30,   # Private event space
+                'craft_beer_system': 35,    # Specialized tap system
+            },
 
             # Revenue metrics
             base_revenue_per_sf_annual=450,
             occupancy_rate_base=0.80,
             occupancy_rate_premium=0.88,
             operating_margin_base=0.15,
-            operating_margin_premium=0.20
+            operating_margin_premium=0.20,
+            
+            # Expense ratios for operational efficiency calculations
+            food_cost_ratio=0.25,            # 25% - limited food menu
+            labor_cost_ratio=0.28,           # 28% - bartenders and servers
+            beverage_cost_ratio=0.20,        # 20% - alcohol is primary focus
+            management_fee_ratio=0.05,       # 5% - bar management
+            utility_cost_ratio=0.03,         # 3% - less cooking
+            maintenance_cost_ratio=0.03,     # 3% - equipment maintenance
+            marketing_ratio=0.04,            # 4% - promotions and events
+            insurance_cost_ratio=0.03,       # 3% - higher liquor liability
+            security_ratio=0.02              # 2% - bouncer/security needs
         ),
         
         'cafe': BuildingConfig(
@@ -1708,13 +1872,32 @@ MASTER_CONFIG = {
                 'New York': 1.35,
                 'San Francisco': 1.40
             },
+            
+            special_features={
+                'outdoor_seating': 20,      # Sidewalk/patio seating
+                'drive_thru': 35,           # Coffee drive-thru
+                'bakery_display': 15,       # Display cases
+                'lounge_area': 20,          # Comfortable seating area
+                'meeting_room': 25,         # Small meeting space
+            },
 
             # Revenue metrics
             base_revenue_per_sf_annual=350,
             occupancy_rate_base=0.80,
             occupancy_rate_premium=0.85,
             operating_margin_base=0.15,
-            operating_margin_premium=0.22
+            operating_margin_premium=0.22,
+            
+            # Expense ratios for operational efficiency calculations
+            food_cost_ratio=0.30,            # 30% - pastries and light food
+            labor_cost_ratio=0.35,           # 35% - baristas and bakers
+            beverage_cost_ratio=0.12,        # 12% - coffee and specialty drinks
+            management_fee_ratio=0.04,       # 4% - simple management
+            utility_cost_ratio=0.03,         # 3% - espresso machines, ovens
+            maintenance_cost_ratio=0.02,     # 2% - equipment maintenance
+            marketing_ratio=0.03,            # 3% - local marketing
+            insurance_cost_ratio=0.02,       # 2% - general liability
+            supply_cost_ratio=0.03           # 3% - cups, lids, napkins
         )
     },
     
@@ -1754,7 +1937,7 @@ MASTER_CONFIG = {
                     debt_rate=0.058,
                     equity_ratio=0.25,
                     target_dscr=1.25,
-                    target_roi=0.10,
+                    target_roi=0.07,  # Market standard 7% for warehouse
                 )
             },
             
@@ -1780,7 +1963,18 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.94,
             occupancy_rate_premium=0.97,
             operating_margin_base=0.70,
-            operating_margin_premium=0.75
+            operating_margin_premium=0.75,
+            
+            # Add these expense ratios for operational efficiency calculations
+            utility_cost_ratio=0.03,         # 3% - minimal HVAC, basic lighting
+            property_tax_ratio=0.08,         # 8% - lower value industrial land
+            insurance_cost_ratio=0.02,       # 2% - property and liability
+            maintenance_cost_ratio=0.03,     # 3% - simple systems, dock maintenance
+            management_fee_ratio=0.02,       # 2% - minimal management needed
+            security_ratio=0.01,             # 1% - basic security systems
+            reserves_ratio=0.02,             # 2% - capital reserves
+            labor_cost_ratio=0.02            # 2% - minimal staffing (security, maintenance)
+            # Total operating ratio: ~15% (very efficient operations)
         ),
         
         'distribution_center': BuildingConfig(
@@ -1882,7 +2076,7 @@ MASTER_CONFIG = {
                     debt_rate=0.062,
                     equity_ratio=0.30,
                     target_dscr=1.20,
-                    target_roi=0.12,
+                    target_roi=0.08,  # Market standard 8% for manufacturing
             
             # Financial metrics
             
@@ -1927,7 +2121,19 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.92,
             occupancy_rate_premium=0.95,
             operating_margin_base=0.65,
-            operating_margin_premium=0.70
+            operating_margin_premium=0.70,
+            
+            # Add these expense ratios for operational efficiency calculations
+            utility_cost_ratio=0.08,         # 8% - production equipment power
+            property_tax_ratio=0.06,         # 6% - industrial zones
+            insurance_cost_ratio=0.03,       # 3% - higher due to equipment/liability
+            maintenance_cost_ratio=0.06,     # 6% - equipment maintenance critical
+            management_fee_ratio=0.02,       # 2% - facility management
+            security_ratio=0.01,             # 1% - standard security
+            reserves_ratio=0.03,             # 3% - equipment replacement reserves
+            labor_cost_ratio=0.35,           # 35% - production staff (if included)
+            raw_materials_ratio=0.25         # 25% - materials for production
+            # Total operating ratio: ~25% facility costs (excluding production labor/materials)
         ),
         
         'flex_space': BuildingConfig(
@@ -1988,7 +2194,19 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.88,
             occupancy_rate_premium=0.92,
             operating_margin_base=0.60,
-            operating_margin_premium=0.65
+            operating_margin_premium=0.65,
+            
+            # Add these expense ratios for operational efficiency calculations
+            utility_cost_ratio=0.05,         # 5% - mixed use, some office HVAC
+            property_tax_ratio=0.09,         # 9% - higher value than pure warehouse
+            insurance_cost_ratio=0.02,       # 2% - standard coverage
+            maintenance_cost_ratio=0.04,     # 4% - office and warehouse systems
+            management_fee_ratio=0.03,       # 3% - more complex management
+            janitorial_ratio=0.02,           # 2% - office areas need cleaning
+            security_ratio=0.01,             # 1% - access control
+            reserves_ratio=0.02,             # 2% - capital reserves
+            labor_cost_ratio=0.03            # 3% - facility staff
+            # Total operating ratio: ~20% (between warehouse and office)
         ),
         
         'cold_storage': BuildingConfig(
@@ -2055,7 +2273,19 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.95,
             occupancy_rate_premium=0.98,
             operating_margin_base=0.55,
-            operating_margin_premium=0.60
+            operating_margin_premium=0.60,
+            
+            # Add these expense ratios for operational efficiency calculations
+            utility_cost_ratio=0.15,         # 15% - massive refrigeration costs
+            property_tax_ratio=0.07,         # 7% - specialized facility
+            insurance_cost_ratio=0.03,       # 3% - higher due to product liability
+            maintenance_cost_ratio=0.08,     # 8% - refrigeration equipment critical
+            management_fee_ratio=0.03,       # 3% - specialized management
+            security_ratio=0.02,             # 2% - temperature monitoring, security
+            reserves_ratio=0.04,             # 4% - refrigeration equipment reserves
+            labor_cost_ratio=0.05,           # 5% - specialized operators
+            monitoring_cost_ratio=0.03       # 3% - 24/7 temperature monitoring
+            # Total operating ratio: ~30% (high due to refrigeration)
         )
     },
     
@@ -2131,7 +2361,19 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.75,
             occupancy_rate_premium=0.82,
             operating_margin_base=0.30,
-            operating_margin_premium=0.38
+            operating_margin_premium=0.38,
+            
+            # Standard expense ratios for operational efficiency calculations
+            labor_cost_ratio=0.37,           # 37% - 12% rooms ops + 25% F&B ops = total labor
+            food_cost_ratio=0.10,            # 10% - Food purchases for restaurants/catering
+            management_fee_ratio=0.03,       # 3% - Hotel management company
+            utility_cost_ratio=0.06,         # 6% - 24/7 operations, pools, kitchens
+            maintenance_cost_ratio=0.04,     # 4% - Constant wear from guests
+            insurance_cost_ratio=0.02,       # 2% - Property and liability
+            property_tax_ratio=0.10,         # 10% - Valuable real estate
+            marketing_ratio=0.08,            # 8% - Sales & marketing (higher than other types)
+            reserves_ratio=0.04,             # 4% - FF&E replacement
+            franchise_fee_ratio=0.06         # 6% - Franchise fees, misc expenses
         ),
         
         'limited_service_hotel': BuildingConfig(
@@ -2201,7 +2443,19 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.70,
             occupancy_rate_premium=0.78,
             operating_margin_base=0.35,
-            operating_margin_premium=0.42
+            operating_margin_premium=0.42,
+            
+            # Standard expense ratios for operational efficiency calculations
+            labor_cost_ratio=0.20,           # 20% - 15% rooms ops + 5% breakfast = total labor
+            food_cost_ratio=0.03,            # 3% - Continental breakfast supplies
+            management_fee_ratio=0.04,       # 4% - Property management
+            utility_cost_ratio=0.07,         # 7% - Less efficient systems
+            maintenance_cost_ratio=0.05,     # 5% - Deferred maintenance common
+            insurance_cost_ratio=0.02,       # 2% - Standard coverage
+            property_tax_ratio=0.12,         # 12% - Often in suburban locations
+            marketing_ratio=0.06,            # 6% - OTA commissions, marketing
+            reserves_ratio=0.03,             # 3% - FF&E reserves
+            franchise_fee_ratio=0.08         # 8% - Franchise fees (higher % of lower revenue)
         )
     },
     
@@ -3015,7 +3269,19 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.95,
             occupancy_rate_premium=0.98,
             operating_margin_base=0.45,
-            operating_margin_premium=0.55
+            operating_margin_premium=0.55,
+            
+            # Add these expense ratios for operational efficiency calculations
+            utility_cost_ratio=0.25,         # 25% - massive power for servers/cooling
+            property_tax_ratio=0.05,         # 5% - valuable equipment
+            insurance_cost_ratio=0.04,       # 4% - critical infrastructure insurance
+            maintenance_cost_ratio=0.10,     # 10% - HVAC, UPS, generators critical
+            management_fee_ratio=0.03,       # 3% - specialized management
+            security_ratio=0.05,             # 5% - physical and cyber security
+            reserves_ratio=0.05,             # 5% - equipment refresh cycle
+            labor_cost_ratio=0.08,           # 8% - 24/7 NOC staff
+            connectivity_ratio=0.05          # 5% - bandwidth, network costs
+            # Total operating ratio: ~45% (highest due to power/cooling)
         ),
         
         'laboratory': BuildingConfig(
