@@ -204,15 +204,7 @@ class UnifiedEngine:
                 ownership_analysis['operational_efficiency'] = revenue_data.get('operational_efficiency', {})
                 ownership_analysis['operational_metrics'] = revenue_data.get('operational_metrics', {})
         
-        # Calculate financial requirements (if available for this subtype)
-        financial_requirements = self.calculate_financial_requirements(
-            building_type=building_type,
-            subtype=subtype,
-            config=building_config,
-            total_investment=total_project_cost,  # construction + soft costs
-            square_footage=square_footage,
-            location=location
-        )
+        # Financial requirements removed - was only partially implemented for hospital
         
         # Build comprehensive response - FLATTENED structure to match frontend expectations
         result = {
@@ -260,9 +252,7 @@ class UnifiedEngine:
             'timestamp': datetime.now().isoformat()
         }
         
-        # Only add financial requirements if available
-        if financial_requirements:
-            result['financial_requirements'] = financial_requirements
+        # Financial requirements removed - was only partially implemented
         
         self._log_trace("Calculation complete", {
             'total_project_cost': total_project_cost,
@@ -496,11 +486,13 @@ class UnifiedEngine:
             years=years
         )
         
-        # Calculate Revenue Requirements
+        # Calculate Revenue Requirements with actual projections
         revenue_requirements = self.calculate_revenue_requirements(
             total_cost=total_cost,
             config=subtype_config,
-            square_footage=square_footage
+            square_footage=square_footage,
+            actual_annual_revenue=annual_revenue,
+            actual_net_income=net_income
         )
         
         # Calculate Operational Efficiency
@@ -707,17 +699,42 @@ class UnifiedEngine:
         
         return round(rate, 4)
 
-    def calculate_revenue_requirements(self, total_cost: float, config, square_footage: float) -> dict:
-        """Calculate revenue needed to achieve target ROI from config"""
+    def calculate_revenue_requirements(self, total_cost: float, config, square_footage: float,
+                                      actual_annual_revenue: float = 0, actual_net_income: float = 0) -> dict:
+        """
+        Calculate revenue requirements comparing actual projected returns to required returns.
+        This determines true feasibility based on whether the project meets ROI targets.
+        """
+        
+        # Target ROI (use config if available, otherwise default)
         target_roi = getattr(config, 'target_roi', 0.08)
         
-        # Calculate required annual return
+        # Calculate required annual return (what investor needs)
         required_annual_return = total_cost * target_roi
         
-        # Calculate operating margin (1 - total expense ratio)
-        total_expense_ratio = 0
+        # Use ACTUAL projected revenue and profit from the project
+        # This is what the project will actually generate
         
-        # Add all expense ratios from config
+        # For feasibility, compare actual profit to required return
+        # NOT theoretical market capacity
+        if actual_net_income > 0:
+            gap = actual_net_income - required_annual_return
+            gap_percentage = (gap / required_annual_return) * 100 if required_annual_return > 0 else 0
+            
+            # Feasibility based on whether actual returns meet requirements
+            if gap >= 0:
+                feasibility = 'Feasible'
+            elif gap >= -required_annual_return * 0.2:  # Within 20% of target
+                feasibility = 'Marginal'
+            else:
+                feasibility = 'Not Feasible'
+        else:
+            gap = -required_annual_return
+            gap_percentage = -100
+            feasibility = 'Not Feasible'
+        
+        # Calculate operating margin for additional context
+        total_expense_ratio = 0
         expense_fields = [
             'labor_cost_ratio', 'utility_cost_ratio', 'maintenance_cost_ratio',
             'management_fee_ratio', 'insurance_cost_ratio', 'property_tax_ratio',
@@ -737,30 +754,40 @@ class UnifiedEngine:
         
         operating_margin = 1 - total_expense_ratio
         
-        # Required revenue to achieve target ROI
-        required_revenue = required_annual_return / operating_margin if operating_margin > 0 else 0
+        # Simple payback calculation using actual net income
+        simple_payback_years = round(total_cost / actual_net_income, 1) if actual_net_income > 0 else 999
         
-        # Calculate market value based on typical revenue for this building type
-        market_revenue_per_sf = getattr(config, 'base_revenue_per_sf_annual', 0) or 0
-        market_value = market_revenue_per_sf * square_footage if market_revenue_per_sf > 0 else 0
-        
-        # Calculate feasibility and gap
-        feasibility = 'Feasible' if market_value >= required_revenue else 'Challenging'
-        gap = market_value - required_revenue
-        gap_percentage = (gap / required_revenue * 100) if required_revenue > 0 else 0
-        
+        # ALWAYS return this exact structure
+        # The Revenue Requirements card expects these exact fields
         return {
-            'required_value': round(required_revenue, 2),
-            'required_revenue_per_sf': round(required_revenue / square_footage, 2) if square_footage > 0 else 0,
-            'metric_name': 'Annual Revenue Required',
+            # Core fields for Revenue Requirements card
+            'required_value': round(required_annual_return, 2),
+            'market_value': round(actual_annual_revenue, 2),  # Now shows actual projected revenue
+            'feasibility': feasibility,
+            'gap': round(gap, 2),
+            'gap_percentage': round(gap_percentage, 1),
+            
+            # Additional fields for debugging/clarity
+            'actual_net_income': round(actual_net_income, 2),
+            
+            # Additional display fields
+            'metric_name': 'Annual Return Required',
+            'required_revenue_per_sf': round(required_annual_return / square_footage, 2) if square_footage > 0 else 0,
+            'actual_revenue_per_sf': round(actual_annual_revenue / square_footage, 2) if square_footage > 0 else 0,
             'target_roi': target_roi,
             'operating_margin': round(operating_margin, 3),
             'break_even_revenue': round(total_cost * 0.1, 2),  # Simple 10% of cost
-            'required_monthly': round(required_revenue / 12, 2),
-            'market_value': round(market_value, 2),  # ADD THIS
-            'feasibility': feasibility,  # ADD THIS
-            'gap': round(gap, 2),  # ADD THIS
-            'gap_percentage': round(gap_percentage, 1)  # ADD THIS
+            'required_monthly': round(required_annual_return / 12, 2),
+            
+            # Simple payback for the card
+            'simple_payback_years': simple_payback_years,
+            
+            # Detailed feasibility for additional context
+            'feasibility_detail': {
+                'status': feasibility,
+                'gap': round(gap, 2),
+                'recommendation': self._get_revenue_feasibility_recommendation(gap, square_footage)
+            }
         }
 
     def calculate_operational_metrics_for_display(self, building_type: str, subtype: str, 
@@ -1097,118 +1124,8 @@ class UnifiedEngine:
         
         return result
     
-    def calculate_revenue_requirements(self, total_cost: float, config: Any, square_footage: float) -> Dict[str, Any]:
-        """
-        Calculate financial requirements based on financial_metrics configuration.
-        Uses the new financial_metrics field added to each BuildingConfig.
-        """
-        # Get financial metrics from config
-        financial_metrics = getattr(config, 'financial_metrics', None)
-        
-        if not financial_metrics:
-            # Fallback to basic calculation if no metrics configured
-            return {
-                'status': 'No financial metrics configured',
-                'recommendation': 'Contact engineering for configuration'
-            }
-        
-        # Extract metrics
-        primary_unit = financial_metrics.get('primary_unit', 'sf')
-        units_per_sf = financial_metrics.get('units_per_sf', 1.0)
-        revenue_per_unit = financial_metrics.get('revenue_per_unit_annual', 0)
-        target_utilization = financial_metrics.get('target_utilization', 0.85)
-        breakeven_utilization = financial_metrics.get('breakeven_utilization', 0.70)
-        market_rate_type = financial_metrics.get('market_rate_type', 'unknown')
-        market_rate_default = financial_metrics.get('market_rate_default', 0)
-        display_name = financial_metrics.get('display_name', 'Financial Requirements')
-        
-        # Calculate total units
-        total_units = square_footage * units_per_sf
-        
-        # Calculate revenue at different utilization levels
-        revenue_at_target = total_units * revenue_per_unit * target_utilization
-        revenue_at_breakeven = total_units * revenue_per_unit * breakeven_utilization
-        
-        # Calculate required revenue to cover costs
-        # Assume 10-year amortization for simplicity
-        annual_cost_coverage = total_cost / 10
-        required_revenue = annual_cost_coverage / 0.85  # Assume 15% operating expenses
-        
-        # Determine feasibility
-        feasibility_gap = required_revenue - revenue_at_target
-        feasibility_status = 'Feasible' if feasibility_gap <= 0 else 'Requires Optimization'
-        
-        return {
-            'display_name': display_name,
-            'primary_unit': primary_unit,
-            'total_units': round(total_units, 1),
-            'units_per_sf': units_per_sf,
-            'revenue_per_unit_annual': revenue_per_unit,
-            'market_rate': {
-                'type': market_rate_type,
-                'default': market_rate_default,
-                'adjusted': self.get_market_rate('', '', '', market_rate_type, market_rate_default)
-            },
-            'utilization': {
-                'target': target_utilization,
-                'breakeven': breakeven_utilization,
-                'current_market': target_utilization * 0.95  # Slight discount for market conditions
-            },
-            'revenue_projections': {
-                'at_target': revenue_at_target,
-                'at_breakeven': revenue_at_breakeven,
-                'required': required_revenue
-            },
-            'feasibility': {
-                'status': feasibility_status,
-                'gap': abs(feasibility_gap),
-                'recommendation': self._get_feasibility_recommendation(feasibility_gap, primary_unit)
-            }
-        }
-    
-    def calculate_operational_efficiency(self, revenue: float, config: Any) -> Dict[str, Any]:
-        """
-        Calculate operational efficiency metrics.
-        Dynamic calculation based on building type and operational parameters.
-        """
-        # Get financial metrics if available
-        financial_metrics = getattr(config, 'financial_metrics', {})
-        
-        # Base metrics from config
-        base_margin = getattr(config, 'operating_margin_base', 0.20)
-        premium_margin = getattr(config, 'operating_margin_premium', 0.25)
-        
-        # Calculate efficiency score (0-100)
-        efficiency_score = 75  # Base score
-        
-        # Adjust based on utilization if available
-        if financial_metrics:
-            target_util = financial_metrics.get('target_utilization', 0.85)
-            breakeven_util = financial_metrics.get('breakeven_utilization', 0.70)
-            util_range = target_util - breakeven_util
-            
-            if util_range > 0.15:
-                efficiency_score += 10  # Good utilization range
-            elif util_range < 0.10:
-                efficiency_score -= 10  # Tight margins
-        
-        # Calculate operational metrics
-        return {
-            'efficiency_score': efficiency_score,
-            'efficiency_rating': self._get_efficiency_rating(efficiency_score),
-            'margins': {
-                'base': base_margin,
-                'premium': premium_margin,
-                'industry_avg': (base_margin + premium_margin) / 2
-            },
-            'recommendations': self._get_efficiency_recommendations(efficiency_score),
-            'benchmarks': {
-                'excellent': 90,
-                'good': 75,
-                'average': 60,
-                'below_average': 45
-            }
-        }
+    # REMOVED DUPLICATE calculate_revenue_requirements - using the one at line 710
+    # REMOVED DUPLICATE calculate_operational_efficiency - using the one at line 977
     
     def get_market_rate(self, building_type: str, subtype: str, location: str, 
                         rate_type: str, default_rate: float) -> float:
@@ -1280,6 +1197,17 @@ class UnifiedEngine:
         
         return requirements
     
+    def _get_revenue_feasibility_recommendation(self, gap: float, square_footage: float) -> str:
+        """Generate feasibility recommendations for revenue requirements."""
+        if gap >= 0:
+            return "Project meets market revenue expectations"
+        elif abs(gap) < 1000000:
+            return "Minor revenue optimization needed through operational efficiency"
+        elif abs(gap) < 5000000:
+            return "Consider phased development or value engineering to reduce costs"
+        else:
+            return "Significant restructuring required to achieve feasibility"
+    
     def _get_feasibility_recommendation(self, gap: float, unit_type: str) -> str:
         """Generate feasibility recommendations based on gap analysis."""
         if gap <= 0:
@@ -1323,307 +1251,13 @@ class UnifiedEngine:
         
         return recommendations
 
-    def calculate_financial_requirements(self, building_type, subtype, config, 
-                                        total_investment, square_footage, location):
-        """
-        Calculate detailed financial requirements for ROI using config-driven metrics.
-        Currently only implemented for hospital, ready for expansion to all subtypes.
-        """
-        
-        # Check if this subtype has financial metrics configured
-        if not hasattr(config, 'financial_metrics') or not config.financial_metrics:
-            return None  # Return None to indicate this feature isn't available for this subtype
-        
-        fm = config.financial_metrics
-        
-        # Calculate total units based on the primary unit type
-        units_per_sf = fm.get('units_per_sf', 0)
-        total_units = square_footage * units_per_sf if units_per_sf > 0 else 0
-        
-        if total_units == 0:
-            return None  # Can't calculate without units
-        
-        # Core financial calculations
-        investment_per_unit = total_investment / total_units
-        
-        # Financial targets
-        target_roi = 0.08  # 8% ROI
-        target_irr = 0.12  # 12% IRR
-        debt_service_coverage = 1.25  # DSCR
-        
-        # Calculate required revenue
-        required_annual_revenue_total = total_investment * target_roi
-        required_revenue_per_unit = required_annual_revenue_total / total_units
-        
-        # Get occupancy/utilization rates
-        target_occupancy = fm.get('target_occupancy', 0.85)
-        breakeven_occupancy = fm.get('breakeven_occupancy', 0.70)
-        
-        # Get market data
-        market_rate = self.get_market_rate(
-            building_type, subtype, location,
-            fm.get('market_rate_type', 'rate'),
-            fm.get('market_rate_default', 0)
-        )
-        
-        # Calculate required rates based on unit type and market rate type
-        market_rate_type = fm.get('market_rate_type', 'rate')
-        primary_unit = fm.get('primary_unit', 'unit')
-        
-        # Build the requirements structure
-        requirements = {
-            'primary_metrics': {
-                'title': fm.get('display_name', 'Financial Requirements'),
-                'metrics': []
-            },
-            'performance_targets': {
-                'title': 'Performance Requirements',
-                'metrics': []
-            },
-            'market_analysis': {
-                'title': 'Market Feasibility',
-                'metrics': []
-            }
-        }
-        
-        # Add primary metrics
-        requirements['primary_metrics']['metrics'].extend([
-            {
-                'label': f'Total {primary_unit.capitalize()}',
-                'value': f'{int(total_units):,}',
-                'tooltip': f'Based on {units_per_sf:.5f} per SF'
-            },
-            {
-                'label': f'Investment per {primary_unit}',
-                'value': f'${investment_per_unit:,.0f}',
-                'tooltip': f'Total investment / {int(total_units)} {primary_unit}'
-            },
-            {
-                'label': f'Required Annual Revenue per {primary_unit}',
-                'value': f'${required_revenue_per_unit:,.0f}',
-                'tooltip': f'To achieve {target_roi:.0%} ROI'
-            }
-        ])
-        
-        # Calculate specific requirements based on market rate type
-        if market_rate_type == 'daily_rate':
-            # For hospitals, hotels, etc. with daily rates
-            days_per_year = 365
-            required_daily_rate = required_revenue_per_unit / (target_occupancy * days_per_year)
-            breakeven_daily_rate = required_revenue_per_unit / (breakeven_occupancy * days_per_year)
-            
-            requirements['primary_metrics']['metrics'].extend([
-                {
-                    'label': 'Required Daily Rate',
-                    'value': f'${required_daily_rate:,.0f}',
-                    'tooltip': f'At {target_occupancy:.0%} occupancy'
-                },
-                {
-                    'label': 'Break-even Daily Rate',
-                    'value': f'${breakeven_daily_rate:,.0f}',
-                    'tooltip': f'At {breakeven_occupancy:.0%} occupancy'
-                }
-            ])
-            
-            # Market comparison
-            feasibility_status = self.assess_feasibility(required_daily_rate, market_rate)
-            requirements['market_analysis']['metrics'].extend([
-                {
-                    'label': 'Market Average Daily Rate',
-                    'value': f'${market_rate:,.0f}',
-                    'status': feasibility_status['color']
-                },
-                {
-                    'label': 'Rate Gap',
-                    'value': f'${abs(market_rate - required_daily_rate):,.0f}',
-                    'status': feasibility_status['color'],
-                    'tooltip': 'Market rate vs required rate'
-                }
-            ])
-            
-        elif market_rate_type == 'monthly_rent':
-            # For apartments with monthly rent
-            required_monthly_rent = required_revenue_per_unit / 12
-            market_monthly = market_rate
-            
-            requirements['primary_metrics']['metrics'].extend([
-                {
-                    'label': 'Required Monthly Rent',
-                    'value': f'${required_monthly_rent:,.0f}',
-                    'tooltip': f'To achieve {target_roi:.0%} ROI'
-                }
-            ])
-            
-            feasibility_status = self.assess_feasibility(required_monthly_rent, market_monthly)
-            requirements['market_analysis']['metrics'].extend([
-                {
-                    'label': 'Market Average Rent',
-                    'value': f'${market_monthly:,.0f}',
-                    'status': feasibility_status['color']
-                }
-            ])
-            
-        elif market_rate_type == 'annual_psf':
-            # For office/retail/industrial with PSF rates
-            required_psf = required_revenue_per_unit / units_per_sf if units_per_sf > 0 else 0
-            
-            requirements['primary_metrics']['metrics'].extend([
-                {
-                    'label': 'Required Rate per SF',
-                    'value': f'${required_psf:,.2f}/SF/year',
-                    'tooltip': 'Triple net lease rate needed'
-                }
-            ])
-            
-            feasibility_status = self.assess_feasibility(required_psf, market_rate)
-            requirements['market_analysis']['metrics'].extend([
-                {
-                    'label': 'Market Lease Rate',
-                    'value': f'${market_rate:,.2f}/SF/year',
-                    'status': feasibility_status['color']
-                }
-            ])
-        else:
-            # Default feasibility for unknown market rate types
-            feasibility_status = {
-                'status': 'Analysis Available',
-                'color': 'info',
-                'message': 'Financial metrics configured',
-                'recommendation': 'Review detailed requirements above'
-            }
-        
-        # Add performance targets
-        requirements['performance_targets']['metrics'].extend([
-            {
-                'label': 'Target Occupancy',
-                'value': f'{target_occupancy:.0%}',
-                'tooltip': 'For optimal returns'
-            },
-            {
-                'label': 'Break-even Occupancy',
-                'value': f'{breakeven_occupancy:.0%}',
-                'tooltip': 'Minimum viable occupancy'
-            },
-            {
-                'label': 'Target ROI',
-                'value': f'{target_roi:.0%}',
-                'tooltip': 'Annual return on investment'
-            },
-            {
-                'label': 'Required DSCR',
-                'value': f'{debt_service_coverage:.2f}x',
-                'tooltip': 'Debt service coverage ratio'
-            }
-        ])
-        
-        # Add overall feasibility assessment
-        requirements['feasibility_summary'] = feasibility_status
-        
-        return requirements
+    # REMOVED calculate_financial_requirements - was only partially implemented for hospital
+    # This feature should be rebuilt properly after launch based on user needs
     
-    def get_market_rate(self, building_type, subtype, location, rate_type, default_rate):
-        """
-        Get location-adjusted market rates for comparison.
-        In production, this would connect to a real market data API.
-        """
-        
-        # Location multipliers for major markets
-        location_multipliers = {
-            'Nashville, TN': 1.00,
-            'New York, NY': 1.85,
-            'San Francisco, CA': 1.75,
-            'Los Angeles, CA': 1.55,
-            'Chicago, IL': 1.25,
-            'Boston, MA': 1.50,
-            'Washington, DC': 1.45,
-            'Seattle, WA': 1.40,
-            'Austin, TX': 1.20,
-            'Denver, CO': 1.15,
-            'Miami, FL': 1.35,
-            'Atlanta, GA': 1.05,
-            'Dallas, TX': 1.10,
-            'Phoenix, AZ': 0.95,
-            'Las Vegas, NV': 0.90,
-            'Detroit, MI': 0.70,
-            'Cleveland, OH': 0.65
-        }
-        
-        # Extract city from location string
-        city_state = location.split(',')[0] if ',' in location else location
-        multiplier = location_multipliers.get(location, 1.0)
-        
-        # Apply location multiplier
-        adjusted_rate = default_rate * multiplier
-        
-        # Apply quality adjustments for specific subtypes
-        quality_adjustments = {
-            'luxury_apartments': 1.20,
-            'class_a': 1.15,
-            'full_service_hotel': 1.10,
-            'surgical_center': 1.25,
-            'affordable_housing': 0.70,
-            'class_b': 0.85,
-            'limited_service_hotel': 0.80
-        }
-        
-        quality_mult = quality_adjustments.get(subtype, 1.0)
-        final_rate = adjusted_rate * quality_mult
-        
-        return final_rate
+    # REMOVED DUPLICATE get_market_rate - using the one at line 1134
     
-    def assess_feasibility(self, required_rate, market_rate):
-        """
-        Assess feasibility based on required vs market rates.
-        Returns status with color coding and recommendations.
-        """
-        
-        if market_rate == 0:
-            return {
-                'status': 'Unknown',
-                'color': 'gray',
-                'message': 'Market data unavailable',
-                'recommendation': 'Conduct detailed market study'
-            }
-        
-        # Calculate percentage difference
-        gap_percentage = ((required_rate - market_rate) / market_rate) * 100
-        
-        if gap_percentage <= -10:
-            # Market rate is significantly higher than required
-            return {
-                'status': 'Highly Feasible',
-                'color': 'success',
-                'icon': '✅',
-                'message': f'Market rate exceeds requirements by {abs(gap_percentage):.0f}%',
-                'recommendation': 'Strong market conditions support aggressive timeline'
-            }
-        elif gap_percentage <= 5:
-            # Market rate is close to or slightly above required
-            return {
-                'status': 'Feasible',
-                'color': 'success',
-                'icon': '✅',
-                'message': 'Market rates support project requirements',
-                'recommendation': 'Proceed with standard development approach'
-            }
-        elif gap_percentage <= 15:
-            # Required rate is slightly above market
-            return {
-                'status': 'Feasible with Optimization',
-                'color': 'warning',
-                'icon': '⚠️',
-                'message': f'Required rate {gap_percentage:.0f}% above market',
-                'recommendation': 'Consider value engineering or phased development'
-            }
-        else:
-            # Required rate significantly exceeds market
-            return {
-                'status': 'Challenging',
-                'color': 'error',
-                'icon': '❌',
-                'message': f'Required rate {gap_percentage:.0f}% above market',
-                'recommendation': 'Reassess project scope or explore alternative financing'
-            }
+    # REMOVED assess_feasibility - was part of financial requirements feature
+    # This was only partially implemented and should be rebuilt properly after launch
 
 # Create a singleton instance
 unified_engine = UnifiedEngine()

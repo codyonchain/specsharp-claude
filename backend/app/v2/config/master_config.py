@@ -148,6 +148,17 @@ class BuildingConfig:
     operating_margin_base: Optional[float] = None
     operating_margin_premium: Optional[float] = None
     
+    # Expense ratios for operational efficiency
+    labor_cost_ratio: Optional[float] = None
+    supply_cost_ratio: Optional[float] = None
+    management_fee_ratio: Optional[float] = None
+    insurance_cost_ratio: Optional[float] = None
+    utility_cost_ratio: Optional[float] = None
+    maintenance_cost_ratio: Optional[float] = None
+    food_cost_ratio: Optional[float] = None
+    equipment_lease_ratio: Optional[float] = None
+    marketing_ratio: Optional[float] = None
+    
     # Financial metrics configuration
     financial_metrics: Optional[Dict[str, Any]] = None
 
@@ -261,7 +272,15 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.85,
             occupancy_rate_premium=0.88,
             operating_margin_base=0.20,
-            operating_margin_premium=0.25
+            operating_margin_premium=0.25,
+            
+            # Expense ratios for operational efficiency calculations
+            labor_cost_ratio=0.50,           # 50% of revenue - industry standard for hospitals
+            supply_cost_ratio=0.15,          # 15% - medical supplies and pharmaceuticals
+            management_fee_ratio=0.10,       # 10% - administration and management
+            insurance_cost_ratio=0.03,       # 3% - malpractice and liability insurance
+            utility_cost_ratio=0.03,         # 3% - utilities (high energy use)
+            maintenance_cost_ratio=0.04      # 4% - facility and equipment maintenance
         ),
         
         'surgical_center': BuildingConfig(
@@ -340,7 +359,15 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.80,
             occupancy_rate_premium=0.85,
             operating_margin_base=0.35,
-            operating_margin_premium=0.40
+            operating_margin_premium=0.40,
+            
+            # Expense ratios for operational efficiency calculations
+            labor_cost_ratio=0.45,           # 45% - slightly lower than hospital
+            supply_cost_ratio=0.20,          # 20% - higher surgical supply costs
+            management_fee_ratio=0.08,       # 8% - leaner administration
+            insurance_cost_ratio=0.04,       # 4% - higher malpractice risk
+            utility_cost_ratio=0.02,         # 2% - smaller facility
+            maintenance_cost_ratio=0.05      # 5% - specialized equipment maintenance
         ),
         
         'medical_center': BuildingConfig(
@@ -417,7 +444,15 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.88,
             occupancy_rate_premium=0.92,
             operating_margin_base=0.25,
-            operating_margin_premium=0.30
+            operating_margin_premium=0.30,
+            
+            # Expense ratios for operational efficiency calculations
+            labor_cost_ratio=0.48,           # 48% - comprehensive staffing
+            supply_cost_ratio=0.16,          # 16% - varied medical supplies
+            management_fee_ratio=0.11,       # 11% - complex administration
+            insurance_cost_ratio=0.03,       # 3% - liability insurance
+            utility_cost_ratio=0.03,         # 3% - standard utilities
+            maintenance_cost_ratio=0.04      # 4% - facility maintenance
         ),
         
         'imaging_center': BuildingConfig(
@@ -489,7 +524,16 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.75,
             occupancy_rate_premium=0.85,
             operating_margin_base=0.40,
-            operating_margin_premium=0.45
+            operating_margin_premium=0.45,
+            
+            # Expense ratios for operational efficiency calculations
+            labor_cost_ratio=0.35,           # 35% - specialized technicians
+            supply_cost_ratio=0.08,          # 8% - contrast agents and supplies
+            management_fee_ratio=0.10,       # 10% - administration
+            insurance_cost_ratio=0.02,       # 2% - lower risk than surgery
+            utility_cost_ratio=0.04,         # 4% - high power for equipment
+            maintenance_cost_ratio=0.15,     # 15% - expensive equipment maintenance
+            equipment_lease_ratio=0.10       # 10% - often lease MRI/CT scanners
         ),
         
         'outpatient_clinic': BuildingConfig(
@@ -568,7 +612,15 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.80,
             occupancy_rate_premium=0.90,
             operating_margin_base=0.22,
-            operating_margin_premium=0.28
+            operating_margin_premium=0.28,
+            
+            # Expense ratios for operational efficiency calculations
+            labor_cost_ratio=0.42,           # 42% - clinical staff
+            supply_cost_ratio=0.10,          # 10% - basic medical supplies
+            management_fee_ratio=0.08,       # 8% - simpler administration
+            insurance_cost_ratio=0.02,       # 2% - lower risk profile
+            utility_cost_ratio=0.02,         # 2% - standard office utilities
+            maintenance_cost_ratio=0.03      # 3% - basic maintenance
         ),
         
         'urgent_care': BuildingConfig(
@@ -639,7 +691,16 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.70,
             occupancy_rate_premium=0.85,
             operating_margin_base=0.25,
-            operating_margin_premium=0.30
+            operating_margin_premium=0.30,
+            
+            # Expense ratios for operational efficiency calculations
+            labor_cost_ratio=0.40,           # 40% - 24/7 staffing considerations
+            supply_cost_ratio=0.12,          # 12% - emergency supplies
+            management_fee_ratio=0.08,       # 8% - administration
+            insurance_cost_ratio=0.03,       # 3% - moderate risk
+            utility_cost_ratio=0.03,         # 3% - extended hours
+            maintenance_cost_ratio=0.03,     # 3% - standard maintenance
+            marketing_ratio=0.03             # 3% - local marketing important
         ),
         
         'medical_office': BuildingConfig(
@@ -706,7 +767,15 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.92,
             occupancy_rate_premium=0.95,
             operating_margin_base=0.65,
-            operating_margin_premium=0.70
+            operating_margin_premium=0.70,
+            
+            # Expense ratios for operational efficiency calculations
+            labor_cost_ratio=0.38,           # 38% - physicians and staff
+            supply_cost_ratio=0.08,          # 8% - office medical supplies
+            management_fee_ratio=0.12,       # 12% - practice management
+            insurance_cost_ratio=0.02,       # 2% - malpractice insurance
+            utility_cost_ratio=0.02,         # 2% - standard office
+            maintenance_cost_ratio=0.02      # 2% - minimal maintenance
         ),
         
         'dental_office': BuildingConfig(
@@ -774,7 +843,16 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.90,
             occupancy_rate_premium=0.95,
             operating_margin_base=0.30,
-            operating_margin_premium=0.38
+            operating_margin_premium=0.38,
+            
+            # Expense ratios for operational efficiency calculations
+            labor_cost_ratio=0.35,           # 35% - dentists and hygienists
+            supply_cost_ratio=0.12,          # 12% - dental materials
+            management_fee_ratio=0.08,       # 8% - practice management
+            insurance_cost_ratio=0.02,       # 2% - malpractice
+            utility_cost_ratio=0.02,         # 2% - standard utilities
+            maintenance_cost_ratio=0.03,     # 3% - equipment maintenance
+            equipment_lease_ratio=0.05       # 5% - dental equipment leases
         ),
         
         'rehabilitation': BuildingConfig(
@@ -852,7 +930,15 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.82,
             occupancy_rate_premium=0.88,
             operating_margin_base=0.18,
-            operating_margin_premium=0.25
+            operating_margin_premium=0.25,
+            
+            # Expense ratios for operational efficiency calculations
+            labor_cost_ratio=0.55,           # 55% - therapy staff intensive
+            supply_cost_ratio=0.08,          # 8% - therapy supplies
+            management_fee_ratio=0.10,       # 10% - administration
+            insurance_cost_ratio=0.02,       # 2% - liability
+            utility_cost_ratio=0.03,         # 3% - pool/gym facilities
+            maintenance_cost_ratio=0.05      # 5% - equipment and pool maintenance
         ),
         
         'nursing_home': BuildingConfig(
@@ -930,7 +1016,16 @@ MASTER_CONFIG = {
             occupancy_rate_base=0.88,
             occupancy_rate_premium=0.92,
             operating_margin_base=0.12,
-            operating_margin_premium=0.18
+            operating_margin_premium=0.18,
+            
+            # Expense ratios for operational efficiency calculations
+            labor_cost_ratio=0.60,           # 60% - 24/7 care staff
+            supply_cost_ratio=0.10,          # 10% - medical and living supplies
+            food_cost_ratio=0.08,            # 8% - meal services
+            management_fee_ratio=0.08,       # 8% - administration
+            insurance_cost_ratio=0.02,       # 2% - liability
+            utility_cost_ratio=0.04,         # 4% - residential-level utilities
+            maintenance_cost_ratio=0.03      # 3% - facility maintenance
         )
     },
     
