@@ -148,6 +148,10 @@ class BuildingConfig:
     operating_margin_base: Optional[float] = None
     operating_margin_premium: Optional[float] = None
     
+    # Valuation metrics
+    market_cap_rate: Optional[float] = None  # Cap rate for property valuation
+    discount_rate: Optional[float] = None    # Discount rate for DCF
+    
     # Expense ratios for operational efficiency
     labor_cost_ratio: Optional[float] = None
     supply_cost_ratio: Optional[float] = None
@@ -1121,14 +1125,17 @@ MASTER_CONFIG = {
                 'concierge': 15
             },
 
-            # Revenue metrics
-            base_revenue_per_sf_annual=180,
-            base_revenue_per_unit_monthly=3500,
-            units_per_sf=0.00111,
+            # Revenue metrics - Updated for realistic luxury apartments
+            base_revenue_per_sf_annual=45,  # Realistic $38-45/SF annually for luxury
+            base_revenue_per_unit_monthly=3500,  # Nashville luxury market rate
+            units_per_sf=0.000909,  # 1,100 SF per unit (luxury standard, 1/1100)
             occupancy_rate_base=0.93,
             occupancy_rate_premium=0.90,
-            operating_margin_base=0.35,
-            operating_margin_premium=0.42,
+            operating_margin_base=0.65,
+            operating_margin_premium=0.7,
+            
+            # Valuation parameters
+            market_cap_rate=0.055,  # 5.5% for Nashville luxury apartments
             
             # Expense ratios for operational efficiency calculations
             management_fee_ratio=0.04,       # 4% - professional property management
@@ -1200,8 +1207,11 @@ MASTER_CONFIG = {
             units_per_sf=0.00125,
             occupancy_rate_base=0.95,
             occupancy_rate_premium=0.93,
-            operating_margin_base=0.40,
-            operating_margin_premium=0.45,
+            operating_margin_base=0.6,
+            operating_margin_premium=0.65,
+            
+            # Valuation parameters
+            market_cap_rate=0.065,  # 6.5% for market rate apartments
             
             # Expense ratios for operational efficiency calculations
             management_fee_ratio=0.05,       # 5% - standard property management
@@ -1274,8 +1284,11 @@ MASTER_CONFIG = {
             units_per_sf=0.00143,
             occupancy_rate_base=0.97,
             occupancy_rate_premium=0.96,
-            operating_margin_base=0.30,
-            operating_margin_premium=0.35,
+            operating_margin_base=0.55,
+            operating_margin_premium=0.6,
+            
+            # Valuation parameters
+            market_cap_rate=0.075,  # 7.5% for affordable housing
             
             # Expense ratios for operational efficiency calculations
             management_fee_ratio=0.06,       # 6% - compliance adds complexity

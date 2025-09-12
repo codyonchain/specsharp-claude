@@ -35,6 +35,17 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
   const regionalMultiplier = calculations.construction_costs?.regional_multiplier || 1.03;
   const complexityMultiplier = calculations.construction_costs?.class_multiplier || 1.00;
   const finalCostPerSF = calculations.construction_costs?.final_cost_per_sf || 1185;
+  
+  // Debug: Log the actual values
+  console.log('Construction View Debug:', {
+    baseCostPerSF,
+    regionalMultiplier,
+    complexityMultiplier,
+    finalCostPerSF,
+    expectedFinal: baseCostPerSF * regionalMultiplier * complexityMultiplier,
+    location: calculations.project_info?.location,
+    rawData: calculations.construction_costs
+  });
   // Use totals.hard_costs which includes base construction + special features
   // This ensures consistency with Executive View
   const constructionTotal = calculations.totals?.hard_costs || 246900000;
@@ -309,12 +320,21 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
               })}
             </div>
             
-            {/* Warning */}
+            {/* Warning - Dynamic based on building type */}
             <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
               <div className="flex items-start gap-2">
                 <Info className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-yellow-800">
-                  <strong>Long-lead items:</strong> Medical equipment and AHUs require 16-20 week lead time. Order by Month 3 to avoid delays.
+                  <strong>Long-lead items:</strong> {
+                    buildingType === 'healthcare' ? 'Medical equipment and AHUs require 16-20 week lead time. Order by Month 3 to avoid delays.' :
+                    buildingType === 'restaurant' ? 'Kitchen equipment and bar fixtures require 8-10 week lead time. Order by Month 2 to avoid delays.' :
+                    buildingType === 'office' ? 'Furniture systems and AV equipment require 6-8 week lead time. Order by Month 2 to avoid delays.' :
+                    buildingType === 'retail' ? 'Display fixtures and POS systems require 6-8 week lead time. Order by Month 2 to avoid delays.' :
+                    buildingType === 'industrial' ? 'Specialized machinery and racking systems require 10-12 week lead time. Order by Month 2 to avoid delays.' :
+                    buildingType === 'hospitality' ? 'FF&E packages and kitchen equipment require 10-12 week lead time. Order by Month 2 to avoid delays.' :
+                    buildingType === 'multifamily' ? 'Appliance packages and cabinetry require 8-10 week lead time. Order by Month 2 to avoid delays.' :
+                    'Equipment and fixtures require standard lead times. Verify with suppliers for specific requirements.'
+                  }
                 </p>
               </div>
             </div>

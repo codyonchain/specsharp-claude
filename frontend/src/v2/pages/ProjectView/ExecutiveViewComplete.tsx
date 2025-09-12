@@ -51,7 +51,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   const buildingType = parsed?.building_type || 'office';
   const buildingSubtype = parsed?.building_subtype || parsed?.subtype || 'general';
   const location = parsed?.location || 'Nashville';
-  const floors = parsed?.floors || 1;
+  // For multifamily and other building types, use typical_floors if available (more accurate)
+  const floors = calculations?.project_info?.typical_floors || parsed?.floors || 1;
   
   // Financial values with formatting
   const totalProjectCost = totals.total_project_cost || 0;
@@ -334,7 +335,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               </span>
               <span className="flex items-center gap-1.5">
                 <Building className="h-4 w-4" />
-                {floors} Floors
+                {floors} {floors === 1 ? 'Floor' : 'Floors'}
               </span>
               <span className="flex items-center gap-1.5">
                 <Calendar className="h-4 w-4" />
@@ -839,13 +840,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               </div>
               
               <div className="relative">
-                <div className="w-full bg-gradient-to-r from-green-100 via-yellow-100 to-red-100 rounded-full h-4 overflow-hidden">
-                  <div className="absolute top-0 left-1/2 transform -translate-x-1/2 h-full w-0.5 bg-gray-700"></div>
+                <div className="w-full bg-gradient-to-r from-green-100 via-yellow-100 to-red-100 rounded-full h-4 relative">
                   <div 
-                    className="absolute top-0 h-full w-1 bg-blue-600 shadow-lg"
-                    style={{ left: '59%' }}
+                    className="absolute top-1/2 transform -translate-y-1/2 w-6 h-6 bg-blue-600 rounded-full border-2 border-white shadow-lg z-10"
+                    style={{ left: '59%', marginLeft: '-12px' }}
                   >
-                    <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-blue-600 rounded-full border-2 border-white shadow-lg"></div>
                   </div>
                 </div>
                 <div className="flex justify-between text-xs text-gray-500 mt-2">

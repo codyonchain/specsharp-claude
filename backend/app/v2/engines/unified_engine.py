@@ -514,23 +514,54 @@ class UnifiedEngine:
         # Calculate financial metrics
         net_income = annual_revenue * operating_margin
         
-        # Calculate NPV using config discount_rate
-        years = 10  # Standard projection period
-        discount_rate = getattr(subtype_config, 'discount_rate', 0.08)
+        # Standard projection period for IRR calculation
+        years = 10
         
-        npv = self.calculate_npv(
-            initial_investment=total_cost,
-            annual_cash_flow=net_income,
-            years=years,
-            discount_rate=discount_rate
-        )
+        # Initialize valuation variables
+        property_value = None
+        market_cap_rate = None
         
-        # Calculate IRR
-        irr = self.calculate_irr(
-            initial_investment=total_cost,
-            annual_cash_flow=net_income,
-            years=years
-        )
+        # Calculate NPV - use cap rate for multifamily, DCF for others
+        logger.info(f"🏢 Building enum check: {building_enum} == {BuildingType.MULTIFAMILY}? {building_enum == BuildingType.MULTIFAMILY}")
+        if building_enum == BuildingType.MULTIFAMILY:
+            # Cap rate valuation for income-producing real estate
+            market_cap_rate = getattr(subtype_config, 'market_cap_rate', 0.06)
+            property_value = net_income / market_cap_rate if market_cap_rate > 0 else 0
+            npv = property_value - total_cost
+            
+            # Log for debugging
+            logger.info(f"🏢 Multifamily Cap Rate Valuation:")
+            logger.info(f"   NOI: ${net_income:,.0f}")
+            logger.info(f"   Cap Rate: {market_cap_rate:.1%}")
+            logger.info(f"   Property Value: ${property_value:,.0f}")
+            logger.info(f"   NPV: ${npv:,.0f}")
+        else:
+            # DCF valuation for other building types
+            discount_rate = getattr(subtype_config, 'discount_rate', 0.08)
+            
+            npv = self.calculate_npv(
+                initial_investment=total_cost,
+                annual_cash_flow=net_income,
+                years=years,
+                discount_rate=discount_rate
+            )
+        
+        # Calculate IRR - include terminal value for multifamily
+        if building_enum == BuildingType.MULTIFAMILY and property_value:
+            # For multifamily, include property value as terminal value
+            irr = self.calculate_irr_with_terminal_value(
+                initial_investment=total_cost,
+                annual_cash_flow=net_income,
+                terminal_value=property_value,
+                years=years
+            )
+        else:
+            # Standard IRR calculation for other property types
+            irr = self.calculate_irr(
+                initial_investment=total_cost,
+                annual_cash_flow=net_income,
+                years=years
+            )
         
         # Calculate Revenue Requirements with actual projections
         revenue_requirements = self.calculate_revenue_requirements(
@@ -577,7 +608,10 @@ class UnifiedEngine:
                 'cap_rate': round((net_income / total_cost) * 100, 2) if total_cost > 0 else 0,
                 'npv': npv,
                 'irr': round(irr * 100, 2),  # Convert to percentage
-                'payback_period': payback_period
+                'payback_period': payback_period,
+                'property_value': property_value,  # Always include the value
+                'market_cap_rate': market_cap_rate,  # Always include the rate
+                'is_multifamily': building_enum == BuildingType.MULTIFAMILY  # Debug flag
             },
             'revenue_requirements': revenue_requirements,
             'operational_efficiency': operational_efficiency,  # Keep raw data
@@ -743,6 +777,47 @@ class UnifiedEngine:
                 break
             
             rate = rate - npv / dnpv if dnpv != 0 else rate
+        
+        return round(rate, 4)
+    
+    def calculate_irr_with_terminal_value(self, initial_investment: float, annual_cash_flow: float,
+                                         terminal_value: float, years: int = 10) -> float:
+        """
+        Calculate IRR including terminal value (property sale) at end of investment period.
+        Used for real estate investments where property value is realized at exit.
+        """
+        if initial_investment <= 0:
+            return 0.0
+        
+        # Newton-Raphson method for IRR with terminal value
+        rate = 0.1  # Initial guess
+        for _ in range(50):  # More iterations for complex calculation
+            npv = -initial_investment
+            dnpv = 0
+            
+            # Annual cash flows
+            for year in range(1, years + 1):
+                npv += annual_cash_flow / ((1 + rate) ** year)
+                dnpv -= year * annual_cash_flow / ((1 + rate) ** (year + 1))
+            
+            # Terminal value at end of last year
+            npv += terminal_value / ((1 + rate) ** years)
+            dnpv -= years * terminal_value / ((1 + rate) ** (years + 1))
+            
+            if abs(npv) < 0.01:  # Converged
+                break
+            
+            # Update rate estimate
+            if dnpv != 0:
+                new_rate = rate - npv / dnpv
+                # Bound the rate to prevent divergence
+                if new_rate < -0.99:
+                    new_rate = -0.99
+                elif new_rate > 10:
+                    new_rate = 10
+                rate = new_rate
+            else:
+                break
         
         return round(rate, 4)
 
