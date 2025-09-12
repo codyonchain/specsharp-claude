@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Project, FinancialRequirements } from '../../types';
+import { Project } from '../../types';
 import { formatters, safeGet } from '../../utils/displayFormatters';
 import { BackendDataMapper } from '../../utils/backendDataMapper';
-import { FinancialRequirementsCard } from './FinancialRequirementsCard';
+// Removed FinancialRequirementsCard - was only implemented for hospital
 import * as XLSX from 'xlsx';
 import { 
   TrendingUp, DollarSign, Building, Clock, AlertCircle,
@@ -127,12 +127,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                      calculations?.ownership_analysis?.revenue_requirements || 
                      null;
 
-  // Financial Requirements data (for healthcare facilities)
-  const financialRequirements: FinancialRequirements | null = 
-    calculations?.financial_requirements ||
-    analysis?.calculations?.financial_requirements ||
-    project?.financial_requirements ||
-    null;
+  // Financial Requirements removed - was only implemented for hospital
   
   // Get department icons based on building type
   const getDepartmentIcon = (deptName: string) => {
@@ -703,24 +698,29 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               </div>
               
               <div className={`p-4 rounded-lg ${
-                revenueReq.feasibility === 'Feasible' 
+                (revenueReq.feasibility?.status || revenueReq.feasibility) === 'Feasible' 
                   ? 'bg-green-50 border border-green-200' 
                   : 'bg-amber-50 border border-amber-200'
               }`}>
                 <div className="flex items-center justify-between">
                   <span className="font-semibold">Project Feasibility:</span>
                   <span className={`font-bold ${
-                    revenueReq.feasibility === 'Feasible' ? 'text-green-600' : 'text-amber-600'
+                    (revenueReq.feasibility?.status || revenueReq.feasibility) === 'Feasible' ? 'text-green-600' : 'text-amber-600'
                   }`}>
-                    {revenueReq.feasibility}
+                    {revenueReq.feasibility?.status || revenueReq.feasibility}
                   </span>
                 </div>
-                {revenueReq.gap !== undefined && (
+                {(revenueReq.gap !== undefined || revenueReq.feasibility?.gap !== undefined) && (
                   <p className="text-sm mt-2">
-                    {revenueReq.gap > 0 
-                      ? `Market rate is ${formatters.currency(Math.abs(revenueReq.gap))} (${Math.abs(revenueReq.gap_percentage).toFixed(1)}%) above requirement ✓`
-                      : `Need to achieve ${formatters.currency(Math.abs(revenueReq.gap))} (${Math.abs(revenueReq.gap_percentage).toFixed(1)}%) above market rate`
+                    {(revenueReq.gap || revenueReq.feasibility?.gap || 0) > 0 
+                      ? `Market rate is ${formatters.currency(Math.abs(revenueReq.gap || revenueReq.feasibility?.gap || 0))} (${Math.abs(revenueReq.gap_percentage || 0).toFixed(1)}%) above requirement ✓`
+                      : `Need to achieve ${formatters.currency(Math.abs(revenueReq.gap || revenueReq.feasibility?.gap || 0))} (${Math.abs(revenueReq.gap_percentage || 0).toFixed(1)}%) above market rate`
                     }
+                  </p>
+                )}
+                {revenueReq.feasibility?.recommendation && (
+                  <p className="text-sm mt-2 text-gray-600">
+                    {revenueReq.feasibility.recommendation}
                   </p>
                 )}
               </div>
@@ -736,13 +736,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         </div>
       )}
 
-      {/* Financial Requirements Card - Healthcare Only */}
-      {buildingType === 'healthcare' && financialRequirements && (
-        <FinancialRequirementsCard 
-          requirements={financialRequirements}
-          isVisible={true}
-        />
-      )}
+      {/* Financial Requirements removed - was only implemented for hospital */}
 
       {/* Major Soft Cost Categories */}
       {softCostCategories.length > 0 && (

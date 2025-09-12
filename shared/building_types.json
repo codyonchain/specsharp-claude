@@ -197,14 +197,14 @@
           "keywords": ["luxury hotel", "5 star", "resort", "boutique"],
           "base_cost_per_sf": 650
         },
-        "business_hotel": {
-          "display_name": "Business Hotel",
-          "keywords": ["business hotel", "conference", "airport hotel"],
+        "full_service_hotel": {
+          "display_name": "Full Service Hotel",
+          "keywords": ["full service", "full-service", "business hotel", "conference", "airport hotel"],
           "base_cost_per_sf": 425
         },
-        "limited_service": {
+        "limited_service_hotel": {
           "display_name": "Limited Service Hotel",
-          "keywords": ["limited service", "select service", "economy"],
+          "keywords": ["limited service", "select service", "economy", "budget", "express"],
           "base_cost_per_sf": 325
         },
         "extended_stay": {

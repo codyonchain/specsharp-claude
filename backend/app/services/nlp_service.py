@@ -257,11 +257,26 @@ class NLPService:
             building_type = 'office'
             subtype = 'class_b'  # Default office is Class B
             
-        # RESTAURANT
+        # HOSPITALITY - Check BEFORE restaurant to catch "full service hotel"
+        elif any(word in text_lower for word in ['hotel', 'motel', 'inn']):
+            # Full service indicators
+            if any(term in text_lower for term in ['full service', 'full-service', 'luxury', 'resort', 'convention']):
+                building_type = 'hospitality'
+                subtype = 'full_service_hotel'
+            # Limited service indicators (INCLUDING budget, economy, express)
+            elif any(term in text_lower for term in ['limited service', 'select service', 'budget', 'economy', 'express']):
+                building_type = 'hospitality'
+                subtype = 'limited_service_hotel'
+            # Default to limited service (most common)
+            else:
+                building_type = 'hospitality'
+                subtype = 'limited_service_hotel'
+                
+        # RESTAURANT - Check AFTER hospitality
         elif any(phrase in text_lower for phrase in ['quick service', 'qsr', 'fast food', 'fast casual']):
             building_type = 'restaurant'
             subtype = 'quick_service'
-        elif any(phrase in text_lower for phrase in ['full service', 'full-service', 'sit-down', 'casual dining']):
+        elif any(phrase in text_lower for phrase in ['full service', 'full-service', 'sit-down', 'casual dining']) and 'hotel' not in text_lower:
             building_type = 'restaurant'
             subtype = 'full_service'
         elif any(phrase in text_lower for phrase in ['bar', 'tavern', 'pub', 'brewery']):
@@ -306,18 +321,6 @@ class NLPService:
         elif 'flex' in text_lower and any(word in text_lower for word in ['space', 'industrial', 'building']):
             building_type = 'industrial'
             subtype = 'flex_space'
-            
-        # HOSPITALITY
-        elif any(word in text_lower for word in ['hotel', 'motel']):
-            if 'luxury' in text_lower or 'resort' in text_lower:
-                building_type = 'hospitality'
-                subtype = 'luxury_hotel'
-            elif 'budget' in text_lower or 'economy' in text_lower:
-                building_type = 'hospitality'
-                subtype = 'economy_hotel'
-            else:
-                building_type = 'hospitality'
-                subtype = 'business_hotel'  # Default hotel
                 
         return building_type, subtype, classification
     

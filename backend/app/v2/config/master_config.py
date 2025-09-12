@@ -246,6 +246,8 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.96,
                 'Memphis': 0.94,
                 'Knoxville': 0.93,
@@ -348,6 +350,8 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.96,
                 'Memphis': 0.94,
                 'New York': 1.32,
@@ -435,6 +439,8 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.96,
                 'Memphis': 0.94,
                 'New York': 1.33,
@@ -512,6 +518,8 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.96,
                 'Memphis': 0.94,
                 'New York': 1.30,
@@ -601,6 +609,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.93,
                 'New York': 1.28,
@@ -680,6 +689,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.93,
                 'New York': 1.25,
@@ -760,6 +770,8 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.96,
                 'Memphis': 0.94,
                 'New York': 1.30,
@@ -835,6 +847,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.93,
                 'New York': 1.28,
@@ -920,6 +933,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.93,
                 'New York': 1.28,
@@ -1006,6 +1020,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.25,
@@ -1090,6 +1105,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.90,
                 'New York': 1.45,
@@ -1171,6 +1187,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.90,
                 'Memphis': 0.88,
                 'New York': 1.40,
@@ -1244,6 +1261,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.88,
                 'Memphis': 0.86,
                 'New York': 1.35,
@@ -1321,6 +1339,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.92,
                 'New York': 1.45,
@@ -1403,6 +1422,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.90,
                 'New York': 1.40,
@@ -1486,6 +1506,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.90,
                 'New York': 1.35,
@@ -1555,6 +1576,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.90,
                 'Memphis': 0.88,
                 'New York': 1.30,
@@ -1630,6 +1652,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.35,
@@ -1708,6 +1731,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.93,
                 'New York': 1.40,
@@ -1788,6 +1812,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.38,
@@ -1867,6 +1892,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.93,
                 'Memphis': 0.91,
                 'New York': 1.35,
@@ -1950,6 +1976,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.90,
                 'New York': 1.25,
@@ -2022,6 +2049,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.93,
                 'Memphis': 0.91,  # Memphis is distribution hub
                 'New York': 1.28,
@@ -2101,6 +2129,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.35,
@@ -2181,6 +2210,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.93,
                 'Memphis': 0.91,
                 'New York': 1.30,
@@ -2254,6 +2284,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.32,
@@ -2338,6 +2369,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.93,
                 'New York': 1.45,
@@ -2421,6 +2453,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.93,
                 'Memphis': 0.91,
                 'New York': 1.40,
@@ -2510,6 +2543,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.38,
@@ -2582,6 +2616,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.38,
@@ -2655,6 +2690,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.40,
@@ -2736,6 +2772,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.93,
                 'New York': 1.42,
@@ -2808,6 +2845,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.93,
                 'Memphis': 0.91,
                 'New York': 1.35,
@@ -2883,6 +2921,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.93,
                 'Memphis': 0.91,
                 'New York': 1.45,
@@ -2953,6 +2992,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.48,
@@ -3023,6 +3063,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.93,
                 'New York': 1.45,
@@ -3094,6 +3135,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.48,
@@ -3173,6 +3215,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.92,  # No transit
                 'Memphis': 0.93,
                 'New York': 1.50,  # High transit value
@@ -3249,6 +3292,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.93,
                 'New York': 1.25,  # Less premium for data centers
@@ -3340,6 +3384,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.95,
                 'Memphis': 0.93,
                 'New York': 1.40,
@@ -3412,6 +3457,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.90,
                 'Memphis': 0.88,
                 'New York': 1.30,
@@ -3483,6 +3529,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.90,
                 'New York': 1.35,
@@ -3553,7 +3600,8 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.03,  # Music city
+                'Nashville': 1.03,
+                'Franklin': 1.03,  # Music city
                 'Manchester': 0.92,
                 'Memphis': 0.94,
                 'New York': 1.45,
@@ -3631,6 +3679,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.38,
@@ -3699,6 +3748,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.93,
                 'Memphis': 0.91,
                 'New York': 1.40,
@@ -3772,6 +3822,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.93,
                 'Memphis': 0.91,
                 'New York': 1.38,
@@ -3854,6 +3905,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.90,
                 'New York': 1.35,
@@ -3926,6 +3978,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.42,
@@ -4003,6 +4056,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.90,
                 'New York': 1.35,
@@ -4082,6 +4136,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.93,
                 'Memphis': 0.91,
                 'New York': 1.38,
@@ -4162,6 +4217,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.40,
@@ -4244,6 +4300,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.90,
                 'New York': 1.35,
@@ -4324,6 +4381,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.93,
                 'New York': 1.45,
@@ -4403,6 +4461,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.90,
                 'Memphis': 0.88,
                 'New York': 1.25,
@@ -4483,6 +4542,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.90,
                 'New York': 1.35,
@@ -4557,6 +4617,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.94,
                 'Memphis': 0.92,
                 'New York': 1.45,  # High land value
@@ -4631,6 +4692,7 @@ MASTER_CONFIG = {
             
             regional_multipliers={
                 'Nashville': 1.03,
+                'Franklin': 1.03,
                 'Manchester': 0.92,
                 'Memphis': 0.90,
                 'New York': 1.40,  # Space premium
@@ -4707,14 +4769,23 @@ def get_regional_multiplier(building_type: BuildingType, subtype: str, city: str
     """Get regional cost multiplier for a city"""
     config = get_building_config(building_type, subtype)
     if config:
+        # Clean the city name - extract just the city part from "City, State"
+        city_clean = city.split(',')[0].strip() if ',' in city else city.strip()
+        
         # Try exact match first
-        if city in config.regional_multipliers:
-            return config.regional_multipliers[city]
+        if city_clean in config.regional_multipliers:
+            return config.regional_multipliers[city_clean]
+        
         # Try case-insensitive match
         for key, value in config.regional_multipliers.items():
-            if key.lower() == city.lower():
+            if key.lower() == city_clean.lower():
                 return value
-    return 1.0  # Default to Nashville baseline
+                
+        # Also try original city string (in case it's already clean)
+        if city in config.regional_multipliers:
+            return config.regional_multipliers[city]
+            
+    return 1.0  # Default baseline
 
 def get_base_cost(building_type: BuildingType, subtype: str) -> float:
     """Get base construction cost per square foot"""

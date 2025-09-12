@@ -6,6 +6,7 @@ import {
   AlertCircle, Info, FileText, Building, Wrench, Zap, 
   Droplet, PaintBucket, DollarSign, MapPin, Download, BarChart3, Package
 } from 'lucide-react';
+import { ProvenanceModal } from '../../components/ProvenanceModal';
 
 interface Props {
   project: Project;
@@ -13,6 +14,7 @@ interface Props {
 
 export const ConstructionView: React.FC<Props> = ({ project }) => {
   const [expandedTrade, setExpandedTrade] = useState<string | null>(null);
+  const [showProvenanceModal, setShowProvenanceModal] = useState(false);
   
   // ADD ONLY THIS CHECK
   if (!project?.analysis) {
@@ -334,7 +336,18 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
             const Icon = trade.icon;
             return (
               <div key={trade.name} className="border rounded-lg hover:shadow-md transition">
-                <div className="p-4">
+                <div 
+                  className="p-4 cursor-pointer hover:bg-gray-50 transition-all"
+                  onClick={() => setExpandedTrade(expandedTrade === trade.name ? null : trade.name)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setExpandedTrade(expandedTrade === trade.name ? null : trade.name);
+                    }
+                  }}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className={`p-2 bg-${trade.color}-50 rounded-lg`}>
@@ -351,12 +364,9 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                         <p className="text-2xl font-bold">{formatCurrency(trade.amount)}</p>
                         <p className="text-sm text-gray-500">{formatCurrency(trade.costPerSF)}/SF</p>
                       </div>
-                      <button
-                        onClick={() => setExpandedTrade(expandedTrade === trade.name ? null : trade.name)}
-                        className="p-2 hover:bg-gray-50 rounded-lg transition"
-                      >
+                      <div className="p-2 rounded-lg transition">
                         <ChevronRight className={`h-5 w-5 text-gray-400 transition-transform ${expandedTrade === trade.name ? 'rotate-90' : ''}`} />
-                      </button>
+                      </div>
                     </div>
                   </div>
                   
@@ -602,11 +612,28 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
 
       {/* Footer */}
       <div className="text-center py-6">
-        <button className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium">
+        <button 
+          onClick={() => setShowProvenanceModal(true)}
+          className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium transition-colors"
+        >
           <FileText className="h-4 w-4" />
           View Detailed Provenance Receipt
         </button>
       </div>
+      
+      {/* Provenance Modal */}
+      <ProvenanceModal
+        isOpen={showProvenanceModal}
+        onClose={() => setShowProvenanceModal(false)}
+        projectData={{
+          building_type: parsed_input?.building_type,
+          square_footage: squareFootage,
+          location: parsed_input?.location,
+          project_class: parsed_input?.project_classification || parsed_input?.project_class,
+          confidence_projects: 47
+        }}
+        calculationTrace={calculations?.calculation_trace || project.analysis?.calculation_trace}
+      />
     </div>
   );
 };

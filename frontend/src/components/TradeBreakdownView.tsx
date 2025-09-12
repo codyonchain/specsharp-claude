@@ -221,7 +221,19 @@ function TradeBreakdownView({
             <div className="card-body">
               <div className="trade-bars">
                 {(selectedTrade === 'all' ? tradeSummaries : selectedTradeData).map((trade, index) => (
-                  <div key={index} className="trade-bar-item">
+                  <div 
+                    key={index} 
+                    className={`trade-bar-item ${selectedTrade === 'all' ? 'clickable-trade' : ''}`}
+                    onClick={selectedTrade === 'all' ? () => onViewDetails(trade.name) : undefined}
+                    role={selectedTrade === 'all' ? 'button' : undefined}
+                    tabIndex={selectedTrade === 'all' ? 0 : undefined}
+                    onKeyDown={selectedTrade === 'all' ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onViewDetails(trade.name);
+                      }
+                    } : undefined}
+                  >
                     <div className="trade-bar-header">
                       <div className="trade-info">
                         <span className="trade-icon">{TRADE_ICONS[trade.name] || '📊'}</span>
@@ -242,12 +254,10 @@ function TradeBreakdownView({
                       />
                     </div>
                     {selectedTrade === 'all' && (
-                      <button 
-                        className="view-details-btn"
-                        onClick={() => onViewDetails(trade.name)}
-                      >
-                        View Details →
-                      </button>
+                      <div className="view-details-indicator">
+                        <span className="view-details-text">View Details</span>
+                        <span className="view-details-arrow">→</span>
+                      </div>
                     )}
                   </div>
                 ))}

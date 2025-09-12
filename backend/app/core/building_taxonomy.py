@@ -10,7 +10,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Load the canonical taxonomy
+# Load the canonical taxonomy - Updated for hotel subtypes
 TAXONOMY_PATH = Path(__file__).parent.parent.parent.parent / "shared" / "building_types.json"
 if not TAXONOMY_PATH.exists():
     # Fallback for testing

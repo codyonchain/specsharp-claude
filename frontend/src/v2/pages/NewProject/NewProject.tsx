@@ -12,7 +12,9 @@ import {
   Calculator, MapPin, Layers, Tag, Loader2, ChevronDown,
   TrendingUp, DollarSign, Clock, Square, FileText,
   Zap, RefreshCw, Save, Building, GraduationCap, Heart,
-  Home, Factory, ShoppingBag, Plus, X, Settings, Info
+  Home, Factory, ShoppingBag, Plus, X, Settings, Info,
+  UtensilsCrossed, Briefcase, Hotel, Warehouse, ShoppingCart,
+  Shield, Dumbbell, Car, Box
 } from 'lucide-react';
 
 export const NewProject: React.FC = () => {
@@ -48,9 +50,8 @@ export const NewProject: React.FC = () => {
     });
   }, [description]);
   
-  // Example prompts focused on target markets
+  // Example prompts covering all 13 building types
   const examplePrompts = [
-    // Nashville/Tennessee Area Examples
     { 
       icon: <Heart className="h-6 w-6" />, 
       text: '200,000 SF hospital with emergency department in Nashville', 
@@ -59,61 +60,88 @@ export const NewProject: React.FC = () => {
       color: 'text-red-600 bg-red-50'
     },
     { 
-      icon: <ShoppingBag className="h-6 w-6" />, 
-      text: '4,200 SF full-service restaurant with bar and patio in Franklin TN', 
-      highlights: ['4,200 SF', 'restaurant', 'bar and patio', 'Franklin TN'],
+      icon: <UtensilsCrossed className="h-6 w-6" />, 
+      text: '4,200 SF full_service restaurant with bar and patio in Franklin TN', 
+      highlights: ['4,200 SF', 'full_service restaurant', 'bar and patio', 'Franklin TN'],
       type: 'restaurant',
       color: 'text-orange-600 bg-orange-50'
     },
     { 
-      icon: <Building2 className="h-6 w-6" />, 
-      text: '85,000 SF Class A office tower with structured parking in Nashville', 
-      highlights: ['85,000 SF', 'Class A office', 'structured parking', 'Nashville'],
-      type: 'commercial',
+      icon: <Building className="h-6 w-6" />, 
+      text: '250,000 SF luxury_apartments complex with 250 units and amenity deck in Brentwood TN', 
+      highlights: ['250,000 SF', 'luxury_apartments', '250 units', 'Brentwood TN'],
+      type: 'multifamily',
+      color: 'text-purple-600 bg-purple-50'
+    },
+    { 
+      icon: <Briefcase className="h-6 w-6" />, 
+      text: '85,000 SF class_a office tower with structured parking in Nashville', 
+      highlights: ['85,000 SF', 'class_a office', 'structured parking', 'Nashville'],
+      type: 'office',
       color: 'text-blue-600 bg-blue-50'
     },
     { 
-      icon: <Home className="h-6 w-6" />, 
-      text: '250-unit luxury apartment complex with amenity deck in Brentwood TN', 
-      highlights: ['250-unit', 'luxury apartment', 'amenity deck', 'Brentwood TN'],
-      type: 'residential',
-      color: 'text-purple-600 bg-purple-50'
-    },
-    // Southern NH Examples
-    { 
-      icon: <Heart className="h-6 w-6" />, 
-      text: '45,000 SF medical office building with imaging center in Manchester NH', 
-      highlights: ['45,000 SF', 'medical office', 'imaging center', 'Manchester NH'],
-      type: 'healthcare',
-      color: 'text-red-600 bg-red-50'
+      icon: <Hotel className="h-6 w-6" />, 
+      text: '120,000 SF full_service_hotel with 200 rooms in downtown Nashville', 
+      highlights: ['120,000 SF', 'full_service_hotel', '200 rooms', 'downtown Nashville'],
+      type: 'hospitality',
+      color: 'text-indigo-600 bg-indigo-50'
     },
     { 
-      icon: <Factory className="h-6 w-6" />, 
-      text: '120,000 SF distribution warehouse with 24 loading docks in Nashua NH', 
-      highlights: ['120,000 SF', 'warehouse', '24 loading docks', 'Nashua NH'],
+      icon: <Warehouse className="h-6 w-6" />, 
+      text: '120,000 SF warehouse with 24 loading docks in La Vergne TN', 
+      highlights: ['120,000 SF', 'warehouse', '24 loading docks', 'La Vergne TN'],
       type: 'industrial',
       color: 'text-gray-600 bg-gray-50'
     },
     { 
-      icon: <ShoppingBag className="h-6 w-6" />, 
-      text: '35,000 SF neighborhood shopping center with grocery anchor in Concord NH', 
-      highlights: ['35,000 SF', 'shopping center', 'grocery anchor', 'Concord NH'],
+      icon: <ShoppingCart className="h-6 w-6" />, 
+      text: '35,000 SF shopping_center with grocery anchor in Franklin TN', 
+      highlights: ['35,000 SF', 'shopping_center', 'grocery anchor', 'Franklin TN'],
       type: 'retail',
-      color: 'text-orange-600 bg-orange-50'
+      color: 'text-pink-600 bg-pink-50'
     },
     { 
       icon: <GraduationCap className="h-6 w-6" />, 
-      text: '65,000 SF middle school for 800 students in Bedford NH', 
-      highlights: ['65,000 SF', 'middle school', '800 students', 'Bedford NH'],
+      text: '65,000 SF middle_school for 800 students in Bedford NH', 
+      highlights: ['65,000 SF', 'middle_school', '800 students', 'Bedford NH'],
       type: 'educational',
       color: 'text-green-600 bg-green-50'
     },
     { 
-      icon: <Home className="h-6 w-6" />, 
-      text: '180-unit workforce housing development with community center in Salem NH', 
-      highlights: ['180-unit', 'workforce housing', 'community center', 'Salem NH'],
-      type: 'residential',
-      color: 'text-purple-600 bg-purple-50'
+      icon: <Shield className="h-6 w-6" />, 
+      text: '25,000 SF public_safety building with fire station in Murfreesboro', 
+      highlights: ['25,000 SF', 'public_safety', 'fire station', 'Murfreesboro'],
+      type: 'civic',
+      color: 'text-amber-600 bg-amber-50'
+    },
+    { 
+      icon: <Dumbbell className="h-6 w-6" />, 
+      text: '45,000 SF fitness_center with pool and basketball courts in Brentwood', 
+      highlights: ['45,000 SF', 'fitness_center', 'pool', 'Brentwood'],
+      type: 'recreation',
+      color: 'text-teal-600 bg-teal-50'
+    },
+    { 
+      icon: <Building2 className="h-6 w-6" />, 
+      text: '180,000 SF urban_mixed development with retail and residential in Nashville', 
+      highlights: ['180,000 SF', 'urban_mixed', 'retail and residential', 'Nashville'],
+      type: 'mixed_use',
+      color: 'text-violet-600 bg-violet-50'
+    },
+    { 
+      icon: <Car className="h-6 w-6" />, 
+      text: '100,000 SF parking_garage with 300 spaces downtown Nashville', 
+      highlights: ['100,000 SF', 'parking_garage', '300 spaces', 'downtown Nashville'],
+      type: 'parking',
+      color: 'text-slate-600 bg-slate-50'
+    },
+    { 
+      icon: <Box className="h-6 w-6" />, 
+      text: '80,000 SF self_storage facility with climate control in Antioch', 
+      highlights: ['80,000 SF', 'self_storage', 'climate control', 'Antioch'],
+      type: 'specialty',
+      color: 'text-stone-600 bg-stone-50'
     }
   ];
   
