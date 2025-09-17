@@ -1780,6 +1780,87 @@ MASTER_CONFIG = {
             supply_cost_ratio=0.02           # 2% - napkins, utensils, etc.
         ),
         
+        'fine_dining': BuildingConfig(
+            display_name='Fine Dining Restaurant',
+            base_cost_per_sf=550,  # Premium construction and finishes
+            cost_range=(500, 650),
+            equipment_cost_per_sf=50,  # High-end kitchen equipment
+            typical_floors=1,
+            
+            trades=TradeBreakdown(
+                structural=0.18,
+                mechanical=0.28,  # Advanced HVAC for comfort
+                electrical=0.18,  # Sophisticated lighting systems
+                plumbing=0.14,
+                finishes=0.22     # Premium finishes and materials
+            ),
+            
+            soft_costs=SoftCosts(
+                design_fees=0.08,      # 8% - high-end design and architects
+                permits=0.02,          # 2%
+                legal=0.01,            # 1%
+                financing=0.03,        # 3% - larger investment
+                contingency=0.08,      # 8% - complex finishes
+                testing=0.01,          # 1% - extensive equipment testing
+                construction_management=0.04,  # 4% - more oversight needed
+                startup=0.02           # 2% - extensive training
+            ),  # Total: 29% soft costs
+            
+            ownership_types={
+                OwnershipType.FOR_PROFIT: FinancingTerms(
+                    debt_ratio=0.55,
+                    debt_rate=0.07,
+                    equity_ratio=0.45,
+                    target_dscr=1.35,
+                    target_roi=0.18
+                )
+            },
+            
+            nlp=NLPConfig(
+                keywords=['fine dining', 'upscale', 'white tablecloth', 
+                         'gourmet', 'haute cuisine', 'michelin', 'tasting menu'],
+                priority=14,
+                incompatible_classes=[]
+            ),
+            
+            regional_multipliers={
+                'Nashville': 1.03,
+                'Franklin': 1.04,
+                'Manchester': 0.92,
+                'Memphis': 0.90,
+                'New York': 1.45,
+                'San Francisco': 1.50
+            },
+            
+            special_features={
+                'wine_cellar': 60,          # Premium wine storage
+                'private_dining': 45,       # Multiple private rooms
+                'chef_table': 40,           # Chef's table experience
+                'dry_aging_room': 50,       # Meat aging facility
+                'pastry_kitchen': 35,       # Separate pastry kitchen
+                'sommelier_station': 30,    # Wine service station
+                'valet_parking': 25,        # Valet required
+            },
+
+            # Revenue metrics - higher per SF due to premium pricing
+            base_revenue_per_sf_annual=650,
+            occupancy_rate_base=0.75,      # Lower occupancy but higher prices
+            occupancy_rate_premium=0.85,
+            operating_margin_base=0.12,    # Better margins on premium food
+            operating_margin_premium=0.18,
+            
+            # Expense ratios for operational efficiency calculations
+            food_cost_ratio=0.28,          # 28% - premium ingredients but better margins
+            labor_cost_ratio=0.35,         # 35% - highly skilled staff
+            beverage_cost_ratio=0.18,      # 18% - extensive wine program
+            management_fee_ratio=0.06,     # 6% - specialized management
+            utility_cost_ratio=0.03,       # 3% - efficient systems
+            maintenance_cost_ratio=0.03,   # 3% - preventive maintenance
+            marketing_ratio=0.02,          # 2% - reputation-driven
+            insurance_cost_ratio=0.02,     # 2% - comprehensive coverage
+            supply_cost_ratio=0.03         # 3% - premium tableware
+        ),
+        
         'bar_tavern': BuildingConfig(
             display_name='Bar/Tavern',
             base_cost_per_sf=350,  # Adjusted to industry standard

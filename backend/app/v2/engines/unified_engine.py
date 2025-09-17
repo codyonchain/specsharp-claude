@@ -537,7 +537,7 @@ class UnifiedEngine:
             logger.info(f"   NPV: ${npv:,.0f}")
         else:
             # DCF valuation for other building types
-            discount_rate = getattr(subtype_config, 'discount_rate', 0.08)
+            discount_rate = getattr(subtype_config, 'discount_rate', None) or 0.08
             
             npv = self.calculate_npv(
                 initial_investment=total_cost,
