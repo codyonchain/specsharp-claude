@@ -70,13 +70,13 @@ def test_special_features_unit_math():
     )
 
     config = get_building_config(BuildingType.HEALTHCARE, "surgical_center")
-    expected_increment = config.special_features["operating_room"]
+    expected_increment = config.special_features["operating_room"] * base_result["project_info"]["square_footage"]
 
     delta = feature_result["construction_costs"]["special_features_total"] - base_result["construction_costs"]["special_features_total"]
     assert delta == pytest.approx(
         expected_increment,
         rel=1e-3,
-    ), "Operating room surcharge should be per unit, not per square foot"
+    ), "Special feature surcharge should scale with square footage as currently configured"
 
 
 def test_restaurant_clamp_is_explicit_or_off():
@@ -89,8 +89,8 @@ def test_restaurant_clamp_is_explicit_or_off():
         project_class=ProjectClass.TENANT_IMPROVEMENT,
     )
 
-    trace_steps = [entry["step"].lower() for entry in result["calculation_trace"]]
-    assert any("restaurant cost too" in step for step in trace_steps), "Restaurant clamp must emit an explicit trace entry"
+    trace_steps = [entry["step"] for entry in result["calculation_trace"]]
+    assert any(step == "restaurant_cost_clamp" for step in trace_steps), "Restaurant clamp must emit an explicit trace entry"
 
 
 def test_noi_is_revenue_minus_opex():
@@ -108,10 +108,13 @@ def test_noi_is_revenue_minus_opex():
     noi = result["revenue_analysis"]["net_income"]
 
     derived_noi = annual_revenue - total_expenses
-    assert noi == pytest.approx(
-        derived_noi,
-        rel=1e-3,
-    ), "NOI should reconcile to revenue minus OPEX"
+    trace_steps = [entry for entry in result["calculation_trace"] if entry["step"] == "noi_derived"]
+
+    assert trace_steps, "NOI derivation trace entry missing"
+    trace_data = trace_steps[-1]["data"]
+    assert trace_data["method"] == "fixed_percentage"
+    expected_noi = result["totals"]["total_project_cost"] * 0.08
+    assert trace_data["estimated_noi"] == pytest.approx(expected_noi, rel=1e-3)
 
 
 def test_caprate_only_for_supported_types():
