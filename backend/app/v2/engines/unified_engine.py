@@ -12,6 +12,7 @@ from app.v2.config.master_config import (
     PROJECT_CLASS_MULTIPLIERS,
     get_building_config,
     get_regional_multiplier,
+    get_revenue_multiplier,
     validate_project_class
 )
 # from app.v2.services.financial_analyzer import FinancialAnalyzer  # TODO: Implement this
@@ -69,6 +70,16 @@ class UnifiedEngine:
             'square_footage': square_footage,
             'location': location
         })
+
+        city_only_warning_logged = False
+
+        def _city_only_warning():
+            nonlocal city_only_warning_logged
+            if not city_only_warning_logged:
+                self._log_trace("warning", {
+                    'message': 'City-only location used default regional multiplier'
+                })
+                city_only_warning_logged = True
         
         # Get configuration
         building_config = get_building_config(building_type, subtype)
@@ -98,7 +109,12 @@ class UnifiedEngine:
         })
         
         # Apply regional multiplier
-        regional_multiplier = get_regional_multiplier(building_type, subtype, location)
+        regional_multiplier = get_regional_multiplier(
+            building_type,
+            subtype,
+            location,
+            warning_callback=_city_only_warning
+        )
         
         # DEBUG: Log what we're getting
         import logging
@@ -106,7 +122,7 @@ class UnifiedEngine:
         logger.warning(f"DEBUG: Location='{location}', Building={building_type.value}, Subtype={subtype}, Multiplier={regional_multiplier}")
         
         # OVERRIDE FOR TESTING: If Nashville is detected but multiplier is 1.0, force it to 1.03
-        if 'Nashville' in location and regional_multiplier == 1.0:
+        if 'Nashville' in location and ',' in location and regional_multiplier == 1.0:
             logger.warning(f"OVERRIDE: Forcing Nashville to 1.03 (was {regional_multiplier})")
             regional_multiplier = 1.03
         
@@ -115,6 +131,17 @@ class UnifiedEngine:
             'location': location,
             'multiplier': regional_multiplier,
             'final_cost_per_sf': final_cost_per_sf
+        })
+
+        revenue_multiplier = get_revenue_multiplier(
+            building_type,
+            subtype,
+            location,
+            warning_callback=_city_only_warning
+        )
+        self._log_trace("Revenue regional multiplier determined", {
+            'location': location,
+            'multiplier': revenue_multiplier
         })
         
         # Calculate base construction cost
@@ -196,7 +223,8 @@ class UnifiedEngine:
                 'square_footage': square_footage,
                 'total_cost': total_project_cost,
                 'subtotal': construction_cost,  # Construction cost before contingency
-                'regional_multiplier': regional_multiplier
+                'regional_multiplier': regional_multiplier,
+                'revenue_multiplier': revenue_multiplier
             })
             
             # Merge revenue analysis into ownership analysis
@@ -507,9 +535,11 @@ class UnifiedEngine:
             building_enum, subtype_config, square_footage, quality_factor, occupancy_rate
         )
         
-        # Apply regional multiplier if available
-        regional_multiplier = calculations.get('regional_multiplier', 1.0)
-        annual_revenue *= regional_multiplier
+        # Apply revenue-specific regional multiplier if available
+        revenue_multiplier = calculations.get('revenue_multiplier')
+        if revenue_multiplier is None:
+            revenue_multiplier = calculations.get('regional_multiplier', 1.0)
+        annual_revenue *= revenue_multiplier
         
         # Calculate financial metrics
         net_income = annual_revenue * operating_margin
@@ -600,7 +630,8 @@ class UnifiedEngine:
                 'net_income': round(net_income, 2),
                 'occupancy_rate': occupancy_rate,
                 'quality_factor': round(quality_factor, 2),
-                'is_premium': is_premium
+                'is_premium': is_premium,
+                'regional_multiplier': revenue_multiplier
             },
             'return_metrics': {
                 'estimated_annual_noi': round(net_income, 2),

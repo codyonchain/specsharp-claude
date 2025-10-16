@@ -6,7 +6,7 @@ This replaces: building_types_config.py, owner_metrics_config.py, and NLP detect
 
 from enum import Enum
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Callable
 
 # ============================================================================
 # ENUMS
@@ -4859,26 +4859,38 @@ def get_soft_costs(building_type: BuildingType, subtype: str) -> Optional[SoftCo
     config = get_building_config(building_type, subtype)
     return config.soft_costs if config else None
 
-def get_regional_multiplier(building_type: BuildingType, subtype: str, city: str) -> float:
+def get_regional_multiplier(building_type: BuildingType, subtype: str, city: str,
+                            warning_callback: Optional[Callable[[], None]] = None) -> float:
     """Get regional cost multiplier for a city"""
     config = get_building_config(building_type, subtype)
     if config:
-        # Clean the city name - extract just the city part from "City, State"
-        city_clean = city.split(',')[0].strip() if ',' in city else city.strip()
-        
-        # Try exact match first
-        if city_clean in config.regional_multipliers:
-            return config.regional_multipliers[city_clean]
-        
-        # Try case-insensitive match
+        has_state = ',' in city if city else False
+        if not has_state:
+            if warning_callback:
+                warning_callback()
+            return 1.0
+
+        # Clean the city and state parts from "City, State"
+        city_part, state_part = [part.strip() for part in city.split(',', 1)]
+
+        # Try exact city match first (maintains historical behavior when state provided)
+        if city_part in config.regional_multipliers:
+            return config.regional_multipliers[city_part]
+
+        # Try case-insensitive city match
         for key, value in config.regional_multipliers.items():
-            if key.lower() == city_clean.lower():
+            if key.lower() == city_part.lower():
                 return value
-                
-        # Also try original city string (in case it's already clean)
+
+        # Try matching on state code/name if provided in configuration
+        for key, value in config.regional_multipliers.items():
+            if key.lower() == state_part.lower():
+                return value
+
+        # Also try the raw location string
         if city in config.regional_multipliers:
             return config.regional_multipliers[city]
-            
+
     return 1.0  # Default baseline
 
 def get_base_cost(building_type: BuildingType, subtype: str) -> float:
@@ -4905,6 +4917,35 @@ def get_financing_terms(building_type: BuildingType, subtype: str,
     if config:
         return config.ownership_types.get(ownership)
     return None
+
+def get_revenue_multiplier(building_type: BuildingType, subtype: str, location: str,
+                           warning_callback: Optional[Callable[[], None]] = None) -> float:
+    """
+    Get revenue analysis regional multiplier.
+    Requires a city and state; falls back to 1.0 with a warning when state is missing.
+    """
+    if not location:
+        if warning_callback:
+            warning_callback()
+        return 1.0
+
+    normalized = location.strip()
+    if ',' not in normalized:
+        if warning_callback:
+            warning_callback()
+        return 1.0
+
+    city_part, state_part = [part.strip() for part in normalized.split(',', 1)]
+    config = get_building_config(building_type, subtype)
+
+    if config:
+        # Prefer explicit state entries if present
+        for key, value in config.regional_multipliers.items():
+            if key.lower() == state_part.lower():
+                return value
+
+    # No explicit state-level revenue multiplier configured, fall back to baseline
+    return 1.0
 
 # ============================================================================
 # NLP DETECTION HELPERS
