@@ -29,3 +29,14 @@ jobs:
         run: |
           source .venv/bin/activate
           PYTHONPATH=. pytest -q tests/test_trace_flags.py tests/test_invariants.py tests/test_revenue_golden.py
+
+      - name: Verify engine contract checksum
+        if: always()
+        working-directory: backend
+        run: |
+          source .venv/bin/activate
+          OUTPUT=$(PYTHONPATH=. python scripts/engine_contract_check.py)
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -Ei "hash mismatch|different"; then
+            exit 1
+          fi
