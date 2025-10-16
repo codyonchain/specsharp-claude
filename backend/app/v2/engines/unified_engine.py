@@ -13,6 +13,7 @@ from app.v2.config.master_config import (
     get_building_config,
     get_regional_multiplier,
     get_revenue_multiplier,
+    get_regional_override,
     validate_project_class
 )
 # from app.v2.services.financial_analyzer import FinancialAnalyzer  # TODO: Implement this
@@ -120,11 +121,15 @@ class UnifiedEngine:
         import logging
         logger = logging.getLogger(__name__)
         logger.warning(f"DEBUG: Location='{location}', Building={building_type.value}, Subtype={subtype}, Multiplier={regional_multiplier}")
-        
-        # OVERRIDE FOR TESTING: If Nashville is detected but multiplier is 1.0, force it to 1.03
-        if 'Nashville' in location and ',' in location and regional_multiplier == 1.0:
-            logger.warning(f"OVERRIDE: Forcing Nashville to 1.03 (was {regional_multiplier})")
-            regional_multiplier = 1.03
+
+        override_multiplier = get_regional_override(location)
+        if override_multiplier is not None:
+            regional_multiplier = override_multiplier
+            self._log_trace("regional_override", {
+                'location': location,
+                'multiplier': regional_multiplier,
+                'reason': 'config override'
+            })
         
         final_cost_per_sf = adjusted_cost_per_sf * regional_multiplier
         self._log_trace("Regional multiplier applied", {

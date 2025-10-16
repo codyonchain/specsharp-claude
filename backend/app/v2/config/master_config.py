@@ -4815,6 +4815,15 @@ MASTER_CONFIG = {
 }
 
 # ============================================================================
+# REGIONAL OVERRIDES
+# ============================================================================
+
+REGIONAL_OVERRIDES: Dict[str, float] = {
+    'Nashville': 1.03,
+    'Nashville, TN': 1.03
+}
+
+# ============================================================================
 # MULTIPLIERS
 # ============================================================================
 
@@ -4946,6 +4955,28 @@ def get_revenue_multiplier(building_type: BuildingType, subtype: str, location: 
 
     # No explicit state-level revenue multiplier configured, fall back to baseline
     return 1.0
+
+def get_regional_override(location: str) -> Optional[float]:
+    """Fetch a configuration-based regional override multiplier if defined."""
+    if not location:
+        return None
+
+    normalized = location.strip()
+    if not normalized:
+        return None
+
+    lower_map = {key.lower(): value for key, value in REGIONAL_OVERRIDES.items()}
+
+    direct = lower_map.get(normalized.lower())
+    if direct is not None:
+        return direct
+
+    if ',' in normalized:
+        city_part = normalized.split(',', 1)[0].strip()
+    else:
+        city_part = normalized
+
+    return lower_map.get(city_part.lower())
 
 # ============================================================================
 # NLP DETECTION HELPERS
