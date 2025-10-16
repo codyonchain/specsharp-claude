@@ -65,7 +65,7 @@ class UnifiedEngine:
         
         # Clear trace for new calculation
         self.calculation_trace = []
-        self._log_trace("Starting calculation", {
+        self._log_trace("calculation_start", {
             'building_type': building_type.value,
             'subtype': subtype,
             'square_footage': square_footage,
@@ -91,7 +91,7 @@ class UnifiedEngine:
         original_class = project_class
         project_class = validate_project_class(building_type, subtype, project_class)
         if project_class != original_class:
-            self._log_trace("Project class adjusted", {
+            self._log_trace("project_class_adjusted", {
                 'original': original_class.value,
                 'adjusted': project_class.value,
                 'reason': 'Incompatible with building type'
@@ -99,12 +99,12 @@ class UnifiedEngine:
         
         # Base construction cost calculation
         base_cost_per_sf = building_config.base_cost_per_sf
-        self._log_trace("Base cost retrieved", {'base_cost_per_sf': base_cost_per_sf})
+        self._log_trace("base_cost_retrieved", {'base_cost_per_sf': base_cost_per_sf})
         
         # Apply project class multiplier
         class_multiplier = PROJECT_CLASS_MULTIPLIERS[project_class]
         adjusted_cost_per_sf = base_cost_per_sf * class_multiplier
-        self._log_trace("Project class multiplier applied", {
+        self._log_trace("project_class_multiplier_applied", {
             'multiplier': class_multiplier,
             'adjusted_cost_per_sf': adjusted_cost_per_sf
         })
@@ -128,11 +128,11 @@ class UnifiedEngine:
             self._log_trace("regional_override", {
                 'location': location,
                 'multiplier': regional_multiplier,
-                'reason': 'config override'
+                'source': 'config'
             })
         
         final_cost_per_sf = adjusted_cost_per_sf * regional_multiplier
-        self._log_trace("Regional multiplier applied", {
+        self._log_trace("cost_regional_multiplier_determined", {
             'location': location,
             'multiplier': regional_multiplier,
             'final_cost_per_sf': final_cost_per_sf
@@ -144,7 +144,7 @@ class UnifiedEngine:
             location,
             warning_callback=_city_only_warning
         )
-        self._log_trace("Revenue regional multiplier determined", {
+        self._log_trace("revenue_regional_multiplier_determined", {
             'location': location,
             'multiplier': revenue_multiplier
         })
@@ -162,7 +162,8 @@ class UnifiedEngine:
                 if feature in building_config.special_features:
                     feature_cost = building_config.special_features[feature] * square_footage
                     special_features_cost += feature_cost
-                    self._log_trace(f"Special feature added: {feature}", {
+                    self._log_trace("special_feature_applied", {
+                        'feature': feature,
                         'cost_per_sf': building_config.special_features[feature],
                         'total_cost': feature_cost
                     })
@@ -192,9 +193,10 @@ class UnifiedEngine:
             max_cost = 700  # Maximum reasonable restaurant cost (except fine dining)
             
             if cost_per_sf < min_cost:
-                self._log_trace(f"Restaurant cost too low: ${cost_per_sf:.0f}/SF, adjusting to minimum", {
+                self._log_trace("restaurant_cost_clamp", {
+                    'mode': 'minimum',
                     'original_cost_per_sf': cost_per_sf,
-                    'minimum': min_cost
+                    'target_cost_per_sf': min_cost
                 })
                 # Adjust costs proportionally
                 adjustment_factor = (min_cost * square_footage) / total_project_cost
@@ -202,9 +204,10 @@ class UnifiedEngine:
                 total_soft_costs *= adjustment_factor
                 total_project_cost = min_cost * square_footage
             elif cost_per_sf > max_cost and subtype != 'fine_dining':
-                self._log_trace(f"Restaurant cost too high: ${cost_per_sf:.0f}/SF, capping at maximum", {
+                self._log_trace("restaurant_cost_clamp", {
+                    'mode': 'maximum',
                     'original_cost_per_sf': cost_per_sf,
-                    'maximum': max_cost
+                    'target_cost_per_sf': max_cost
                 })
                 # Cap costs proportionally
                 adjustment_factor = (max_cost * square_footage) / total_project_cost
@@ -333,7 +336,7 @@ class UnifiedEngine:
         
         # Financial requirements removed - was only partially implemented
         
-        self._log_trace("Calculation complete", {
+        self._log_trace("calculation_end", {
             'total_project_cost': total_project_cost,
             'cost_per_sf': total_project_cost / square_footage
         })
@@ -348,7 +351,7 @@ class UnifiedEngine:
         for trade, percentage in trades_dict.items():
             trades[trade] = construction_cost * percentage
             
-        self._log_trace("Trade breakdown calculated", {
+        self._log_trace("trade_breakdown_calculated", {
             'total': construction_cost,
             'trades': len(trades)
         })
@@ -363,7 +366,7 @@ class UnifiedEngine:
         for cost_type, rate in soft_costs_dict.items():
             soft_costs[cost_type] = construction_cost * rate
             
-        self._log_trace("Soft costs calculated", {
+        self._log_trace("soft_costs_calculated", {
             'base': construction_cost,
             'total_soft': sum(soft_costs.values())
         })
@@ -388,6 +391,12 @@ class UnifiedEngine:
         estimated_annual_noi = total_cost * 0.08
         dscr = estimated_annual_noi / annual_debt_service if annual_debt_service > 0 else 0
         
+        self._log_trace("noi_derived", {
+            'total_project_cost': total_cost,
+            'estimated_noi': estimated_annual_noi,
+            'method': 'fixed_percentage'
+        })
+
         result = {
             'financing_sources': {
                 'debt_amount': debt_amount,
@@ -411,7 +420,7 @@ class UnifiedEngine:
             }
         }
         
-        self._log_trace("Ownership analysis calculated", {
+        self._log_trace("ownership_analysis_calculated", {
             'total_project_cost': total_cost,
             'debt_ratio': financing_terms.debt_ratio,
             'dscr': dscr
