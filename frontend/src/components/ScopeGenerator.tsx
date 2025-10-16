@@ -26,7 +26,8 @@ interface ScopeRequest {
   building_mix?: { [key: string]: number };
   service_level?: string;
   building_features?: string[];
-  finish_level?: 'basic' | 'standard' | 'premium';
+  finish_level?: 'basic' | 'standard' | 'premium' | 'luxury';
+  finishLevel?: 'standard' | 'premium' | 'luxury';
 }
 
 function ScopeGenerator() {
@@ -886,6 +887,11 @@ function ScopeGenerator() {
     if (!finalFormData.project_name || finalFormData.project_name.trim() === '') {
       delete finalFormData.project_name;
     }
+
+    const finishSource = finalFormData.finishLevel || finalFormData.finish_level || 'standard';
+    const normalizedFinish = typeof finishSource === 'string' ? finishSource.toLowerCase() : 'standard';
+    finalFormData.finishLevel = normalizedFinish.charAt(0).toUpperCase() + normalizedFinish.slice(1);
+    finalFormData.finish_level = normalizedFinish as ScopeRequest['finish_level'];
 
     console.log('Submitting form data:', finalFormData);
     console.log('📏 Square footage being submitted:', finalFormData.square_footage);

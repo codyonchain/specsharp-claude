@@ -117,6 +117,35 @@ def test_noi_is_revenue_minus_opex():
     assert trace_data["estimated_noi"] == pytest.approx(expected_noi, rel=1e-3)
 
 
+def test_finish_level_quality_factor_trace():
+    """Premium finish levels should increase costs and emit a quality factor trace."""
+    standard = unified_engine.calculate_project(
+        building_type=BuildingType.RESTAURANT,
+        subtype="full_service",
+        square_footage=5_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        finish_level="Standard",
+    )
+
+    premium = unified_engine.calculate_project(
+        building_type=BuildingType.RESTAURANT,
+        subtype="full_service",
+        square_footage=5_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        finish_level="Premium",
+    )
+
+    assert premium["totals"]["total_project_cost"] > standard["totals"]["total_project_cost"], "Premium finish should increase total cost"
+
+    quality_traces = [entry for entry in premium["calculation_trace"] if entry["step"] == "quality_factor_resolved"]
+    assert quality_traces, "Missing quality factor trace entry for premium finish"
+    trace_data = quality_traces[0]["data"]
+    assert trace_data["finish_level"] == "premium"
+    assert trace_data["quality_factor"] == pytest.approx(1.1, rel=1e-3)
+
+
 def test_caprate_only_for_supported_types():
     """Cap-rate valuation should only trigger for the supported real estate asset classes."""
     supported = unified_engine.calculate_project(

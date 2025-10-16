@@ -4823,6 +4823,12 @@ REGIONAL_OVERRIDES: Dict[str, float] = {
     'Nashville, TN': 1.03
 }
 
+FINISH_LEVELS: Dict[str, float] = {
+    'standard': 1.00,
+    'premium': 1.10,
+    'luxury': 1.20
+}
+
 # ============================================================================
 # MULTIPLIERS
 # ============================================================================
@@ -4977,6 +4983,37 @@ def get_regional_override(location: str) -> Optional[float]:
         city_part = normalized
 
     return lower_map.get(city_part.lower())
+
+
+def resolve_quality_factor(finish_level: Optional[str],
+                           building_type: BuildingType,
+                           subtype: str) -> float:
+    """Resolve deterministic quality factor for a finish level."""
+    factor = 1.0
+    if finish_level:
+        level_key = finish_level.strip().lower()
+        factor = FINISH_LEVELS.get(level_key, 1.0)
+    
+    config = get_building_config(building_type, subtype)
+    if not config:
+        return factor
+
+    overrides = getattr(config, 'quality_factor_overrides', None)
+    if overrides and finish_level:
+        level_key = finish_level.strip().lower()
+        override_value = overrides.get(level_key)
+        if override_value is not None:
+            factor = override_value
+
+    min_factor = getattr(config, 'quality_factor_min', None)
+    max_factor = getattr(config, 'quality_factor_max', None)
+
+    if min_factor is not None and factor < min_factor:
+        factor = min_factor
+    if max_factor is not None and factor > max_factor:
+        factor = max_factor
+
+    return factor
 
 # ============================================================================
 # NLP DETECTION HELPERS

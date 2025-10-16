@@ -99,6 +99,7 @@ class ComparisonService:
             project_class=project_class,
             floors=request_dict.get('floors'),
             ownership_type=ownership_type,
+            finish_level=request_dict.get('finish_level'),
             special_features=request_dict.get('special_features', [])
         )
         

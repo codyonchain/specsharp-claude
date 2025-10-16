@@ -116,7 +116,9 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, currentEsti
           location: parsed.location || 'United States',
           occupancy_type: parsed.occupancy_type || 'office',
           num_floors: parsed.num_floors || 1,
-          special_requirements: naturalLanguageInput
+          special_requirements: naturalLanguageInput,
+          finish_level: 'standard',
+          finishLevel: 'Standard'
         };
       } else {
         // Use prefilled data
@@ -127,7 +129,9 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, currentEsti
           location: currentExample.prefilledData.location,
           occupancy_type: currentExample.prefilledData.building_type,
           num_floors: currentExample.prefilledData.num_floors || 1,
-          special_requirements: currentExample.prefilledData.naturalLanguageInput
+          special_requirements: currentExample.prefilledData.naturalLanguageInput,
+          finish_level: 'standard',
+          finishLevel: 'Standard'
         };
       }
 

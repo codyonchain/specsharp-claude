@@ -47,11 +47,16 @@ export function useProjectAnalysis() {
     ownership_type?: OwnershipType;
     floors?: number;
     special_features?: string[];
+    finishLevel?: 'Standard' | 'Premium' | 'Luxury';
   }) => {
     try {
       setCalculating(true);
       setError(null);
-      const calculation = await api.calculateProject(params);
+      const finishLevel = params.finishLevel || 'Standard';
+      const calculation = await api.calculateProject({
+        ...params,
+        finishLevel,
+      });
       
       // Convert to ProjectAnalysis format
       const analysis: ProjectAnalysis = {
@@ -62,6 +67,7 @@ export function useProjectAnalysis() {
           location: params.location,
           project_class: params.project_class || ProjectClass.GROUND_UP,
           floors: params.floors || 1,
+          finish_level: finishLevel.toLowerCase(),
           confidence: 1.0
         },
         calculations: calculation,

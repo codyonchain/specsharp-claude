@@ -142,10 +142,20 @@ class V2APIClient {
     ownership_type?: OwnershipType;
     floors?: number;
     special_features?: string[];
+    finishLevel?: 'Standard' | 'Premium' | 'Luxury';
   }): Promise<CalculationResult> {
+    const finishSource = params.finishLevel;
+    const normalized = finishSource ? finishSource.toLowerCase() : undefined;
+    const finishLevel = normalized
+      ? normalized.charAt(0).toUpperCase() + normalized.slice(1)
+      : undefined;
+
     return this.request<CalculationResult>('/calculate', {
       method: 'POST',
-      body: JSON.stringify(params),
+      body: JSON.stringify({
+        ...params,
+        finishLevel,
+      }),
     });
   }
 

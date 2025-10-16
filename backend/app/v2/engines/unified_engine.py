@@ -14,6 +14,7 @@ from app.v2.config.master_config import (
     get_regional_multiplier,
     get_revenue_multiplier,
     get_regional_override,
+    resolve_quality_factor,
     validate_project_class
 )
 # from app.v2.services.financial_analyzer import FinancialAnalyzer  # TODO: Implement this
@@ -44,6 +45,7 @@ class UnifiedEngine:
                          project_class: ProjectClass = ProjectClass.GROUND_UP,
                          floors: int = 1,
                          ownership_type: OwnershipType = OwnershipType.FOR_PROFIT,
+                         finish_level: Optional[str] = None,
                          special_features: List[str] = None) -> Dict[str, Any]:
         """
         The master calculation method.
@@ -72,6 +74,13 @@ class UnifiedEngine:
             'location': location
         })
 
+        normalized_finish_level = finish_level.lower().strip() if finish_level else None
+        quality_factor = resolve_quality_factor(normalized_finish_level, building_type, subtype)
+        self._log_trace("quality_factor_resolved", {
+            'finish_level': normalized_finish_level or 'standard',
+            'quality_factor': round(quality_factor, 4)
+        })
+
         city_only_warning_logged = False
 
         def _city_only_warning():
@@ -97,9 +106,14 @@ class UnifiedEngine:
                 'reason': 'Incompatible with building type'
             })
         
-        # Base construction cost calculation
-        base_cost_per_sf = building_config.base_cost_per_sf
-        self._log_trace("base_cost_retrieved", {'base_cost_per_sf': base_cost_per_sf})
+        # Base construction cost calculation with finish level adjustment
+        original_base_cost_per_sf = building_config.base_cost_per_sf
+        base_cost_per_sf = original_base_cost_per_sf * quality_factor
+        self._log_trace("base_cost_retrieved", {
+            'base_cost_per_sf': original_base_cost_per_sf,
+            'quality_factor': round(quality_factor, 4),
+            'adjusted_base_cost_per_sf': base_cost_per_sf
+        })
         
         # Apply project class multiplier
         class_multiplier = PROJECT_CLASS_MULTIPLIERS[project_class]
@@ -232,7 +246,9 @@ class UnifiedEngine:
                 'total_cost': total_project_cost,
                 'subtotal': construction_cost,  # Construction cost before contingency
                 'regional_multiplier': regional_multiplier,
-                'revenue_multiplier': revenue_multiplier
+                'revenue_multiplier': revenue_multiplier,
+                'quality_factor': quality_factor,
+                'finish_level': normalized_finish_level
             })
             
             # Merge revenue analysis into ownership analysis
@@ -255,7 +271,7 @@ class UnifiedEngine:
         
         # Generate cost DNA for transparency
         cost_dna = {
-            'base_cost': base_cost_per_sf,
+            'base_cost': original_base_cost_per_sf,
             'regional_adjustment': regional_multiplier,
             'complexity_factor': class_multiplier,  # Using class_multiplier as complexity factor
             'final_cost': final_cost_per_sf,
@@ -265,9 +281,11 @@ class UnifiedEngine:
             'subtype': subtype,
             'detected_factors': [],  # Will be populated with special features
             'applied_adjustments': {
-                'base': base_cost_per_sf,
-                'after_regional': base_cost_per_sf * regional_multiplier,
-                'after_complexity': base_cost_per_sf * regional_multiplier * class_multiplier,
+                'base': original_base_cost_per_sf,
+                'after_finish': original_base_cost_per_sf * quality_factor,
+                'after_class': base_cost_per_sf * class_multiplier,
+                'after_complexity': base_cost_per_sf * class_multiplier,
+                'after_regional': base_cost_per_sf * class_multiplier * regional_multiplier,
                 'final': final_cost_per_sf
             },
             'market_context': {
@@ -293,13 +311,16 @@ class UnifiedEngine:
                 'location': location,
                 'floors': floors,
                 'typical_floors': building_config.typical_floors,
+                'finish_level': normalized_finish_level or 'standard',
                 'available_special_features': list(building_config.special_features.keys()) if building_config.special_features else []
             },
             # Flatten calculations to top level to match frontend CalculationResult interface
             'construction_costs': {
                 'base_cost_per_sf': base_cost_per_sf,
+                'original_base_cost_per_sf': original_base_cost_per_sf,
                 'class_multiplier': class_multiplier,
                 'regional_multiplier': regional_multiplier,
+                'quality_factor': quality_factor,
                 'final_cost_per_sf': final_cost_per_sf,
                 'construction_total': construction_cost,
                 'equipment_total': equipment_cost,
@@ -467,6 +488,7 @@ class UnifiedEngine:
                     project_class=project_class,
                     floors=scenario.get('floors', 1),
                     ownership_type=ownership_type,
+                    finish_level=scenario.get('finish_level') or scenario.get('finishLevel'),
                     special_features=scenario.get('special_features', [])
                 )
                 
@@ -521,30 +543,28 @@ class UnifiedEngine:
         if not subtype_config:
             return self._empty_ownership_analysis()
         
-        # Calculate quality factor based on actual vs base cost
+        provided_quality_factor = calculations.get('quality_factor')
+        finish_level = calculations.get('finish_level')
+        normalized_finish_level = finish_level.lower() if isinstance(finish_level, str) else None
+
         base_cost_psf = subtype_config.base_cost_per_sf
-        actual_cost_psf = construction_cost / square_footage if square_footage > 0 else base_cost_psf
-        quality_factor = pow(actual_cost_psf / base_cost_psf, 0.5) if base_cost_psf > 0 else 1.0
-        
-        # Ensure quality_factor is not None
-        if quality_factor is None:
-            quality_factor = 1.0
-        
-        # Determine if premium (>20% above base cost)
-        is_premium = quality_factor > 1.2
-        
-        # Get occupancy and margin based on quality
+        if provided_quality_factor is not None:
+            quality_factor = provided_quality_factor
+        else:
+            actual_cost_psf = construction_cost / square_footage if square_footage > 0 else base_cost_psf
+            quality_factor = pow(actual_cost_psf / base_cost_psf, 0.5) if base_cost_psf > 0 else 1.0
+            if quality_factor is None:
+                quality_factor = 1.0
+
+        if normalized_finish_level in ("premium", "luxury"):
+            is_premium = True
+        else:
+            is_premium = quality_factor > 1.2
+
         occupancy_rate = subtype_config.occupancy_rate_premium if is_premium else subtype_config.occupancy_rate_base
-        operating_margin = subtype_config.operating_margin_premium if is_premium else subtype_config.operating_margin_base
-        
-        
-        # Ensure they're not None
         if occupancy_rate is None:
-            occupancy_rate = 0.85  # Default 85% occupancy
-        if operating_margin is None:
-            operating_margin = 0.20  # Default 20% margin
-        
-        # Calculate revenue based on building type
+            occupancy_rate = 0.85
+
         annual_revenue = self._calculate_revenue_by_type(
             building_enum, subtype_config, square_footage, quality_factor, occupancy_rate
         )
@@ -555,72 +575,72 @@ class UnifiedEngine:
             revenue_multiplier = calculations.get('regional_multiplier', 1.0)
         annual_revenue *= revenue_multiplier
         
-        # Calculate financial metrics
-        net_income = annual_revenue * operating_margin
+        operational_efficiency = self.calculate_operational_efficiency(
+            revenue=annual_revenue,
+            config=subtype_config,
+            subtype=subtype
+        )
+        total_expenses = operational_efficiency.get('total_expenses', 0)
+        net_income = annual_revenue - total_expenses
+        operating_margin = round(net_income / annual_revenue, 3) if annual_revenue > 0 else 0
+        expense_ratio = round(total_expenses / annual_revenue, 3) if annual_revenue > 0 else 0
+        operational_efficiency['operating_margin'] = operating_margin
+        operational_efficiency['expense_ratio'] = expense_ratio
+        operational_efficiency['efficiency_score'] = round((1 - expense_ratio) * 100, 1) if annual_revenue > 0 else 0
         
         # Standard projection period for IRR calculation
         years = 10
-        
-        # Initialize valuation variables
+
         property_value = None
         market_cap_rate = None
-        
-        # Calculate NPV - use cap rate for multifamily, DCF for others
-        logger.info(f"🏢 Building enum check: {building_enum} == {BuildingType.MULTIFAMILY}? {building_enum == BuildingType.MULTIFAMILY}")
-        if building_enum == BuildingType.MULTIFAMILY:
-            # Cap rate valuation for income-producing real estate
-            market_cap_rate = getattr(subtype_config, 'market_cap_rate', 0.06)
-            property_value = net_income / market_cap_rate if market_cap_rate > 0 else 0
-            npv = property_value - total_cost
-            
-            # Log for debugging
-            logger.info(f"🏢 Multifamily Cap Rate Valuation:")
-            logger.info(f"   NOI: ${net_income:,.0f}")
-            logger.info(f"   Cap Rate: {market_cap_rate:.1%}")
-            logger.info(f"   Property Value: ${property_value:,.0f}")
-            logger.info(f"   NPV: ${npv:,.0f}")
+
+        if net_income <= 0:
+            npv = -total_cost
+            irr = 0.0
+            property_value = 0
         else:
-            # DCF valuation for other building types
-            discount_rate = getattr(subtype_config, 'discount_rate', None) or 0.08
-            
-            npv = self.calculate_npv(
-                initial_investment=total_cost,
-                annual_cash_flow=net_income,
-                years=years,
-                discount_rate=discount_rate
-            )
+            logger.info(f"🏢 Building enum check: {building_enum} == {BuildingType.MULTIFAMILY}? {building_enum == BuildingType.MULTIFAMILY}")
+            if building_enum == BuildingType.MULTIFAMILY:
+                market_cap_rate = getattr(subtype_config, 'market_cap_rate', 0.06)
+                property_value = net_income / market_cap_rate if market_cap_rate > 0 else 0
+                npv = property_value - total_cost
+                logger.info(f"🏢 Multifamily Cap Rate Valuation:")
+                logger.info(f"   NOI: ${net_income:,.0f}")
+                logger.info(f"   Cap Rate: {market_cap_rate:.1%}")
+                logger.info(f"   Property Value: ${property_value:,.0f}")
+                logger.info(f"   NPV: ${npv:,.0f}")
+                try:
+                    irr = self.calculate_irr_with_terminal_value(
+                        initial_investment=total_cost,
+                        annual_cash_flow=net_income,
+                        terminal_value=property_value,
+                        years=years
+                    ) if property_value else 0.0
+                except OverflowError:
+                    irr = 0.0
+            else:
+                discount_rate = getattr(subtype_config, 'discount_rate', None) or 0.08
+                npv = self.calculate_npv(
+                    initial_investment=total_cost,
+                    annual_cash_flow=net_income,
+                    years=years,
+                    discount_rate=discount_rate
+                )
+                try:
+                    irr = self.calculate_irr(
+                        initial_investment=total_cost,
+                        annual_cash_flow=net_income,
+                        years=years
+                    )
+                except OverflowError:
+                    irr = 0.0
         
-        # Calculate IRR - include terminal value for multifamily
-        if building_enum == BuildingType.MULTIFAMILY and property_value:
-            # For multifamily, include property value as terminal value
-            irr = self.calculate_irr_with_terminal_value(
-                initial_investment=total_cost,
-                annual_cash_flow=net_income,
-                terminal_value=property_value,
-                years=years
-            )
-        else:
-            # Standard IRR calculation for other property types
-            irr = self.calculate_irr(
-                initial_investment=total_cost,
-                annual_cash_flow=net_income,
-                years=years
-            )
-        
-        # Calculate Revenue Requirements with actual projections
         revenue_requirements = self.calculate_revenue_requirements(
             total_cost=total_cost,
             config=subtype_config,
             square_footage=square_footage,
             actual_annual_revenue=annual_revenue,
             actual_net_income=net_income
-        )
-        
-        # Calculate Operational Efficiency
-        operational_efficiency = self.calculate_operational_efficiency(
-            revenue=annual_revenue,
-            config=subtype_config,
-            subtype=subtype
         )
         
         # Calculate payback period

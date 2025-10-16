@@ -3,7 +3,7 @@ Clean API endpoint that uses the new system
 """
 
 from fastapi import APIRouter, HTTPException, Query, Depends, Header
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict, AliasChoices
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 import uuid
@@ -38,6 +38,7 @@ class AnalyzeRequest(BaseModel):
 
 class CalculateRequest(BaseModel):
     """Request for direct calculation"""
+    model_config = ConfigDict(populate_by_name=True)
     building_type: str = Field(..., description="Building type (e.g., 'healthcare', 'office')")
     subtype: str = Field(..., description="Building subtype (e.g., 'hospital', 'class_a')")
     square_footage: float = Field(..., gt=0, description="Total square footage")
@@ -46,6 +47,12 @@ class CalculateRequest(BaseModel):
     floors: Optional[int] = Field(1, ge=1, description="Number of floors")
     ownership_type: Optional[str] = Field("for_profit", description="Ownership type")
     special_features: Optional[List[str]] = Field([], description="Special features to include")
+    finish_level: Optional[str] = Field(
+        None,
+        alias="finishLevel",
+        validation_alias=AliasChoices("finishLevel", "finish_level"),
+        description="Finish level (Standard, Premium, Luxury)"
+    )
 
 class CompareRequest(BaseModel):
     """Request for scenario comparison"""
@@ -94,6 +101,8 @@ async def analyze_project(request: AnalyzeRequest):
             parsed['square_footage'] = request.default_square_footage
         if not parsed.get('location'):
             parsed['location'] = request.default_location
+        if 'finish_level' not in parsed:
+            parsed['finish_level'] = 'standard'
             
         # Validate we have minimum required data
         if not parsed.get('square_footage'):
@@ -117,12 +126,14 @@ async def analyze_project(request: AnalyzeRequest):
             project_class=project_class,
             floors=parsed.get('floors', 1),
             ownership_type=ownership_type,
+            finish_level=parsed.get('finish_level'),
             special_features=parsed.get('special_features', [])
         )
         
         # Add building_subtype for frontend compatibility
         parsed_with_compat = parsed.copy()
         parsed_with_compat['building_subtype'] = parsed.get('subtype')
+        parsed_with_compat['finish_level'] = parsed.get('finish_level', 'standard')
         
         # Return comprehensive result
         # Wrap the flattened result as 'calculations' to match frontend expectations
@@ -180,6 +191,7 @@ async def calculate_project(request: CalculateRequest):
             project_class=project_class,
             floors=request.floors,
             ownership_type=ownership_type,
+            finish_level=request.finish_level,
             special_features=request.special_features
         )
         
@@ -480,6 +492,8 @@ async def generate_scope(
             parsed['location'] = request.default_location
         if not parsed.get('square_footage') and hasattr(request, 'default_square_footage'):
             parsed['square_footage'] = request.default_square_footage
+        if 'finish_level' not in parsed:
+            parsed['finish_level'] = 'standard'
         
         # Normalize building type using taxonomy
         if parsed.get('building_type'):
@@ -504,6 +518,7 @@ async def generate_scope(
             project_class=ProjectClass(parsed.get('project_class', 'ground_up')),
             floors=parsed.get('floors', 1),
             ownership_type=OwnershipType(parsed.get('ownership_type', 'for_profit')),
+            finish_level=parsed.get('finish_level'),
             special_features=parsed.get('special_features', [])
         )
         
