@@ -15,7 +15,15 @@ export function useProjectAnalysis() {
   const [result, setResult] = useState<ProjectAnalysis | null>(null);
   const [error, setError] = useState<APIError | null>(null);
 
-  const analyzeDescription = async (description: string) => {
+  const analyzeDescription = async (
+    description: string,
+    overrides?: {
+      squareFootage?: number;
+      location?: string;
+      finishLevel?: 'standard' | 'premium' | 'luxury';
+      signal?: AbortSignal;
+    }
+  ) => {
     if (!description.trim()) {
       setError({ message: 'Please enter a project description' });
       return null;
@@ -25,7 +33,16 @@ export function useProjectAnalysis() {
       setAnalyzing(true);
       setError(null);
       console.log('Starting analysis for:', description);
-      const analysis = await api.analyzeProject(description);
+      const finishLevel = overrides?.finishLevel
+        ? (overrides.finishLevel.charAt(0).toUpperCase() + overrides.finishLevel.slice(1)) as
+            'Standard' | 'Premium' | 'Luxury'
+        : undefined;
+      const analysis = await api.analyzeProject(description, {
+        square_footage: overrides?.squareFootage,
+        location: overrides?.location,
+        finishLevel,
+        signal: overrides?.signal,
+      });
       console.log('Setting result in hook:', analysis);
       setResult(analysis);
       return analysis;

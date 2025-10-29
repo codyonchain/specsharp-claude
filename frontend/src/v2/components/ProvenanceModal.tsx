@@ -58,6 +58,18 @@ export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
     return String(value);
   };
 
+  const feasibilityTrace = Array.isArray(calculationTrace)
+    ? [...calculationTrace].reverse().find(trace => trace?.step === 'feasibility_evaluated')
+    : undefined;
+  const isDevMode = import.meta.env.MODE !== 'production';
+
+  const formatPercent = (value: any) => {
+    if (typeof value === 'number') {
+      return `${value.toFixed(2)}%`;
+    }
+    return String(value ?? 'N/A');
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
@@ -126,6 +138,32 @@ export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
                 <li>• Equipment costs: Manufacturer MSRP data</li>
               </ul>
             </div>
+
+            {isDevMode && feasibilityTrace && (
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
+                <h3 className="font-semibold text-purple-900 mb-2">Feasibility Evaluation (dev)</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  <div>
+                    <p className="text-purple-700 uppercase tracking-wide text-xs mb-1">ROI</p>
+                    <p className="font-semibold text-gray-900">{formatPercent(feasibilityTrace.data?.roi)}</p>
+                  </div>
+                  <div>
+                    <p className="text-purple-700 uppercase tracking-wide text-xs mb-1">Target ROI</p>
+                    <p className="font-semibold text-gray-900">{formatPercent(feasibilityTrace.data?.target_roi)}</p>
+                  </div>
+                  <div>
+                    <p className="text-purple-700 uppercase tracking-wide text-xs mb-1">NPV</p>
+                    <p className="font-semibold text-gray-900">{formatDataValue('npv', feasibilityTrace.data?.npv)}</p>
+                  </div>
+                  <div>
+                    <p className="text-purple-700 uppercase tracking-wide text-xs mb-1">Feasible</p>
+                    <p className={`font-semibold ${feasibilityTrace.data?.feasible ? 'text-green-700' : 'text-red-700'}`}>
+                      {String(feasibilityTrace.data?.feasible)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Calculation Trace */}
             <div className="space-y-4">

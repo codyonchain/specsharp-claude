@@ -21,6 +21,7 @@ export interface DisplayData {
   
   // Investment decision
   investmentDecision: 'GO' | 'NO-GO' | 'PENDING';
+  feasible?: boolean;
   decisionReason: string;
   suggestions: string[];
   improvementsNeeded: Array<{
@@ -204,8 +205,15 @@ export class BackendDataMapper {
                            safeGet(ownership, 'operational_efficiency.operating_margin', 0.6);
     
     // Extract investment analysis
-    const investmentDecision = investmentAnalysis.recommendation || investmentAnalysis.decision || 
-                               (roi >= 0.08 && npv > 0 ? 'GO' : 'NO-GO');
+    const backendFeasible = safeGet(returnMetrics, 'feasible', undefined);
+    const fallbackFeasible = roi >= 0.08 && npv > 0;
+    const hasFinancialSignals = !!roi || !!npv;
+    const feasible = typeof backendFeasible === 'boolean'
+      ? backendFeasible
+      : hasFinancialSignals
+        ? fallbackFeasible
+        : undefined;
+    const investmentDecision = feasible === undefined ? 'PENDING' : feasible ? 'GO' : 'NO-GO';
     
     // Extract unit metrics
     const unitCount = this.extractUnitCount(projectInfo, parsedInput);
@@ -253,6 +261,7 @@ export class BackendDataMapper {
       noi,
       operatingMargin,
       investmentDecision,
+      feasible,
       decisionReason: investmentAnalysis.summary || investmentAnalysis.reason || this.generateDecisionReason(roi, npv, dscr),
       suggestions: Array.isArray(investmentAnalysis.suggestions) ? investmentAnalysis.suggestions : [],
       improvementsNeeded: Array.isArray(investmentAnalysis.improvements_needed) ? investmentAnalysis.improvements_needed : [],
@@ -295,6 +304,7 @@ export class BackendDataMapper {
       noi: 0,
       operatingMargin: 0,
       investmentDecision: 'PENDING',
+      feasible: undefined,
       decisionReason: 'Awaiting analysis...',
       suggestions: [],
       improvementsNeeded: [],

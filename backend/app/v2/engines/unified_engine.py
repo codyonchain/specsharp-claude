@@ -5,16 +5,15 @@ clean_scope_engine.py, owner_view_engine.py, engine_selector.py
 """
 
 from app.v2.config.master_config import (
-    MASTER_CONFIG, 
-    BuildingType, 
+    MASTER_CONFIG,
+    BuildingType,
     ProjectClass,
     OwnershipType,
     PROJECT_CLASS_MULTIPLIERS,
     get_building_config,
-    get_regional_multiplier,
-    get_revenue_multiplier,
-    get_regional_override,
+    get_effective_modifiers,
     get_margin_pct,
+    get_target_roi,
     detect_building_type_with_method,
     resolve_quality_factor,
     validate_project_class
@@ -110,59 +109,36 @@ class UnifiedEngine:
         
         # Base construction cost calculation with finish level adjustment
         original_base_cost_per_sf = building_config.base_cost_per_sf
-        base_cost_per_sf = original_base_cost_per_sf * quality_factor
+        cost_after_finish = original_base_cost_per_sf * quality_factor
         self._log_trace("base_cost_retrieved", {
             'base_cost_per_sf': original_base_cost_per_sf,
             'quality_factor': round(quality_factor, 4),
-            'adjusted_base_cost_per_sf': base_cost_per_sf
+            'adjusted_base_cost_per_sf': cost_after_finish
         })
         
         # Apply project class multiplier
         class_multiplier = PROJECT_CLASS_MULTIPLIERS[project_class]
-        adjusted_cost_per_sf = base_cost_per_sf * class_multiplier
+        cost_after_class = cost_after_finish * class_multiplier
+        base_cost_per_sf = cost_after_class
         self._log_trace("project_class_multiplier_applied", {
             'multiplier': class_multiplier,
-            'adjusted_cost_per_sf': adjusted_cost_per_sf
+            'adjusted_cost_per_sf': base_cost_per_sf
         })
-        
-        # Apply regional multiplier
-        regional_multiplier = get_regional_multiplier(
+
+        modifiers = get_effective_modifiers(
             building_type,
             subtype,
+            normalized_finish_level,
             location,
             warning_callback=_city_only_warning
         )
-        
-        # DEBUG: Log what we're getting
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(f"DEBUG: Location='{location}', Building={building_type.value}, Subtype={subtype}, Multiplier={regional_multiplier}")
 
-        override_multiplier = get_regional_override(location)
-        if override_multiplier is not None:
-            regional_multiplier = override_multiplier
-            self._log_trace("regional_override", {
-                'location': location,
-                'multiplier': regional_multiplier,
-                'source': 'config'
-            })
-        
-        final_cost_per_sf = adjusted_cost_per_sf * regional_multiplier
-        self._log_trace("cost_regional_multiplier_determined", {
-            'location': location,
-            'multiplier': regional_multiplier,
-            'final_cost_per_sf': final_cost_per_sf
-        })
-
-        revenue_multiplier = get_revenue_multiplier(
-            building_type,
-            subtype,
-            location,
-            warning_callback=_city_only_warning
-        )
-        self._log_trace("revenue_regional_multiplier_determined", {
-            'location': location,
-            'multiplier': revenue_multiplier
+        final_cost_per_sf = base_cost_per_sf * modifiers['cost_factor']
+        self._log_trace("modifiers_applied", {
+            'finish_level': normalized_finish_level or 'standard',
+            'cost_factor': round(modifiers['cost_factor'], 4),
+            'revenue_factor': round(modifiers['revenue_factor'], 4),
+            'margin_pct': round(modifiers['margin_pct'], 4)
         })
         
         # Calculate base construction cost
@@ -247,8 +223,7 @@ class UnifiedEngine:
                 'square_footage': square_footage,
                 'total_cost': total_project_cost,
                 'subtotal': construction_cost,  # Construction cost before contingency
-                'regional_multiplier': regional_multiplier,
-                'revenue_multiplier': revenue_multiplier,
+                'modifiers': modifiers,
                 'quality_factor': quality_factor,
                 'finish_level': normalized_finish_level
             })
@@ -274,7 +249,7 @@ class UnifiedEngine:
         # Generate cost DNA for transparency
         cost_dna = {
             'base_cost': original_base_cost_per_sf,
-            'regional_adjustment': regional_multiplier,
+            'regional_adjustment': modifiers['cost_factor'],
             'complexity_factor': class_multiplier,  # Using class_multiplier as complexity factor
             'final_cost': final_cost_per_sf,
             'location': location,
@@ -284,17 +259,17 @@ class UnifiedEngine:
             'detected_factors': [],  # Will be populated with special features
             'applied_adjustments': {
                 'base': original_base_cost_per_sf,
-                'after_finish': original_base_cost_per_sf * quality_factor,
-                'after_class': base_cost_per_sf * class_multiplier,
-                'after_complexity': base_cost_per_sf * class_multiplier,
-                'after_regional': base_cost_per_sf * class_multiplier * regional_multiplier,
+                'after_finish': cost_after_finish,
+                'after_class': cost_after_class,
+                'after_complexity': cost_after_class,
+                'after_regional': base_cost_per_sf * modifiers['cost_factor'],
                 'final': final_cost_per_sf
             },
             'market_context': {
                 'market': location.split(',')[0] if location else 'Nashville',
-                'index': regional_multiplier,
-                'comparison': 'above national average' if regional_multiplier > 1.0 else 'below national average' if regional_multiplier < 1.0 else 'at national average',
-                'percentage_difference': round((regional_multiplier - 1.0) * 100, 1)
+                'index': modifiers['cost_factor'],
+                'comparison': 'above national average' if modifiers['cost_factor'] > 1.0 else 'below national average' if modifiers['cost_factor'] < 1.0 else 'at national average',
+                'percentage_difference': round((modifiers['cost_factor'] - 1.0) * 100, 1)
             }
         }
         
@@ -316,12 +291,14 @@ class UnifiedEngine:
                 'finish_level': normalized_finish_level or 'standard',
                 'available_special_features': list(building_config.special_features.keys()) if building_config.special_features else []
             },
+            'modifiers': modifiers,
             # Flatten calculations to top level to match frontend CalculationResult interface
             'construction_costs': {
                 'base_cost_per_sf': base_cost_per_sf,
                 'original_base_cost_per_sf': original_base_cost_per_sf,
                 'class_multiplier': class_multiplier,
-                'regional_multiplier': regional_multiplier,
+                'regional_multiplier': modifiers['cost_factor'],
+                'cost_factor': modifiers['cost_factor'],
                 'quality_factor': quality_factor,
                 'final_cost_per_sf': final_cost_per_sf,
                 'construction_total': construction_cost,
@@ -549,6 +526,10 @@ class UnifiedEngine:
         finish_level = calculations.get('finish_level')
         normalized_finish_level = finish_level.lower() if isinstance(finish_level, str) else None
 
+        modifiers = calculations.get('modifiers') or {}
+        revenue_factor = float(modifiers.get('revenue_factor', 1.0) or 1.0)
+        margin_pct = float(modifiers.get('margin_pct', get_margin_pct(building_enum, subtype)))
+
         base_cost_psf = subtype_config.base_cost_per_sf
         if provided_quality_factor is not None:
             quality_factor = provided_quality_factor
@@ -571,13 +552,10 @@ class UnifiedEngine:
             building_enum, subtype_config, square_footage, quality_factor, occupancy_rate
         )
         
-        # Apply revenue-specific regional multiplier if available
-        revenue_multiplier = calculations.get('revenue_multiplier')
-        if revenue_multiplier is None:
-            revenue_multiplier = calculations.get('regional_multiplier', 1.0)
-        annual_revenue *= revenue_multiplier
+        # Apply revenue modifiers
+        annual_revenue *= revenue_factor
         
-        margin_pct = get_margin_pct(building_enum, subtype)
+        margin_pct = margin_pct if margin_pct else get_margin_pct(building_enum, subtype)
         self._log_trace("margin_normalized", {
             'building_type': building_enum.value,
             'subtype': subtype,
@@ -669,6 +647,19 @@ class UnifiedEngine:
             units=calculations.get('units', 0)
         )
         
+        cash_on_cash_return_pct = round((net_income / total_cost) * 100, 2) if total_cost > 0 else 0
+        cap_rate_pct = round((net_income / total_cost) * 100, 2) if total_cost > 0 else 0
+
+        target_roi = get_target_roi(building_enum)
+        feasible = (npv >= 0) and ((cash_on_cash_return_pct / 100) >= target_roi)
+
+        self._log_trace("feasibility_evaluated", {
+            'roi': cash_on_cash_return_pct,
+            'target_roi': target_roi,
+            'npv': npv,
+            'feasible': feasible
+        })
+
         return {
             'revenue_analysis': {
                 'annual_revenue': round(annual_revenue, 2),
@@ -678,18 +669,20 @@ class UnifiedEngine:
                 'occupancy_rate': occupancy_rate,
                 'quality_factor': round(quality_factor, 2),
                 'is_premium': is_premium,
-                'regional_multiplier': revenue_multiplier
+                'revenue_factor': round(revenue_factor, 4),
+                'regional_multiplier': round(revenue_factor, 4)
             },
             'return_metrics': {
                 'estimated_annual_noi': round(net_income, 2),
-                'cash_on_cash_return': round((net_income / total_cost) * 100, 2) if total_cost > 0 else 0,
-                'cap_rate': round((net_income / total_cost) * 100, 2) if total_cost > 0 else 0,
+                'cash_on_cash_return': cash_on_cash_return_pct,
+                'cap_rate': cap_rate_pct,
                 'npv': npv,
                 'irr': round(irr * 100, 2),  # Convert to percentage
                 'payback_period': payback_period,
                 'property_value': property_value,  # Always include the value
                 'market_cap_rate': market_cap_rate,  # Always include the rate
-                'is_multifamily': building_enum == BuildingType.MULTIFAMILY  # Debug flag
+                'is_multifamily': building_enum == BuildingType.MULTIFAMILY,  # Debug flag
+                'feasible': feasible
             },
             'revenue_requirements': revenue_requirements,
             'operational_efficiency': operational_efficiency,  # Keep raw data

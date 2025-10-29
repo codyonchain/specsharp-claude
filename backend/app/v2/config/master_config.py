@@ -4836,6 +4836,10 @@ REGIONAL_OVERRIDES: Dict[str, float] = {
     'Nashville, TN': 1.03
 }
 
+MARKET_OVERRIDES: Dict[str, float] = {
+    key: value for key, value in REGIONAL_OVERRIDES.items()
+}
+
 FINISH_LEVELS: Dict[str, float] = {
     'standard': 1.00,
     'premium': 1.10,
@@ -4943,6 +4947,152 @@ def get_regional_multiplier(building_type: BuildingType, subtype: str, city: str
             return config.regional_multipliers[city]
 
     return 1.0  # Default baseline
+
+def _clamp(value: float, lower: float, upper: float) -> float:
+    return max(lower, min(upper, value))
+
+def get_finish_cost_factor(finish_level: Optional[str]) -> float:
+    """Return cost factor for a finish level using configured defaults when available."""
+    defaults = {
+        'standard': 1.00,
+        'premium': 1.15,
+        'luxury': 1.25,
+    }
+    level_map = {**defaults, **FINISH_LEVELS}
+    if not finish_level:
+        return level_map.get('standard', 1.0)
+    key = finish_level.strip().lower()
+    return level_map.get(key, level_map.get('standard', 1.0))
+
+def get_finish_revenue_factor(
+    finish_level: Optional[str],
+    building_type: BuildingType,
+    subtype: str
+) -> float:
+    """
+    Return revenue factor by finish level. Defaults:
+      standard=1.00, premium=1.05, luxury=1.10.
+    If TYPE/subtype overrides exist in config (e.g., restaurants premium 1.08),
+    prefer them. Clamp to [0.9, 1.3] for safety.
+    """
+    defaults = {
+        'standard': 1.00,
+        'premium': 1.05,
+        'luxury': 1.10,
+    }
+    config = get_building_config(building_type, subtype)
+    key = (finish_level or 'standard').strip().lower()
+
+    candidate: Optional[float] = None
+    if config:
+        overrides = getattr(config, 'finish_revenue_factors', None)
+        if overrides:
+            candidate = overrides.get(key) or overrides.get(key.capitalize())
+
+    if candidate is None:
+        candidate = defaults.get(key, defaults['standard'])
+
+    return _clamp(float(candidate), 0.9, 1.3)
+
+def get_market_factor(location: str, warning_callback: Optional[Callable[[], None]] = None) -> float:
+    """
+    A revenue-oriented regional factor. Reuse get_regional_multiplier if no
+    revenue map exists; otherwise prefer revenue-specific entries if present.
+    Fall back to 1.0 on city-only, logging upstream warning via callback when provided.
+    """
+    if not location:
+        return 1.0
+
+    normalized = location.strip()
+    if not normalized:
+        return 1.0
+
+    has_state = ',' in normalized
+    if not has_state and warning_callback:
+        warning_callback()
+
+    lower_market = {key.lower(): value for key, value in MARKET_OVERRIDES.items()}
+    value: Optional[float] = None
+
+    if has_state:
+        city_part, state_part = [part.strip() for part in normalized.split(',', 1)]
+        value = lower_market.get(normalized.lower())
+        if value is None:
+            value = lower_market.get(city_part.lower())
+        if value is None:
+            value = lower_market.get(state_part.lower())
+        if value is None:
+            value = lower_market.get(state_part.upper())
+    else:
+        value = lower_market.get(normalized.lower())
+
+    if value is None:
+        override = get_regional_override(normalized)
+        if override is None and has_state:
+            city_part = normalized.split(',', 1)[0].strip()
+            override = get_regional_override(city_part)
+        value = override if override is not None else 1.0
+
+    return value
+
+def get_target_roi(building_type: BuildingType) -> float:
+    """
+    Universal ROI hurdle by type (can be tuned later):
+      MULTIFAMILY=0.08, OFFICE=0.08, RETAIL=0.09, INDUSTRIAL=0.08,
+      RESTAURANT=0.10, HOSPITALITY=0.10, HEALTHCARE=0.07, EDUCATIONAL=0.07,
+      default 0.08
+    """
+    roi_map = {
+        BuildingType.MULTIFAMILY: 0.08,
+        BuildingType.OFFICE: 0.08,
+        BuildingType.RETAIL: 0.09,
+        BuildingType.INDUSTRIAL: 0.08,
+        BuildingType.RESTAURANT: 0.10,
+        BuildingType.HOSPITALITY: 0.10,
+        BuildingType.HEALTHCARE: 0.07,
+        BuildingType.EDUCATIONAL: 0.07,
+    }
+    return roi_map.get(building_type, 0.08)
+
+def get_effective_modifiers(
+    building_type: BuildingType,
+    subtype: str,
+    finish_level: Optional[str],
+    location: str,
+    warning_callback: Optional[Callable[[], None]] = None
+) -> Dict[str, float]:
+    """
+    Compute the one true set of modifiers used engine-wide:
+       cost_factor    = get_finish_cost_factor(finish_level) * get_regional_multiplier(..., warning_callback)
+       revenue_factor = get_finish_revenue_factor(finish_level, building_type, subtype) * get_market_factor(location)
+       margin_pct     = get_margin_pct(building_type, subtype)
+    Return {"cost_factor": f1, "revenue_factor": f2, "margin_pct": m}
+    Clamp cost/revenue factors to [0.7, 1.6] to avoid explosions.
+    """
+    finish_cost_factor = get_finish_cost_factor(finish_level)
+    regional_factor = get_regional_multiplier(
+        building_type,
+        subtype,
+        location,
+        warning_callback=warning_callback
+    )
+    override = get_regional_override(location)
+    if override is not None:
+        regional_factor = override
+    cost_factor = finish_cost_factor * regional_factor
+
+    revenue_finish_factor = get_finish_revenue_factor(finish_level, building_type, subtype)
+    market_factor = get_market_factor(location, warning_callback=warning_callback)
+    revenue_factor = revenue_finish_factor * market_factor
+
+    cost_factor = _clamp(cost_factor, 0.7, 1.6)
+    revenue_factor = _clamp(revenue_factor, 0.7, 1.6)
+
+    return {
+        'cost_factor': cost_factor,
+        'revenue_factor': revenue_factor,
+        'margin_pct': get_margin_pct(building_type, subtype)
+    }
 
 def get_base_cost(building_type: BuildingType, subtype: str) -> float:
     """Get base construction cost per square foot"""

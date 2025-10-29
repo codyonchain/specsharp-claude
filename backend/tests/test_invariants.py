@@ -9,6 +9,7 @@ from app.v2.config.master_config import (
     OwnershipType,
     get_building_config,
     get_margin_pct,
+    get_target_roi,
     validate_config,
 )
 
@@ -32,23 +33,36 @@ def test_state_required_for_multiplier():
 
 
 def test_revenue_uses_own_multiplier():
-    """Revenue calculations must reference an explicit regional multiplier separate from cost."""
-    result = unified_engine.calculate_project(
+    """Revenue modifiers must respond independently while remaining available to the UI."""
+    standard = unified_engine.calculate_project(
         building_type=BuildingType.OFFICE,
         subtype="class_a",
         square_footage=25_000,
         location="Nashville, TN",
         project_class=ProjectClass.GROUND_UP,
+        finish_level="Standard",
     )
 
-    cost_multiplier = result["construction_costs"]["regional_multiplier"]
-    revenue_multiplier = result["revenue_analysis"].get("regional_multiplier")
+    premium = unified_engine.calculate_project(
+        building_type=BuildingType.OFFICE,
+        subtype="class_a",
+        square_footage=25_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        finish_level="Premium",
+    )
 
-    assert revenue_multiplier is not None, "Revenue analysis is missing a dedicated regional multiplier"
-    assert not math.isclose(
-        revenue_multiplier,
-        cost_multiplier,
-    ), "Revenue multiplier must not silently re-use the cost multiplier"
+    standard_cost = standard["construction_costs"].get("cost_factor")
+    premium_cost = premium["construction_costs"].get("cost_factor")
+    standard_revenue = standard["revenue_analysis"].get("revenue_factor")
+    premium_revenue = premium["revenue_analysis"].get("revenue_factor")
+
+    assert standard_cost is not None and premium_cost is not None, "Cost factors must be present"
+    assert standard_revenue is not None and premium_revenue is not None, "Revenue factors must be present"
+
+    assert premium_cost > standard_cost, "Premium finish should raise cost factor"
+    assert premium_revenue > standard_revenue, "Premium finish should raise revenue factor"
+    assert not math.isclose(premium_revenue, premium_cost), "Revenue factor should remain distinct from cost factor"
 
 
 def test_description_detection_natural_language():
@@ -165,6 +179,36 @@ def test_margin_normalized_noi_is_revenue_minus_opex():
 def test_noi_is_revenue_minus_opex():
     """Backward-compatible alias for targeted pytest selection."""
     test_margin_normalized_noi_is_revenue_minus_opex()
+
+
+def test_modifiers_applied_boost_revenue_and_align_feasibility():
+    """Premium finishes should lift revenue and expose modifier trace + feasibility flag."""
+    base_kwargs = dict(
+        building_type=BuildingType.RESTAURANT,
+        subtype="full_service",
+        square_footage=5_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+    )
+
+    standard = unified_engine.calculate_project(**base_kwargs, finish_level="Standard")
+    premium = unified_engine.calculate_project(**base_kwargs, finish_level="Premium")
+
+    assert premium["revenue_analysis"]["annual_revenue"] > standard["revenue_analysis"]["annual_revenue"]
+
+    modifier_traces = [entry for entry in premium["calculation_trace"] if entry["step"] == "modifiers_applied"]
+    assert modifier_traces, "Expected modifiers_applied trace for premium scenario"
+
+    premium_modifier = modifier_traces[-1]["data"]
+    assert premium_modifier["finish_level"] == "premium"
+
+    return_metrics = premium["return_metrics"]
+    roi_percent = return_metrics.get("cash_on_cash_return", 0)
+    npv = return_metrics.get("npv", 0)
+    feasible_flag = return_metrics.get("feasible")
+    target_roi = get_target_roi(BuildingType.RESTAURANT)
+    expected_feasible = (npv >= 0) and ((roi_percent or 0) / 100 >= target_roi)
+    assert feasible_flag == expected_feasible, "Feasibility flag must reflect ROI hurdle and NPV"
 
 
 def test_finish_level_quality_factor_trace():

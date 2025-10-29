@@ -35,6 +35,26 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   
   // Map backend data through our mapper
   const displayData = BackendDataMapper.mapToDisplay(analysis);
+  const investmentDecisionFromDisplay = displayData.investmentDecision;
+  const feasibilityFlag = typeof displayData.feasible === 'boolean' ? displayData.feasible : undefined;
+  const derivedDecision = typeof investmentDecisionFromDisplay === 'string'
+    ? investmentDecisionFromDisplay
+    : investmentDecisionFromDisplay?.recommendation || 'PENDING';
+  const decisionStatus = feasibilityFlag === true
+    ? 'GO'
+    : feasibilityFlag === false
+      ? 'NO-GO'
+      : derivedDecision;
+  const decisionReasonText = displayData.decisionReason || (
+    typeof investmentDecisionFromDisplay === 'object'
+      ? investmentDecisionFromDisplay?.summary
+      : undefined
+  ) || 'Investment analysis in progress';
+  const feasibilityChipLabel = feasibilityFlag === true
+    ? 'Feasible'
+    : feasibilityFlag === false
+      ? 'Needs Work'
+      : 'Pending Review';
   
   // Extract additional raw data we need - check multiple paths for data
   const parsed = analysis?.parsed_input || {};
@@ -196,8 +216,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         ['Annual Revenue', formatters.currency(annualRevenue)],
         ['Annual NOI', formatters.currency(noi)],
         [''],
-        ['DECISION', displayData.investmentDecision?.recommendation || 'Under Review'],
-        ['Reason', displayData.investmentDecision?.summary || 'Investment analysis in progress']
+        ['DECISION', decisionStatus === 'PENDING' ? 'Under Review' : decisionStatus],
+        ['Reason', decisionReasonText]
       ];
       
       const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
@@ -251,15 +271,15 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       XLSX.utils.book_append_sheet(wb, ws4, 'Investment Criteria');
       
       // Sheet 5: Improvement Recommendations
-      if (displayData.investmentDecision?.improvementsNeeded?.length > 0) {
+      if (displayData.improvementsNeeded?.length > 0) {
         const improvementData = [
           ['PATHS TO FEASIBILITY'],
           [''],
           ['Priority', 'Action Required', 'Impact'],
-          ...displayData.investmentDecision.improvementsNeeded.map((imp, idx) => [
+          ...displayData.improvementsNeeded.map((imp, idx) => [
             idx + 1,
-            imp.action,
-            imp.impact
+            imp.metric || imp.action || imp.description || 'Action Required',
+            imp.suggestion || imp.impact || imp.recommendation || ''
           ])
         ];
         const ws5 = XLSX.utils.aoa_to_sheet(improvementData);
@@ -358,6 +378,18 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             <p className="text-xs text-blue-200 uppercase tracking-wider mb-2 font-medium">TOTAL INVESTMENT REQUIRED</p>
             <p className="text-5xl font-bold">{formatters.currency(totalProjectCost)}</p>
             <p className="text-lg text-blue-200">{formatters.costPerSF(totals.cost_per_sf)}</p>
+            <div className="mt-3 flex justify-end">
+              <span
+                className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${decisionStatus === 'GO'
+                  ? 'bg-green-500/15 text-green-100 border-green-400/40'
+                  : decisionStatus === 'NO-GO'
+                    ? 'bg-red-500/15 text-red-100 border-red-400/40'
+                    : 'bg-amber-500/15 text-amber-100 border-amber-400/40'}`}
+              >
+                {decisionStatus === 'GO' ? <CheckCircle className="h-3 w-3" /> : decisionStatus === 'NO-GO' ? <AlertCircle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                {feasibilityChipLabel}
+              </span>
+            </div>
           </div>
         </div>
         
@@ -384,19 +416,39 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       {/* Investment Decision Section with Enhanced Feedback */}
       <div className="space-y-4">
         {/* Decision Header */}
-        <div className={`${displayData.investmentDecision === 'NO-GO' ? 'bg-red-50 border-red-500' : 'bg-green-50 border-green-500'} border-l-4 rounded-lg p-6`}>
+        <div
+          className={`${decisionStatus === 'GO'
+            ? 'bg-green-50 border-green-500'
+            : decisionStatus === 'NO-GO'
+              ? 'bg-red-50 border-red-500'
+              : 'bg-amber-50 border-amber-500'} border-l-4 rounded-lg p-6`}
+        >
           <div className="flex items-start gap-3">
-            {displayData.investmentDecision === 'NO-GO' ? (
+            {decisionStatus === 'GO' ? (
+              <CheckCircle className="h-6 w-6 text-green-600 flex-shrink-0" />
+            ) : decisionStatus === 'NO-GO' ? (
               <AlertCircle className="h-6 w-6 text-red-600 flex-shrink-0" />
             ) : (
-              <CheckCircle className="h-6 w-6 text-green-600 flex-shrink-0" />
+              <Clock className="h-6 w-6 text-amber-600 flex-shrink-0" />
             )}
             <div className="flex-1">
-              <h3 className={`font-bold text-lg ${displayData.investmentDecision === 'NO-GO' ? 'text-red-900' : 'text-green-900'}`}>
-                Investment Decision: {displayData.investmentDecision}
+              <h3
+                className={`font-bold text-lg ${decisionStatus === 'GO'
+                  ? 'text-green-900'
+                  : decisionStatus === 'NO-GO'
+                    ? 'text-red-900'
+                    : 'text-amber-900'}`}
+              >
+                Investment Decision: {decisionStatus === 'PENDING' ? 'Under Review' : decisionStatus}
               </h3>
-              <p className={`mt-1 ${displayData.investmentDecision === 'NO-GO' ? 'text-red-700' : 'text-green-700'}`}>
-                {displayData.decisionReason}
+              <p
+                className={`mt-1 ${decisionStatus === 'GO'
+                  ? 'text-green-700'
+                  : decisionStatus === 'NO-GO'
+                    ? 'text-red-700'
+                    : 'text-amber-700'}`}
+              >
+                {decisionReasonText}
               </p>
             </div>
           </div>
@@ -442,7 +494,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         )}
         
         {/* Actionable Improvements for NO-GO */}
-        {displayData.investmentDecision === 'NO-GO' && displayData.failedCriteria && displayData.failedCriteria.length > 0 && (
+        {decisionStatus === 'NO-GO' && displayData.failedCriteria && displayData.failedCriteria.length > 0 && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200">
             <div className="px-6 py-4 border-b border-gray-200">
               <h4 className="font-semibold text-gray-900 flex items-center gap-2">
@@ -478,7 +530,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         )}
             
             {/* Legacy improvements display - now handled above */}
-            {false && displayData.investmentDecision === 'NO-GO' && displayData.improvementsNeeded && displayData.improvementsNeeded.length > 0 && (
+            {false && decisionStatus === 'NO-GO' && displayData.improvementsNeeded && displayData.improvementsNeeded.length > 0 && (
               <div className="mt-4 p-4 bg-white rounded-lg border border-red-200">
                 <h4 className="font-semibold text-red-900 mb-3 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4" />
@@ -503,7 +555,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             )}
             
             {/* Display suggestions if NO-GO */}
-            {displayData.investmentDecision === 'NO-GO' && displayData.suggestions.length > 0 && (
+            {decisionStatus === 'NO-GO' && displayData.suggestions.length > 0 && (
               <div className="mt-4 p-4 bg-white rounded-lg border border-amber-200">
                 <h4 className="font-semibold text-amber-900 mb-2 flex items-center gap-2">
                   <Lightbulb className="h-4 w-4" />

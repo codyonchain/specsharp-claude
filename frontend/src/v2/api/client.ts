@@ -112,12 +112,39 @@ class V2APIClient {
   /**
    * Analyze natural language project description
    */
-  async analyzeProject(text: string): Promise<ProjectAnalysis> {
-    tracer.trace('API_REQUEST', 'Sending analysis request', { description: text });
+  async analyzeProject(
+    text: string,
+    options: {
+      square_footage?: number;
+      location?: string;
+      finishLevel?: 'Standard' | 'Premium' | 'Luxury';
+      signal?: AbortSignal;
+    } = {}
+  ): Promise<ProjectAnalysis> {
+    const { square_footage, location, finishLevel, signal } = options;
+
+    tracer.trace('API_REQUEST', 'Sending analysis request', {
+      description: text,
+      square_footage,
+      location,
+      finishLevel,
+    });
+
+    const payload: Record<string, unknown> = { description: text };
+    if (typeof square_footage === 'number' && Number.isFinite(square_footage)) {
+      payload.square_footage = square_footage;
+    }
+    if (location && location.trim()) {
+      payload.location = location.trim();
+    }
+    if (finishLevel) {
+      payload.finishLevel = finishLevel;
+    }
     
     const result = await this.request<ProjectAnalysis>('/analyze', {
       method: 'POST',
-      body: JSON.stringify({ description: text }),
+      body: JSON.stringify(payload),
+      signal,
     });
     
     tracer.trace('API_RESPONSE', 'Received analysis response', {

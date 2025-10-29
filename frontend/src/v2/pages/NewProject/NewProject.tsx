@@ -24,6 +24,8 @@ export const NewProject: React.FC = () => {
   
   // Form state
   const [description, setDescription] = useState('');
+  const [squareFootageInput, setSquareFootageInput] = useState('');
+  const [locationInput, setLocationInput] = useState('');
   const [activeStep, setActiveStep] = useState<'input' | 'analyzing' | 'results'>('input');
   const [saving, setSaving] = useState(false);
   
@@ -31,6 +33,19 @@ export const NewProject: React.FC = () => {
   const [specialFeatures, setSpecialFeatures] = useState<string[]>([]);
   const [finishLevel, setFinishLevel] = useState<'standard' | 'premium' | 'luxury'>('standard');
   const [projectComplexity, setProjectComplexity] = useState<'ground_up' | 'renovation' | 'addition'>('ground_up');
+
+  // Live preview state
+  const [previewData, setPreviewData] = useState<{
+    totalCost?: number;
+    annualRevenue?: number;
+    noi?: number;
+    roi?: number;
+    payback?: number;
+  } | null>(null);
+  const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewTimeoutRef = useRef<number | null>(null);
+  const previewAbortRef = useRef<AbortController | null>(null);
   
   // NLP detection state
   const [detectedFeatures, setDetectedFeatures] = useState({
@@ -52,96 +67,122 @@ export const NewProject: React.FC = () => {
   
   // Example prompts covering all 13 building types
   const examplePrompts = [
-    { 
-      icon: <Heart className="h-6 w-6" />, 
-      text: '200,000 SF hospital with emergency department in Nashville', 
-      highlights: ['200,000 SF', 'hospital', 'emergency department', 'Nashville'],
+    {
+      icon: <Heart className="h-6 w-6" />,
+      text: '200,000 sf hospital with emergency department in Nashville, TN',
+      highlights: ['200,000 sf', 'hospital', 'emergency department', 'Nashville, TN'],
       type: 'healthcare',
-      color: 'text-red-600 bg-red-50'
+      color: 'text-red-600 bg-red-50',
+      squareFootage: 200000,
+      location: 'Nashville, TN'
     },
-    { 
-      icon: <UtensilsCrossed className="h-6 w-6" />, 
-      text: '4,200 SF full_service restaurant with bar and patio in Franklin TN', 
-      highlights: ['4,200 SF', 'full_service restaurant', 'bar and patio', 'Franklin TN'],
+    {
+      icon: <UtensilsCrossed className="h-6 w-6" />,
+      text: '5,000 sf full service restaurant in Nashville, TN',
+      highlights: ['5,000 sf', 'full service restaurant', 'Nashville, TN'],
       type: 'restaurant',
-      color: 'text-orange-600 bg-orange-50'
+      color: 'text-orange-600 bg-orange-50',
+      squareFootage: 5000,
+      location: 'Nashville, TN'
     },
-    { 
-      icon: <Building className="h-6 w-6" />, 
-      text: '250,000 SF luxury_apartments complex with 250 units and amenity deck in Brentwood TN', 
-      highlights: ['250,000 SF', 'luxury_apartments', '250 units', 'Brentwood TN'],
+    {
+      icon: <Building className="h-6 w-6" />,
+      text: '250,000 sf luxury apartments complex with 250 units and amenity deck in Brentwood, TN',
+      highlights: ['250,000 sf', 'luxury apartments', '250 units', 'Brentwood, TN'],
       type: 'multifamily',
-      color: 'text-purple-600 bg-purple-50'
+      color: 'text-purple-600 bg-purple-50',
+      squareFootage: 250000,
+      location: 'Brentwood, TN'
     },
-    { 
-      icon: <Briefcase className="h-6 w-6" />, 
-      text: '85,000 SF class_a office tower with structured parking in Nashville', 
-      highlights: ['85,000 SF', 'class_a office', 'structured parking', 'Nashville'],
+    {
+      icon: <Briefcase className="h-6 w-6" />,
+      text: '50,000 sf class A office in Nashville, TN',
+      highlights: ['50,000 sf', 'class A office', 'Nashville, TN'],
       type: 'office',
-      color: 'text-blue-600 bg-blue-50'
+      color: 'text-blue-600 bg-blue-50',
+      squareFootage: 50000,
+      location: 'Nashville, TN'
     },
-    { 
-      icon: <Hotel className="h-6 w-6" />, 
-      text: '120,000 SF full_service_hotel with 200 rooms in downtown Nashville', 
-      highlights: ['120,000 SF', 'full_service_hotel', '200 rooms', 'downtown Nashville'],
+    {
+      icon: <Hotel className="h-6 w-6" />,
+      text: '120,000 sf full service hotel with 200 rooms in downtown Nashville, TN',
+      highlights: ['120,000 sf', 'full service hotel', '200 rooms', 'Nashville, TN'],
       type: 'hospitality',
-      color: 'text-indigo-600 bg-indigo-50'
+      color: 'text-indigo-600 bg-indigo-50',
+      squareFootage: 120000,
+      location: 'Nashville, TN'
     },
-    { 
-      icon: <Warehouse className="h-6 w-6" />, 
-      text: '120,000 SF warehouse with 24 loading docks in La Vergne TN', 
-      highlights: ['120,000 SF', 'warehouse', '24 loading docks', 'La Vergne TN'],
+    {
+      icon: <Warehouse className="h-6 w-6" />,
+      text: '120,000 sf warehouse with twenty four docks in La Vergne, TN',
+      highlights: ['120,000 sf', 'warehouse', 'twenty four docks', 'La Vergne, TN'],
       type: 'industrial',
-      color: 'text-gray-600 bg-gray-50'
+      color: 'text-gray-600 bg-gray-50',
+      squareFootage: 120000,
+      location: 'La Vergne, TN'
     },
-    { 
-      icon: <ShoppingCart className="h-6 w-6" />, 
-      text: '35,000 SF shopping_center with grocery anchor in Franklin TN', 
-      highlights: ['35,000 SF', 'shopping_center', 'grocery anchor', 'Franklin TN'],
+    {
+      icon: <ShoppingCart className="h-6 w-6" />,
+      text: '35,000 sf shopping center with grocery anchor in Franklin, TN',
+      highlights: ['35,000 sf', 'shopping center', 'grocery anchor', 'Franklin, TN'],
       type: 'retail',
-      color: 'text-pink-600 bg-pink-50'
+      color: 'text-pink-600 bg-pink-50',
+      squareFootage: 35000,
+      location: 'Franklin, TN'
     },
-    { 
-      icon: <GraduationCap className="h-6 w-6" />, 
-      text: '65,000 SF middle_school for 800 students in Bedford NH', 
-      highlights: ['65,000 SF', 'middle_school', '800 students', 'Bedford NH'],
+    {
+      icon: <GraduationCap className="h-6 w-6" />,
+      text: '65,000 sf middle school for 800 students in Bedford, NH',
+      highlights: ['65,000 sf', 'middle school', '800 students', 'Bedford, NH'],
       type: 'educational',
-      color: 'text-green-600 bg-green-50'
+      color: 'text-green-600 bg-green-50',
+      squareFootage: 65000,
+      location: 'Bedford, NH'
     },
-    { 
-      icon: <Shield className="h-6 w-6" />, 
-      text: '25,000 SF public_safety building with fire station in Murfreesboro', 
-      highlights: ['25,000 SF', 'public_safety', 'fire station', 'Murfreesboro'],
+    {
+      icon: <Shield className="h-6 w-6" />,
+      text: '25,000 sf public safety building with fire station in Murfreesboro, TN',
+      highlights: ['25,000 sf', 'public safety', 'fire station', 'Murfreesboro, TN'],
       type: 'civic',
-      color: 'text-amber-600 bg-amber-50'
+      color: 'text-amber-600 bg-amber-50',
+      squareFootage: 25000,
+      location: 'Murfreesboro, TN'
     },
-    { 
-      icon: <Dumbbell className="h-6 w-6" />, 
-      text: '45,000 SF fitness_center with pool and basketball courts in Brentwood', 
-      highlights: ['45,000 SF', 'fitness_center', 'pool', 'Brentwood'],
+    {
+      icon: <Dumbbell className="h-6 w-6" />,
+      text: '45,000 sf fitness center with pool and basketball courts in Brentwood, TN',
+      highlights: ['45,000 sf', 'fitness center', 'pool', 'Brentwood, TN'],
       type: 'recreation',
-      color: 'text-teal-600 bg-teal-50'
+      color: 'text-teal-600 bg-teal-50',
+      squareFootage: 45000,
+      location: 'Brentwood, TN'
     },
-    { 
-      icon: <Building2 className="h-6 w-6" />, 
-      text: '180,000 SF urban_mixed development with retail and residential in Nashville', 
-      highlights: ['180,000 SF', 'urban_mixed', 'retail and residential', 'Nashville'],
+    {
+      icon: <Building2 className="h-6 w-6" />,
+      text: '180,000 sf urban mixed development with retail and residential in Nashville, TN',
+      highlights: ['180,000 sf', 'urban mixed', 'retail and residential', 'Nashville, TN'],
       type: 'mixed_use',
-      color: 'text-violet-600 bg-violet-50'
+      color: 'text-violet-600 bg-violet-50',
+      squareFootage: 180000,
+      location: 'Nashville, TN'
     },
-    { 
-      icon: <Car className="h-6 w-6" />, 
-      text: '100,000 SF parking_garage with 300 spaces downtown Nashville', 
-      highlights: ['100,000 SF', 'parking_garage', '300 spaces', 'downtown Nashville'],
+    {
+      icon: <Car className="h-6 w-6" />,
+      text: '100,000 sf parking garage with 300 spaces in downtown Nashville, TN',
+      highlights: ['100,000 sf', 'parking garage', '300 spaces', 'Nashville, TN'],
       type: 'parking',
-      color: 'text-slate-600 bg-slate-50'
+      color: 'text-slate-600 bg-slate-50',
+      squareFootage: 100000,
+      location: 'Nashville, TN'
     },
-    { 
-      icon: <Box className="h-6 w-6" />, 
-      text: '80,000 SF self_storage facility with climate control in Antioch', 
-      highlights: ['80,000 SF', 'self_storage', 'climate control', 'Antioch'],
+    {
+      icon: <Box className="h-6 w-6" />,
+      text: '80,000 sf self storage facility with climate control in Antioch, TN',
+      highlights: ['80,000 sf', 'self storage', 'climate control', 'Antioch, TN'],
       type: 'specialty',
-      color: 'text-stone-600 bg-stone-50'
+      color: 'text-stone-600 bg-stone-50',
+      squareFootage: 80000,
+      location: 'Antioch, TN'
     }
   ];
   
@@ -224,6 +265,127 @@ export const NewProject: React.FC = () => {
       projectComplexity: detectedComplexity
     };
   };
+
+  const parseSquareFootageValue = (value: string): number | undefined => {
+    if (!value) return undefined;
+    const cleaned = value.replace(/,/g, '').trim().toLowerCase();
+    if (!cleaned) return undefined;
+
+    let multiplier = 1;
+    let numericPortion = cleaned;
+    if (cleaned.endsWith('k')) {
+      multiplier = 1000;
+      numericPortion = numericPortion.slice(0, -1);
+    }
+
+    const numeric = Number(numericPortion);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return numeric * multiplier;
+    }
+    return undefined;
+  };
+
+  const finishLevelForApi = (level: typeof finishLevel) =>
+    (level.charAt(0).toUpperCase() + level.slice(1)) as 'Standard' | 'Premium' | 'Luxury';
+
+  const formatPreviewCurrency = (value?: number) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(value);
+    }
+    return '—';
+  };
+
+  const formatPreviewPercent = (value?: number) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return `${value.toFixed(2)}%`;
+    }
+    return '—';
+  };
+
+  const formatPreviewYears = (value?: number) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return `${value.toFixed(2)} yrs`;
+    }
+    return '—';
+  };
+
+  // Live preview effect
+  useEffect(() => {
+    if (previewTimeoutRef.current) {
+      window.clearTimeout(previewTimeoutRef.current);
+      previewTimeoutRef.current = null;
+    }
+    if (previewAbortRef.current) {
+      previewAbortRef.current.abort();
+      previewAbortRef.current = null;
+    }
+
+    if (!description.trim()) {
+      setPreviewStatus('idle');
+      setPreviewData(null);
+      setPreviewError(null);
+      return;
+    }
+
+    setPreviewStatus('loading');
+    setPreviewError(null);
+
+    const timeoutId = window.setTimeout(async () => {
+      const controller = new AbortController();
+      previewAbortRef.current = controller;
+
+      try {
+        const squareValue = parseSquareFootageValue(squareFootageInput);
+        const locationValue = locationInput.trim() || undefined;
+        const analysis = await api.analyzeProject(description, {
+          square_footage: squareValue,
+          location: locationValue,
+          finishLevel: finishLevelForApi(finishLevel),
+          signal: controller.signal,
+        });
+
+        const totals = (analysis as any)?.totals ?? (analysis as any)?.calculations?.totals;
+        const revenueAnalysis =
+          (analysis as any)?.revenue_analysis ?? (analysis as any)?.calculations?.revenue_analysis;
+        const returnMetrics =
+          (analysis as any)?.return_metrics ?? (analysis as any)?.calculations?.return_metrics;
+
+        setPreviewData({
+          totalCost: totals?.total_project_cost,
+          annualRevenue: revenueAnalysis?.annual_revenue,
+          noi: revenueAnalysis?.net_income,
+          roi: returnMetrics?.cash_on_cash_return,
+          payback: returnMetrics?.payback_period,
+        });
+        setPreviewStatus('success');
+      } catch (err) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        console.error('Preview error:', err);
+        setPreviewData(null);
+        setPreviewStatus('error');
+        setPreviewError(err instanceof Error ? err.message : 'Preview unavailable');
+      } finally {
+        previewAbortRef.current = null;
+      }
+    }, 400);
+
+    previewTimeoutRef.current = timeoutId;
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      if (previewAbortRef.current) {
+        previewAbortRef.current.abort();
+        previewAbortRef.current = null;
+      }
+    };
+  }, [description, squareFootageInput, locationInput, finishLevel]);
   
   // Calculate total cost including features
   const calculateTotalWithFeatures = () => {
@@ -260,6 +422,8 @@ export const NewProject: React.FC = () => {
   
   const handleExampleClick = (example: any) => {
     setDescription(example.text);
+    setSquareFootageInput(example.squareFootage ? formatNumber(example.squareFootage) : '');
+    setLocationInput(example.location || '');
     // Reset configuration when using example
     setSpecialFeatures([]);
     setFinishLevel('standard');
@@ -274,7 +438,12 @@ export const NewProject: React.FC = () => {
     setActiveStep('analyzing');
     tracer.trace('ANALYZE_START', 'Starting analysis', { description });
     
-    const analysis = await analyzeDescription(description);
+    const squareValue = parseSquareFootageValue(squareFootageInput);
+    const analysis = await analyzeDescription(description, {
+      squareFootage: squareValue,
+      location: locationInput.trim() || undefined,
+      finishLevel,
+    });
     
     if (analysis) {
       // Auto-detect features from description
@@ -282,6 +451,12 @@ export const NewProject: React.FC = () => {
       setSpecialFeatures(parsed.specialFeatures);
       setFinishLevel(parsed.finishLevel);
       setProjectComplexity(parsed.projectComplexity);
+      if (analysis.parsed_input?.square_footage) {
+        setSquareFootageInput(formatNumber(analysis.parsed_input.square_footage));
+      }
+      if (analysis.parsed_input?.location) {
+        setLocationInput(analysis.parsed_input.location);
+      }
       
       setActiveStep('results');
       tracer.trace('ANALYZE_SUCCESS', 'Analysis complete', analysis);
@@ -331,10 +506,23 @@ export const NewProject: React.FC = () => {
   const handleReset = () => {
     reset();
     setDescription('');
+    setSquareFootageInput('');
+    setLocationInput('');
     setActiveStep('input');
     setSpecialFeatures([]);
     setFinishLevel('standard');
     setProjectComplexity('ground_up');
+    setPreviewData(null);
+    setPreviewStatus('idle');
+    setPreviewError(null);
+    if (previewTimeoutRef.current) {
+      window.clearTimeout(previewTimeoutRef.current);
+      previewTimeoutRef.current = null;
+    }
+    if (previewAbortRef.current) {
+      previewAbortRef.current.abort();
+      previewAbortRef.current = null;
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   
@@ -460,6 +648,95 @@ export const NewProject: React.FC = () => {
               </span>
             </div>
           )}
+
+          {/* Key details inputs */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                Square Footage (optional)
+              </label>
+              <input
+                value={squareFootageInput}
+                onChange={(e) => setSquareFootageInput(e.target.value)}
+                placeholder="e.g. 50,000"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
+                inputMode="numeric"
+                autoComplete="off"
+                disabled={analyzing}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                Location (City, State)
+              </label>
+              <input
+                value={locationInput}
+                onChange={(e) => setLocationInput(e.target.value)}
+                placeholder="e.g. Nashville, TN"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
+                autoComplete="off"
+                disabled={analyzing}
+              />
+            </div>
+          </div>
+
+          {/* Live preview */}
+          <div className="mt-6">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold text-gray-700">Live Preview</p>
+              <span className="text-xs text-gray-400">Live based on inputs</span>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+              {previewStatus === 'idle' && (
+                <p className="text-xs text-gray-500">
+                  Start adding project details to see real-time cost and ROI insights.
+                </p>
+              )}
+              {previewStatus === 'loading' && (
+                <div className="space-y-2">
+                  <div className="h-3 bg-gray-200 rounded animate-pulse" />
+                  <div className="h-3 bg-gray-200 rounded animate-pulse" />
+                  <div className="h-3 bg-gray-200 rounded animate-pulse" />
+                  <p className="text-xs text-gray-500">Calculating…</p>
+                </div>
+              )}
+              {previewStatus === 'success' && previewData && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Total Cost</p>
+                    <p className="text-sm font-semibold text-gray-900">{formatPreviewCurrency(previewData.totalCost)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Annual Revenue</p>
+                    <p className="text-sm font-semibold text-gray-900">{formatPreviewCurrency(previewData.annualRevenue)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">NOI</p>
+                    <p className="text-sm font-semibold text-gray-900">{formatPreviewCurrency(previewData.noi)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Cash-on-Cash ROI</p>
+                    <p className="text-sm font-semibold text-gray-900">{formatPreviewPercent(previewData.roi)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Payback Period</p>
+                    <p className="text-sm font-semibold text-gray-900">{formatPreviewYears(previewData.payback)}</p>
+                  </div>
+                </div>
+              )}
+              {previewStatus === 'error' && (
+                <p className="text-xs text-gray-500">Preview unavailable at the moment.</p>
+              )}
+            </div>
+            {previewStatus === 'error' && (
+              <p className="mt-2 text-xs text-amber-600">
+                Preview unavailable. Continue filling the form or try again.
+              </p>
+            )}
+            {previewStatus === 'error' && previewError && (
+              <p className="mt-1 text-[11px] text-gray-400">{previewError}</p>
+            )}
+          </div>
           
           {/* Example prompts */}
           <div className="mt-6">

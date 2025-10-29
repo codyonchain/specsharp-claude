@@ -176,6 +176,7 @@ export interface OwnershipAnalysis {
     target_roi: number;
     estimated_annual_noi: number;
     cash_on_cash_return: number;
+    feasible?: boolean;
   };
 }
 
