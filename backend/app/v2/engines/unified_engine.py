@@ -14,6 +14,8 @@ from app.v2.config.master_config import (
     get_regional_multiplier,
     get_revenue_multiplier,
     get_regional_override,
+    get_margin_pct,
+    detect_building_type_with_method,
     resolve_quality_factor,
     validate_project_class
 )
@@ -575,18 +577,28 @@ class UnifiedEngine:
             revenue_multiplier = calculations.get('regional_multiplier', 1.0)
         annual_revenue *= revenue_multiplier
         
+        margin_pct = get_margin_pct(building_enum, subtype)
+        self._log_trace("margin_normalized", {
+            'building_type': building_enum.value,
+            'subtype': subtype,
+            'margin_pct': round(margin_pct, 4)
+        })
+        total_expenses = round(annual_revenue * (1 - margin_pct), 2)
+        net_income = round(annual_revenue - total_expenses, 2)
+
         operational_efficiency = self.calculate_operational_efficiency(
             revenue=annual_revenue,
             config=subtype_config,
-            subtype=subtype
+            subtype=subtype,
+            margin_pct=margin_pct,
+            total_expenses_override=total_expenses
         )
-        total_expenses = operational_efficiency.get('total_expenses', 0)
-        net_income = annual_revenue - total_expenses
-        operating_margin = round(net_income / annual_revenue, 3) if annual_revenue > 0 else 0
-        expense_ratio = round(total_expenses / annual_revenue, 3) if annual_revenue > 0 else 0
+        total_expenses = operational_efficiency.get('total_expenses', total_expenses)
+        operating_margin = round(margin_pct, 3) if annual_revenue > 0 else 0
+        expense_ratio = round(1 - margin_pct, 3) if annual_revenue > 0 else 0
         operational_efficiency['operating_margin'] = operating_margin
         operational_efficiency['expense_ratio'] = expense_ratio
-        operational_efficiency['efficiency_score'] = round((1 - expense_ratio) * 100, 1) if annual_revenue > 0 else 0
+        operational_efficiency['efficiency_score'] = round(margin_pct * 100, 1) if annual_revenue > 0 else 0
         
         # Standard projection period for IRR calculation
         years = 10
@@ -640,7 +652,8 @@ class UnifiedEngine:
             config=subtype_config,
             square_footage=square_footage,
             actual_annual_revenue=annual_revenue,
-            actual_net_income=net_income
+            actual_net_income=net_income,
+            margin_pct=margin_pct
         )
         
         # Calculate payback period
@@ -886,8 +899,15 @@ class UnifiedEngine:
         
         return round(rate, 4)
 
-    def calculate_revenue_requirements(self, total_cost: float, config, square_footage: float,
-                                      actual_annual_revenue: float = 0, actual_net_income: float = 0) -> dict:
+    def calculate_revenue_requirements(
+        self,
+        total_cost: float,
+        config,
+        square_footage: float,
+        actual_annual_revenue: float = 0,
+        actual_net_income: float = 0,
+        margin_pct: Optional[float] = None
+    ) -> dict:
         """
         Calculate revenue requirements comparing actual projected returns to required returns.
         This determines true feasibility based on whether the project meets ROI targets.
@@ -920,27 +940,18 @@ class UnifiedEngine:
             gap_percentage = -100
             feasibility = 'Not Feasible'
         
-        # Calculate operating margin for additional context
-        total_expense_ratio = 0
-        expense_fields = [
-            'labor_cost_ratio', 'utility_cost_ratio', 'maintenance_cost_ratio',
-            'management_fee_ratio', 'insurance_cost_ratio', 'property_tax_ratio',
-            'supply_cost_ratio', 'food_cost_ratio', 'beverage_cost_ratio',
-            'franchise_fee_ratio', 'equipment_lease_ratio', 'marketing_ratio',
-            'reserves_ratio', 'security_ratio', 'supplies_ratio', 'janitorial_ratio',
-            'rooms_operations_ratio', 'food_beverage_ratio', 'sales_marketing_ratio',
-            'floor_plan_interest_ratio', 'materials_ratio', 'program_costs_ratio',
-            'equipment_ratio', 'chemicals_ratio', 'event_costs_ratio',
-            'software_fees_ratio', 'other_expenses_ratio'
-        ]
-        
-        for field in expense_fields:
-            if hasattr(config, field):
-                ratio = getattr(config, field)
-                if ratio and ratio > 0:
-                    total_expense_ratio += ratio
-        
-        operating_margin = 1 - total_expense_ratio
+        # Normalize operating margin using provided margin or config hints
+        normalized_margin = margin_pct
+        if normalized_margin is None and getattr(config, 'operating_margin_base', None) is not None:
+            normalized_margin = getattr(config, 'operating_margin_base')
+        if normalized_margin is None and getattr(config, 'financial_metrics', None):
+            normalized_margin = config.financial_metrics.get('operating_margin')
+        if normalized_margin is None and getattr(config, 'operating_margin_premium', None) is not None:
+            normalized_margin = getattr(config, 'operating_margin_premium')
+        if normalized_margin is None:
+            normalized_margin = 0.20
+        normalized_margin = max(0.05, min(0.40, normalized_margin))
+        operating_margin = normalized_margin
         
         # Simple payback calculation using actual net income
         simple_payback_years = round(total_cost / actual_net_income, 1) if actual_net_income > 0 else 999
@@ -1158,8 +1169,15 @@ class UnifiedEngine:
         
         return operational_metrics
 
-    def calculate_operational_efficiency(self, revenue: float, config, subtype: str = None) -> dict:
-        """Calculate operational efficiency metrics from config ratios"""
+    def calculate_operational_efficiency(
+        self,
+        revenue: float,
+        config,
+        subtype: str = None,
+        margin_pct: Optional[float] = None,
+        total_expenses_override: Optional[float] = None
+    ) -> dict:
+        """Calculate operational efficiency metrics from config ratios and normalized margin."""
         result = {
             'total_expenses': 0,
             'operating_margin': 0,
@@ -1208,7 +1226,8 @@ class UnifiedEngine:
         ]
         
         # Calculate expenses
-        total_expenses = 0
+        expense_details = {}
+        raw_total_expenses = 0
         for name, attr in expense_mappings:
             # Skip business operation expenses for manufacturing
             if attr in exclude_from_facility_opex:
@@ -1218,13 +1237,48 @@ class UnifiedEngine:
                 ratio = getattr(config, attr)
                 if ratio and ratio > 0:
                     cost = revenue * ratio
-                    result[name] = round(cost, 2)
-                    total_expenses += cost
-        
-        result['total_expenses'] = round(total_expenses, 2)
-        result['operating_margin'] = round(1 - (total_expenses / revenue) if revenue > 0 else 0, 3)
-        result['efficiency_score'] = round((1 - (total_expenses / revenue)) * 100 if revenue > 0 else 0, 1)
-        result['expense_ratio'] = round(total_expenses / revenue if revenue > 0 else 0, 3)
+                    expense_details[name] = cost
+                    raw_total_expenses += cost
+
+        # Determine target expenses based on provided overrides or margin
+        if total_expenses_override is not None:
+            target_total_expenses = round(total_expenses_override, 2)
+        elif margin_pct is not None and revenue > 0:
+            target_total_expenses = round(revenue * (1 - margin_pct), 2)
+        else:
+            target_total_expenses = round(raw_total_expenses, 2)
+
+        # Scale detailed expenses to match the normalized total
+        if raw_total_expenses > 0 and target_total_expenses > 0:
+            scale_factor = target_total_expenses / raw_total_expenses
+            scaled_sum = 0
+            for key, value in expense_details.items():
+                scaled_value = round(value * scale_factor, 2)
+                expense_details[key] = scaled_value
+                scaled_sum += scaled_value
+
+            # Adjust for rounding drift by applying difference to the first key
+            adjustment = round(target_total_expenses - scaled_sum, 2)
+            if adjustment and expense_details:
+                first_key = next(iter(expense_details))
+                expense_details[first_key] = round(expense_details[first_key] + adjustment, 2)
+        elif not expense_details and target_total_expenses > 0:
+            # If no detailed breakdown but expenses exist, record as generic operating expense
+            expense_details['operating_expenses'] = target_total_expenses
+
+        result.update({key: value for key, value in expense_details.items()})
+        result['total_expenses'] = target_total_expenses
+
+        if revenue > 0:
+            normalized_margin = margin_pct if margin_pct is not None else (1 - (target_total_expenses / revenue))
+            normalized_margin = max(0.0, normalized_margin)
+            result['operating_margin'] = round(normalized_margin, 3)
+            result['efficiency_score'] = round(normalized_margin * 100, 1)
+            result['expense_ratio'] = round(1 - normalized_margin, 3)
+        else:
+            result['operating_margin'] = round(margin_pct or 0, 3) if margin_pct is not None else 0
+            result['efficiency_score'] = 0
+            result['expense_ratio'] = 0
         
         return result
     
@@ -1286,18 +1340,16 @@ class UnifiedEngine:
         Returns:
             Cost estimate with detected building type
         """
-        from app.v2.config.master_config import detect_building_type
-        
         # Detect building type from description
-        detection = detect_building_type(description)
-        
+        detection = detect_building_type_with_method(description)
+
         if not detection:
             return {
                 'error': 'Could not detect building type from description',
                 'description': description
             }
         
-        building_type, subtype = detection
+        building_type, subtype, detection_method = detection
         
         # Detect project class from keywords
         description_lower = description.lower()
@@ -1318,13 +1370,20 @@ class UnifiedEngine:
             location=location,
             project_class=project_class
         )
+
+        self._log_trace("nlp_detected", {
+            'building_type': building_type.value,
+            'subtype': subtype,
+            'method': detection_method
+        })
         
         # Add detection info
         result['detection_info'] = {
             'detected_type': building_type.value,
             'detected_subtype': subtype,
             'detected_class': project_class.value,
-            'original_description': description
+            'original_description': description,
+            'method': detection_method
         }
         
         return result

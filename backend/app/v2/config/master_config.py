@@ -4,6 +4,8 @@ Single source of truth that combines construction costs, owner metrics, and NLP 
 This replaces: building_types_config.py, owner_metrics_config.py, and NLP detection logic.
 """
 
+import re
+from collections import defaultdict
 from enum import Enum
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Any, Callable
@@ -181,6 +183,17 @@ class BuildingConfig:
 # ============================================================================
 # MASTER CONFIGURATION
 # ============================================================================
+
+MARGINS = {
+    BuildingType.MULTIFAMILY: 0.35,
+    BuildingType.OFFICE: 0.25,
+    BuildingType.RETAIL: 0.20,
+    BuildingType.INDUSTRIAL: 0.22,
+    BuildingType.HOSPITALITY: 0.18,
+    BuildingType.RESTAURANT: 0.17,
+    BuildingType.HEALTHCARE: 0.22,
+    BuildingType.EDUCATIONAL: 0.15,
+}
 
 MASTER_CONFIG = {
     # ------------------------------------------------------------------------
@@ -4850,6 +4863,29 @@ def get_building_config(building_type: BuildingType, subtype: str) -> Optional[B
         return MASTER_CONFIG[building_type].get(subtype)
     return None
 
+def get_margin_pct(building_type: BuildingType, subtype: str) -> float:
+    """Get the normalized operating margin for a building type/subtype."""
+    margin: Optional[float] = None
+    config = get_building_config(building_type, subtype)
+
+    if config:
+        candidate = getattr(config, 'operating_margin_base', None)
+
+        if candidate is None and getattr(config, 'financial_metrics', None):
+            candidate = config.financial_metrics.get('operating_margin')
+
+        if candidate is None:
+            candidate = getattr(config, 'operating_margin_premium', None)
+
+        if candidate is not None:
+            margin = float(candidate)
+
+    if margin is None:
+        margin = MARGINS.get(building_type, 0.20)
+
+    margin = max(0.05, min(0.40, margin))
+    return margin
+
 def get_all_subtypes(building_type: BuildingType) -> List[str]:
     """Get all subtypes for a building type"""
     if building_type in MASTER_CONFIG:
@@ -5019,27 +5055,263 @@ def resolve_quality_factor(finish_level: Optional[str],
 # NLP DETECTION HELPERS
 # ============================================================================
 
-def get_nlp_keywords_by_priority() -> List[Tuple[BuildingType, str, NLPConfig]]:
-    """Get all NLP configurations sorted by priority for detection"""
-    configs = []
-    for building_type, subtypes in MASTER_CONFIG.items():
-        for subtype, config in subtypes.items():
-            configs.append((building_type, subtype, config.nlp))
-    
-    # Sort by priority (higher first)
-    configs.sort(key=lambda x: x[2].priority, reverse=True)
-    return configs
+_NUMBER_TOKEN_RE = re.compile(r"\b\d[\d,]*(?:\.\d+)?k?\b", re.IGNORECASE)
+_NON_ALNUM_RE = re.compile(r"[^a-z0-9\s]")
 
-def detect_building_type(description: str) -> Optional[Tuple[BuildingType, str]]:
-    """Simple keyword-based building type detection"""
-    description_lower = description.lower()
-    
-    for building_type, subtype, nlp_config in get_nlp_keywords_by_priority():
-        for keyword in nlp_config.keywords:
-            if keyword.lower() in description_lower:
-                return (building_type, subtype)
-    
-    return None  # No match found
+_DETECTION_PATTERNS_CACHE: Optional[Dict[str, Dict[str, Any]]] = None
+
+
+def normalize_number_tokens(text: str) -> str:
+    """Normalize numeric tokens (e.g., 5,000 / 5000 / 5k) to a canonical form."""
+    if not text:
+        return text
+
+    def _normalize_token(match: re.Match) -> str:
+        token = match.group(0)
+        multiplier = 1
+        if token.lower().endswith("k"):
+            multiplier = 1000
+            token = token[:-1]
+
+        cleaned = token.replace(",", "")
+        try:
+            value = float(cleaned)
+        except ValueError:
+            return match.group(0)
+
+        normalized_value = value * multiplier
+        if normalized_value.is_integer():
+            return str(int(normalized_value))
+        return f"{normalized_value}".rstrip("0").rstrip(".")
+
+    return _NUMBER_TOKEN_RE.sub(_normalize_token, text)
+
+
+def _normalize_detection_text(value: str) -> str:
+    """Lowercase, de-underscore, and strip extraneous punctuation for detection."""
+    if not value:
+        return ""
+    normalized = value.replace("_", " ").lower()
+    normalized = _NON_ALNUM_RE.sub(" ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _register_detection_entry(
+    phrase_map: Dict[str, List[Tuple[Optional[str], int]]],
+    token_map: Dict[str, List[Tuple[Optional[str], int]]],
+    term: str,
+    subtype: Optional[str],
+    priority: int,
+    force_phrase: Optional[bool] = None,
+) -> None:
+    normalized = _normalize_detection_text(term)
+    if not normalized:
+        return
+
+    is_phrase = force_phrase if force_phrase is not None else (" " in normalized)
+    target_map = phrase_map if is_phrase else token_map
+    entries = target_map[normalized]
+    candidate = (subtype, priority)
+    if candidate not in entries:
+        entries.append(candidate)
+
+
+def build_detection_patterns() -> Dict[str, Dict[str, Any]]:
+    """
+    Generate phrase-first detection patterns from master configuration.
+
+    Returns:
+        Mapping of building type value to detection metadata:
+        {
+            "<building_type>": {
+                "phrases": [...],
+                "tokens": [...],
+                "priority": <int>,
+                "_phrase_map": {phrase: [(subtype, priority), ...]},
+                "_token_map": {token: [(subtype, priority), ...]},
+            }
+        }
+    """
+    global _DETECTION_PATTERNS_CACHE
+    if _DETECTION_PATTERNS_CACHE is not None:
+        return _DETECTION_PATTERNS_CACHE
+
+    patterns: Dict[str, Dict[str, Any]] = {}
+
+    for building_type, subtypes in MASTER_CONFIG.items():
+        phrase_map: Dict[str, List[Tuple[Optional[str], int]]] = defaultdict(list)
+        token_map: Dict[str, List[Tuple[Optional[str], int]]] = defaultdict(list)
+        priority = 0
+
+        for subtype_key, config in subtypes.items():
+            nlp_config = getattr(config, "nlp", None)
+            subtype_priority = getattr(nlp_config, "priority", 0) or 0
+            priority = max(priority, subtype_priority)
+
+            # Display name is treated as a phrase
+            if getattr(config, "display_name", None):
+                _register_detection_entry(
+                    phrase_map,
+                    token_map,
+                    config.display_name,
+                    subtype_key,
+                    subtype_priority,
+                    force_phrase=True,
+                )
+
+            # Subtype key and NLP keywords
+            _register_detection_entry(
+                phrase_map,
+                token_map,
+                subtype_key,
+                subtype_key,
+                subtype_priority,
+            )
+
+            if nlp_config:
+                for keyword in nlp_config.keywords:
+                    _register_detection_entry(
+                        phrase_map,
+                        token_map,
+                        keyword,
+                        subtype_key,
+                        subtype_priority,
+                    )
+
+        # General fallback token for the building type
+        _register_detection_entry(
+            phrase_map,
+            token_map,
+            building_type.value,
+            None,
+            priority,
+        )
+
+        sorted_phrases = sorted(
+            phrase_map.keys(),
+            key=lambda phrase: (-len(phrase.split()), -len(phrase), phrase),
+        )
+        sorted_tokens = sorted(
+            token_map.keys(),
+            key=lambda token: (-len(token), token),
+        )
+
+        patterns[building_type.value] = {
+            "phrases": sorted_phrases,
+            "tokens": sorted_tokens,
+            "priority": priority,
+            "_phrase_map": phrase_map,
+            "_token_map": token_map,
+        }
+
+    _DETECTION_PATTERNS_CACHE = patterns
+    return patterns
+
+
+def _select_best_subtype(entries: List[Tuple[Optional[str], int]]) -> Optional[str]:
+    if not entries:
+        return None
+
+    # Prefer explicit subtype matches ordered by priority (desc)
+    ranked = sorted(
+        entries,
+        key=lambda item: (
+            0 if item[0] else 1,  # prioritize actual subtype over generic
+            -(item[1] if item[1] is not None else 0),
+            item[0] or "",
+        ),
+    )
+    for subtype, _ in ranked:
+        if subtype:
+            return subtype
+    return ranked[0][0]
+
+
+def _fallback_subtype_for_type(building_type: BuildingType) -> Optional[str]:
+    subtypes = MASTER_CONFIG.get(building_type)
+    if not subtypes:
+        return None
+
+    ranked = sorted(
+        subtypes.items(),
+        key=lambda item: (
+            -(getattr(getattr(item[1], "nlp", None), "priority", 0) or 0),
+            item[0],
+        ),
+    )
+    return ranked[0][0] if ranked else None
+
+
+def _match_terms(
+    haystack: str,
+    terms: List[str],
+    term_map: Dict[str, List[Tuple[Optional[str], int]]],
+    method: str,
+) -> Optional[Tuple[str, Optional[str], str]]:
+    for term in terms:
+        if not term:
+            continue
+        pattern = re.compile(rf"\b{re.escape(term)}\b")
+        if pattern.search(haystack):
+            subtype = _select_best_subtype(term_map.get(term, []))
+            return term, subtype, method
+    return None
+
+
+def detect_building_type_with_method(
+    description: str,
+) -> Optional[Tuple[BuildingType, Optional[str], str]]:
+    """
+    Detect building type/subtype from description, returning detection method.
+    """
+    if not description:
+        return None
+
+    normalized_text = _normalize_detection_text(normalize_number_tokens(description))
+    if not normalized_text:
+        return None
+
+    patterns = build_detection_patterns()
+    sorted_types = sorted(
+        patterns.items(),
+        key=lambda item: (-item[1]["priority"], item[0]),
+    )
+
+    for building_type_value, data in sorted_types:
+        phrase_hit = _match_terms(
+            normalized_text,
+            data["phrases"],
+            data["_phrase_map"],
+            method="phrase",
+        )
+        if phrase_hit:
+            _, subtype, method = phrase_hit
+            building_type_enum = BuildingType(building_type_value)
+            subtype = subtype or _fallback_subtype_for_type(building_type_enum)
+            return building_type_enum, subtype, method
+
+        token_hit = _match_terms(
+            normalized_text,
+            data["tokens"],
+            data["_token_map"],
+            method="token",
+        )
+        if token_hit:
+            _, subtype, method = token_hit
+            building_type_enum = BuildingType(building_type_value)
+            subtype = subtype or _fallback_subtype_for_type(building_type_enum)
+            return building_type_enum, subtype, method
+
+    return None
+
+
+def detect_building_type(description: str) -> Optional[Tuple[BuildingType, Optional[str]]]:
+    """Detect building type/subtype using config-driven patterns."""
+    result = detect_building_type_with_method(description)
+    if not result:
+        return None
+    building_type, subtype, _method = result
+    return building_type, subtype
 
 # ============================================================================
 # VALIDATION

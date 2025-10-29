@@ -8,6 +8,7 @@ from app.v2.config.master_config import (
     ProjectClass,
     OwnershipType,
     get_building_config,
+    get_margin_pct,
     validate_config,
 )
 
@@ -48,6 +49,43 @@ def test_revenue_uses_own_multiplier():
         revenue_multiplier,
         cost_multiplier,
     ), "Revenue multiplier must not silently re-use the cost multiplier"
+
+
+def test_description_detection_natural_language():
+    """Natural-language descriptions should map to building types with NLP trace visibility."""
+    office_description = "50,000 sf class A office in Nashville, TN"
+    office_result = unified_engine.estimate_from_description(
+        description=office_description,
+        square_footage=50_000,
+        location="Nashville, TN",
+    )
+
+    office_detection = office_result["detection_info"]
+    assert office_detection["detected_type"] == BuildingType.OFFICE.value
+    assert office_detection["detected_subtype"].replace("_", " ") == "class a"
+
+    office_trace = [
+        entry for entry in office_result["calculation_trace"] if entry["step"] == "nlp_detected"
+    ]
+    assert office_trace, "NLP detection trace entry missing for office description"
+    assert office_trace[-1]["data"]["method"] in {"phrase", "token"}
+
+    restaurant_description = "5k sf full service restaurant in Nashville, TN"
+    restaurant_result = unified_engine.estimate_from_description(
+        description=restaurant_description,
+        square_footage=5_000,
+        location="Nashville, TN",
+    )
+
+    restaurant_detection = restaurant_result["detection_info"]
+    assert restaurant_detection["detected_type"] == BuildingType.RESTAURANT.value
+    assert restaurant_detection["detected_subtype"].replace("_", " ") == "full service"
+
+    restaurant_trace = [
+        entry for entry in restaurant_result["calculation_trace"] if entry["step"] == "nlp_detected"
+    ]
+    assert restaurant_trace, "NLP detection trace entry missing for restaurant description"
+    assert restaurant_trace[-1]["data"]["method"] in {"phrase", "token"}
 
 
 def test_special_features_unit_math():
@@ -93,7 +131,7 @@ def test_restaurant_clamp_is_explicit_or_off():
     assert any(step == "restaurant_cost_clamp" for step in trace_steps), "Restaurant clamp must emit an explicit trace entry"
 
 
-def test_noi_is_revenue_minus_opex():
+def test_margin_normalized_noi_is_revenue_minus_opex():
     """NOI must be derived from revenue minus operating expenses, not a fixed percentage."""
     result = unified_engine.calculate_project(
         building_type=BuildingType.RESTAURANT,
@@ -108,6 +146,13 @@ def test_noi_is_revenue_minus_opex():
     noi = result["revenue_analysis"]["net_income"]
 
     derived_noi = annual_revenue - total_expenses
+    assert noi == pytest.approx(round(derived_noi, 2), abs=0.01), "Net income should match revenue minus expenses"
+
+    margin_traces = [entry for entry in result["calculation_trace"] if entry["step"] == "margin_normalized"]
+    assert len(margin_traces) == 1, "Margin normalization trace entry missing or duplicated"
+    expected_margin = get_margin_pct(BuildingType.RESTAURANT, "full_service")
+    assert margin_traces[0]["data"]["margin_pct"] == pytest.approx(expected_margin, rel=1e-4)
+
     trace_steps = [entry for entry in result["calculation_trace"] if entry["step"] == "noi_derived"]
 
     assert trace_steps, "NOI derivation trace entry missing"
@@ -115,6 +160,11 @@ def test_noi_is_revenue_minus_opex():
     assert trace_data["method"] == "fixed_percentage"
     expected_noi = result["totals"]["total_project_cost"] * 0.08
     assert trace_data["estimated_noi"] == pytest.approx(expected_noi, rel=1e-3)
+
+
+def test_noi_is_revenue_minus_opex():
+    """Backward-compatible alias for targeted pytest selection."""
+    test_margin_normalized_noi_is_revenue_minus_opex()
 
 
 def test_finish_level_quality_factor_trace():
