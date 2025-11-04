@@ -16,7 +16,8 @@ from app.v2.config.master_config import (
     get_target_roi,
     detect_building_type_with_method,
     resolve_quality_factor,
-    validate_project_class
+    validate_project_class,
+    infer_finish_level
 )
 # from app.v2.services.financial_analyzer import FinancialAnalyzer  # TODO: Implement this
 from typing import Optional, Dict, Any, List
@@ -47,7 +48,8 @@ class UnifiedEngine:
                          floors: int = 1,
                          ownership_type: OwnershipType = OwnershipType.FOR_PROFIT,
                          finish_level: Optional[str] = None,
-                         special_features: List[str] = None) -> Dict[str, Any]:
+                         special_features: List[str] = None,
+                         finish_level_source: Optional[str] = None) -> Dict[str, Any]:
         """
         The master calculation method.
         Everything goes through here.
@@ -60,7 +62,9 @@ class UnifiedEngine:
             project_class: Ground-up, renovation, etc.
             floors: Number of floors
             ownership_type: For-profit, non-profit, etc.
+            finish_level: Optional finish quality override
             special_features: List of special features to add
+            finish_level_source: Trace provenance for finish level selection
             
         Returns:
             Comprehensive cost breakdown dictionary
@@ -76,6 +80,15 @@ class UnifiedEngine:
         })
 
         normalized_finish_level = finish_level.lower().strip() if finish_level else None
+        finish_source = finish_level_source or ('explicit' if finish_level else 'default')
+        if finish_source not in {'explicit', 'description', 'default'}:
+            finish_source = 'explicit' if finish_level else 'default'
+        if finish_source == 'description' and not normalized_finish_level:
+            finish_source = 'default'
+
+        self._log_trace("finish_level_source", {
+            'source': finish_source
+        })
         quality_factor = resolve_quality_factor(normalized_finish_level, building_type, subtype)
         self._log_trace("quality_factor_resolved", {
             'finish_level': normalized_finish_level or 'standard',
@@ -133,6 +146,11 @@ class UnifiedEngine:
             warning_callback=_city_only_warning
         )
 
+        self._log_trace("finish_cost_applied", {
+            'finish_level': normalized_finish_level or 'standard',
+            'factor': round(modifiers.get('finish_cost_factor', 1.0), 4)
+        })
+
         final_cost_per_sf = base_cost_per_sf * modifiers['cost_factor']
         self._log_trace("modifiers_applied", {
             'finish_level': normalized_finish_level or 'standard',
@@ -144,8 +162,9 @@ class UnifiedEngine:
         # Calculate base construction cost
         construction_cost = final_cost_per_sf * square_footage
         
-        # Calculate equipment cost
-        equipment_cost = building_config.equipment_cost_per_sf * square_footage
+        # Calculate equipment cost with finish/regional adjustments
+        equipment_multiplier = modifiers.get('finish_cost_factor', 1.0)
+        equipment_cost = building_config.equipment_cost_per_sf * equipment_multiplier * square_footage
         
         # Add special features if any
         special_features_cost = 0
@@ -247,9 +266,13 @@ class UnifiedEngine:
         # Financial requirements removed - was only partially implemented for hospital
         
         # Generate cost DNA for transparency
+        cost_after_finish_factor = cost_after_class * modifiers.get('finish_cost_factor', 1.0)
+        cost_after_regional = cost_after_class * modifiers['cost_factor']
+
         cost_dna = {
             'base_cost': original_base_cost_per_sf,
-            'regional_adjustment': modifiers['cost_factor'],
+            'finish_adjustment': modifiers.get('finish_cost_factor', 1.0),
+            'regional_adjustment': modifiers.get('regional_cost_factor', modifiers['cost_factor']),
             'complexity_factor': class_multiplier,  # Using class_multiplier as complexity factor
             'final_cost': final_cost_per_sf,
             'location': location,
@@ -262,14 +285,15 @@ class UnifiedEngine:
                 'after_finish': cost_after_finish,
                 'after_class': cost_after_class,
                 'after_complexity': cost_after_class,
-                'after_regional': base_cost_per_sf * modifiers['cost_factor'],
+                'after_finish_factor': cost_after_finish_factor,
+                'after_regional': cost_after_regional,
                 'final': final_cost_per_sf
             },
             'market_context': {
                 'market': location.split(',')[0] if location else 'Nashville',
-                'index': modifiers['cost_factor'],
-                'comparison': 'above national average' if modifiers['cost_factor'] > 1.0 else 'below national average' if modifiers['cost_factor'] < 1.0 else 'at national average',
-                'percentage_difference': round((modifiers['cost_factor'] - 1.0) * 100, 1)
+                'index': modifiers.get('market_factor', 1.0),
+                'comparison': 'above national average' if modifiers.get('market_factor', 1.0) > 1.0 else 'below national average' if modifiers.get('market_factor', 1.0) < 1.0 else 'at national average',
+                'percentage_difference': round((modifiers.get('market_factor', 1.0) - 1.0) * 100, 1)
             }
         }
         
@@ -297,7 +321,8 @@ class UnifiedEngine:
                 'base_cost_per_sf': base_cost_per_sf,
                 'original_base_cost_per_sf': original_base_cost_per_sf,
                 'class_multiplier': class_multiplier,
-                'regional_multiplier': modifiers['cost_factor'],
+                'regional_multiplier': modifiers.get('regional_cost_factor', 1.0),
+                'finish_cost_factor': modifiers.get('finish_cost_factor', 1.0),
                 'cost_factor': modifiers['cost_factor'],
                 'quality_factor': quality_factor,
                 'final_cost_per_sf': final_cost_per_sf,
@@ -670,7 +695,8 @@ class UnifiedEngine:
                 'quality_factor': round(quality_factor, 2),
                 'is_premium': is_premium,
                 'revenue_factor': round(revenue_factor, 4),
-                'regional_multiplier': round(revenue_factor, 4)
+                'finish_revenue_factor': round(modifiers.get('finish_revenue_factor', 1.0), 4),
+                'regional_multiplier': round(modifiers.get('market_factor', 1.0), 4)
             },
             'return_metrics': {
                 'estimated_annual_noi': round(net_income, 2),
@@ -1321,7 +1347,8 @@ class UnifiedEngine:
     def estimate_from_description(self, 
                                  description: str,
                                  square_footage: float,
-                                 location: str = "Nashville") -> Dict[str, Any]:
+                                 location: str = "Nashville",
+                                 finish_level: Optional[str] = None) -> Dict[str, Any]:
         """
         Estimate costs from a natural language description
         
@@ -1329,6 +1356,7 @@ class UnifiedEngine:
             description: Natural language project description
             square_footage: Total square footage
             location: City/location for regional multiplier
+            finish_level: Optional explicit finish level override
             
         Returns:
             Cost estimate with detected building type
@@ -1355,13 +1383,26 @@ class UnifiedEngine:
         else:
             project_class = ProjectClass.GROUND_UP
         
+        inferred_finish_level, explicit_factor = infer_finish_level(description)
+        finish_source = 'default'
+        finish_for_calculation: Optional[str] = None
+
+        if finish_level:
+            finish_for_calculation = finish_level
+            finish_source = 'explicit'
+        elif inferred_finish_level:
+            finish_for_calculation = inferred_finish_level
+            finish_source = 'description'
+
         # Calculate with detected parameters
         result = self.calculate_project(
             building_type=building_type,
             subtype=subtype,
             square_footage=square_footage,
             location=location,
-            project_class=project_class
+            project_class=project_class,
+            finish_level=finish_for_calculation,
+            finish_level_source=finish_source
         )
 
         self._log_trace("nlp_detected", {
@@ -1369,6 +1410,17 @@ class UnifiedEngine:
             'subtype': subtype,
             'method': detection_method
         })
+
+        if inferred_finish_level or explicit_factor is not None:
+            self._log_trace("finish_level_inferred", {
+                'from': 'description',
+                'finish_level': inferred_finish_level,
+                'explicit_factor': explicit_factor
+            })
+        if explicit_factor is not None:
+            self._log_trace("finish_factor_inferred", {
+                'factor': explicit_factor
+            })
         
         # Add detection info
         result['detection_info'] = {

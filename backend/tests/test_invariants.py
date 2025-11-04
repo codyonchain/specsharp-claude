@@ -102,6 +102,45 @@ def test_description_detection_natural_language():
     assert restaurant_trace[-1]["data"]["method"] in {"phrase", "token"}
 
 
+def test_description_infers_finish_level():
+    """Descriptions with finish cues should promote premium modifiers exactly once."""
+    base_description = "5,000 sf full service restaurant in Nashville, TN"
+    premium_description = f"{base_description} (premium finishes, 1.15x)"
+
+    base_result = unified_engine.estimate_from_description(
+        description=base_description,
+        square_footage=5_000,
+        location="Nashville, TN",
+    )
+    premium_result = unified_engine.estimate_from_description(
+        description=premium_description,
+        square_footage=5_000,
+        location="Nashville, TN",
+    )
+
+    premium_trace = [entry for entry in premium_result["calculation_trace"] if isinstance(entry, dict)]
+    base_trace = [entry for entry in base_result["calculation_trace"] if isinstance(entry, dict)]
+
+    inference_traces = [entry for entry in premium_trace if entry["step"] == "finish_level_inferred"]
+    assert inference_traces, "Missing finish_level_inferred trace for premium description"
+    inferred_payload = inference_traces[-1]["data"]
+    assert inferred_payload["finish_level"] == "Premium", "Expected Premium finish level from description cues"
+
+    premium_modifiers = next(
+        entry["data"] for entry in premium_trace if entry["step"] == "modifiers_applied"
+    )
+    base_modifiers = next(
+        entry["data"] for entry in base_trace if entry["step"] == "modifiers_applied"
+    )
+
+    premium_revenue_factor = premium_modifiers["revenue_factor"]
+    base_revenue_factor = base_modifiers["revenue_factor"]
+
+    assert premium_revenue_factor > base_revenue_factor > 1.0, "Premium modifiers should lift revenue factor"
+    ratio = premium_revenue_factor / base_revenue_factor
+    assert ratio == pytest.approx(1.08, rel=1e-2), "Premium factor should apply once (≈1.08× increase)"
+
+
 def test_special_features_unit_math():
     """Special feature pricing should respect per-unit costs, not auto-scale by total square footage."""
     base_result = unified_engine.calculate_project(

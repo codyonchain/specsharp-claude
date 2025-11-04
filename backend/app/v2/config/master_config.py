@@ -723,7 +723,7 @@ MASTER_CONFIG = {
             },
 
             # Revenue metrics
-            base_revenue_per_sf_annual=600,
+            base_revenue_per_sf_annual=430,
             base_revenue_per_visit=150,
             visits_per_day=50,
             days_per_year=365,
@@ -1775,7 +1775,7 @@ MASTER_CONFIG = {
             },
 
             # Revenue metrics
-            base_revenue_per_sf_annual=400,
+            base_revenue_per_sf_annual=450,
             occupancy_rate_base=0.85,
             occupancy_rate_premium=0.90,
             operating_margin_base=0.08,
@@ -4846,6 +4846,33 @@ FINISH_LEVELS: Dict[str, float] = {
     'luxury': 1.20
 }
 
+_FINISH_LEVEL_SYNONYMS = {
+    'standard': [
+        'standard',
+        'base finish',
+        'basic finishes'
+    ],
+    'premium': [
+        'premium',
+        'high-end',
+        'upscale',
+        'upgrade',
+        'upgraded finishes',
+        'premium finishes',
+        'fit-out premium'
+    ],
+    'luxury': [
+        'luxury',
+        'deluxe',
+        'top-end'
+    ]
+}
+
+_FINISH_FACTOR_PATTERN = re.compile(
+    r'(?:(?:^|[^0-9])(1\.[0-9]{1,2}|[0-9]\.[0-9]{1,2})x\b)|(?:x(1\.[0-9]{1,2}))',
+    re.IGNORECASE
+)
+
 # ============================================================================
 # MULTIPLIERS
 # ============================================================================
@@ -4951,6 +4978,38 @@ def get_regional_multiplier(building_type: BuildingType, subtype: str, city: str
 def _clamp(value: float, lower: float, upper: float) -> float:
     return max(lower, min(upper, value))
 
+def infer_finish_level(text: str) -> Tuple[Optional[str], Optional[float]]:
+    """
+    Infer finish level keyword and optional explicit multiplier factor from free text.
+    Returns normalized title-case finish level and parsed float factor when available.
+    """
+    if not text:
+        return (None, None)
+
+    text_lower = text.lower()
+    finish_key: Optional[str] = None
+
+    for level in ('luxury', 'premium', 'standard'):
+        for phrase in _FINISH_LEVEL_SYNONYMS.get(level, []):
+            if phrase in text_lower:
+                finish_key = level
+                break
+        if finish_key:
+            break
+
+    factor: Optional[float] = None
+    match = _FINISH_FACTOR_PATTERN.search(text_lower)
+    if match:
+        factor_str = match.group(1) or match.group(2)
+        if factor_str:
+            try:
+                factor = float(factor_str)
+            except ValueError:
+                factor = None
+
+    finish_level = finish_key.title() if finish_key else None
+    return (finish_level, factor)
+
 def get_finish_cost_factor(finish_level: Optional[str]) -> float:
     """Return cost factor for a finish level using configured defaults when available."""
     defaults = {
@@ -4980,6 +5039,12 @@ def get_finish_revenue_factor(
         'premium': 1.05,
         'luxury': 1.10,
     }
+    if building_type == BuildingType.RESTAURANT:
+        defaults.update({
+            'standard': 1.00,
+            'premium': 1.08,
+            'luxury': 1.12,
+        })
     config = get_building_config(building_type, subtype)
     key = (finish_level or 'standard').strip().lower()
 
@@ -5079,19 +5144,22 @@ def get_effective_modifiers(
     override = get_regional_override(location)
     if override is not None:
         regional_factor = override
-    cost_factor = finish_cost_factor * regional_factor
+    raw_cost_factor = finish_cost_factor * regional_factor
+    cost_factor = _clamp(raw_cost_factor, 0.7, 1.6)
 
-    revenue_finish_factor = get_finish_revenue_factor(finish_level, building_type, subtype)
+    finish_revenue_factor = get_finish_revenue_factor(finish_level, building_type, subtype)
     market_factor = get_market_factor(location, warning_callback=warning_callback)
-    revenue_factor = revenue_finish_factor * market_factor
-
-    cost_factor = _clamp(cost_factor, 0.7, 1.6)
-    revenue_factor = _clamp(revenue_factor, 0.7, 1.6)
+    raw_revenue_factor = finish_revenue_factor * market_factor
+    revenue_factor = _clamp(raw_revenue_factor, 0.7, 1.6)
 
     return {
         'cost_factor': cost_factor,
         'revenue_factor': revenue_factor,
-        'margin_pct': get_margin_pct(building_type, subtype)
+        'margin_pct': get_margin_pct(building_type, subtype),
+        'finish_cost_factor': finish_cost_factor,
+        'regional_cost_factor': regional_factor,
+        'finish_revenue_factor': finish_revenue_factor,
+        'market_factor': market_factor
     }
 
 def get_base_cost(building_type: BuildingType, subtype: str) -> float:
