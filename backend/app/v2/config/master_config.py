@@ -4842,8 +4842,8 @@ MARKET_OVERRIDES: Dict[str, float] = {
 
 FINISH_LEVELS: Dict[str, float] = {
     'standard': 1.00,
-    'premium': 1.10,
-    'luxury': 1.20
+    'premium': 1.15,
+    'luxury': 1.25
 }
 
 _FINISH_LEVEL_SYNONYMS = {

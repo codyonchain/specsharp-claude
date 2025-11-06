@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Project } from '../../types';
 import { formatters, safeGet } from '../../utils/displayFormatters';
@@ -65,6 +65,98 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   const soft_costs = calculations?.soft_costs || {};
   const ownership = calculations?.ownership_analysis || {};
   const investmentAnalysis = ownership?.investment_analysis || {};
+  const calculationTrace = Array.isArray(calculations?.calculation_trace)
+    ? calculations.calculation_trace.filter((entry: any) => entry && typeof entry === 'object' && entry.step)
+    : [];
+
+  const getLatestTrace = (step: string) => {
+    for (let i = calculationTrace.length - 1; i >= 0; i -= 1) {
+      const entry = calculationTrace[i];
+      if (entry?.step === step) {
+        return entry;
+      }
+    }
+    return undefined;
+  };
+
+  const finishSourceEntry = getLatestTrace('finish_level_source');
+  const modifiersTrace = getLatestTrace('modifiers_applied');
+  const inferredTrace = getLatestTrace('finish_level_inferred');
+
+  const normalizeFinishLevel = (value?: string | null) => {
+    if (!value || typeof value !== 'string') {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+  };
+
+  const finishLevelFromDisplay = normalizeFinishLevel(displayData.finishLevel);
+  const finishLevelFromProject = normalizeFinishLevel(calculations?.project_info?.finish_level);
+  const finishLevelFromTrace = normalizeFinishLevel(inferredTrace?.data?.finish_level || modifiersTrace?.data?.finish_level);
+  const finishLevel = finishLevelFromProject || finishLevelFromDisplay || finishLevelFromTrace;
+
+  const displayFinishSource = displayData.finishLevelSource;
+  const finishSourceRaw = finishSourceEntry?.data?.source;
+  const finishSource =
+    displayFinishSource === 'explicit' || displayFinishSource === 'description' || displayFinishSource === 'default'
+      ? displayFinishSource
+      : finishSourceRaw === 'explicit' || finishSourceRaw === 'description'
+        ? finishSourceRaw
+        : 'default';
+
+  const costFactorFromDisplay = typeof displayData.costFactor === 'number' ? displayData.costFactor : undefined;
+  const revenueFactorFromDisplay = typeof displayData.revenueFactor === 'number' ? displayData.revenueFactor : undefined;
+  const costFactor = costFactorFromDisplay ?? (typeof modifiersTrace?.data?.cost_factor === 'number' ? modifiersTrace.data.cost_factor : undefined);
+  const revenueFactor = revenueFactorFromDisplay ?? (typeof modifiersTrace?.data?.revenue_factor === 'number' ? modifiersTrace.data.revenue_factor : undefined);
+
+  const isDev = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
+
+  const formatMultiplier = (value?: number) => {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      return undefined;
+    }
+    return value.toFixed(3).replace(/(?:\.0+|(\.\d+?)0+)$/, '$1');
+  };
+
+  const costFactorText = formatMultiplier(costFactor);
+  const revenueFactorText = formatMultiplier(revenueFactor);
+
+  const finishChipTooltip = finishSource === 'explicit'
+    ? 'Source: Selected in form'
+    : finishSource === 'description'
+      ? 'Source: Inferred from description'
+      : 'Source: Default (Standard)';
+
+  const hasFinishPayload = Boolean(finishLevel || costFactor || revenueFactor);
+  const finishChipDetail = hasFinishPayload
+    ? `Finish: ${finishLevel || 'Standard'} ${costFactorText && revenueFactorText
+      ? `(Cost ×${costFactorText} · Rev ×${revenueFactorText})`
+      : '(applied)'}`.trim()
+    : 'MISSING';
+
+  const finishChipClasses = hasFinishPayload
+    ? 'ml-2 inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border bg-indigo-500/15 text-indigo-100 border-indigo-400/40'
+    : 'ml-2 inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border bg-red-500/15 text-red-100 border-red-400/40';
+
+  const finishDevLogRef = useRef(false);
+
+  useEffect(() => {
+    if (!isDev || finishDevLogRef.current) {
+      return;
+    }
+    console.log('[SpecSharp DEV] Finish chip payload', {
+      finishLevel: finishLevel || 'Standard',
+      costFactor,
+      revenueFactor,
+      modifiersTrace: modifiersTrace?.data || null,
+      finishSource
+    });
+    finishDevLogRef.current = true;
+  }, [isDev, finishLevel, modifiersTrace, finishSource, costFactor, revenueFactor]);
   
   // Basic project info
   const squareFootage = parsed?.square_footage || 0;
@@ -378,7 +470,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             <p className="text-xs text-blue-200 uppercase tracking-wider mb-2 font-medium">TOTAL INVESTMENT REQUIRED</p>
             <p className="text-5xl font-bold">{formatters.currency(totalProjectCost)}</p>
             <p className="text-lg text-blue-200">{formatters.costPerSF(totals.cost_per_sf)}</p>
-            <div className="mt-3 flex justify-end">
+            <div className="mt-3 flex justify-end gap-2 flex-wrap">
               <span
                 className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${decisionStatus === 'GO'
                   ? 'bg-green-500/15 text-green-100 border-green-400/40'
@@ -389,6 +481,18 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                 {decisionStatus === 'GO' ? <CheckCircle className="h-3 w-3" /> : decisionStatus === 'NO-GO' ? <AlertCircle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
                 {feasibilityChipLabel}
               </span>
+              {isDev && (
+                <span className={finishChipClasses} title={hasFinishPayload ? finishChipTooltip : undefined}>
+                  {hasFinishPayload ? (
+                    <>
+                      <span className="font-semibold tracking-wide">DEV • Finish</span>
+                      <span className="ml-1">{finishChipDetail}</span>
+                    </>
+                  ) : (
+                    'DEV • Finish: MISSING'
+                  )}
+                </span>
+              )}
             </div>
           </div>
         </div>

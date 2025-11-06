@@ -95,6 +95,15 @@ export interface DisplayData {
   buildingSubtype: string;
   location: string;
   floors: number;
+  constructionCostBuildUp: Array<{
+    label: string;
+    value_per_sf?: number;
+    multiplier?: number;
+  }>;
+  finishLevel: string;
+  finishLevelSource: 'explicit' | 'description' | 'default';
+  costFactor?: number;
+  revenueFactor?: number;
 }
 
 export class BackendDataMapper {
@@ -179,6 +188,59 @@ export class BackendDataMapper {
     const operationalEfficiency = ownership?.operational_efficiency || calculations?.operational_efficiency || calculations?.calculations?.operational_efficiency || {};
     const parsedInput = analysis?.parsed_input || {};
     const totals = calculations?.totals || calculations?.calculations?.totals || {};
+    const calculationTrace = Array.isArray(calculations?.calculation_trace)
+      ? calculations.calculation_trace.filter((entry: any) => entry && typeof entry === 'object' && 'step' in entry)
+      : [];
+
+    const getLatestTrace = (step: string) => {
+      for (let i = calculationTrace.length - 1; i >= 0; i -= 1) {
+        const entry = calculationTrace[i];
+        if (entry?.step === step) {
+          return entry;
+        }
+      }
+      return undefined;
+    };
+
+    const modifiersTrace = getLatestTrace('modifiers_applied');
+    const finishSourceTrace = getLatestTrace('finish_level_source');
+
+    const normalizeFinishLevel = (value: any): string | undefined => {
+      if (typeof value !== 'string') {
+        return undefined;
+      }
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return undefined;
+      }
+      return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+    };
+
+    const finishLevelFromInfo = normalizeFinishLevel(projectInfo?.finish_level);
+    const finishLevelFromParsed = normalizeFinishLevel(parsedInput?.finish_level);
+    const finishLevelFromTrace = normalizeFinishLevel(modifiersTrace?.data?.finish_level);
+    const finishLevel =
+      finishLevelFromInfo ||
+      finishLevelFromParsed ||
+      finishLevelFromTrace ||
+      'Standard';
+
+    const isFinishSource = (value: any): value is 'explicit' | 'description' | 'default' =>
+      value === 'explicit' || value === 'description' || value === 'default';
+
+    const finishLevelSourceTrace = finishSourceTrace?.data?.source;
+    const parsedFinishSource = parsedInput?.finish_level_source;
+    const finishLevelSource: 'explicit' | 'description' | 'default' =
+      (isFinishSource(finishLevelSourceTrace) && finishLevelSourceTrace) ||
+      (isFinishSource(parsedFinishSource) && parsedFinishSource) ||
+      'default';
+
+    const costFactorFromTrace = typeof modifiersTrace?.data?.cost_factor === 'number' ? modifiersTrace.data.cost_factor : undefined;
+    const revenueFactorFromTrace = typeof modifiersTrace?.data?.revenue_factor === 'number' ? modifiersTrace.data.revenue_factor : undefined;
+    const fallbackCostFactor = typeof calculations?.modifiers?.cost_factor === 'number' ? calculations.modifiers.cost_factor : undefined;
+    const fallbackRevenueFactor = typeof calculations?.modifiers?.revenue_factor === 'number' ? calculations.modifiers.revenue_factor : undefined;
+    const costFactor = costFactorFromTrace ?? fallbackCostFactor;
+    const revenueFactor = revenueFactorFromTrace ?? fallbackRevenueFactor;
     
     // TRACE DATA MAPPING
     console.log('=== BACKEND DATA MAPPER TRACE ===');
@@ -288,7 +350,14 @@ export class BackendDataMapper {
       buildingType: safeGet(parsedInput, 'building_type', 'office'),
       buildingSubtype: safeGet(parsedInput, 'building_subtype', safeGet(parsedInput, 'subtype', 'standard')),
       location: safeGet(parsedInput, 'location', 'Nashville'),
-      floors: safeGet(parsedInput, 'floors', 1)
+      floors: safeGet(parsedInput, 'floors', 1),
+      constructionCostBuildUp: Array.isArray(calculations?.construction_costs?.cost_build_up)
+        ? calculations.construction_costs.cost_build_up
+        : [],
+      finishLevel,
+      finishLevelSource,
+      costFactor,
+      revenueFactor
     };
   }
   
@@ -328,7 +397,12 @@ export class BackendDataMapper {
       buildingType: '',
       buildingSubtype: '',
       location: '',
-      floors: 1
+      floors: 1,
+      constructionCostBuildUp: [],
+      finishLevel: 'Standard',
+      finishLevelSource: 'default',
+      costFactor: undefined,
+      revenueFactor: undefined
     };
   }
   

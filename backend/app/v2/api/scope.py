@@ -32,9 +32,23 @@ router = APIRouter(tags=["v2"])
 
 class AnalyzeRequest(BaseModel):
     """Request for natural language analysis"""
+    model_config = ConfigDict(populate_by_name=True)
     description: str = Field(..., description="Natural language project description")
     default_location: Optional[str] = Field("Nashville", description="Default location if not detected")
-    default_square_footage: Optional[int] = Field(None, description="Default square footage if not detected")
+    default_square_footage: Optional[float] = Field(None, description="Default square footage if not detected")
+    location: Optional[str] = Field(None, description="Explicit location override")
+    square_footage: Optional[float] = Field(
+        None,
+        alias="squareFootage",
+        validation_alias=AliasChoices("square_footage", "squareFootage"),
+        description="Explicit square footage override"
+    )
+    finish_level: Optional[str] = Field(
+        None,
+        alias="finishLevel",
+        validation_alias=AliasChoices("finishLevel", "finish_level"),
+        description="Finish level selection (Standard, Premium, Luxury)"
+    )
 
 class CalculateRequest(BaseModel):
     """Request for direct calculation"""
@@ -96,14 +110,30 @@ async def analyze_project(request: AnalyzeRequest):
             if original_type != canonical_type:
                 logger.info(f"Normalized building type from '{original_type}' to '{canonical_type}'")
         
-        # Apply defaults if needed
-        if not parsed.get('square_footage') and request.default_square_footage:
+        # Apply explicit overrides and defaults
+        if request.square_footage:
+            parsed['square_footage'] = request.square_footage
+        elif not parsed.get('square_footage') and request.default_square_footage:
             parsed['square_footage'] = request.default_square_footage
-        if not parsed.get('location'):
+
+        if request.location:
+            parsed['location'] = request.location
+        elif not parsed.get('location'):
             parsed['location'] = request.default_location
-        if 'finish_level' not in parsed:
+
+        finish_override = (request.finish_level or "").strip().lower() if request.finish_level else None
+        if finish_override:
+            parsed['finish_level'] = finish_override
+
+        if 'finish_level' not in parsed or not parsed['finish_level']:
             parsed['finish_level'] = 'standard'
-            
+
+        finish_level_value = parsed.get('finish_level', 'standard')
+        finish_level_source = 'explicit' if finish_override else (
+            'description' if parsed.get('finish_level') not in (None, '', 'standard') and not finish_override else 'default'
+        )
+        parsed['finish_level_source'] = finish_level_source
+
         # Validate we have minimum required data
         if not parsed.get('square_footage'):
             return ProjectResponse(
@@ -126,7 +156,8 @@ async def analyze_project(request: AnalyzeRequest):
             project_class=project_class,
             floors=parsed.get('floors', 1),
             ownership_type=ownership_type,
-            finish_level=parsed.get('finish_level'),
+            finish_level=finish_level_value,
+            finish_level_source=finish_level_source,
             special_features=parsed.get('special_features', [])
         )
         
@@ -134,6 +165,7 @@ async def analyze_project(request: AnalyzeRequest):
         parsed_with_compat = parsed.copy()
         parsed_with_compat['building_subtype'] = parsed.get('subtype')
         parsed_with_compat['finish_level'] = parsed.get('finish_level', 'standard')
+        parsed_with_compat['finish_level_source'] = finish_level_source
         
         # Return comprehensive result
         # Wrap the flattened result as 'calculations' to match frontend expectations
@@ -192,6 +224,7 @@ async def calculate_project(request: CalculateRequest):
             floors=request.floors,
             ownership_type=ownership_type,
             finish_level=request.finish_level,
+            finish_level_source='explicit' if request.finish_level else None,
             special_features=request.special_features
         )
         
@@ -488,12 +521,28 @@ async def generate_scope(
         parsed = nlp_service.extract_project_details(request.description)
         
         # Add any missing fields from request
-        if not parsed.get('location') and hasattr(request, 'default_location'):
+        if request.location:
+            parsed['location'] = request.location
+        elif not parsed.get('location') and hasattr(request, 'default_location'):
             parsed['location'] = request.default_location
-        if not parsed.get('square_footage') and hasattr(request, 'default_square_footage'):
+
+        if request.square_footage:
+            parsed['square_footage'] = request.square_footage
+        elif not parsed.get('square_footage') and hasattr(request, 'default_square_footage'):
             parsed['square_footage'] = request.default_square_footage
-        if 'finish_level' not in parsed:
+
+        finish_override = (request.finish_level or "").strip().lower() if getattr(request, 'finish_level', None) else None
+        if finish_override:
+            parsed['finish_level'] = finish_override
+
+        if 'finish_level' not in parsed or not parsed['finish_level']:
             parsed['finish_level'] = 'standard'
+
+        finish_level_value = parsed.get('finish_level', 'standard')
+        finish_level_source = 'explicit' if finish_override else (
+            'description' if parsed.get('finish_level') not in (None, '', 'standard') and not finish_override else 'default'
+        )
+        parsed['finish_level_source'] = finish_level_source
         
         # Normalize building type using taxonomy
         if parsed.get('building_type'):
@@ -518,7 +567,8 @@ async def generate_scope(
             project_class=ProjectClass(parsed.get('project_class', 'ground_up')),
             floors=parsed.get('floors', 1),
             ownership_type=OwnershipType(parsed.get('ownership_type', 'for_profit')),
-            finish_level=parsed.get('finish_level'),
+            finish_level=finish_level_value,
+            finish_level_source=finish_level_source,
             special_features=parsed.get('special_features', [])
         )
         

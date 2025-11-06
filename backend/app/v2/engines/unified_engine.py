@@ -79,15 +79,26 @@ class UnifiedEngine:
             'location': location
         })
 
-        normalized_finish_level = finish_level.lower().strip() if finish_level else None
-        finish_source = finish_level_source or ('explicit' if finish_level else 'default')
-        if finish_source not in {'explicit', 'description', 'default'}:
-            finish_source = 'explicit' if finish_level else 'default'
-        if finish_source == 'description' and not normalized_finish_level:
+        normalized_finish_level = finish_level.lower().strip() if isinstance(finish_level, str) and finish_level.strip() else None
+        inferred_source = finish_level_source if finish_level_source in {'explicit', 'description', 'default'} else None
+
+        if inferred_source == 'explicit':
+            finish_source = 'explicit'
+        elif inferred_source == 'description':
+            finish_source = 'description'
+        elif inferred_source == 'default':
+            finish_source = 'default'
+        elif normalized_finish_level:
+            finish_source = 'explicit'
+        else:
             finish_source = 'default'
 
+        if not normalized_finish_level:
+            normalized_finish_level = 'standard'
+
         self._log_trace("finish_level_source", {
-            'source': finish_source
+            'source': finish_source,
+            'finish_level': normalized_finish_level or 'standard'
         })
         quality_factor = resolve_quality_factor(normalized_finish_level, building_type, subtype)
         self._log_trace("quality_factor_resolved", {
@@ -122,20 +133,20 @@ class UnifiedEngine:
         
         # Base construction cost calculation with finish level adjustment
         original_base_cost_per_sf = building_config.base_cost_per_sf
-        cost_after_finish = original_base_cost_per_sf * quality_factor
+        base_cost_per_sf = original_base_cost_per_sf
         self._log_trace("base_cost_retrieved", {
             'base_cost_per_sf': original_base_cost_per_sf,
             'quality_factor': round(quality_factor, 4),
-            'adjusted_base_cost_per_sf': cost_after_finish
+            'adjusted_base_cost_per_sf': round(base_cost_per_sf, 4)
         })
         
-        # Apply project class multiplier
+        # Apply project class multiplier (treated as complexity factor)
         class_multiplier = PROJECT_CLASS_MULTIPLIERS[project_class]
-        cost_after_class = cost_after_finish * class_multiplier
-        base_cost_per_sf = cost_after_class
+        complexity_factor = class_multiplier
+        cost_after_complexity = base_cost_per_sf * complexity_factor
         self._log_trace("project_class_multiplier_applied", {
-            'multiplier': class_multiplier,
-            'adjusted_cost_per_sf': base_cost_per_sf
+            'multiplier': complexity_factor,
+            'adjusted_cost_per_sf': round(cost_after_complexity, 4)
         })
 
         modifiers = get_effective_modifiers(
@@ -151,10 +162,21 @@ class UnifiedEngine:
             'factor': round(modifiers.get('finish_cost_factor', 1.0), 4)
         })
 
-        final_cost_per_sf = base_cost_per_sf * modifiers['cost_factor']
+        finish_cost_factor = modifiers.get('finish_cost_factor', 1.0)
+        if not finish_cost_factor:
+            finish_cost_factor = 1.0
+        cost_factor = modifiers['cost_factor']
+        if finish_cost_factor:
+            regional_multiplier_effective = cost_factor / finish_cost_factor
+        else:
+            regional_multiplier_effective = cost_factor
+
+        cost_after_regional = cost_after_complexity * regional_multiplier_effective
+        final_cost_per_sf = cost_after_regional * finish_cost_factor
         self._log_trace("modifiers_applied", {
             'finish_level': normalized_finish_level or 'standard',
-            'cost_factor': round(modifiers['cost_factor'], 4),
+            'cost_factor': round(cost_factor, 4),
+            'regional_multiplier': round(regional_multiplier_effective, 4),
             'revenue_factor': round(modifiers['revenue_factor'], 4),
             'margin_pct': round(modifiers['margin_pct'], 4)
         })
@@ -266,14 +288,11 @@ class UnifiedEngine:
         # Financial requirements removed - was only partially implemented for hospital
         
         # Generate cost DNA for transparency
-        cost_after_finish_factor = cost_after_class * modifiers.get('finish_cost_factor', 1.0)
-        cost_after_regional = cost_after_class * modifiers['cost_factor']
-
         cost_dna = {
-            'base_cost': original_base_cost_per_sf,
-            'finish_adjustment': modifiers.get('finish_cost_factor', 1.0),
-            'regional_adjustment': modifiers.get('regional_cost_factor', modifiers['cost_factor']),
-            'complexity_factor': class_multiplier,  # Using class_multiplier as complexity factor
+            'base_cost': base_cost_per_sf,
+            'finish_adjustment': finish_cost_factor,
+            'regional_adjustment': regional_multiplier_effective,
+            'complexity_factor': complexity_factor,
             'final_cost': final_cost_per_sf,
             'location': location,
             'market_name': location.split(',')[0] if location else 'Nashville',  # Extract city name
@@ -281,11 +300,11 @@ class UnifiedEngine:
             'subtype': subtype,
             'detected_factors': [],  # Will be populated with special features
             'applied_adjustments': {
-                'base': original_base_cost_per_sf,
-                'after_finish': cost_after_finish,
-                'after_class': cost_after_class,
-                'after_complexity': cost_after_class,
-                'after_finish_factor': cost_after_finish_factor,
+                'base': base_cost_per_sf,
+                'after_finish': cost_after_complexity,
+                'after_class': cost_after_complexity,
+                'after_complexity': cost_after_complexity,
+                'after_finish_factor': final_cost_per_sf,
                 'after_regional': cost_after_regional,
                 'final': final_cost_per_sf
             },
@@ -300,6 +319,28 @@ class UnifiedEngine:
         # Add special features if present
         if special_features:
             cost_dna['detected_factors'] = list(special_features) if isinstance(special_features, (list, dict)) else [special_features]
+
+        cost_build_up = [
+            {
+                'label': 'Base Cost',
+                'value_per_sf': base_cost_per_sf
+            },
+            {
+                'label': 'Regional',
+                'multiplier': regional_multiplier_effective
+            },
+            {
+                'label': 'Complexity',
+                'multiplier': complexity_factor
+            }
+        ]
+
+        display_finish_level = (normalized_finish_level or 'standard').lower()
+        if display_finish_level != 'standard':
+            cost_build_up.append({
+                'label': 'Finish Level',
+                'multiplier': finish_cost_factor
+            })
         
         # Build comprehensive response - FLATTENED structure to match frontend expectations
         result = {
@@ -309,26 +350,28 @@ class UnifiedEngine:
                 'display_name': building_config.display_name,
                 'project_class': project_class.value,
                 'square_footage': square_footage,
-                'location': location,
-                'floors': floors,
-                'typical_floors': building_config.typical_floors,
-                'finish_level': normalized_finish_level or 'standard',
-                'available_special_features': list(building_config.special_features.keys()) if building_config.special_features else []
-            },
+            'location': location,
+            'floors': floors,
+            'typical_floors': building_config.typical_floors,
+            'finish_level': normalized_finish_level or 'standard',
+            'finish_level_source': finish_source,
+            'available_special_features': list(building_config.special_features.keys()) if building_config.special_features else []
+        },
             'modifiers': modifiers,
             # Flatten calculations to top level to match frontend CalculationResult interface
             'construction_costs': {
                 'base_cost_per_sf': base_cost_per_sf,
                 'original_base_cost_per_sf': original_base_cost_per_sf,
                 'class_multiplier': class_multiplier,
-                'regional_multiplier': modifiers.get('regional_cost_factor', 1.0),
-                'finish_cost_factor': modifiers.get('finish_cost_factor', 1.0),
-                'cost_factor': modifiers['cost_factor'],
+                'regional_multiplier': regional_multiplier_effective,
+                'finish_cost_factor': finish_cost_factor,
+                'cost_factor': cost_factor,
                 'quality_factor': quality_factor,
                 'final_cost_per_sf': final_cost_per_sf,
                 'construction_total': construction_cost,
                 'equipment_total': equipment_cost,
-                'special_features_total': special_features_cost
+                'special_features_total': special_features_cost,
+                'cost_build_up': cost_build_up
             },
             'cost_dna': cost_dna,  # Add cost DNA for transparency
             'trade_breakdown': trades,

@@ -32,6 +32,7 @@ export const NewProject: React.FC = () => {
   // Project configuration state
   const [specialFeatures, setSpecialFeatures] = useState<string[]>([]);
   const [finishLevel, setFinishLevel] = useState<'standard' | 'premium' | 'luxury'>('standard');
+  const [finishLevelLocked, setFinishLevelLocked] = useState(false);
   const [projectComplexity, setProjectComplexity] = useState<'ground_up' | 'renovation' | 'addition'>('ground_up');
 
   // Live preview state
@@ -314,6 +315,22 @@ export const NewProject: React.FC = () => {
     return '—';
   };
 
+  const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+  const extractNumber = (value: unknown): number | undefined => (isFiniteNumber(value) ? value : undefined);
+
+  const formatCurrencySafe = (value?: number) => (isFiniteNumber(value) ? formatCurrency(value) : '—');
+
+  const formatCurrencyPerSF = (value?: number) => (isFiniteNumber(value) ? `${formatCurrency(value)}/SF` : '—');
+
+  const formatMultiplierSegment = (label: string, value?: number) => {
+    if (!isFiniteNumber(value)) {
+      return null;
+    }
+    const formatted = value.toFixed(3).replace(/(?:\.0+|(\.\d+?)0+)$/, '$1');
+    return `${label} ×${formatted}`;
+  };
+
   // Live preview effect
   useEffect(() => {
     if (previewTimeoutRef.current) {
@@ -345,7 +362,7 @@ export const NewProject: React.FC = () => {
         const analysis = await api.analyzeProject(description, {
           square_footage: squareValue,
           location: locationValue,
-          finishLevel: finishLevelForApi(finishLevel),
+          finishLevel: finishLevelLocked ? finishLevelForApi(finishLevel) : undefined,
           signal: controller.signal,
         });
 
@@ -385,41 +402,9 @@ export const NewProject: React.FC = () => {
         previewAbortRef.current = null;
       }
     };
-  }, [description, squareFootageInput, locationInput, finishLevel]);
+  }, [description, squareFootageInput, locationInput, finishLevel, finishLevelLocked]);
   
   // Calculate total cost including features
-  const calculateTotalWithFeatures = () => {
-    if (!result) return 0;
-    
-    let total = result.calculations?.total_cost || 0;
-    
-    // Add special features costs
-    const buildingType = result.parsed_input?.building_type || 'commercial';
-    const availableFeatures = getAvailableFeatures(buildingType);
-    specialFeatures.forEach(featureId => {
-      const feature = availableFeatures.find(f => f.id === featureId);
-      if (feature) total += feature.cost;
-    });
-    
-    // Apply finish level multiplier
-    const finishMultipliers = {
-      standard: 1.0,
-      premium: 1.15,
-      luxury: 1.35
-    };
-    total *= finishMultipliers[finishLevel];
-    
-    // Apply complexity multiplier
-    const complexityMultipliers = {
-      ground_up: 1.0,
-      renovation: 1.35,
-      addition: 1.15
-    };
-    total *= complexityMultipliers[projectComplexity];
-    
-    return total;
-  };
-  
   const handleExampleClick = (example: any) => {
     setDescription(example.text);
     setSquareFootageInput(example.squareFootage ? formatNumber(example.squareFootage) : '');
@@ -427,6 +412,7 @@ export const NewProject: React.FC = () => {
     // Reset configuration when using example
     setSpecialFeatures([]);
     setFinishLevel('standard');
+    setFinishLevelLocked(false);
     setProjectComplexity('ground_up');
     // Auto-scroll to show the form is filled
     window.scrollTo({ top: 200, behavior: 'smooth' });
@@ -442,14 +428,22 @@ export const NewProject: React.FC = () => {
     const analysis = await analyzeDescription(description, {
       squareFootage: squareValue,
       location: locationInput.trim() || undefined,
-      finishLevel,
+      finishLevel: finishLevelLocked ? finishLevel : undefined,
     });
     
     if (analysis) {
       // Auto-detect features from description
       const parsed = parseDescription(description);
       setSpecialFeatures(parsed.specialFeatures);
-      setFinishLevel(parsed.finishLevel);
+      if (!finishLevelLocked) {
+        const engineFinish = analysis.calculations?.project_info?.finish_level;
+        const normalizedEngineFinish = typeof engineFinish === 'string' ? engineFinish.toLowerCase() as 'standard' | 'premium' | 'luxury' : undefined;
+        if (normalizedEngineFinish) {
+          setFinishLevel(normalizedEngineFinish);
+        } else if (parsed.finishLevel) {
+          setFinishLevel(parsed.finishLevel);
+        }
+      }
       setProjectComplexity(parsed.projectComplexity);
       if (analysis.parsed_input?.square_footage) {
         setSquareFootageInput(formatNumber(analysis.parsed_input.square_footage));
@@ -511,6 +505,7 @@ export const NewProject: React.FC = () => {
     setActiveStep('input');
     setSpecialFeatures([]);
     setFinishLevel('standard');
+    setFinishLevelLocked(false);
     setProjectComplexity('ground_up');
     setPreviewData(null);
     setPreviewStatus('idle');
@@ -525,6 +520,33 @@ export const NewProject: React.FC = () => {
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const summaryCalculations = result?.calculations;
+  const summaryConstruction = summaryCalculations?.construction_costs;
+  const summaryTotals = summaryCalculations?.totals;
+  const squareFootageSummary = extractNumber(result?.parsed_input?.square_footage ?? summaryConstruction?.square_footage);
+  const regionalMultiplierValue = extractNumber(summaryConstruction?.regional_multiplier);
+  const complexityMultiplierValue = extractNumber(summaryConstruction?.class_multiplier);
+  const finishMultiplierValue = extractNumber(summaryConstruction?.finish_cost_factor);
+  const multiplierSegments = [
+    formatMultiplierSegment('Regional', regionalMultiplierValue),
+    formatMultiplierSegment('Complexity', complexityMultiplierValue),
+    formatMultiplierSegment('Finish', finishMultiplierValue),
+  ].filter(Boolean) as string[];
+  const multipliersText = multiplierSegments.length ? multiplierSegments.join(' · ') : '—';
+  const multiplierValues = [regionalMultiplierValue, complexityMultiplierValue, finishMultiplierValue];
+  const derivedMultiplier = multiplierValues.every((val) => isFiniteNumber(val) && val !== 0)
+    ? (multiplierValues as number[]).reduce((acc, val) => acc * val, 1)
+    : undefined;
+  const baseCostPerSFRaw = extractNumber(summaryConstruction?.base_cost_per_sf);
+  const finalCostPerSFValue = extractNumber(summaryConstruction?.final_cost_per_sf);
+  const baseCostPerSFValue = baseCostPerSFRaw ?? ((derivedMultiplier && derivedMultiplier !== 0 && finalCostPerSFValue !== undefined)
+    ? finalCostPerSFValue / derivedMultiplier
+    : undefined);
+  const totalProjectCostValue = extractNumber(summaryTotals?.total_project_cost);
+  const costPerSFValue = totalProjectCostValue !== undefined && squareFootageSummary && squareFootageSummary > 0
+    ? totalProjectCostValue / squareFootageSummary
+    : finalCostPerSFValue;
   
   // Get display-friendly names for building types
   const getDisplayName = (type: string, subtype: string) => {
@@ -945,7 +967,10 @@ export const NewProject: React.FC = () => {
                       {(['standard', 'premium', 'luxury'] as const).map(level => (
                         <button
                           key={level}
-                          onClick={() => setFinishLevel(level)}
+                          onClick={() => {
+                            setFinishLevel(level);
+                            setFinishLevelLocked(true);
+                          }}
                           className={`px-3 py-3 rounded-lg text-sm font-medium transition ${
                             finishLevel === level
                               ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-500'
@@ -1018,40 +1043,25 @@ export const NewProject: React.FC = () => {
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
-                      <p className="text-blue-100 text-sm mb-1">Base Cost</p>
-                      <p className="text-xl font-bold">
-                        {formatCurrency(result.calculations.total_cost)}
-                      </p>
+                      <p className="text-blue-100 text-sm mb-1">Base Cost (per SF)</p>
+                      <p className="text-xl font-bold">{formatCurrencyPerSF(baseCostPerSFValue)}</p>
                     </div>
-                    {specialFeatures.length > 0 && (
-                      <div>
-                        <p className="text-blue-100 text-sm mb-1">+ Features</p>
-                        <p className="text-xl font-bold">
-                          {formatCurrency(
-                            specialFeatures.reduce((sum, fId) => {
-                              const buildingType = result.parsed_input?.building_type || 'commercial';
-                              const f = getAvailableFeatures(buildingType).find(feat => feat.id === fId);
-                              return sum + (f?.cost || 0);
-                            }, 0)
-                          )}
-                        </p>
-                      </div>
-                    )}
                     <div>
-                      <p className="text-blue-100 text-sm mb-1">Multipliers</p>
-                      <p className="text-xl font-bold">
-                        {(finishLevel === 'standard' ? 1.0 : finishLevel === 'premium' ? 1.15 : 1.35) * 
-                         (projectComplexity === 'ground_up' ? 1.0 : projectComplexity === 'addition' ? 1.15 : 1.35)}x
+                      <p className="text-blue-100 text-sm mb-1">Cost Multipliers</p>
+                      <p className="text-sm font-semibold md:text-lg">
+                        {multipliersText}
                       </p>
                     </div>
                     <div>
                       <p className="text-blue-100 text-sm mb-1">Total Project Cost</p>
-                      <p className="text-2xl font-bold">
-                        {formatCurrency(calculateTotalWithFeatures())}
-                      </p>
-                      <p className="text-blue-200 text-sm mt-1">
-                        {formatCurrency(calculateTotalWithFeatures() / (result.parsed_input?.square_footage || 1))}/SF
-                      </p>
+                      <p className="text-2xl font-bold">{formatCurrencySafe(totalProjectCostValue)}</p>
+                    </div>
+                    <div>
+                      <p className="text-blue-100 text-sm mb-1">All-in Cost per SF</p>
+                      <p className="text-2xl font-bold">{formatCurrencyPerSF(costPerSFValue)}</p>
+                      {squareFootageSummary && (
+                        <p className="text-blue-200 text-xs mt-1">{formatNumber(squareFootageSummary)} SF</p>
+                      )}
                     </div>
                   </div>
                 </div>

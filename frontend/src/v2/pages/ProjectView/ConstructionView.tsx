@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Project } from '../../types';
 import { formatCurrency, formatNumber, formatPercent } from '../../utils/formatters';
 import { 
@@ -7,6 +7,7 @@ import {
   Droplet, PaintBucket, DollarSign, MapPin, Download, BarChart3, Package
 } from 'lucide-react';
 import { ProvenanceModal } from '../../components/ProvenanceModal';
+import { BackendDataMapper } from '../../utils/backendDataMapper';
 
 interface Props {
   project: Project;
@@ -23,6 +24,8 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
   
   // NOW safe to destructure
   const { parsed_input, calculations } = project.analysis;
+  const displayData = BackendDataMapper.mapToDisplay(project.analysis);
+  const isDev = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
 
   // ========================================
   // PULL FROM SAME CALCULATION ENGINE
@@ -35,6 +38,12 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
   const regionalMultiplier = calculations.construction_costs?.regional_multiplier || 1.03;
   const complexityMultiplier = calculations.construction_costs?.class_multiplier || 1.00;
   const finalCostPerSF = calculations.construction_costs?.final_cost_per_sf || 1185;
+  const rawCostBuildUp = Array.isArray(calculations.construction_costs?.cost_build_up)
+    ? calculations.construction_costs.cost_build_up
+    : [];
+  const costBuildUp = Array.isArray(displayData.constructionCostBuildUp) && displayData.constructionCostBuildUp.length > 0
+    ? displayData.constructionCostBuildUp
+    : rawCostBuildUp;
   
   // Debug: Log the actual values
   console.log('Construction View Debug:', {
@@ -101,6 +110,35 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
     name: key.charAt(0).toUpperCase() + key.slice(1),
     ...value
   }));
+  const formatMultiplier = (value?: number) => {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      return undefined;
+    }
+    return value.toFixed(3).replace(/(?:\.0+|(\.\d+?)0+)$/, '$1');
+  };
+  const costBuildUpSequence = costBuildUp.map((step: any) => {
+    if (!step) {
+      return 'Unknown';
+    }
+    if (typeof step.value_per_sf === 'number') {
+      return `${step.label ?? 'Base'} ${formatCurrency(step.value_per_sf)}/SF`;
+    }
+    if (typeof step.multiplier === 'number') {
+      const formatted = formatMultiplier(step.multiplier);
+      return `${step.label ?? 'Step'} ×${formatted ?? step.multiplier}`;
+    }
+    return step.label || 'Unknown';
+  });
+  const hasFinishStep = costBuildUp.some((step: any) => (step?.label || '').toLowerCase() === 'finish level');
+  const costBuildUpLogRef = useRef(false);
+
+  useEffect(() => {
+    if (!isDev || costBuildUpLogRef.current) {
+      return;
+    }
+    console.log('[SpecSharp DEV] cost_build_up', costBuildUp);
+    costBuildUpLogRef.current = true;
+  }, [isDev, costBuildUp]);
 
   // Construction schedule phases
   const schedule = [
@@ -450,6 +488,19 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
           <h3 className="text-2xl font-bold text-gray-900 mb-2">Cost Build-Up Analysis</h3>
           <p className="text-gray-600">Understanding how your price is calculated step by step</p>
         </div>
+        {isDev && (
+          <div className="mb-4 text-xs font-mono text-slate-600">
+            <span className="font-semibold">DEV • Build-Up:</span>{' '}
+            <span>
+              {costBuildUpSequence.length > 0
+                ? costBuildUpSequence.join(' → ')
+                : 'cost_build_up payload missing'}
+            </span>
+            {!hasFinishStep && (
+              <span className="ml-2 font-semibold text-red-500">Finish step: MISSING</span>
+            )}
+          </div>
+        )}
         
         {/* Main calculation flow */}
         <div className="space-y-8">

@@ -83,7 +83,11 @@ GOLDEN_CASES = [
 ]
 
 
-@pytest.mark.parametrize("case_data", GOLDEN_CASES, ids=[c["case"] for c in GOLDEN_CASES])
+@pytest.mark.parametrize(
+    "case_data",
+    GOLDEN_CASES,
+    ids=[c["case"] if c["case"] != "A" else "restaurant" for c in GOLDEN_CASES],
+)
 def test_revenue_golden_cases(case_data):
     """Golden-case regression guardrails for TN / NH focus projects."""
     description = case_data["description"]
