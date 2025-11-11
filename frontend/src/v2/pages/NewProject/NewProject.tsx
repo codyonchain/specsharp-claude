@@ -362,7 +362,8 @@ export const NewProject: React.FC = () => {
         const analysis = await api.analyzeProject(description, {
           square_footage: squareValue,
           location: locationValue,
-          finishLevel: finishLevelLocked ? finishLevelForApi(finishLevel) : undefined,
+          finishLevel: finishLevelForApi(finishLevel),
+          projectClass: projectComplexity,
           signal: controller.signal,
         });
 
@@ -428,7 +429,8 @@ export const NewProject: React.FC = () => {
     const analysis = await analyzeDescription(description, {
       squareFootage: squareValue,
       location: locationInput.trim() || undefined,
-      finishLevel: finishLevelLocked ? finishLevel : undefined,
+      finishLevel,
+      projectClass: projectComplexity,
     });
     
     if (analysis) {
@@ -549,7 +551,10 @@ export const NewProject: React.FC = () => {
   const summaryCalculations = result?.calculations;
   const summaryConstruction = summaryCalculations?.construction_costs;
   const summaryTotals = summaryCalculations?.totals;
-  const squareFootageSummary = extractNumber(result?.parsed_input?.square_footage ?? summaryConstruction?.square_footage);
+  const parsedSummarySF = extractNumber(result?.parsed_input?.square_footage ?? summaryConstruction?.square_footage);
+  const squareFootageSummary = parsedSummarySF && parsedSummarySF > 0
+    ? parsedSummarySF
+    : parseSquareFootageValue(squareFootageInput);
   const regionalMultiplierValue = extractNumber(summaryConstruction?.regional_multiplier);
   const complexityMultiplierValue = extractNumber(summaryConstruction?.class_multiplier);
   const finishMultiplierValue = extractNumber(summaryConstruction?.finish_cost_factor);

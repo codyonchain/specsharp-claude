@@ -21,6 +21,7 @@ export function useProjectAnalysis() {
       squareFootage?: number;
       location?: string;
       finishLevel?: 'standard' | 'premium' | 'luxury';
+      projectClass?: 'ground_up' | 'renovation' | 'addition';
       signal?: AbortSignal;
     }
   ) => {
@@ -41,6 +42,7 @@ export function useProjectAnalysis() {
         square_footage: overrides?.squareFootage,
         location: overrides?.location,
         finishLevel,
+        projectClass: overrides?.projectClass,
         signal: overrides?.signal,
       });
       console.log('Setting result in hook:', analysis);
