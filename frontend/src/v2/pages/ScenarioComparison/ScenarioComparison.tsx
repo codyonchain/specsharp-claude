@@ -26,6 +26,7 @@ const ScenarioComparison: React.FC = () => {
   const [showBuilder, setShowBuilder] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [comparisonResult, setComparisonResult] = useState<ComparisonResult | null>(null);
+  const canonicalProjectId = project?.id || projectId || '';
 
   useEffect(() => {
     loadProject();
@@ -150,7 +151,7 @@ const ScenarioComparison: React.FC = () => {
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => navigate(`/project/${projectId}`)}
+              onClick={() => navigate(canonicalProjectId ? `/project/${canonicalProjectId}` : '/dashboard')}
               className="p-2 hover:bg-gray-100 rounded-lg transition"
             >
               <ArrowLeft className="h-5 w-5" />

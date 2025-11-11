@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { scopeService } from '../services/api';
+import { createProject } from '@/v2/api/client';
 import './ScopeGenerator.css';
 import { determineOccupancyType, getProjectTypeFromOccupancy } from '../utils/buildingTypeDetection';
 import ProjectTypeSelector from './ProjectTypeSelector';
@@ -897,28 +897,50 @@ function ScopeGenerator() {
     console.log('📏 Square footage being submitted:', finalFormData.square_footage);
 
     try {
-      const response = await scopeService.generate(finalFormData);
-      navigate(`/project/${response.project_id}`);
+      const derivedDescription = (
+        finalFormData.special_requirements ||
+        naturalLanguageInput ||
+        finalFormData.project_name ||
+        ''
+      ).trim() || 'SpecSharp Project';
+      const derivedLocation = finalFormData.location?.trim() || undefined;
+      const derivedSquareFootage = typeof finalFormData.square_footage === 'number'
+        ? finalFormData.square_footage
+        : undefined;
+      const derivedFinishLevel = (finalFormData.finishLevel || finalFormData.finish_level)
+        ? finalFormData.finishLevel
+        : undefined;
+      const derivedProjectClass = finalFormData.project_classification || undefined;
+      const derivedSpecialFeatures = finalFormData.building_features || [];
+
+      const { id } = await createProject({
+        description: derivedDescription,
+        location: derivedLocation,
+        squareFootage: derivedSquareFootage,
+        finishLevel: derivedFinishLevel,
+        projectClass: derivedProjectClass,
+        specialFeatures: derivedSpecialFeatures,
+      });
+
+      console.debug('[TRACE save:legacy->server]', { source: 'ScopeGenerator.tsx:925', id });
+      navigate(`/project/${id}`);
     } catch (err: any) {
       console.error('Scope generation error:', err);
-      console.error('Error response:', err.response);
       let errorMessage = 'Failed to generate scope';
-      
-      if (err.response?.data?.detail) {
-        if (Array.isArray(err.response.data.detail)) {
-          // Pydantic validation errors come as an array
-          errorMessage = err.response.data.detail.map((e: any) => 
-            `${e.loc.join(' → ')}: ${e.msg}`
-          ).join('\n');
+
+      const detail = err?.details || err?.response?.data;
+      if (detail?.detail) {
+        if (Array.isArray(detail.detail)) {
+          errorMessage = detail.detail.map((e: any) => `${e.loc?.join?.(' → ') || ''}: ${e.msg || e.message || ''}`).join('\n');
         } else {
-          errorMessage = err.response.data.detail;
+          errorMessage = detail.detail;
         }
-      } else if (err.response?.data) {
-        errorMessage = JSON.stringify(err.response.data);
-      } else if (err.message) {
+      } else if (typeof detail === 'string') {
+        errorMessage = detail;
+      } else if (err?.message) {
         errorMessage = err.message;
       }
-      
+
       setError(errorMessage);
     } finally {
       setLoading(false);

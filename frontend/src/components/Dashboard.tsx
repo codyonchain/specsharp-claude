@@ -159,6 +159,8 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
   const [editingProjectName, setEditingProjectName] = useState<string>('');
   const navigate = useNavigate();
 
+  const resolveProjectId = (project: any): string | undefined => project?.id || project?.project_id;
+
   useEffect(() => {
     loadProjects();
     checkSubscriptionStatus();
@@ -446,6 +448,10 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
               )}
               <div className="projects-grid">
                 {projects.map((project) => {
+                  const projectId = resolveProjectId(project);
+                  if (!projectId) {
+                    return null;
+                  }
                   // Calculate total investment (including soft costs)
                   const totalInvestment = project.total_cost * 1.46; // Assuming 46% soft costs average
                   const constructionCost = project.total_cost;
@@ -453,13 +459,13 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
                   
                   return (
                     <div 
-                      key={project.project_id} 
-                      className={`bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden group cursor-pointer ${isComparisonMode && selectedForComparison.includes(project.project_id) ? 'ring-2 ring-blue-500' : ''}`}
+                      key={projectId} 
+                      className={`bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden group cursor-pointer ${isComparisonMode && selectedForComparison.includes(projectId) ? 'ring-2 ring-blue-500' : ''}`}
                       onClick={() => {
                         if (isComparisonMode) {
-                          toggleComparisonSelection(project.project_id);
+                          toggleComparisonSelection(projectId);
                         } else {
-                          navigate(`/project/${project.project_id}`);
+                          navigate(`/project/${projectId}`);
                         }
                       }}
                     >
@@ -472,7 +478,7 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
                           <div className="flex-1">
                             {isComparisonMode && (
                               <div className="mb-2">
-                                {selectedForComparison.includes(project.project_id) ? (
+                                {selectedForComparison.includes(projectId) ? (
                                   <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded">✓ Selected</span>
                                 ) : (
                                   <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded">Click to select</span>
@@ -497,14 +503,14 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
                           <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                             <button 
                               className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
-                              onClick={(e) => handleDuplicateClick(e, project.project_id, project.name)}
+                              onClick={(e) => handleDuplicateClick(e, projectId, project.name)}
                               title="Duplicate project"
                             >
                               <Copy size={16} />
                             </button>
                             <button 
                               className="p-1.5 text-gray-400 hover:text-red-600 transition-colors"
-                              onClick={(e) => handleDeleteClick(e, project.project_id, project.name)}
+                              onClick={(e) => handleDeleteClick(e, projectId, project.name)}
                               title="Delete project"
                             >
                               <Trash2 size={16} />

@@ -1,57 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Plus, Building2, ArrowRight, MapPin,
   Trash2, Square, Clock, TrendingUp,
   Home, Heart, School, Package, Building
 } from 'lucide-react';
-import { Project } from '../../types';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { formatters } from '../../utils/displayFormatters';
+import { useProjects } from '../../hooks/useProjects';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [projects, setProjects] = useState<Project[]>([]);
+  const { projects, loading, error, deleteProject } = useProjects();
 
-  useEffect(() => {
-    // Load projects from localStorage
-    const loadProjects = () => {
-      try {
-        const stored = localStorage.getItem('specsharp_projects');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          // Sort projects by creation date (newest first)
-          const sorted = Array.isArray(parsed) ? parsed.sort((a, b) => {
-            const dateA = new Date(a.created_at || a.createdAt || 0).getTime();
-            const dateB = new Date(b.created_at || b.createdAt || 0).getTime();
-            return dateB - dateA; // Newest first
-          }) : [];
-          setProjects(sorted);
-        }
-      } catch (error) {
-        console.error('Error loading projects:', error);
-        setProjects([]);
-      }
-    };
-    
-    loadProjects();
-    
-    // Listen for storage events (when projects are added/updated)
-    window.addEventListener('storage', loadProjects);
-    
-    // Check for updates every second (for same-tab updates)
-    const interval = setInterval(loadProjects, 1000);
-    
-    return () => {
-      window.removeEventListener('storage', loadProjects);
-      clearInterval(interval);
-    };
-  }, []);
-
-  const handleDelete = (id: string) => {
-    const updated = projects.filter(p => p.id !== id);
-    setProjects(updated);
-    localStorage.setItem('specsharp_projects', JSON.stringify(updated));
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteProject(id);
+    } catch (err) {
+      console.error('Failed to delete project:', err);
+    }
   };
 
   // Helper function to get building icon
@@ -110,8 +77,19 @@ export const Dashboard: React.FC = () => {
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
+        {error && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error.message || 'Failed to load projects'}
+          </div>
+        )}
+
         {/* Projects Grid */}
-        {projects.length > 0 ? (
+        {loading ? (
+          <div className="bg-white rounded-lg p-12 text-center mb-8">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading your projects...</p>
+          </div>
+        ) : projects.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             {projects.map((project) => {
               const analysis = project.analysis;
