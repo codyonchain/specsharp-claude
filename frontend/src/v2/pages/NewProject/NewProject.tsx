@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectAnalysis } from '../../hooks/useProjectAnalysis';
-import { api } from '../../api/client';
+import { api, createProject } from '../../api/client';
 import { tracer } from '../../utils/traceSystem';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { BuildingTaxonomy } from '../../../core/buildingTaxonomy';
@@ -468,6 +468,17 @@ export const NewProject: React.FC = () => {
     }
   };
   
+  const normalizeFinishLevel = (
+    level?: string
+  ): 'Standard' | 'Premium' | 'Luxury' | undefined => {
+    if (!level) return undefined;
+    const lower = level.toLowerCase();
+    if (lower === 'standard') return 'Standard';
+    if (lower === 'premium') return 'Premium';
+    if (lower === 'luxury') return 'Luxury';
+    return undefined;
+  };
+
   const handleSaveProject = async () => {
     if (!result) return;
     
@@ -475,20 +486,34 @@ export const NewProject: React.FC = () => {
     tracer.trace('SAVE_START', 'Saving project', result);
     
     try {
-      const projectData = {
-        name: description.slice(0, 100),
-        description: description,
-        analysis: result,
-        user_id: 'user_1', // Would come from auth
-        is_shared: false,
-        createdAt: new Date().toISOString()
-      };
-      
-      const project = await api.saveProject(projectData);
-      tracer.trace('SAVE_SUCCESS', 'Project saved', { id: project.id });
-      
-      // Navigate to project view
-      navigate(`/project/${project.id}`);
+      const squareValueFromInput = parseSquareFootageValue(squareFootageInput);
+      const derivedSquareFootage = result.parsed_input?.square_footage ?? squareValueFromInput;
+      const derivedLocation = result.parsed_input?.location || locationInput.trim() || undefined;
+      const engineFinish = typeof result.calculations?.project_info?.finish_level === 'string'
+        ? result.calculations?.project_info?.finish_level
+        : undefined;
+      const derivedFinishLevel = normalizeFinishLevel(engineFinish) || finishLevelForApi(finishLevel);
+      const derivedProjectClass = result.parsed_input?.project_class || projectComplexity;
+      const derivedDescription = description.trim() || result.calculations?.project_info?.display_name || 'SpecSharp Project';
+      const engineFeatures = (result.calculations?.project_info as any)?.special_features;
+      const derivedSpecialFeatures = specialFeatures.length
+        ? specialFeatures
+        : Array.isArray(engineFeatures)
+          ? engineFeatures
+          : [];
+
+      const { id } = await createProject({
+        description: derivedDescription,
+        location: derivedLocation,
+        squareFootage: derivedSquareFootage,
+        finishLevel: derivedFinishLevel,
+        projectClass: derivedProjectClass,
+        specialFeatures: derivedSpecialFeatures,
+      });
+
+      console.debug('[TRACE save:legacy->server]', { source: 'NewProject.tsx:514', id });
+      tracer.trace('SAVE_SUCCESS', 'Project saved', { id });
+      navigate(`/project/${id}`);
     } catch (err) {
       console.error('Failed to save project:', err);
       tracer.trace('SAVE_ERROR', 'Save failed', err);

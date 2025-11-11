@@ -17,6 +17,38 @@ import {
 } from '../types';
 import { tracer } from '../utils/traceSystem';
 
+export interface CreateProjectParams {
+  description: string;
+  location?: string;
+  squareFootage?: number;
+  finishLevel?: 'Standard' | 'Premium' | 'Luxury' | 'standard' | 'premium' | 'luxury';
+  projectClass?: ProjectClass | string;
+  specialFeatures?: string[];
+}
+
+export interface CreateProjectResponse {
+  id: string;
+  project_id?: string;
+  [key: string]: any;
+}
+
+const normalizeFinishLevel = (
+  level?: CreateProjectParams['finishLevel']
+): 'Standard' | 'Premium' | 'Luxury' | undefined => {
+  if (!level) return undefined;
+  const lower = level.toString().toLowerCase();
+  switch (lower) {
+    case 'standard':
+      return 'Standard';
+    case 'premium':
+      return 'Premium';
+    case 'luxury':
+      return 'Luxury';
+    default:
+      return undefined;
+  }
+};
+
 class V2APIClient {
   private baseURL: string;
   private headers: HeadersInit;
@@ -379,6 +411,58 @@ class V2APIClient {
   }
 
   /**
+   * Create a project via V2 scope generation endpoint
+   */
+  async createProject(params: CreateProjectParams): Promise<CreateProjectResponse> {
+    const payload: Record<string, unknown> = {
+      description: params.description,
+      special_features: params.specialFeatures ?? [],
+    };
+
+    if (params.location?.trim()) {
+      payload.location = params.location.trim();
+    }
+
+    if (typeof params.squareFootage === 'number' && Number.isFinite(params.squareFootage)) {
+      payload.square_footage = params.squareFootage;
+    }
+
+    const normalizedFinish = normalizeFinishLevel(params.finishLevel);
+    if (normalizedFinish) {
+      payload.finishLevel = normalizedFinish;
+    }
+
+    if (params.projectClass) {
+      payload.project_class = params.projectClass;
+    }
+
+    tracer.trace('API_CREATE_PROJECT_V2', 'Creating project via V2 endpoint', {
+      has_location: !!payload.location,
+      has_square_footage: !!payload.square_footage,
+      finishLevel: payload.finishLevel,
+      project_class: payload.project_class,
+      special_features_count: (payload.special_features as string[])?.length ?? 0,
+    });
+
+    const response = await this.request<any>('/scope/generate', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, 'v2');
+
+    const projectId = response?.id || response?.project_id;
+    if (!projectId) {
+      console.error('createProject: Backend response missing project id', response);
+      throw new Error('Project creation failed: missing id');
+    }
+
+    return {
+      ...response,
+      id: projectId,
+      project_id: response.project_id ?? projectId,
+    };
+  }
+
+  /**
    * Save project to backend
    */
   async saveProject(project: Omit<Project, 'id' | 'created_at' | 'updated_at'>): Promise<Project> {
@@ -675,6 +759,9 @@ class V2APIClient {
 
 // Export singleton instance
 export const api = new V2APIClient();
+
+// Lightweight helper for callers that only need project creation
+export const createProject = (params: CreateProjectParams) => api.createProject(params);
 
 // Export class for testing
 export { V2APIClient };
