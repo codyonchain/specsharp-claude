@@ -133,10 +133,28 @@ class UnifiedEngine:
         
         # Base construction cost calculation with finish level adjustment
         original_base_cost_per_sf = building_config.base_cost_per_sf
-        base_cost_per_sf = original_base_cost_per_sf
+
+        # Height premium for office towers: add modest multipliers for taller structures
+        height_factor = 1.0
+        if building_type == BuildingType.OFFICE:
+            try:
+                floor_count = int(floors or building_config.typical_floors or 1)
+            except (TypeError, ValueError):
+                floor_count = 1
+
+            extra_premium = 0.0
+            if floor_count > 4:
+                extra_premium += max(0, min(floor_count, 8) - 4) * 0.02  # 2% per floor from 5-8
+            if floor_count > 8:
+                extra_premium += max(0, min(floor_count, 12) - 8) * 0.01  # 1% per floor from 9-12
+
+            height_factor = 1.0 + min(extra_premium, 0.20)  # Cap at +20%
+
+        base_cost_per_sf = original_base_cost_per_sf * height_factor
         self._log_trace("base_cost_retrieved", {
             'base_cost_per_sf': original_base_cost_per_sf,
             'quality_factor': round(quality_factor, 4),
+            'height_factor': round(height_factor, 4),
             'adjusted_base_cost_per_sf': round(base_cost_per_sf, 4)
         })
         
@@ -251,12 +269,6 @@ class UnifiedEngine:
         # Calculate ownership/financing analysis with enhanced financial metrics
         ownership_analysis = None
         if ownership_type in building_config.ownership_types:
-            # Get basic ownership metrics
-            ownership_analysis = self._calculate_ownership(
-                total_project_cost,
-                building_config.ownership_types[ownership_type]
-            )
-            
             # Calculate comprehensive revenue analysis using master_config
             revenue_data = self.calculate_ownership_analysis({
                 'building_type': building_type.value,
@@ -268,6 +280,14 @@ class UnifiedEngine:
                 'quality_factor': quality_factor,
                 'finish_level': normalized_finish_level
             })
+
+            # Get basic ownership metrics (prefer revenue-derived NOI when available)
+            revenue_analysis_for_financing = revenue_data.get('revenue_analysis') if revenue_data else None
+            ownership_analysis = self._calculate_ownership(
+                total_project_cost,
+                building_config.ownership_types[ownership_type],
+                revenue_analysis=revenue_analysis_for_financing
+            )
             
             # Merge revenue analysis into ownership analysis
             if revenue_data and 'revenue_analysis' in revenue_data:
@@ -284,6 +304,30 @@ class UnifiedEngine:
                 ownership_analysis['revenue_requirements'] = revenue_data.get('revenue_requirements', {})
                 ownership_analysis['operational_efficiency'] = revenue_data.get('operational_efficiency', {})
                 ownership_analysis['operational_metrics'] = revenue_data.get('operational_metrics', {})
+                if 'yield_on_cost' in revenue_data:
+                    ownership_analysis['yield_on_cost'] = revenue_data.get('yield_on_cost')
+                if 'market_cap_rate' in revenue_data:
+                    ownership_analysis['market_cap_rate'] = revenue_data.get('market_cap_rate')
+                if 'cap_rate_spread_bps' in revenue_data:
+                    ownership_analysis['cap_rate_spread_bps'] = revenue_data.get('cap_rate_spread_bps')
+                
+                actual_noi = (
+                    revenue_data.get('return_metrics', {}).get('estimated_annual_noi')
+                    or revenue_data['revenue_analysis'].get('net_income')
+                )
+                debt_metrics = ownership_analysis.get('debt_metrics') or {}
+                annual_debt_service = debt_metrics.get('annual_debt_service', 0)
+                if actual_noi is not None:
+                    recalculated_dscr = actual_noi / annual_debt_service if annual_debt_service else 0
+                    debt_metrics['calculated_dscr'] = recalculated_dscr
+                    debt_metrics['dscr_meets_target'] = recalculated_dscr >= debt_metrics.get('target_dscr', 0)
+                    ownership_analysis['debt_metrics'] = debt_metrics
+                    ownership_analysis['return_metrics']['estimated_annual_noi'] = actual_noi
+                    self._log_trace("dscr_recalculated_from_revenue", {
+                        'actual_noi': actual_noi,
+                        'annual_debt_service': annual_debt_service,
+                        'calculated_dscr': recalculated_dscr
+                    })
         
         # Financial requirements removed - was only partially implemented for hospital
         
@@ -342,6 +386,15 @@ class UnifiedEngine:
                 'multiplier': finish_cost_factor
             })
         
+        # Ensure the build-up array always has something meaningful so frontend visuals don't break
+        fallback_cost_build_up = cost_build_up if cost_build_up else [
+            {'label': 'Base Cost', 'value_per_sf': original_base_cost_per_sf},
+            {'label': 'Regional', 'multiplier': regional_multiplier_effective},
+            {'label': 'Complexity', 'multiplier': complexity_factor},
+        ]
+        if not cost_build_up and display_finish_level != 'standard':
+            fallback_cost_build_up.append({'label': 'Finish Level', 'multiplier': finish_cost_factor})
+
         # Build comprehensive response - FLATTENED structure to match frontend expectations
         result = {
             'project_info': {
@@ -371,7 +424,7 @@ class UnifiedEngine:
                 'construction_total': construction_cost,
                 'equipment_total': equipment_cost,
                 'special_features_total': special_features_cost,
-                'cost_build_up': cost_build_up
+                'cost_build_up': fallback_cost_build_up
             },
             'cost_dna': cost_dna,  # Add cost DNA for transparency
             'trade_breakdown': trades,
@@ -441,8 +494,13 @@ class UnifiedEngine:
         
         return soft_costs
     
-    def _calculate_ownership(self, total_cost: float, financing_terms: Any) -> Dict[str, Any]:
-        """Calculate ownership/financing metrics"""
+    def _calculate_ownership(
+        self,
+        total_cost: float,
+        financing_terms: Any,
+        revenue_analysis: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Calculate ownership/financing metrics with DSCR tied to revenue NOI when available."""
         
         # Calculate debt and equity
         debt_amount = total_cost * financing_terms.debt_ratio
@@ -454,15 +512,19 @@ class UnifiedEngine:
         annual_debt_service = debt_amount * financing_terms.debt_rate
         monthly_debt_service = annual_debt_service / 12
         
-        # Calculate DSCR (simplified - would need NOI in real implementation)
-        # For now, estimate NOI as 8% of project cost
-        estimated_annual_noi = total_cost * 0.08
+        # Prefer NOI from revenue analysis when available so DSCR matches frontend revenue panel
+        noi_from_revenue = None
+        if revenue_analysis and isinstance(revenue_analysis.get('net_income'), (int, float)):
+            noi_from_revenue = float(revenue_analysis['net_income'])
+        
+        fallback_noi = total_cost * getattr(financing_terms, 'noi_percentage', 0.08)
+        estimated_annual_noi = noi_from_revenue if noi_from_revenue is not None else fallback_noi
         dscr = estimated_annual_noi / annual_debt_service if annual_debt_service > 0 else 0
         
         self._log_trace("noi_derived", {
             'total_project_cost': total_cost,
             'estimated_noi': estimated_annual_noi,
-            'method': 'fixed_percentage'
+            'method': 'revenue_analysis' if noi_from_revenue is not None else 'fixed_percentage'
         })
 
         result = {
@@ -597,6 +659,17 @@ class UnifiedEngine:
         modifiers = calculations.get('modifiers') or {}
         revenue_factor = float(modifiers.get('revenue_factor', 1.0) or 1.0)
         margin_pct = float(modifiers.get('margin_pct', get_margin_pct(building_enum, subtype)))
+        office_operating_expense_override = None
+        office_cam_charges = None
+        staffing_pct_pm = None
+        staffing_pct_maintenance = None
+        if building_enum == BuildingType.OFFICE:
+            if getattr(subtype_config, 'operating_expense_per_sf', None) and square_footage > 0:
+                office_operating_expense_override = square_footage * float(subtype_config.operating_expense_per_sf)
+            if getattr(subtype_config, 'cam_charges_per_sf', None) and square_footage > 0:
+                office_cam_charges = square_footage * float(subtype_config.cam_charges_per_sf)
+            staffing_pct_pm = getattr(subtype_config, 'staffing_pct_property_mgmt', None)
+            staffing_pct_maintenance = getattr(subtype_config, 'staffing_pct_maintenance', None)
 
         base_cost_psf = subtype_config.base_cost_per_sf
         if provided_quality_factor is not None:
@@ -629,8 +702,28 @@ class UnifiedEngine:
             'subtype': subtype,
             'margin_pct': round(margin_pct, 4)
         })
-        total_expenses = round(annual_revenue * (1 - margin_pct), 2)
+        if office_operating_expense_override is not None:
+            total_expenses = round(office_operating_expense_override, 2)
+            if annual_revenue > 0:
+                margin_pct = max(0.05, min(0.65, 1 - (total_expenses / annual_revenue)))
+        else:
+            total_expenses = round(annual_revenue * (1 - margin_pct), 2)
+
         net_income = round(annual_revenue - total_expenses, 2)
+        cam_charges_value = round(office_cam_charges, 2) if office_cam_charges is not None else round(float(calculations.get('cam_charges', 0) or 0), 2)
+        market_cap_rate_config = getattr(subtype_config, 'market_cap_rate', None)
+        yield_on_cost = net_income / total_cost if total_cost > 0 else 0
+        cap_rate_spread_bps = None
+        if isinstance(market_cap_rate_config, (int, float)):
+            cap_rate_spread_bps = int(round((yield_on_cost - market_cap_rate_config) * 10000))
+
+        property_mgmt_staff_cost = None
+        maintenance_staff_cost = None
+        if building_enum == BuildingType.OFFICE and total_expenses > 0:
+            prop_pct = float(staffing_pct_pm or 0.06)
+            maint_pct = float(staffing_pct_maintenance or 0.12)
+            property_mgmt_staff_cost = round(total_expenses * prop_pct, 2)
+            maintenance_staff_cost = round(total_expenses * maint_pct, 2)
 
         operational_efficiency = self.calculate_operational_efficiency(
             revenue=annual_revenue,
@@ -645,6 +738,11 @@ class UnifiedEngine:
         operational_efficiency['operating_margin'] = operating_margin
         operational_efficiency['expense_ratio'] = expense_ratio
         operational_efficiency['efficiency_score'] = round(margin_pct * 100, 1) if annual_revenue > 0 else 0
+        if property_mgmt_staff_cost is not None:
+            operational_efficiency['property_mgmt_staffing'] = property_mgmt_staff_cost
+        if maintenance_staff_cost is not None:
+            operational_efficiency['maintenance_staffing'] = maintenance_staff_cost
+        operational_efficiency['cam_charges'] = cam_charges_value
         
         # Standard projection period for IRR calculation
         years = 10
@@ -728,12 +826,31 @@ class UnifiedEngine:
             'feasible': feasible
         })
 
+        default_vacancy_rate = 0.0
+        if isinstance(occupancy_rate, (int, float)):
+            default_vacancy_rate = max(0.0, min(1.0, 1.0 - occupancy_rate))
+
+        underwriting = calculations.get('underwriting')
+        if not underwriting:
+            underwriting = {
+                'effective_gross_income': round(annual_revenue, 2),
+                'underwritten_operating_expenses': round(total_expenses, 2),
+                'underwritten_noi': round(net_income, 2),
+                'vacancy_rate': default_vacancy_rate,
+                'collection_loss': 0.0,
+                'management_fee': 0.0,
+                'capex_reserve': 0.0,
+            }
+
         return {
             'revenue_analysis': {
                 'annual_revenue': round(annual_revenue, 2),
                 'revenue_per_sf': round(annual_revenue / square_footage, 2) if square_footage > 0 else 0,
                 'operating_margin': operating_margin,
                 'net_income': round(net_income, 2),
+                'underwritten_noi': round(underwriting.get('underwritten_noi', net_income), 2),
+                'operating_expenses': round(total_expenses, 2),
+                'cam_charges': cam_charges_value,
                 'occupancy_rate': occupancy_rate,
                 'quality_factor': round(quality_factor, 2),
                 'is_premium': is_premium,
@@ -753,9 +870,13 @@ class UnifiedEngine:
                 'is_multifamily': building_enum == BuildingType.MULTIFAMILY,  # Debug flag
                 'feasible': feasible
             },
+            'yield_on_cost': round(yield_on_cost, 4),
+            'market_cap_rate': round(market_cap_rate_config, 4) if isinstance(market_cap_rate_config, (int, float)) else None,
+            'cap_rate_spread_bps': cap_rate_spread_bps,
             'revenue_requirements': revenue_requirements,
             'operational_efficiency': operational_efficiency,  # Keep raw data
-            'operational_metrics': operational_metrics  # ADD formatted display data
+            'operational_metrics': operational_metrics,  # ADD formatted display data
+            'underwriting': underwriting
         }
 
     def _calculate_revenue_by_type(self, building_enum, config, square_footage, quality_factor, occupancy_rate):
@@ -1183,15 +1304,28 @@ class UnifiedEngine:
             ]
             
         elif building_type == 'office':
+            property_mgmt_staffing = float(
+                operational_efficiency.get('property_mgmt_staffing', operational_efficiency.get('management_fee', 0)) or 0
+            )
+            maintenance_staffing = float(
+                operational_efficiency.get('maintenance_staffing', operational_efficiency.get('maintenance_cost', 0)) or 0
+            )
+            cam_charges = float(operational_efficiency.get('cam_charges', 0) or 0)
+            rent_per_sf = (annual_revenue / square_footage) if square_footage > 0 else 0
+            operating_expenses_per_sf = (total_expenses / square_footage) if square_footage > 0 else 0
+            cam_per_sf = (cam_charges / square_footage) if square_footage > 0 else 0
+
             operational_metrics['staffing'] = [
-                {'label': 'Property Mgmt', 'value': f'${operational_efficiency.get("management_fee", 0):,.0f}'},
-                {'label': 'Maintenance', 'value': f'${operational_efficiency.get("maintenance_cost", 0):,.0f}'}
+                {'label': 'Property Mgmt', 'value': f'${property_mgmt_staffing:,.0f}'},
+                {'label': 'Maintenance', 'value': f'${maintenance_staffing:,.0f}'}
             ]
             
             operational_metrics['revenue'] = {
-                'Rent per SF': f'${annual_revenue / square_footage:.2f}/yr' if square_footage > 0 else 'N/A',
-                'Operating Expenses': f'${total_expenses:,.0f}',
-                'CAM Charges': f'${total_expenses / square_footage:.2f}/SF' if square_footage > 0 else 'N/A',
+                'Rent per SF': f'${rent_per_sf:.2f}/yr' if square_footage > 0 else 'N/A',
+                'Operating Expenses': f'${total_expenses:,.0f} (${operating_expenses_per_sf:.2f}/SF)',
+                'CAM Charges': (
+                    f'${cam_charges:,.0f} (${cam_per_sf:.2f}/SF)' if cam_charges > 0 and square_footage > 0 else 'Included in lease'
+                ),
                 'Operating Margin': f'{operating_margin * 100:.1f}%'
             }
             
@@ -1203,7 +1337,7 @@ class UnifiedEngine:
                 },
                 {
                     'label': 'Expense/SF',
-                    'value': f'${total_expenses / square_footage:.2f}' if square_footage > 0 else 'N/A',
+                    'value': f'${operating_expenses_per_sf:.2f}' if square_footage > 0 else 'N/A',
                     'color': 'yellow'
                 }
             ]

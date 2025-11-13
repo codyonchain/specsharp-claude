@@ -17,13 +17,13 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
   const [expandedTrade, setExpandedTrade] = useState<string | null>(null);
   const [showProvenanceModal, setShowProvenanceModal] = useState(false);
   
-  // ADD ONLY THIS CHECK
-  if (!project?.analysis) {
+  const analysis = project.analysis;
+  if (!analysis) {
     return <div className="p-6">Loading trade breakdown...</div>;
   }
   
-  // NOW safe to destructure
-  const { parsed_input, calculations } = project.analysis;
+  const calculations = analysis.calculations || {};
+  const parsed_input = analysis.parsed_input || {};
   const displayData = BackendDataMapper.mapToDisplay(project.analysis);
   const isDev = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
 
@@ -32,7 +32,14 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
   // ========================================
   
   // Get values from calculations object - NO HARDCODING
-  const squareFootage = parsed_input.square_footage || 200000;
+  const squareFootageRaw =
+    typeof parsed_input.square_footage === 'number' && parsed_input.square_footage > 0
+      ? parsed_input.square_footage
+      : typeof calculations.project_info?.square_footage === 'number' && calculations.project_info.square_footage > 0
+        ? calculations.project_info.square_footage
+        : 0;
+  const squareFootage = squareFootageRaw > 0 ? squareFootageRaw : 0;
+  const safeSquareFootage = squareFootage > 0 ? squareFootage : 1;
   const buildingType = parsed_input.building_type || 'office';
   const baseCostPerSF = calculations.construction_costs?.base_cost_per_sf || 1150;
   const regionalMultiplier = calculations.construction_costs?.regional_multiplier || 1.03;
@@ -41,9 +48,27 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
   const rawCostBuildUp = Array.isArray(calculations.construction_costs?.cost_build_up)
     ? calculations.construction_costs.cost_build_up
     : [];
-  const costBuildUp = Array.isArray(displayData.constructionCostBuildUp) && displayData.constructionCostBuildUp.length > 0
+  const displayCostBuildUp = Array.isArray(displayData.constructionCostBuildUp)
     ? displayData.constructionCostBuildUp
-    : rawCostBuildUp;
+    : [];
+  const finishLevelName = (displayData.finishLevel || parsed_input.finish_level || 'standard').toString().toLowerCase();
+  const costBuildUpSource =
+    displayCostBuildUp.length > 0
+      ? displayCostBuildUp
+      : rawCostBuildUp;
+  const fallbackCostBuildUp = [
+    { label: 'Base Cost', value_per_sf: baseCostPerSF },
+    { label: 'Regional', multiplier: regionalMultiplier || 1 },
+    { label: 'Complexity', multiplier: complexityMultiplier || 1 },
+  ];
+  if (finishLevelName !== 'standard') {
+    fallbackCostBuildUp.push({
+      label: 'Finish Level',
+      multiplier: calculations.construction_costs?.finish_cost_factor || 1,
+    });
+  }
+  const costBuildUp =
+    costBuildUpSource.length > 0 ? costBuildUpSource : fallbackCostBuildUp;
   
   // Debug: Log the actual values
   console.log('Construction View Debug:', {
@@ -61,7 +86,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
   const baseConstructionTotal = calculations.construction_costs?.construction_total || 236900000;
   const specialFeaturesTotal = calculations.construction_costs?.special_features_total || 0;
   const equipmentTotal = calculations.construction_costs?.equipment_total || (constructionTotal - baseConstructionTotal - specialFeaturesTotal) || 0;
-  const displayCostPerSF = Math.round(finalCostPerSF || (constructionTotal / squareFootage));
+  const displayCostPerSF = Math.round(finalCostPerSF || (constructionTotal / safeSquareFootage));
   
   // Trade breakdown from calculations - use actual percentages from backend
   const actualTradeBreakdown = calculations.trade_breakdown || {};
@@ -73,35 +98,35 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
       percent: Math.round(((actualTradeBreakdown.structural || (constructionTotal * 0.22)) / tradeTotal) * 100),
       color: 'blue',
       icon: Building,
-      costPerSF: Math.round((actualTradeBreakdown.structural || (constructionTotal * 0.22)) / squareFootage)
+      costPerSF: Math.round((actualTradeBreakdown.structural || (constructionTotal * 0.22)) / safeSquareFootage)
     },
     mechanical: {
       amount: actualTradeBreakdown.mechanical || (constructionTotal * 0.25),
       percent: Math.round(((actualTradeBreakdown.mechanical || (constructionTotal * 0.25)) / tradeTotal) * 100),
       color: 'green',
       icon: Wrench,
-      costPerSF: Math.round((actualTradeBreakdown.mechanical || (constructionTotal * 0.25)) / squareFootage)
+      costPerSF: Math.round((actualTradeBreakdown.mechanical || (constructionTotal * 0.25)) / safeSquareFootage)
     },
     electrical: {
       amount: actualTradeBreakdown.electrical || (constructionTotal * 0.15),
       percent: Math.round(((actualTradeBreakdown.electrical || (constructionTotal * 0.15)) / tradeTotal) * 100),
       color: 'yellow',
       icon: Zap,
-      costPerSF: Math.round((actualTradeBreakdown.electrical || (constructionTotal * 0.15)) / squareFootage)
+      costPerSF: Math.round((actualTradeBreakdown.electrical || (constructionTotal * 0.15)) / safeSquareFootage)
     },
     plumbing: {
       amount: actualTradeBreakdown.plumbing || (constructionTotal * 0.12),
       percent: Math.round(((actualTradeBreakdown.plumbing || (constructionTotal * 0.12)) / tradeTotal) * 100),
       color: 'purple',
       icon: Droplet,
-      costPerSF: Math.round((actualTradeBreakdown.plumbing || (constructionTotal * 0.12)) / squareFootage)
+      costPerSF: Math.round((actualTradeBreakdown.plumbing || (constructionTotal * 0.12)) / safeSquareFootage)
     },
     finishes: {
       amount: actualTradeBreakdown.finishes || (constructionTotal * 0.26),
       percent: Math.round(((actualTradeBreakdown.finishes || (constructionTotal * 0.26)) / tradeTotal) * 100),
       color: 'pink',
       icon: PaintBucket,
-      costPerSF: Math.round((actualTradeBreakdown.finishes || (constructionTotal * 0.26)) / squareFootage)
+      costPerSF: Math.round((actualTradeBreakdown.finishes || (constructionTotal * 0.26)) / safeSquareFootage)
     }
   };
 
@@ -606,7 +631,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                 </div>
                 <div className="text-right">
                   <p className="text-lg font-bold text-gray-900">
-                    +${Math.round(equipmentTotal / squareFootage)}/SF
+                    +${Math.round(equipmentTotal / safeSquareFootage)}/SF
                   </p>
                   <p className="text-sm text-gray-500">
                     {((equipmentTotal / constructionTotal) * 100).toFixed(1)}% of total
@@ -624,7 +649,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                 <p className="text-5xl font-bold">{formatCurrency(constructionTotal)}</p>
               </div>
               <div className="text-right">
-                <p className="text-2xl font-semibold">${formatNumber(Math.round(constructionTotal / squareFootage))}/SF</p>
+                <p className="text-2xl font-semibold">${formatNumber(Math.round(constructionTotal / safeSquareFootage))}/SF</p>
                 <p className="text-sm opacity-90 mt-1">All-in cost per square foot</p>
               </div>
             </div>

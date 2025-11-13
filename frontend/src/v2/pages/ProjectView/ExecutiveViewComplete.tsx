@@ -18,6 +18,56 @@ interface Props {
   project: Project;
 }
 
+// Local title casing to avoid depending on missing formatters.titleCase
+const toTitleCase = (value?: string): string => {
+  if (!value) return '';
+  return value
+    .toString()
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, c => c.toUpperCase());
+};
+
+type AnyRecord = Record<string, any>;
+
+const toRecord = (value: unknown): AnyRecord =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as AnyRecord)
+    : {};
+
+const coalesceRecord = (...candidates: unknown[]): AnyRecord => {
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+      return candidate as AnyRecord;
+    }
+  }
+  return {};
+};
+
+const buildSafeAnalysis = (project?: Project | null): AnyRecord => {
+  const projectRecord = toRecord(project);
+  const rawAnalysis = toRecord(projectRecord.analysis);
+  const calculations = coalesceRecord(
+    rawAnalysis.calculations,
+    projectRecord.calculation_data,
+    projectRecord.calculations,
+    projectRecord
+  );
+  const parsedInput = coalesceRecord(
+    rawAnalysis.parsed_input,
+    rawAnalysis.request_payload?.parsed_input,
+    projectRecord.parsed_input,
+    projectRecord.form_state,
+    projectRecord.form_inputs
+  );
+
+  return {
+    ...rawAnalysis,
+    parsed_input: parsedInput,
+    calculations
+  };
+};
+
 export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   const navigate = useNavigate();
   
@@ -30,11 +80,36 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     );
   }
 
-  // Get analysis from project or use project itself if it has the data
-  const analysis = project?.analysis || { calculations: project?.calculation_data } || project;
+  // Normalize analysis payload so downstream consumers always receive objects
+  const analysis = buildSafeAnalysis(project);
   
   // Map backend data through our mapper
-  const displayData = BackendDataMapper.mapToDisplay(analysis);
+  const displayData = BackendDataMapper.mapToDisplay(analysis || {});
+  const dscrFromDisplay = typeof displayData.dscr === 'number' ? displayData.dscr : undefined;
+  const dscrFromOwnership = typeof (analysis as AnyRecord)?.calculations?.ownership_analysis?.debt_metrics?.calculated_dscr === 'number'
+    ? (analysis as AnyRecord).calculations.ownership_analysis.debt_metrics.calculated_dscr
+    : undefined;
+  const targetDscrFromOwnership = typeof (analysis as AnyRecord)?.calculations?.ownership_analysis?.debt_metrics?.target_dscr === 'number'
+    ? (analysis as AnyRecord).calculations.ownership_analysis.debt_metrics.target_dscr
+    : undefined;
+  const dscr = dscrFromDisplay ?? dscrFromOwnership;
+  const targetDscr = targetDscrFromOwnership;
+  const resolvedTargetDscr = typeof targetDscr === 'number' && Number.isFinite(targetDscr) ? targetDscr : 1.25;
+  const yieldOnCost = typeof displayData.yieldOnCost === 'number' && Number.isFinite(displayData.yieldOnCost)
+    ? displayData.yieldOnCost
+    : undefined;
+  const stabilizedYield = typeof yieldOnCost === 'number'
+    ? yieldOnCost
+    : (typeof displayData.roi === 'number' ? displayData.roi : 0);
+  const marketCapRateDisplay = typeof displayData.marketCapRate === 'number' && Number.isFinite(displayData.marketCapRate)
+    ? displayData.marketCapRate
+    : undefined;
+  const capRateSpreadBps = typeof displayData.capRateSpreadBps === 'number' && Number.isFinite(displayData.capRateSpreadBps)
+    ? displayData.capRateSpreadBps
+    : undefined;
+  const equityReturn = typeof displayData.roi === 'number' && Number.isFinite(displayData.roi)
+    ? displayData.roi
+    : undefined;
   const investmentDecisionFromDisplay = displayData.investmentDecision;
   const feasibilityFlag = typeof displayData.feasible === 'boolean' ? displayData.feasible : undefined;
   const derivedDecision = typeof investmentDecisionFromDisplay === 'string'
@@ -59,12 +134,15 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   // Extract additional raw data we need - check multiple paths for data
   const parsed = analysis?.parsed_input || {};
   // Look for calculations in multiple places due to data mapping
-  const calculations = analysis?.calculations || project?.calculation_data || project || {};
+  const calculations = analysis?.calculations || {};
+  const projectInfo = calculations?.project_info || {};
   const totals = calculations?.totals || {};
   const construction_costs = calculations?.construction_costs || {};
   const soft_costs = calculations?.soft_costs || {};
   const ownership = calculations?.ownership_analysis || {};
   const investmentAnalysis = ownership?.investment_analysis || {};
+  const debtMetrics = ownership?.debt_metrics || calculations?.debt_metrics || {};
+  const hasDebt = typeof debtMetrics?.annual_debt_service === 'number' && debtMetrics.annual_debt_service > 0;
   const calculationTrace = Array.isArray(calculations?.calculation_trace)
     ? calculations.calculation_trace.filter((entry: any) => entry && typeof entry === 'object' && entry.step)
     : [];
@@ -95,7 +173,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   };
 
   const finishLevelFromDisplay = normalizeFinishLevel(displayData.finishLevel);
-  const finishLevelFromProject = normalizeFinishLevel(calculations?.project_info?.finish_level);
+  const finishLevelFromProject = normalizeFinishLevel(projectInfo?.finish_level);
   const finishLevelFromTrace = normalizeFinishLevel(inferredTrace?.data?.finish_level || modifiersTrace?.data?.finish_level);
   const finishLevel = finishLevelFromProject || finishLevelFromDisplay || finishLevelFromTrace;
 
@@ -112,6 +190,25 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   const revenueFactorFromDisplay = typeof displayData.revenueFactor === 'number' ? displayData.revenueFactor : undefined;
   const costFactor = costFactorFromDisplay ?? (typeof modifiersTrace?.data?.cost_factor === 'number' ? modifiersTrace.data.cost_factor : undefined);
   const revenueFactor = revenueFactorFromDisplay ?? (typeof modifiersTrace?.data?.revenue_factor === 'number' ? modifiersTrace.data.revenue_factor : undefined);
+
+  const costPerSFValue = typeof displayData.costPerSF === 'number' && Number.isFinite(displayData.costPerSF)
+    ? displayData.costPerSF
+    : undefined;
+  const marketCostPerSFField = (displayData as AnyRecord)?.marketCostPerSF;
+  const inferredMarketCostPerSF = typeof costPerSFValue === 'number' && typeof costFactor === 'number' && costFactor > 0
+    ? costPerSFValue / costFactor
+    : undefined;
+  const marketCostPerSF = typeof marketCostPerSFField === 'number' && Number.isFinite(marketCostPerSFField)
+    ? marketCostPerSFField
+    : inferredMarketCostPerSF;
+  const costPerSFDeltaPct = typeof costPerSFValue === 'number' && typeof marketCostPerSF === 'number' && marketCostPerSF !== 0
+    ? ((costPerSFValue - marketCostPerSF) / marketCostPerSF) * 100
+    : undefined;
+  const softCostRatio = typeof displayData.softCosts === 'number' &&
+    typeof displayData.totalProjectCost === 'number' &&
+    displayData.totalProjectCost > 0
+      ? displayData.softCosts / displayData.totalProjectCost
+      : undefined;
 
   const isDev = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
 
@@ -159,12 +256,44 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   }, [isDev, finishLevel, modifiersTrace, finishSource, costFactor, revenueFactor]);
   
   // Basic project info
-  const squareFootage = parsed?.square_footage || 0;
-  const buildingType = parsed?.building_type || 'office';
+  const enrichedParsed: any = analysis?.parsed_input || {};
+  const squareFootage =
+    Number(enrichedParsed?.square_footage) ||
+    Number(calculations?.construction_costs?.square_footage) ||
+    Number(calculations?.totals?.square_footage) ||
+    0;
+  const buildingType = (enrichedParsed?.building_type || parsed?.building_type || 'general') as string;
   const buildingSubtype = parsed?.building_subtype || parsed?.subtype || 'general';
   const location = parsed?.location || 'Nashville';
+  const friendlyType =
+    (enrichedParsed?.__display_type as string) ||
+    toTitleCase(
+      (projectInfo?.subtype as string) ||
+      (projectInfo?.display_name as string) ||
+      buildingSubtype ||
+      buildingType ||
+      'general'
+    ) ||
+    'General';
   // For multifamily and other building types, use typical_floors if available (more accurate)
-  const floors = calculations?.project_info?.typical_floors || parsed?.floors || 1;
+  const floors = projectInfo?.typical_floors || parsed?.floors || 1;
+  const headerSquareFootage =
+    Number(projectInfo?.square_footage) ||
+    Number(totals?.square_footage) ||
+    squareFootage;
+  const headerFriendlyType =
+    toTitleCase(
+      (projectInfo?.subtype as string) ||
+      (projectInfo?.display_name as string) ||
+      friendlyType
+    ) || friendlyType;
+  const heroTitle =
+    headerSquareFootage > 0
+      ? `${formatters.squareFeet(headerSquareFootage)} ${headerFriendlyType}`
+      : headerFriendlyType;
+  const normalizedOfficeSquareFootage = Math.max(headerSquareFootage || squareFootage || 1, 1);
+  const operatingExpensesTotal = typeof displayData.operatingExpenses === 'number' ? displayData.operatingExpenses : 0;
+  const camChargesTotal = typeof displayData.camCharges === 'number' ? displayData.camCharges : 0;
   
   // Financial values with formatting
   const totalProjectCost = totals.total_project_cost || 0;
@@ -239,6 +368,62 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   const revenueReq = calculations?.revenue_requirements || 
                      calculations?.ownership_analysis?.revenue_requirements || 
                      null;
+  const requiredNoi = typeof revenueReq?.required_value === 'number' ? revenueReq.required_value : undefined;
+  const currentNoi = typeof revenueReq?.actual_net_income === 'number' ? revenueReq.actual_net_income : undefined;
+  const noiGap = typeof revenueReq?.gap === 'number'
+    ? revenueReq.gap
+    : (typeof currentNoi === 'number' && typeof requiredNoi === 'number' ? currentNoi - requiredNoi : undefined);
+  const noiGapPct = typeof revenueReq?.gap_percentage === 'number'
+    ? revenueReq.gap_percentage
+    : (typeof noiGap === 'number' && typeof requiredNoi === 'number' && requiredNoi !== 0
+        ? (noiGap / requiredNoi) * 100
+        : undefined);
+  const requiredRentPerSf = typeof revenueReq?.required_revenue_per_sf === 'number' ? revenueReq.required_revenue_per_sf : undefined;
+  const currentRentPerSf = typeof revenueReq?.actual_revenue_per_sf === 'number' ? revenueReq.actual_revenue_per_sf : undefined;
+  const rentGap = typeof requiredRentPerSf === 'number' && typeof currentRentPerSf === 'number'
+    ? currentRentPerSf - requiredRentPerSf
+    : undefined;
+  const rentGapPct = typeof rentGap === 'number' && typeof requiredRentPerSf === 'number' && requiredRentPerSf !== 0
+    ? (rentGap / requiredRentPerSf) * 100
+    : undefined;
+
+  const decisionBullets: string[] = [];
+  if (typeof costPerSFValue === 'number' && typeof marketCostPerSF === 'number') {
+    const direction = (costPerSFDeltaPct ?? 0) >= 0 ? 'above' : 'below';
+    decisionBullets.push(
+      `Total cost of ${formatters.costPerSF(costPerSFValue)} is ${Math.abs(costPerSFDeltaPct ?? 0).toFixed(1)}% ${direction} typical ${formatters.costPerSF(marketCostPerSF)} for this market.`
+    );
+  } else if (typeof costPerSFValue === 'number') {
+    decisionBullets.push(
+      `Total cost of ${formatters.costPerSF(costPerSFValue)} reflects the current scope; market benchmarks are not available for this scenario.`
+    );
+  } else {
+    decisionBullets.push('Total project cost appears elevated relative to the typical basis for this asset type.');
+  }
+
+  if (typeof yieldOnCost === 'number' && typeof marketCapRateDisplay === 'number') {
+    const spreadBps = Math.round((yieldOnCost - marketCapRateDisplay) * 10000);
+    const direction = spreadBps >= 0 ? 'above' : 'below';
+    decisionBullets.push(
+      `Yield on cost ${(yieldOnCost * 100).toFixed(1)}% is ${Math.abs(spreadBps)} bp ${direction} the market cap rate ${(marketCapRateDisplay * 100).toFixed(1)}%, indicating ${spreadBps >= 0 ? 'value creation' : 'basis risk'} at this basis.`
+    );
+  } else {
+    decisionBullets.push('Current yield appears low relative to prevailing cap rates in this market.');
+  }
+
+  if (typeof softCostRatio === 'number') {
+    const status = softCostRatio > 0.25 ? 'above' : softCostRatio < 0.2 ? 'below' : 'within';
+    const action = softCostRatio > 0.25
+      ? 'a strong case for value engineering.'
+      : softCostRatio < 0.2
+        ? 'lean owner costs with limited contingency.'
+        : 'alignment with the typical 20–25% range.';
+    decisionBullets.push(
+      `Soft costs at ${(softCostRatio * 100).toFixed(1)}% are ${status} the usual 20–25% range, suggesting ${action}`
+    );
+  } else {
+    decisionBullets.push('Soft costs may present an opportunity for value engineering once estimates firm up.');
+  }
 
   // Financial Requirements removed - was only implemented for hospital
   
@@ -438,7 +623,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         <div className="flex justify-between items-start mb-8">
           <div>
             <h2 className="text-3xl font-bold mb-3">
-              {formatters.squareFeet(squareFootage)} {buildingSubtype.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+              {heroTitle}
             </h2>
             <div className="flex items-center gap-6 text-sm text-blue-200">
               <span className="flex items-center gap-1.5">
@@ -497,7 +682,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           </div>
         </div>
         
-        <div className="grid grid-cols-4 gap-8 pt-6 mt-6 border-t border-white/20">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6 pt-6 mt-6 border-t border-white/20">
           <div>
             <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">CONSTRUCTION</p>
             <p className="text-3xl font-bold">{formatters.currency(constructionTotal)}</p>
@@ -507,11 +692,33 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             <p className="text-3xl font-bold">{formatters.currency(softCostsTotal)}</p>
           </div>
           <div>
-            <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">EXPECTED ROI</p>
-            <p className="text-3xl font-bold">{formatters.percentage(displayData.roi)}</p>
+            <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">STABILIZED YIELD (NOI / COST)</p>
+            <p className="text-3xl font-bold">
+              {formatters.percentage(stabilizedYield)}
+            </p>
+            {typeof yieldOnCost === 'number' && typeof marketCapRateDisplay === 'number' && (
+              <p className="text-xs text-blue-200 mt-1">
+                vs cap {(marketCapRateDisplay * 100).toFixed(1)}% ({((yieldOnCost - marketCapRateDisplay) * 100).toFixed(1)}% Δ)
+              </p>
+            )}
+            <p className="text-[11px] text-blue-200/80 mt-1">
+              Yield on total project cost at stabilization.
+            </p>
           </div>
           <div>
-            <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">PAYBACK PERIOD</p>
+            <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">DSCR VS TARGET</p>
+            <p className="text-3xl font-bold">
+              {typeof dscr === 'number' ? `${dscr.toFixed(2)}×` : '—'}
+            </p>
+            <p className="text-xs text-blue-200 mt-1">
+              target {resolvedTargetDscr.toFixed(2)}×
+            </p>
+            <p className="text-[11px] text-blue-200/80 mt-1">
+              Lender sizing based on NOI and annual debt service.
+            </p>
+          </div>
+          <div>
+            <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">Simple Payback (yrs)</p>
             <p className="text-3xl font-bold">{formatters.years(displayData.paybackPeriod)}</p>
           </div>
         </div>
@@ -554,6 +761,45 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               >
                 {decisionReasonText}
               </p>
+              {decisionStatus === 'NO-GO' &&
+                hasDebt &&
+                typeof dscr === 'number' &&
+                Number.isFinite(dscr) && (
+                  <p className="text-xs md:text-sm opacity-80 mt-0.5 text-red-700">
+                    DSCR {dscr.toFixed(2)}× vs target {resolvedTargetDscr.toFixed(2)}×: coverage is adequate but does not meet lender sizing.
+                  </p>
+                )}
+              {typeof yieldOnCost === 'number' && yieldOnCost > 0 && (
+                <p className="text-xs md:text-sm opacity-90 mt-0.5">
+                  Yield on cost of {(yieldOnCost * 100).toFixed(1)}%
+                  {typeof marketCapRateDisplay === 'number' && (
+                    <> vs market cap {(marketCapRateDisplay * 100).toFixed(1)}%</>
+                  )}
+                  {typeof capRateSpreadBps === 'number' && (
+                    <> ({capRateSpreadBps >= 0 ? '+' : ''}{(capRateSpreadBps / 100).toFixed(1)} bp)</>
+                  )}
+                </p>
+              )}
+              {decisionStatus === 'NO-GO' &&
+                typeof dscr === 'number' &&
+                Number.isFinite(dscr) &&
+                dscr >= resolvedTargetDscr && (
+                  <p className="mt-2 text-sm text-red-600">
+                    Debt coverage is healthy (DSCR&nbsp;
+                    {dscr.toFixed(2)}×) but projected equity returns remain
+                    below the hurdle
+                    {equityReturn ? ` (~${(equityReturn * 100).toFixed(1)}%)` : ''}
+                    {typeof yieldOnCost === 'number' && yieldOnCost > 0 && (
+                      <>
+                        {' '}
+                        and yield on cost {(yieldOnCost * 100).toFixed(1)}%
+                        {` vs ${(typeof marketCapRateDisplay === 'number'
+                          ? marketCapRateDisplay
+                          : 0.06) * 100}% cap`}
+                      </>
+                    )}, so the recommendation remains NO-GO.
+                  </p>
+                )}
             </div>
           </div>
         </div>
@@ -834,60 +1080,79 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       {revenueReq && (
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
           <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4">
-            <h3 className="text-lg font-bold text-white">Revenue Requirements</h3>
-            <p className="text-sm text-emerald-100">What you need to charge for 8% ROI</p>
+            <h3 className="text-lg font-bold text-white">Revenue Required to Hit Target Yield</h3>
+            <p className="text-sm text-emerald-100">Compare required NOI and rent per SF against current performance.</p>
           </div>
-          <div className="p-6">
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600 mb-1">Required {revenueReq.metric_name}</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {formatters.currency(revenueReq.required_value)}
-                  </p>
-                </div>
-                <div className="text-center p-4 bg-blue-50 rounded-lg">
-                  <p className="text-sm text-gray-600 mb-1">Market {revenueReq.metric_name}</p>
-                  <p className="text-2xl font-bold text-blue-600">
-                    {formatters.currency(revenueReq.market_value)}
-                  </p>
-                </div>
-              </div>
-              
-              <div className={`p-4 rounded-lg ${
-                (revenueReq.feasibility?.status || revenueReq.feasibility) === 'Feasible' 
-                  ? 'bg-green-50 border border-green-200' 
-                  : 'bg-amber-50 border border-amber-200'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold">Project Feasibility:</span>
-                  <span className={`font-bold ${
-                    (revenueReq.feasibility?.status || revenueReq.feasibility) === 'Feasible' ? 'text-green-600' : 'text-amber-600'
-                  }`}>
-                    {revenueReq.feasibility?.status || revenueReq.feasibility}
+          <div className="p-6 space-y-5">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-600 mb-1">Required NOI (target yield)</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {formatters.currency(requiredNoi ?? revenueReq.required_value)}
+                </p>
+                <p className="text-xs text-gray-600 mt-2">
+                  Current NOI:{' '}
+                  <span className="font-semibold text-gray-900">
+                    {formatters.currency(currentNoi ?? revenueReq.market_value)}
                   </span>
-                </div>
-                {(revenueReq.gap !== undefined || revenueReq.feasibility?.gap !== undefined) && (
-                  <p className="text-sm mt-2">
-                    {(revenueReq.gap || revenueReq.feasibility?.gap || 0) > 0 
-                      ? `Market rate is ${formatters.currency(Math.abs(revenueReq.gap || revenueReq.feasibility?.gap || 0))} (${Math.abs(revenueReq.gap_percentage || 0).toFixed(1)}%) above requirement ✓`
-                      : `Need to achieve ${formatters.currency(Math.abs(revenueReq.gap || revenueReq.feasibility?.gap || 0))} (${Math.abs(revenueReq.gap_percentage || 0).toFixed(1)}%) above market rate`
-                    }
-                  </p>
-                )}
-                {revenueReq.feasibility?.recommendation && (
-                  <p className="text-sm mt-2 text-gray-600">
-                    {revenueReq.feasibility.recommendation}
+                </p>
+                {typeof noiGap === 'number' && (
+                  <p className={`text-xs mt-1 ${noiGap >= 0 ? 'text-green-600' : 'text-amber-600'}`}>
+                    Gap: {formatters.currency(Math.abs(noiGap))} ({Math.abs(noiGapPct || 0).toFixed(1)}%)&nbsp;
+                    {noiGap >= 0 ? 'surplus vs target' : 'shortfall vs target'}
                   </p>
                 )}
               </div>
-              
-              <div className="pt-4 border-t">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">Simple Payback Period</span>
-                  <span className="text-lg font-bold">{formatters.years(displayData.paybackPeriod)}</span>
-                </div>
+              <div className="p-4 bg-blue-50 rounded-lg">
+                <p className="text-sm text-blue-900/80 mb-1">Required Rent per SF</p>
+                <p className="text-2xl font-bold text-blue-700">
+                  {typeof requiredRentPerSf === 'number' ? formatters.currency(requiredRentPerSf) : '—'}
+                </p>
+                <p className="text-xs text-blue-900/80 mt-2">
+                  Current Rent per SF:{' '}
+                  <span className="font-semibold">
+                    {typeof currentRentPerSf === 'number' ? formatters.currency(currentRentPerSf) : '—'}
+                  </span>
+                </p>
+                {typeof rentGap === 'number' && (
+                  <p className={`text-xs mt-1 ${rentGap >= 0 ? 'text-green-700' : 'text-amber-600'}`}>
+                    Gap: {formatters.currency(Math.abs(rentGap))} ({Math.abs(rentGapPct || 0).toFixed(1)}%)&nbsp;
+                    {rentGap >= 0 ? 'above requirement' : 'needed to reach target'}
+                  </p>
+                )}
               </div>
+            </div>
+
+            <div className={`p-4 rounded-lg ${
+              (revenueReq.feasibility?.status || revenueReq.feasibility) === 'Feasible' 
+                ? 'bg-green-50 border border-green-200' 
+                : 'bg-amber-50 border border-amber-200'
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className="font-semibold">Feasibility vs Target Yield</span>
+                <span className={`font-bold ${
+                  (revenueReq.feasibility?.status || revenueReq.feasibility) === 'Feasible' ? 'text-green-600' : 'text-amber-600'
+                }`}>
+                  {revenueReq.feasibility?.status || revenueReq.feasibility}
+                </span>
+              </div>
+              {typeof noiGap === 'number' && (
+                <p className="text-sm mt-2">
+                  {noiGap >= 0
+                    ? `Current NOI exceeds requirement by ${formatters.currency(Math.abs(noiGap))} (${Math.abs(noiGapPct || 0).toFixed(1)}%).`
+                    : `Need ${formatters.currency(Math.abs(noiGap))} (${Math.abs(noiGapPct || 0).toFixed(1)}%) more NOI to meet the yield target.`}
+                </p>
+              )}
+              {revenueReq.feasibility?.recommendation && (
+                <p className="text-sm mt-2 text-gray-600">
+                  {revenueReq.feasibility.recommendation}
+                </p>
+              )}
+            </div>
+            
+            <div className="flex justify-between items-center pt-4 border-t">
+              <span className="text-sm text-gray-600">Simple Payback (yrs)</span>
+              <span className="text-lg font-bold">{formatters.years(displayData.paybackPeriod)}</span>
             </div>
           </div>
         </div>
@@ -1174,6 +1439,30 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                 </div>
               </div>
             )}
+
+            {buildingType === 'office' && (
+              <div className="mb-4">
+                <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Office Opex & CAM</h4>
+                <div className="bg-white rounded-lg p-3 shadow-sm space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Operating Expenses</span>
+                    <span className="font-bold text-gray-900">
+                      {formatters.currency(operatingExpensesTotal)}
+                      {' '}
+                      ({formatters.currencyExact(operatingExpensesTotal / normalizedOfficeSquareFootage)}/SF)
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Recoverable CAM</span>
+                    <span className="font-bold text-gray-900">
+                      {camChargesTotal > 0
+                        ? `${formatters.currency(camChargesTotal)} (${formatters.currencyExact(camChargesTotal / normalizedOfficeSquareFootage)}/SF)`
+                        : 'Included in rent'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
             
             {/* Target KPIs */}
             {displayData.kpis.length > 0 && (
@@ -1201,26 +1490,19 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           </div>
           Executive Decision Points
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[
-            `Total investment of ${formatters.currency(totalProjectCost)} is 7% above regional ${buildingType} average`,
-            buildingType === 'multifamily' ? 
-              `${displayData.unitCount} units with avg rent of $3,500/month` :
-              '22-year payback suggests need for operational efficiency improvements',
-            buildingType === 'multifamily' ?
-              'Amenity package adds 8% to costs but supports premium rents' :
-              'Consider phased opening to accelerate revenue generation',
-            `Soft costs at ${formatters.percentage(softCostsTotal / constructionTotal)} - ${
-              buildingType === 'multifamily' ? 'typical for luxury multifamily' : 'opportunity for value engineering'
-            }`
-          ].map((point, idx) => (
-            <div key={idx} className="flex items-start gap-3 bg-white rounded-lg p-3 shadow-sm">
-              <div className="w-6 h-6 bg-amber-200 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                <span className="text-amber-700 text-xs font-bold">{idx + 1}</span>
+        <div className="space-y-3">
+          {decisionBullets.length > 0 ? (
+            decisionBullets.slice(0, 3).map((point, idx) => (
+              <div key={idx} className="flex items-start gap-3 bg-white rounded-lg p-3 shadow-sm">
+                <div className="w-6 h-6 bg-amber-200 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-amber-700 text-xs font-bold">{idx + 1}</span>
+                </div>
+                <span className="text-sm text-gray-700">{point}</span>
               </div>
-              <span className="text-sm text-gray-700">{point}</span>
-            </div>
-          ))}
+            ))
+          ) : (
+            <p className="text-sm text-gray-700">Cost, yield, and soft cost metrics are loading.</p>
+          )}
         </div>
       </div>
 

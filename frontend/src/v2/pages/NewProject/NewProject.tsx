@@ -489,12 +489,14 @@ export const NewProject: React.FC = () => {
     
     try {
       const squareValueFromInput = parseSquareFootageValue(squareFootageInput);
-      const derivedSquareFootage = result.parsed_input?.square_footage ?? squareValueFromInput;
+      const parsedSquareFootage = Number(result.parsed_input?.square_footage) || 0;
+      const derivedSquareFootage = parsedSquareFootage > 0 ? parsedSquareFootage : squareValueFromInput;
       const derivedLocation = result.parsed_input?.location || locationInput.trim() || undefined;
       const engineFinish = typeof result.calculations?.project_info?.finish_level === 'string'
         ? result.calculations?.project_info?.finish_level
         : undefined;
-      const derivedFinishLevel = normalizeFinishLevel(engineFinish) || finishLevelForApi(finishLevel);
+      const uiFinish = normalizeFinishLevel(finishLevel);
+      const derivedFinishLevel = uiFinish || normalizeFinishLevel(engineFinish) || 'Standard';
       const derivedProjectClass = result.parsed_input?.project_class || projectComplexity;
       const derivedDescription = description.trim() || result.calculations?.project_info?.display_name || 'SpecSharp Project';
       const engineFeatures = (result.calculations?.project_info as any)?.special_features;

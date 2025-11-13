@@ -18,6 +18,13 @@ export interface DisplayData {
   monthlyRevenue: number;
   noi: number;
   operatingMargin: number;
+  operatingExpenses: number;
+  camCharges: number;
+  yieldOnCost: number;
+  marketCapRate: number | null;
+  capRateSpreadBps: number | null;
+  operatingExpenses?: number;
+  camCharges?: number;
   
   // Investment decision
   investmentDecision: 'GO' | 'NO-GO' | 'PENDING';
@@ -180,13 +187,45 @@ export class BackendDataMapper {
     
     // Now extract with proper fallback to both paths
     const ownership = calculations?.ownership_analysis || calculations?.calculations?.ownership_analysis || {};
+    const revenueAnalysis = ownership?.revenue_analysis || {};
     const returnMetrics = ownership?.return_metrics || {};
     const debtMetrics = ownership?.debt_metrics || {};
     const investmentAnalysis = ownership?.investment_analysis || {};
     const projectInfo = ownership?.project_info || calculations?.project_info || calculations?.calculations?.project_info || {};
     // Backend sends operational_efficiency, not operational_metrics
     const operationalEfficiency = ownership?.operational_efficiency || calculations?.operational_efficiency || calculations?.calculations?.operational_efficiency || {};
-    const parsedInput = analysis?.parsed_input || {};
+    const operatingExpensesValue =
+      safeGet(revenueAnalysis, 'operating_expenses', undefined) ??
+      safeGet(operationalEfficiency, 'total_expenses', 0);
+    const camChargesValue =
+      safeGet(revenueAnalysis, 'cam_charges', undefined) ??
+      safeGet(operationalEfficiency, 'cam_charges', 0);
+    const parsedInputRaw = analysis?.parsed_input || {};
+    const parsedInput: Record<string, any> = { ...parsedInputRaw };
+    const constructionCosts = calculations?.construction_costs || {};
+
+    if (!parsedInput.square_footage || Number(parsedInput.square_footage) === 0) {
+      const fallbackSF =
+        Number(constructionCosts?.square_footage) ||
+        Number(calculations?.totals?.square_footage) ||
+        Number(calculations?.calculations?.totals?.square_footage) ||
+        undefined;
+      if (fallbackSF) {
+        parsedInput.square_footage = fallbackSF;
+      }
+    }
+
+    if (!parsedInput.building_type) {
+      const inferredType = (projectInfo?.building_type || parsedInputRaw?.subtype || 'General')
+        .toString()
+        .trim();
+      parsedInput.building_type = inferredType.toLowerCase().replace(/\s+/g, '_') || 'general';
+      parsedInput.__display_type = inferredType || 'General';
+    } else if (!parsedInput.__display_type) {
+      parsedInput.__display_type = String(parsedInput.building_type)
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+    }
     const totals = calculations?.totals || calculations?.calculations?.totals || {};
     const calculationTrace = Array.isArray(calculations?.calculation_trace)
       ? calculations.calculation_trace.filter((entry: any) => entry && typeof entry === 'object' && 'step' in entry)
@@ -322,6 +361,11 @@ export class BackendDataMapper {
                      (annualRevenue / 12),
       noi,
       operatingMargin,
+      operatingExpenses: typeof operatingExpensesValue === 'number' ? operatingExpensesValue : 0,
+      camCharges: typeof camChargesValue === 'number' ? camChargesValue : 0,
+      yieldOnCost: typeof ownership?.yield_on_cost === 'number' ? ownership.yield_on_cost : 0,
+      marketCapRate: typeof ownership?.market_cap_rate === 'number' ? ownership.market_cap_rate : null,
+      capRateSpreadBps: typeof ownership?.cap_rate_spread_bps === 'number' ? ownership.cap_rate_spread_bps : null,
       investmentDecision,
       feasible,
       decisionReason: investmentAnalysis.summary || investmentAnalysis.reason || this.generateDecisionReason(roi, npv, dscr),
@@ -372,6 +416,11 @@ export class BackendDataMapper {
       monthlyRevenue: 0,
       noi: 0,
       operatingMargin: 0,
+      operatingExpenses: 0,
+      camCharges: 0,
+      yieldOnCost: 0,
+      marketCapRate: null,
+      capRateSpreadBps: null,
       investmentDecision: 'PENDING',
       feasible: undefined,
       decisionReason: 'Awaiting analysis...',

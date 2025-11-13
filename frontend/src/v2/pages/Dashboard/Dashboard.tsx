@@ -13,6 +13,25 @@ export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { projects, loading, error, deleteProject } = useProjects();
 
+  type Parsed = {
+    building_type?: string;
+    building_subtype?: string;
+    subtype?: string;
+    location?: string;
+    square_footage?: number;
+  };
+
+  const getParsedInput = (project: any): Parsed => {
+    if (project?.analysis?.parsed_input) return project.analysis.parsed_input as Parsed;
+    if (project?.parsed_input) return project.parsed_input as Parsed;
+    if (project?.analysis?.calculations?.parsed_input) {
+      return project.analysis.calculations.parsed_input as Parsed;
+    }
+    return {};
+  };
+
+  const safeProjects = Array.isArray(projects) ? projects.filter(Boolean) : [];
+
   const handleDelete = async (id: string) => {
     try {
       await deleteProject(id);
@@ -89,31 +108,27 @@ export const Dashboard: React.FC = () => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading your projects...</p>
           </div>
-        ) : projects.length > 0 ? (
+        ) : safeProjects.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            {projects.map((project) => {
-              const analysis = project.analysis;
-              if (!analysis) return null;
-              
-              const { parsed_input, calculations } = analysis;
-              const totals = calculations?.totals || {};
-              const construction_costs = calculations?.construction_costs || {};
-              const buildingType = parsed_input.building_type || 'office';
+            {safeProjects.map((project: any) => {
+              const pid = project?.id ?? project?.project_id;
+              if (!pid) return null;
+              const parsed_input = getParsedInput(project);
+              const totals = project?.analysis?.calculations?.totals;
+              const buildingType = parsed_input?.building_type || 'general';
               const accentGradient = getAccentColor(buildingType);
-              const description = project.description || `Build a ${formatNumber(parsed_input.square_footage)} SF ${parsed_input.building_type} with standard features in ${parsed_input.location}`;
+              const squareFootage = Number(parsed_input?.square_footage) || 0;
+              const description = project.description || `Build a ${squareFootage ? `${squareFootage.toLocaleString()} SF ` : ''}${parsed_input?.building_type || ''} in ${parsed_input?.location || 'your market'}`;
               const projectName = project.name || description.split(' ').slice(0, 8).join(' ') + '...';
-              
+
               return (
                 <div
-                  key={project.id}
+                  key={pid}
                   className="group relative bg-white rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden transform hover:-translate-y-1"
-                  onClick={() => navigate(`/project/${project.id}`)}
+                  onClick={() => navigate(`/project/${pid}`)}
                 >
-                  {/* Gradient accent bar */}
                   <div className={`h-1 bg-gradient-to-r ${accentGradient}`}></div>
-                  
                   <div className="p-6">
-                    {/* Header with icon and title */}
                     <div className="flex items-start gap-3 mb-4">
                       <div className={`p-2 rounded-lg bg-gradient-to-br ${accentGradient} bg-opacity-10 text-white`}>
                         <div className="opacity-80">
@@ -129,32 +144,22 @@ export const Dashboard: React.FC = () => {
                         </p>
                       </div>
                     </div>
-                    
-                    {/* Project details */}
                     <div className="space-y-3">
                       <div className="flex items-center gap-2 text-sm">
                         <MapPin className="h-4 w-4 text-gray-400" />
-                        <span className="text-gray-600">{parsed_input.location}</span>
+                        <span className="text-gray-600">{parsed_input?.location || '—'}</span>
                       </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <Square className="h-4 w-4 text-gray-400" />
-                        <span className="text-gray-600">
-                          {parsed_input.square_footage.toLocaleString()} SF
-                        </span>
-                      </div>
+                      {squareFootage > 0 && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Square className="h-4 w-4 text-gray-400" />
+                          <span className="text-gray-600">
+                            {squareFootage.toLocaleString()} SF
+                          </span>
+                        </div>
+                      )}
                     </div>
-
-                    {/* Cost display */}
                     <div className="mt-5 p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg">
                       <div className="flex justify-between items-center mb-2">
-                        <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Construction
-                        </span>
-                        <span className="text-sm font-semibold text-gray-700">
-                          {formatCurrency(totals?.hard_costs || construction_costs?.construction_total || 0)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
                         <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Total Project
                         </span>
@@ -162,15 +167,15 @@ export const Dashboard: React.FC = () => {
                           {formatCurrency(totals?.total_project_cost || 0)}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1 mt-2">
-                        <TrendingUp className="h-3 w-3 text-green-500" />
-                        <span className="text-xs text-gray-600">
-                          ${Math.round((totals?.total_project_cost / parsed_input?.square_footage) || 0)}/SF
-                        </span>
-                      </div>
+                      {squareFootage > 0 && (
+                        <div className="flex items-center gap-1 mt-2">
+                          <TrendingUp className="h-3 w-3 text-green-500" />
+                          <span className="text-xs text-gray-600">
+                            ${Math.round((totals?.total_project_cost / squareFootage) || 0)}/SF
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    
-                    {/* Footer with timestamp and actions */}
                     <div className="flex justify-between items-center mt-5 pt-4 border-t border-gray-100">
                       <div className="flex items-center gap-1 text-xs text-gray-400">
                         <Clock className="h-3 w-3" />
@@ -179,7 +184,7 @@ export const Dashboard: React.FC = () => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDelete(project.id);
+                          handleDelete(pid);
                         }}
                         className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1.5 hover:bg-red-50 rounded-lg"
                         aria-label="Delete project"
@@ -188,8 +193,6 @@ export const Dashboard: React.FC = () => {
                       </button>
                     </div>
                   </div>
-
-                  {/* Hover overlay effect */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
                 </div>
               );
