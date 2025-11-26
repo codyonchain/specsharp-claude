@@ -23,7 +23,7 @@ from typing import Dict, List, Optional, Tuple, Any, Callable
 # ENUMS
 # ============================================================================
 
-class BuildingType(Enum):
+class BuildingType(str, Enum):
     """All building types in the system"""
     HEALTHCARE = "healthcare"
     MULTIFAMILY = "multifamily"
@@ -144,6 +144,13 @@ class BuildingConfig:
     cam_charges_per_sf: Optional[float] = None
     staffing_pct_property_mgmt: Optional[float] = None
     staffing_pct_maintenance: Optional[float] = None
+    base_adr_by_market: Optional[Dict[str, float]] = None
+    base_occupancy_by_market: Optional[Dict[str, float]] = None
+    expense_percentages: Optional[Dict[str, float]] = None
+    development_cost_per_sf_by_finish: Optional[Dict[str, float]] = None
+    cap_rate_defaults: Optional[Dict[str, float]] = None
+    yield_on_cost_hurdle: Optional[float] = None
+    dscr_target: Optional[float] = None
     
     # Unit metrics
     units_per_sf: Optional[float] = None
@@ -197,18 +204,139 @@ class BuildingConfig:
 # MASTER CONFIGURATION
 # ============================================================================
 
+# Default ground-up project timelines by building type.
+# Used to drive the Executive View "Key Milestones" card (groundbreaking, structure, etc.).
+# Values are month offsets from a notional start date (e.g., Q1 2025).
+PROJECT_TIMELINES = {
+    BuildingType.MULTIFAMILY: {
+        "ground_up": {
+            "total_months": 30,
+            "milestones": {
+                "groundbreaking": 0,
+                "structure_complete": 12,
+                "substantial_completion": 24,
+                "grand_opening": 30,
+            },
+        },
+    },
+    BuildingType.INDUSTRIAL: {
+        "ground_up": {
+            "total_months": 18,
+            "milestones": {
+                "groundbreaking": 0,
+                "structure_complete": 8,
+                "substantial_completion": 14,
+                "grand_opening": 18,
+            },
+        },
+    },
+    BuildingType.HOSPITALITY: {
+        "ground_up": {
+            "total_months": 30,
+            "milestones": {
+                "groundbreaking": 0,
+                "structure_complete": 14,
+                "substantial_completion": 24,
+                "grand_opening": 30,
+            },
+        },
+    },
+}
+
 MARGINS = {
     BuildingType.MULTIFAMILY: 0.35,
     BuildingType.OFFICE: 0.25,
     BuildingType.RETAIL: 0.20,
-    BuildingType.INDUSTRIAL: 0.22,
+    # Industrial: NNN leases, very lean expenses. Treat margin as NOI margin.
+    BuildingType.INDUSTRIAL: 0.85,
     BuildingType.HOSPITALITY: 0.18,
     BuildingType.RESTAURANT: 0.17,
     BuildingType.HEALTHCARE: 0.22,
     BuildingType.EDUCATIONAL: 0.15,
 }
 
-MASTER_CONFIG = {
+"""
+Typical 2025 underwriting sentiment: market cap rates, target yield-on-cost,
+and DSCR by primary building type.
+
+For Multifamily specifically, these values are calibrated to:
+- Market cap rate: blended across luxury, market-rate, and affordable
+  (roughly mid-6%).
+- Target yield-on-cost: ~150–200 bps above market cap, reflecting current
+  equity expectations for new development.
+"""
+BUILDING_PROFILES: Dict[BuildingType, Dict[str, float]] = {
+    BuildingType.MULTIFAMILY: {
+        # Blended across luxury / market-rate / affordable
+        'market_cap_rate': 0.0650,   # ~6.5% MF market cap
+        'target_yield': 0.0800,      # ~8.0% yield-on-cost target
+        'target_dscr': 1.25,
+    },
+    BuildingType.OFFICE: {
+        'market_cap_rate': 0.0700,
+        'target_yield': 0.0950,
+        'target_dscr': 1.30,
+    },
+    BuildingType.RETAIL: {
+        'market_cap_rate': 0.0630,
+        'target_yield': 0.0830,
+        'target_dscr': 1.30,
+    },
+    BuildingType.INDUSTRIAL: {
+        # Modern bulk distribution in strong secondary markets (like Nashville).
+        # Cap rates ~6.25–6.75%, developers underwrite to ~7% yield-on-cost.
+        'market_cap_rate': 0.0650,
+        'target_yield': 0.0700,
+        'target_dscr': 1.25,
+    },
+    BuildingType.HOSPITALITY: {
+        'market_cap_rate': 0.0750,
+        'target_yield': 0.1000,
+        'target_dscr': 1.35,
+    },
+    BuildingType.RESTAURANT: {
+        'market_cap_rate': 0.0725,
+        'target_yield': 0.0900,
+        'target_dscr': 1.30,
+    },
+    BuildingType.HEALTHCARE: {
+        'market_cap_rate': 0.0625,
+        'target_yield': 0.0825,
+        'target_dscr': 1.30,
+    },
+    BuildingType.EDUCATIONAL: {
+        'market_cap_rate': 0.0675,
+        'target_yield': 0.0900,
+        'target_dscr': 1.30,
+    },
+    BuildingType.MIXED_USE: {
+        'market_cap_rate': 0.0575,
+        'target_yield': 0.0775,
+        'target_dscr': 1.30,
+    },
+    BuildingType.SPECIALTY: {
+        'market_cap_rate': 0.0700,
+        'target_yield': 0.0900,
+        'target_dscr': 1.25,
+    },
+    BuildingType.CIVIC: {
+        'market_cap_rate': 0.0675,
+        'target_yield': 0.0900,
+        'target_dscr': 1.30,
+    },
+    BuildingType.RECREATION: {
+        'market_cap_rate': 0.0675,
+        'target_yield': 0.0900,
+        'target_dscr': 1.30,
+    },
+    BuildingType.PARKING: {
+        'market_cap_rate': 0.0700,
+        'target_yield': 0.0900,
+        'target_dscr': 1.25,
+    },
+}
+
+MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
     # ------------------------------------------------------------------------
     # HEALTHCARE
     # ------------------------------------------------------------------------
@@ -1151,10 +1279,14 @@ MASTER_CONFIG = {
                 'concierge': 15
             },
 
-            # Revenue metrics - Updated for realistic luxury apartments
-            base_revenue_per_sf_annual=45,  # Realistic $38-45/SF annually for luxury
+            # Revenue metrics
+            # NOTE: base_revenue_per_sf_annual is calibrated to be
+            # mathematically consistent with units_per_sf, monthly rent,
+            # occupancy_rate_base, and 12 months of income.
+            #   annual_psf ≈ units_per_sf * monthly_rent * 12 * occupancy
+            base_revenue_per_sf_annual=36.0,
             base_revenue_per_unit_monthly=3500,  # Nashville luxury market rate
-            units_per_sf=0.000909,  # 1,100 SF per unit (luxury standard, 1/1100)
+            units_per_sf=0.000909,  # ≈ 1 unit / 1,100 SF
             occupancy_rate_base=0.93,
             occupancy_rate_premium=0.90,
             operating_margin_base=0.65,
@@ -1228,9 +1360,11 @@ MASTER_CONFIG = {
             },
 
             # Revenue metrics
-            base_revenue_per_sf_annual=150,
+            # Calibrated for consistency:
+            #   2,000/mo * 12 * (1/800) * 0.95 ≈ $28.5/SF/yr
+            base_revenue_per_sf_annual=28.5,
             base_revenue_per_unit_monthly=2000,
-            units_per_sf=0.00125,
+            units_per_sf=0.00125,  # ≈ 1 unit / 800 SF
             occupancy_rate_base=0.95,
             occupancy_rate_premium=0.93,
             operating_margin_base=0.6,
@@ -1305,9 +1439,11 @@ MASTER_CONFIG = {
             },
 
             # Revenue metrics
-            base_revenue_per_sf_annual=96,
+            # Calibrated for consistency:
+            #   1,200/mo * 12 * (1/700) * 0.97 ≈ $20/SF/yr
+            base_revenue_per_sf_annual=20.0,
             base_revenue_per_unit_monthly=1200,
-            units_per_sf=0.00143,
+            units_per_sf=0.00143,  # ≈ 1 unit / 700 SF
             occupancy_rate_base=0.97,
             occupancy_rate_premium=0.96,
             operating_margin_base=0.55,
@@ -2058,10 +2194,11 @@ MASTER_CONFIG = {
     # ------------------------------------------------------------------------
     BuildingType.INDUSTRIAL: {
         'warehouse': BuildingConfig(
-            display_name='Warehouse',
-            base_cost_per_sf=85,
-            cost_range=(70, 100),
-            equipment_cost_per_sf=5,
+            display_name='Class A Distribution Warehouse',
+            # Core & shell cost for bulk distribution (tilt-up / precast) in 2025.
+            base_cost_per_sf=105,
+            cost_range=(95, 125),
+            equipment_cost_per_sf=5,  # Dock equipment, minimal FFE
             typical_floors=1,
             
             trades=TradeBreakdown(
@@ -2101,22 +2238,23 @@ MASTER_CONFIG = {
             ),
             
             regional_multipliers={
-                'Nashville': 1.03,
-                'Franklin': 1.03,
-                'Manchester': 0.92,
-                'Memphis': 0.90,
-                'New York': 1.25,
-                'San Francisco': 1.30,
-                'Chicago': 1.10,
-                'Miami': 1.05
+                'Nashville': 1.00,
+                'Memphis': 0.96,
+                'Atlanta': 1.02,
+                'Chicago': 1.05,
+                'Dallas': 1.00,
+                'Los Angeles': 1.15,
+                'New York': 1.12
             },
 
-            # Revenue metrics
-            base_revenue_per_sf_annual=8,
-            occupancy_rate_base=0.94,
+            # Revenue metrics – Industrial is rent-per-SF with NNN structure.
+            # Assume effective gross income ~ $12/SF/yr and 95% stabilized occ.
+            base_revenue_per_sf_annual=11.5,
+            occupancy_rate_base=0.95,
             occupancy_rate_premium=0.97,
-            operating_margin_base=0.70,
-            operating_margin_premium=0.75,
+            # Very lean expense load: 85–90% NOI margin.
+            operating_margin_base=0.88,
+            operating_margin_premium=0.90,
             
             # Add these expense ratios for operational efficiency calculations
             utility_cost_ratio=0.03,         # 3% - minimal HVAC, basic lighting
@@ -2396,7 +2534,7 @@ MASTER_CONFIG = {
                     debt_ratio=0.70,
                     debt_rate=0.062,
                     equity_ratio=0.30,
-                    target_dscr=1.25,
+                    target_dscr=1.35,
                     target_roi=0.12,
                 )
             },
@@ -2534,12 +2672,14 @@ MASTER_CONFIG = {
             franchise_fee_ratio=0.06         # 6% - Franchise fees, misc expenses
         ),
         
+        # Adjusted select-service hotel profile for realistic underwriting.
+        # Target: NOI margin 33–36% with yield-on-cost 9–10% for downtown Nashville.
         'limited_service_hotel': BuildingConfig(
-            display_name='Limited Service Hotel',
-            base_cost_per_sf=225,
-            cost_range=(200, 250),
-            equipment_cost_per_sf=25,
-            typical_floors=4,
+            display_name='Select Service Hotel',
+            base_cost_per_sf=205,
+            cost_range=(190, 230),
+            equipment_cost_per_sf=28,
+            typical_floors=5,
             
             trades=TradeBreakdown(
                 structural=0.26,
@@ -2595,26 +2735,55 @@ MASTER_CONFIG = {
                 'pool': 25
             },
 
-            # Revenue metrics
-            base_revenue_per_sf_annual=60,
-            base_revenue_per_room_annual=65000,
-            rooms_per_sf=0.0025,
-            occupancy_rate_base=0.70,
-            occupancy_rate_premium=0.78,
-            operating_margin_base=0.35,
+            # Revenue metrics (rooms-driven)
+            base_revenue_per_sf_annual=52,
+            base_revenue_per_room_annual=50000,
+            rooms_per_sf=1.0 / 600.0,
+            occupancy_rate_base=0.72,
+            occupancy_rate_premium=0.80,
+            operating_margin_base=0.37,
             operating_margin_premium=0.42,
+            base_adr_by_market={
+                'primary': 195.0,
+                'secondary': 180.0,
+                'tertiary': 165.0,
+            },
+            base_occupancy_by_market={
+                'primary': 0.72,
+                'secondary': 0.68,
+                'tertiary': 0.64,
+            },
+            expense_percentages={
+                'staffing_pct': 0.30,
+                'utilities_ops_pct': 0.14,
+                'sales_marketing_gna_pct': 0.09,
+                'management_fee_pct': 0.03,
+                'franchise_fee_pct': 0.07,
+                'ffe_reserve_pct': 0.04,
+            },
+            development_cost_per_sf_by_finish={
+                'standard': 190.0,
+                'premium': 220.0,
+            },
+            cap_rate_defaults={
+                'low': 0.070,
+                'base': 0.075,
+                'high': 0.085,
+            },
+            yield_on_cost_hurdle=0.095,
+            dscr_target=1.38,
             
             # Standard expense ratios for operational efficiency calculations
-            labor_cost_ratio=0.20,           # 20% - 15% rooms ops + 5% breakfast = total labor
-            food_cost_ratio=0.03,            # 3% - Continental breakfast supplies
-            management_fee_ratio=0.04,       # 4% - Property management
-            utility_cost_ratio=0.07,         # 7% - Less efficient systems
-            maintenance_cost_ratio=0.05,     # 5% - Deferred maintenance common
-            insurance_cost_ratio=0.02,       # 2% - Standard coverage
-            property_tax_ratio=0.12,         # 12% - Often in suburban locations
-            marketing_ratio=0.06,            # 6% - OTA commissions, marketing
-            reserves_ratio=0.03,             # 3% - FF&E reserves
-            franchise_fee_ratio=0.08         # 8% - Franchise fees (higher % of lower revenue)
+            labor_cost_ratio=0.24,           # Staffing + departmental labor
+            food_cost_ratio=0.03,            # Continental breakfast supplies
+            management_fee_ratio=0.03,       # Operator fee
+            utility_cost_ratio=0.12,         # Utilities + ops
+            maintenance_cost_ratio=0.05,     # PPE / ongoing capex
+            insurance_cost_ratio=0.02,       # Property & liability
+            property_tax_ratio=0.10,         # Typical metro rate
+            marketing_ratio=0.08,            # OTA commissions, sales & marketing
+            reserves_ratio=0.05,             # FF&E reserves
+            franchise_fee_ratio=0.05         # Franchise & system fees
         )
     },
     
@@ -5137,6 +5306,19 @@ def get_target_roi(building_type: BuildingType) -> float:
         BuildingType.EDUCATIONAL: 0.07,
     }
     return roi_map.get(building_type, 0.08)
+
+def get_building_profile(building_type: BuildingType) -> Dict[str, float]:
+    """
+    Return a normalized profile with market cap rate, target yield-on-cost,
+    and preferred DSCR for a building type. Defaults to an office-like profile.
+    """
+    default_profile = BUILDING_PROFILES.get(BuildingType.OFFICE, {
+        'market_cap_rate': 0.07,
+        'target_yield': 0.095,
+        'target_dscr': 1.30,
+    })
+    profile = BUILDING_PROFILES.get(building_type, default_profile)
+    return dict(profile)
 
 def get_effective_modifiers(
     building_type: BuildingType,

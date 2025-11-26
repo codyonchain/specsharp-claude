@@ -5,6 +5,27 @@
 
 import { safeGet } from './displayFormatters';
 
+// Shared modifiers fallback so downstream access remains safe even when an
+// analysis payload omits modifier metadata.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let modifiers: any = {};
+
+interface FacilityMetrics {
+  units?: number;
+  costPerUnit?: number;
+  revenuePerUnit?: number;
+  monthlyRevenuePerUnit?: number;
+  buildingSize?: number;
+  costPerSf?: number;
+  revenuePerSf?: number;
+  noiPerSf?: number;
+  rooms?: number;
+  adr?: number;
+  occupancy?: number;
+  revpar?: number;
+  costPerKey?: number;
+}
+
 export interface DisplayData {
   // Financial metrics
   roi: number;
@@ -23,6 +44,8 @@ export interface DisplayData {
   yieldOnCost: number;
   marketCapRate: number | null;
   capRateSpreadBps: number | null;
+  targetYield?: number | null;
+  targetDscr?: number | null;
   operatingExpenses?: number;
   camCharges?: number;
   
@@ -59,11 +82,32 @@ export interface DisplayData {
   unitType: string;
   revenuePerUnit: number;
   costPerUnit: number;
+  units?: number;
+  annualRevenuePerUnit?: number;
+  monthlyRevenuePerUnit?: number;
+
+  // Underwriting refinements
+  yieldGapBps?: number | null;
+  breakEvenOccupancyForTargetYield?: number | null;
+  sensitivity?: {
+    baseYieldOnCost?: number | null;
+    revenueUp10YieldOnCost?: number | null;
+    revenueDown10YieldOnCost?: number | null;
+    costUp10YieldOnCost?: number | null;
+    costDown10YieldOnCost?: number | null;
+  };
   
   // Operational metrics
   breakEvenOccupancy: number;
   targetOccupancy: number;
   requiredRent: number;
+  facilityMetrics?: FacilityMetrics;
+  projectTimeline?: {
+    groundbreaking?: string;
+    structureComplete?: string;
+    substantialCompletion?: string;
+    grandOpening?: string;
+  };
   
   // Department allocations
   departments: Array<{
@@ -111,6 +155,16 @@ export interface DisplayData {
   finishLevelSource: 'explicit' | 'description' | 'default';
   costFactor?: number;
   revenueFactor?: number;
+  // Derived market comparison helpers
+  costPerSf?: number;
+  marketCostPerSF?: number;
+  marketCostPerSf?: number;
+  costPerSFDeltaPct?: number;
+  costPerSfDeltaPct?: number;
+  requiredNoiPerKey?: number;
+  currentNoiPerKey?: number;
+  requiredRevpar?: number;
+  currentRevpar?: number;
 }
 
 export class BackendDataMapper {
@@ -123,7 +177,17 @@ export class BackendDataMapper {
       return this.getEmptyDisplayData();
     }
     
-    const calculations = analysis?.calculations || {};
+    const calculations = analysis?.calculations || analysis?.calculation_data || {};
+    const rawTimeline =
+      calculations?.project_timeline ||
+      analysis?.project_timeline ||
+      analysis?.engine_output?.project_timeline ||
+      analysis?.result?.project_timeline ||
+      null;
+    modifiers =
+      (calculations as any)?.modifiers ||
+      (calculations as any)?.calculations?.modifiers ||
+      {};
     
     // Add comprehensive tracing for ROI and financial metrics
     console.log('=== ROI & FINANCIAL METRICS TRACE ===');
@@ -203,6 +267,31 @@ export class BackendDataMapper {
     const parsedInputRaw = analysis?.parsed_input || {};
     const parsedInput: Record<string, any> = { ...parsedInputRaw };
     const constructionCosts = calculations?.construction_costs || {};
+    const nestedCalculations = calculations?.calculations || {};
+    const profile = calculations?.profile ||
+      nestedCalculations?.profile ||
+      analysis?.profile ||
+      {};
+
+    const rawBuildingTypeValue =
+      calculations?.building_type ||
+      calculations?.buildingType ||
+      parsedInput?.building_type ||
+      projectInfo?.building_type ||
+      '';
+    const buildingTypeName =
+      typeof rawBuildingTypeValue === 'string'
+        ? rawBuildingTypeValue
+        : rawBuildingTypeValue?.name ?? String(rawBuildingTypeValue ?? '');
+    const buildingTypeString = (buildingTypeName || '').toString();
+    const lowerBuildingType = buildingTypeString.toLowerCase();
+    const isIndustrialFacility =
+      buildingTypeString.toUpperCase().includes('INDUSTRIAL') ||
+      lowerBuildingType.includes('warehouse') ||
+      lowerBuildingType.includes('manufacturing');
+    const isHospitalityFacility =
+      buildingTypeString.toUpperCase().includes('HOSPITALITY') ||
+      lowerBuildingType.includes('hotel');
 
     if (!parsedInput.square_footage || Number(parsedInput.square_footage) === 0) {
       const fallbackSF =
@@ -276,8 +365,8 @@ export class BackendDataMapper {
 
     const costFactorFromTrace = typeof modifiersTrace?.data?.cost_factor === 'number' ? modifiersTrace.data.cost_factor : undefined;
     const revenueFactorFromTrace = typeof modifiersTrace?.data?.revenue_factor === 'number' ? modifiersTrace.data.revenue_factor : undefined;
-    const fallbackCostFactor = typeof calculations?.modifiers?.cost_factor === 'number' ? calculations.modifiers.cost_factor : undefined;
-    const fallbackRevenueFactor = typeof calculations?.modifiers?.revenue_factor === 'number' ? calculations.modifiers.revenue_factor : undefined;
+    const fallbackCostFactor = typeof modifiers?.cost_factor === 'number' ? modifiers.cost_factor : undefined;
+    const fallbackRevenueFactor = typeof modifiers?.revenue_factor === 'number' ? modifiers.revenue_factor : undefined;
     const costFactor = costFactorFromTrace ?? fallbackCostFactor;
     const revenueFactor = revenueFactorFromTrace ?? fallbackRevenueFactor;
     
@@ -317,15 +406,9 @@ export class BackendDataMapper {
     const investmentDecision = feasible === undefined ? 'PENDING' : feasible ? 'GO' : 'NO-GO';
     
     // Extract unit metrics
-    const unitCount = this.extractUnitCount(projectInfo, parsedInput);
+    const totalCost = safeGet(totals, 'total_project_cost', 0);
     const unitLabel = safeGet(projectInfo, 'unit_label', 'Units');
     const unitType = safeGet(projectInfo, 'unit_type', 'units');
-    const totalCost = safeGet(totals, 'total_project_cost', 0);
-    const revenuePerUnit = safeGet(projectInfo, 'revenue_per_unit', 0) || 
-                          safeGet(operationalEfficiency, 'revenue_per_unit', 0) || 
-                          (annualRevenue / Math.max(unitCount, 1));
-    const costPerUnit = safeGet(projectInfo, 'cost_per_unit', 0) || 
-                       (totalCost / Math.max(unitCount, 1));
     
     // Extract operational metrics
     const breakEvenOccupancy = safeGet(investmentAnalysis, 'breakeven_metrics.occupancy', 0.85);
@@ -339,15 +422,261 @@ export class BackendDataMapper {
     const operationalMetrics = ownership?.operational_metrics || 
                               calculations?.operational_metrics ||
                               { staffing: [], revenue: {}, kpis: [] };
+    const perUnitMetrics = operationalMetrics?.per_unit ||
+                           ownership?.operational_metrics?.per_unit ||
+                           calculations?.operational_metrics?.per_unit ||
+                           {};
+    const sensitivityAnalysis = ownership?.sensitivity_analysis || {};
+    const sensitivityBase = sensitivityAnalysis.base || {};
+    const sensitivityRevenueUp = sensitivityAnalysis.revenue_up_10 || {};
+    const sensitivityRevenueDown = sensitivityAnalysis.revenue_down_10 || {};
+    const sensitivityCostUp = sensitivityAnalysis.cost_up_10 || {};
+    const sensitivityCostDown = sensitivityAnalysis.cost_down_10 || {};
     
     // Extract metrics for backward compatibility
     const staffingMetrics = operationalMetrics.staffing || [];
     const revenueMetrics = operationalMetrics.revenue || {};
     const kpis = operationalMetrics.kpis || [];
+
+    // Consolidated unit/per-unit metrics using backend payload first
+    const backendUnits = typeof perUnitMetrics.units === 'number' ? perUnitMetrics.units : undefined;
+    const fallbackUnitCount = this.extractUnitCount(projectInfo, parsedInput);
+    const unitCount = backendUnits && backendUnits > 0 ? backendUnits : fallbackUnitCount;
+    const backendCostPerUnit = typeof perUnitMetrics.cost_per_unit === 'number' ? perUnitMetrics.cost_per_unit : undefined;
+    const backendAnnualRevenuePerUnit = typeof perUnitMetrics.annual_revenue_per_unit === 'number'
+      ? perUnitMetrics.annual_revenue_per_unit
+      : undefined;
+    const backendMonthlyRevenuePerUnit = typeof perUnitMetrics.monthly_revenue_per_unit === 'number'
+      ? perUnitMetrics.monthly_revenue_per_unit
+      : undefined;
+    const fallbackCostPerUnit = safeGet(projectInfo, 'cost_per_unit', 0);
+    const fallbackProjectRevenuePerUnit = safeGet(projectInfo, 'revenue_per_unit', 0);
+    const fallbackOperationalRevenuePerUnit = safeGet(operationalEfficiency, 'revenue_per_unit', 0);
+    const annualRevenuePerUnit =
+      (typeof backendAnnualRevenuePerUnit === 'number' ? backendAnnualRevenuePerUnit : undefined) ??
+      (typeof fallbackProjectRevenuePerUnit === 'number' && fallbackProjectRevenuePerUnit > 0 ? fallbackProjectRevenuePerUnit : undefined) ??
+      (typeof fallbackOperationalRevenuePerUnit === 'number' && fallbackOperationalRevenuePerUnit > 0 ? fallbackOperationalRevenuePerUnit : undefined) ??
+      (unitCount > 0 ? annualRevenue / unitCount : 0);
+    const revenuePerUnit = annualRevenuePerUnit;
+    const costPerUnit =
+      backendCostPerUnit ??
+      (typeof fallbackCostPerUnit === 'number' && fallbackCostPerUnit > 0 ? fallbackCostPerUnit : undefined) ??
+      (totalCost / Math.max(unitCount, 1));
+    const monthlyRevenuePerUnit =
+      backendMonthlyRevenuePerUnit ??
+      (annualRevenuePerUnit > 0 ? annualRevenuePerUnit / 12 : 0);
     
     // Extract core project data
     const squareFootage = safeGet(parsedInput, 'square_footage', 0);
     const costPerSF = safeGet(totals, 'cost_per_sf', 0);
+    const derivedCostPerSf =
+      totalCost > 0 && squareFootage > 0
+        ? totalCost / squareFootage
+        : (typeof costPerSF === 'number' ? costPerSF : 0);
+    const marketFactor =
+      typeof modifiers?.market_factor === 'number' &&
+      Number.isFinite(modifiers.market_factor) &&
+      modifiers.market_factor > 0
+        ? modifiers.market_factor
+        : undefined;
+    const marketCostPerSF =
+      typeof marketFactor === 'number'
+        ? derivedCostPerSf / marketFactor
+        : undefined;
+    const costPerSFDeltaPct =
+      typeof marketCostPerSF === 'number' &&
+      marketCostPerSF !== 0
+        ? ((derivedCostPerSf - marketCostPerSF) / marketCostPerSF) * 100
+        : undefined;
+    const profileMarketCapRate = typeof profile?.market_cap_rate === 'number' ? profile.market_cap_rate : null;
+    const profileTargetYield = typeof profile?.target_yield === 'number' ? profile.target_yield : undefined;
+    const profileTargetDscr = typeof profile?.target_dscr === 'number' ? profile.target_dscr : undefined;
+    const targetYieldValue = profileTargetYield;
+    const debtTargetDscrValue = typeof debtMetrics?.target_dscr === 'number' ? debtMetrics.target_dscr : undefined;
+    const targetDscrValue = debtTargetDscrValue ?? profileTargetDscr;
+    const marketCapRateValue = typeof ownership?.market_cap_rate === 'number'
+      ? ownership.market_cap_rate
+      : profileMarketCapRate;
+
+    const pickPositiveNumber = (...values: Array<unknown>): number | undefined => {
+      for (const value of values) {
+        const num = typeof value === 'number' ? value : Number(value);
+        if (Number.isFinite(num) && num > 0) {
+          return num;
+        }
+      }
+      return undefined;
+    };
+
+    const resolvedSquareFootage =
+      typeof squareFootage === 'number' && squareFootage > 0
+        ? squareFootage
+        : pickPositiveNumber(
+            totals?.square_footage,
+            calculations?.square_footage,
+            projectInfo?.square_footage,
+            parsedInputRaw?.square_footage
+          );
+
+    const resolvedTotalCost =
+      typeof totalCost === 'number' && totalCost > 0
+        ? totalCost
+        : pickPositiveNumber(
+            totals?.total_project_cost,
+            calculations?.total_project_cost,
+            calculations?.total_cost
+          );
+
+    const resolvedAnnualRevenue =
+      typeof annualRevenue === 'number' && annualRevenue > 0
+        ? annualRevenue
+        : pickPositiveNumber(revenueAnalysis?.annual_revenue, projectInfo?.annual_revenue);
+
+    const resolvedNoi =
+      typeof noi === 'number' && noi > 0
+        ? noi
+        : pickPositiveNumber(returnMetrics?.estimated_annual_noi, ownership?.noi);
+
+    const toFiniteNumber = (value: unknown): number | undefined => {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+      }
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    };
+
+    const hotelRooms =
+      toFiniteNumber(calculations?.rooms) ??
+      toFiniteNumber(calculations?.room_count) ??
+      toFiniteNumber(calculations?.hotel_rooms) ??
+      toFiniteNumber(calculations?.hospitality_rooms) ??
+      toFiniteNumber(projectInfo?.rooms) ??
+      undefined;
+    const hotelAdr =
+      toFiniteNumber(calculations?.adr) ??
+      toFiniteNumber(calculations?.average_daily_rate) ??
+      toFiniteNumber(calculations?.hotel_adr) ??
+      toFiniteNumber(calculations?.hospitality_adr) ??
+      toFiniteNumber(projectInfo?.adr) ??
+      undefined;
+    let hotelOccupancy =
+      toFiniteNumber(calculations?.occupancy) ??
+      toFiniteNumber(calculations?.hotel_occupancy) ??
+      toFiniteNumber(calculations?.hospitality_occupancy) ??
+      toFiniteNumber(calculations?.occ) ??
+      toFiniteNumber(projectInfo?.occupancy_rate) ??
+      undefined;
+    if (typeof hotelOccupancy === 'number' && hotelOccupancy > 1 && hotelOccupancy <= 100) {
+      hotelOccupancy = hotelOccupancy / 100;
+    }
+    let hotelRevpar =
+      toFiniteNumber(calculations?.revpar) ??
+      toFiniteNumber(calculations?.hotel_revpar) ??
+      toFiniteNumber(calculations?.hospitality_revpar) ??
+      toFiniteNumber(projectInfo?.revpar) ??
+      undefined;
+    if ((hotelRevpar === undefined || hotelRevpar === 0) && typeof hotelAdr === 'number' && typeof hotelOccupancy === 'number') {
+      hotelRevpar = hotelAdr * hotelOccupancy;
+    }
+    const hotelTotalCostOverride =
+      toFiniteNumber(calculations?.total_project_cost) ??
+      toFiniteNumber(calculations?.total_cost) ??
+      toFiniteNumber(calculations?.investment_required) ??
+      toFiniteNumber(calculations?.hotel_total_cost) ??
+      toFiniteNumber(analysis?.total_project_cost) ??
+      toFiniteNumber(analysis?.total_cost) ??
+      toFiniteNumber(analysis?.investment_required) ??
+      undefined;
+    const hotelCostPerKey =
+      toFiniteNumber(calculations?.cost_per_key) ??
+      toFiniteNumber(calculations?.hotel_cost_per_key) ??
+      (
+        typeof hotelRooms === 'number' &&
+        hotelRooms > 0 &&
+        typeof hotelTotalCostOverride === 'number' &&
+        hotelTotalCostOverride > 0
+          ? hotelTotalCostOverride / hotelRooms
+          : undefined
+      );
+
+    const hospitalityFacilityMetrics: FacilityMetrics | undefined = isHospitalityFacility
+      ? {
+          rooms: hotelRooms,
+          adr: hotelAdr,
+          occupancy: hotelOccupancy,
+          revpar: hotelRevpar,
+          costPerKey: hotelCostPerKey,
+        }
+      : undefined;
+
+    const requiredNoiResolved =
+      toFiniteNumber(calculations?.revenue_requirements?.required_value) ??
+      toFiniteNumber(ownership?.revenue_requirements?.required_value) ??
+      (typeof totalCost === 'number' && typeof targetYieldValue === 'number'
+        ? totalCost * targetYieldValue
+        : undefined);
+    const currentNoiResolved =
+      typeof noi === 'number' && Number.isFinite(noi)
+        ? noi
+        : toFiniteNumber(returnMetrics?.estimated_annual_noi);
+    const hospitalityRequiredNoiPerKey =
+      isHospitalityFacility && typeof hotelRooms === 'number' && hotelRooms > 0 && typeof requiredNoiResolved === 'number'
+        ? requiredNoiResolved / hotelRooms
+        : undefined;
+    const hospitalityCurrentNoiPerKey =
+      isHospitalityFacility && typeof hotelRooms === 'number' && hotelRooms > 0 && typeof currentNoiResolved === 'number'
+        ? currentNoiResolved / hotelRooms
+        : undefined;
+    const hospitalityCurrentRevpar =
+      isHospitalityFacility && typeof hotelRevpar === 'number'
+        ? hotelRevpar
+        : isHospitalityFacility && typeof hotelAdr === 'number' && typeof hotelOccupancy === 'number'
+          ? hotelAdr * hotelOccupancy
+          : undefined;
+    let hospitalityRequiredRevpar =
+      isHospitalityFacility
+        ? toFiniteNumber(calculations?.required_revpar ?? calculations?.hotel_required_revpar)
+        : undefined;
+    const hospitalityMargin = typeof operatingMargin === 'number' && operatingMargin > 0 ? operatingMargin : undefined;
+    if (
+      isHospitalityFacility &&
+      hospitalityRequiredRevpar === undefined &&
+      typeof requiredNoiResolved === 'number' &&
+      typeof hospitalityMargin === 'number' &&
+      typeof hotelRooms === 'number' &&
+      hotelRooms > 0
+    ) {
+      hospitalityRequiredRevpar = (requiredNoiResolved / hospitalityMargin) / (hotelRooms * 365);
+    }
+
+    const industrialFacilityMetrics: FacilityMetrics | undefined = isIndustrialFacility
+      ? {
+          buildingSize: resolvedSquareFootage,
+          costPerSf:
+            resolvedSquareFootage && resolvedTotalCost
+              ? resolvedTotalCost / resolvedSquareFootage
+              : undefined,
+          revenuePerSf:
+            resolvedSquareFootage && resolvedAnnualRevenue
+              ? resolvedAnnualRevenue / resolvedSquareFootage
+              : undefined,
+          noiPerSf:
+            resolvedSquareFootage && resolvedNoi ? resolvedNoi / resolvedSquareFootage : undefined,
+        }
+      : undefined;
+
+    const standardFacilityMetrics: FacilityMetrics | undefined = !isIndustrialFacility
+      ? {
+          units: unitCount > 0 ? unitCount : undefined,
+          costPerUnit: typeof costPerUnit === 'number' ? costPerUnit : undefined,
+          revenuePerUnit: typeof revenuePerUnit === 'number' ? revenuePerUnit : undefined,
+          monthlyRevenuePerUnit:
+            typeof monthlyRevenuePerUnit === 'number' ? monthlyRevenuePerUnit : undefined,
+        }
+      : undefined;
+
+    const facilityMetrics =
+      hospitalityFacilityMetrics ?? industrialFacilityMetrics ?? standardFacilityMetrics;
     
     return {
       roi,
@@ -364,8 +693,10 @@ export class BackendDataMapper {
       operatingExpenses: typeof operatingExpensesValue === 'number' ? operatingExpensesValue : 0,
       camCharges: typeof camChargesValue === 'number' ? camChargesValue : 0,
       yieldOnCost: typeof ownership?.yield_on_cost === 'number' ? ownership.yield_on_cost : 0,
-      marketCapRate: typeof ownership?.market_cap_rate === 'number' ? ownership.market_cap_rate : null,
+      marketCapRate: marketCapRateValue,
       capRateSpreadBps: typeof ownership?.cap_rate_spread_bps === 'number' ? ownership.cap_rate_spread_bps : null,
+      targetYield: targetYieldValue,
+      targetDscr: targetDscrValue,
       investmentDecision,
       feasible,
       decisionReason: investmentAnalysis.summary || investmentAnalysis.reason || this.generateDecisionReason(roi, npv, dscr),
@@ -379,9 +710,21 @@ export class BackendDataMapper {
       unitType,
       revenuePerUnit,
       costPerUnit,
+      units: unitCount > 0 ? unitCount : undefined,
+      annualRevenuePerUnit,
+      monthlyRevenuePerUnit,
       breakEvenOccupancy,
       targetOccupancy,
       requiredRent,
+      facilityMetrics,
+      projectTimeline: rawTimeline
+        ? {
+            groundbreaking: rawTimeline.groundbreaking,
+            structureComplete: rawTimeline.structure_complete,
+            substantialCompletion: rawTimeline.substantial_completion,
+            grandOpening: rawTimeline.grand_opening,
+          }
+        : undefined,
       departments,
       staffingMetrics,
       revenueMetrics,
@@ -390,6 +733,15 @@ export class BackendDataMapper {
       constructionCost: safeGet(totals, 'hard_costs', 0),
       softCosts: safeGet(totals, 'soft_costs', 0),
       costPerSF,
+      costPerSf: derivedCostPerSf,
+      marketCostPerSF,
+      marketCostPerSf: marketCostPerSF,
+      costPerSFDeltaPct,
+      costPerSfDeltaPct: costPerSFDeltaPct,
+      requiredNoiPerKey: isHospitalityFacility ? hospitalityRequiredNoiPerKey : undefined,
+      currentNoiPerKey: isHospitalityFacility ? hospitalityCurrentNoiPerKey : undefined,
+      requiredRevpar: isHospitalityFacility ? hospitalityRequiredRevpar : undefined,
+      currentRevpar: isHospitalityFacility ? hospitalityCurrentRevpar : undefined,
       squareFootage,
       buildingType: safeGet(parsedInput, 'building_type', 'office'),
       buildingSubtype: safeGet(parsedInput, 'building_subtype', safeGet(parsedInput, 'subtype', 'standard')),
@@ -401,7 +753,24 @@ export class BackendDataMapper {
       finishLevel,
       finishLevelSource,
       costFactor,
-      revenueFactor
+      revenueFactor,
+      yieldGapBps: typeof ownership.yield_gap_bps === 'number' ? ownership.yield_gap_bps : undefined,
+      breakEvenOccupancyForTargetYield:
+        typeof ownership.break_even_occupancy_for_target_yield === 'number'
+          ? ownership.break_even_occupancy_for_target_yield
+          : undefined,
+      sensitivity: {
+        baseYieldOnCost:
+          typeof sensitivityBase.yield_on_cost === 'number' ? sensitivityBase.yield_on_cost : undefined,
+        revenueUp10YieldOnCost:
+          typeof sensitivityRevenueUp.yield_on_cost === 'number' ? sensitivityRevenueUp.yield_on_cost : undefined,
+        revenueDown10YieldOnCost:
+          typeof sensitivityRevenueDown.yield_on_cost === 'number' ? sensitivityRevenueDown.yield_on_cost : undefined,
+        costUp10YieldOnCost:
+          typeof sensitivityCostUp.yield_on_cost === 'number' ? sensitivityCostUp.yield_on_cost : undefined,
+        costDown10YieldOnCost:
+          typeof sensitivityCostDown.yield_on_cost === 'number' ? sensitivityCostDown.yield_on_cost : undefined,
+      }
     };
   }
   
@@ -421,6 +790,8 @@ export class BackendDataMapper {
       yieldOnCost: 0,
       marketCapRate: null,
       capRateSpreadBps: null,
+      targetYield: undefined,
+      targetDscr: undefined,
       investmentDecision: 'PENDING',
       feasible: undefined,
       decisionReason: 'Awaiting analysis...',
@@ -431,17 +802,35 @@ export class BackendDataMapper {
       unitType: 'units',
       revenuePerUnit: 0,
       costPerUnit: 0,
+      units: 0,
+      annualRevenuePerUnit: 0,
+      monthlyRevenuePerUnit: 0,
       breakEvenOccupancy: 0,
       targetOccupancy: 0,
       requiredRent: 0,
+      facilityMetrics: undefined,
       departments: [],
       staffingMetrics: [],
       revenueMetrics: {},
       kpis: [],
+      yieldGapBps: undefined,
+      breakEvenOccupancyForTargetYield: undefined,
+      sensitivity: {
+        baseYieldOnCost: undefined,
+        revenueUp10YieldOnCost: undefined,
+        revenueDown10YieldOnCost: undefined,
+        costUp10YieldOnCost: undefined,
+        costDown10YieldOnCost: undefined,
+      },
       totalProjectCost: 0,
       constructionCost: 0,
       softCosts: 0,
       costPerSF: 0,
+      costPerSf: 0,
+      marketCostPerSF: undefined,
+      marketCostPerSf: undefined,
+      costPerSFDeltaPct: undefined,
+      costPerSfDeltaPct: undefined,
       squareFootage: 0,
       buildingType: '',
       buildingSubtype: '',
@@ -553,7 +942,7 @@ export class BackendDataMapper {
   
   private static generateDecisionReason(roi: number, npv: number, dscr: number): string {
     if (roi >= 0.08 && npv > 0 && dscr >= 1.25) {
-      return 'Project meets all investment criteria with strong returns and debt coverage.';
+      return 'Debt coverage and returns appear to meet underwriting targets, but confirm DSCR, NOI gap, and yield on cost before proceeding.';
     } else if (roi < 0.06) {
       return `ROI of ${(roi * 100).toFixed(1)}% is below the 8% minimum threshold.`;
     } else if (npv < 0) {

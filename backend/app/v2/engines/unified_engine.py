@@ -4,12 +4,14 @@ This replaces: engine.py, clean_engine_v2.py, cost_engine.py,
 clean_scope_engine.py, owner_view_engine.py, engine_selector.py
 """
 
+from datetime import datetime, date
 from app.v2.config.master_config import (
     MASTER_CONFIG,
     BuildingType,
     ProjectClass,
     OwnershipType,
     PROJECT_CLASS_MULTIPLIERS,
+    PROJECT_TIMELINES,
     get_building_config,
     get_effective_modifiers,
     get_margin_pct,
@@ -17,15 +19,60 @@ from app.v2.config.master_config import (
     detect_building_type_with_method,
     resolve_quality_factor,
     validate_project_class,
-    infer_finish_level
+    infer_finish_level,
+    get_building_profile,
 )
 # from app.v2.services.financial_analyzer import FinancialAnalyzer  # TODO: Implement this
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import asdict
 import logging
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+
+def _add_months(base_date: date, months: int) -> date:
+    """Add months to a date without relying on external libs."""
+    month = base_date.month - 1 + months
+    year = base_date.year + month // 12
+    month = month % 12 + 1
+    day = min(base_date.day, 28)  # avoid month-end overflow
+    return date(year, month, day)
+
+
+def _month_to_quarter_string(d: date) -> str:
+    """Convert a date to a quarter string like 'Q1 2025'."""
+    quarter = (d.month - 1) // 3 + 1
+    return f"Q{quarter} {d.year}"
+
+
+def build_project_timeline(building_type: BuildingType, start_date: Optional[date] = None) -> Dict[str, str]:
+    """
+    Build a project timeline dictionary for the Executive View "Key Milestones" card.
+    Returns milestone names mapped to quarter strings (e.g., 'Q1 2025').
+    """
+    base_date = start_date or date(2025, 1, 1)
+
+    config = PROJECT_TIMELINES.get(building_type)
+    if config:
+        ground_up = config.get("ground_up", {})
+        milestones = ground_up.get("milestones")
+    else:
+        milestones = None
+
+    if not milestones:
+        milestones = {
+            "groundbreaking": 0,
+            "structure_complete": 8,
+            "substantial_completion": 18,
+            "grand_opening": 24,
+        }
+
+    timeline: Dict[str, str] = {}
+    for key, offset_months in milestones.items():
+        milestone_date = _add_months(base_date, int(offset_months))
+        timeline[key] = _month_to_quarter_string(milestone_date)
+
+    return timeline
 
 class UnifiedEngine:
     """
@@ -268,6 +315,7 @@ class UnifiedEngine:
         
         # Calculate ownership/financing analysis with enhanced financial metrics
         ownership_analysis = None
+        revenue_data = None
         if ownership_type in building_config.ownership_types:
             # Calculate comprehensive revenue analysis using master_config
             revenue_data = self.calculate_ownership_analysis({
@@ -395,6 +443,8 @@ class UnifiedEngine:
         if not cost_build_up and display_finish_level != 'standard':
             fallback_cost_build_up.append({'label': 'Finish Level', 'multiplier': finish_cost_factor})
 
+        profile = get_building_profile(building_type)
+
         # Build comprehensive response - FLATTENED structure to match frontend expectations
         result = {
             'project_info': {
@@ -403,13 +453,19 @@ class UnifiedEngine:
                 'display_name': building_config.display_name,
                 'project_class': project_class.value,
                 'square_footage': square_footage,
-            'location': location,
-            'floors': floors,
-            'typical_floors': building_config.typical_floors,
-            'finish_level': normalized_finish_level or 'standard',
-            'finish_level_source': finish_source,
-            'available_special_features': list(building_config.special_features.keys()) if building_config.special_features else []
-        },
+                'location': location,
+                'floors': floors,
+                'typical_floors': building_config.typical_floors,
+                'finish_level': normalized_finish_level or 'standard',
+                'finish_level_source': finish_source,
+                'available_special_features': list(building_config.special_features.keys()) if building_config.special_features else []
+            },
+            'profile': {
+                'building_type': building_type.value,
+                'market_cap_rate': profile.get('market_cap_rate'),
+                'target_yield': profile.get('target_yield'),
+                'target_dscr': profile.get('target_dscr'),
+            },
             'modifiers': modifiers,
             # Flatten calculations to top level to match frontend CalculationResult interface
             'construction_costs': {
@@ -461,6 +517,45 @@ class UnifiedEngine:
             'total_project_cost': total_project_cost,
             'cost_per_sf': total_project_cost / square_footage
         })
+
+        try:
+            building_type_name = building_type.name if hasattr(building_type, 'name') else str(building_type)
+        except Exception:
+            building_type_name = str(building_type)
+        if isinstance(building_type_name, str) and (
+            'HOSPITALITY' in building_type_name.upper() or 'HOTEL' in building_type_name.upper()
+        ):
+            hospitality_metrics = None
+            if revenue_data and isinstance(revenue_data, dict):
+                hospitality_metrics = revenue_data.get('hospitality_financials')
+            if not hospitality_metrics and ownership_analysis:
+                hospitality_metrics = ownership_analysis.get('hospitality_financials')
+            if not hospitality_metrics:
+                hospitality_metrics = result.get('hospitality_financials')
+            if hospitality_metrics:
+                key_map = {
+                    'rooms': 'rooms',
+                    'adr': 'adr',
+                    'occupancy': 'occupancy',
+                    'revpar': 'revpar',
+                    'cost_per_key': 'cost_per_key'
+                }
+                for source_key, dest_key in key_map.items():
+                    metric_value = hospitality_metrics.get(source_key)
+                    if metric_value is None:
+                        continue
+                    try:
+                        result[dest_key] = float(metric_value)
+                    except (TypeError, ValueError):
+                        result[dest_key] = metric_value
+                if 'cost_per_key' not in result or result['cost_per_key'] in (None, 0):
+                    rooms_metric = hospitality_metrics.get('rooms') or result.get('rooms')
+                    if rooms_metric not in (None, 0):
+                        try:
+                            result['cost_per_key'] = float(total_project_cost) / float(rooms_metric)
+                        except (TypeError, ValueError, ZeroDivisionError):
+                            pass
+                result['hospitality_financials'] = hospitality_metrics
         
         return result
     
@@ -685,24 +780,54 @@ class UnifiedEngine:
         else:
             is_premium = quality_factor > 1.2
 
-        occupancy_rate = subtype_config.occupancy_rate_premium if is_premium else subtype_config.occupancy_rate_base
-        if occupancy_rate is None:
-            occupancy_rate = 0.85
+        # Industrial occupancy should follow config's base/premium rates.
+        if building_enum == BuildingType.INDUSTRIAL:
+            occ_base = getattr(subtype_config, "occupancy_rate_base", None)
+            occ_premium = getattr(subtype_config, "occupancy_rate_premium", None)
+            if is_premium and isinstance(occ_premium, (int, float)):
+                occupancy_rate = float(occ_premium)
+            elif isinstance(occ_base, (int, float)):
+                occupancy_rate = float(occ_base)
+            else:
+                occupancy_rate = 0.95
+        else:
+            occupancy_rate = subtype_config.occupancy_rate_premium if is_premium else subtype_config.occupancy_rate_base
+            if occupancy_rate is None:
+                occupancy_rate = 0.85
 
         annual_revenue = self._calculate_revenue_by_type(
-            building_enum, subtype_config, square_footage, quality_factor, occupancy_rate
+            building_enum, subtype_config, square_footage, quality_factor, occupancy_rate, calculations
         )
         
         # Apply revenue modifiers
         annual_revenue *= revenue_factor
+        hospitality_financials = calculations.get('hospitality_financials') if building_enum == BuildingType.HOSPITALITY else None
+        hospitality_expense_pct = None
+        if hospitality_financials:
+            hospitality_financials['annual_revenue'] = annual_revenue
+            derived_occupancy = hospitality_financials.get('occupancy')
+            if isinstance(derived_occupancy, (int, float)):
+                occupancy_rate = derived_occupancy
+            expense_override = hospitality_financials.get('expense_pct')
+            if isinstance(expense_override, (int, float)):
+                hospitality_expense_pct = max(0.0, min(float(expense_override), 0.95))
         
         margin_pct = margin_pct if margin_pct else get_margin_pct(building_enum, subtype)
+        if hospitality_expense_pct is not None:
+            margin_pct = 1 - hospitality_expense_pct
+        # For industrial, enforce the configured operating margin (NNN style).
+        if building_enum == BuildingType.INDUSTRIAL:
+            industrial_margin = getattr(subtype_config, "operating_margin_base", None)
+            if isinstance(industrial_margin, (int, float)) and industrial_margin > 0:
+                margin_pct = float(industrial_margin)
         self._log_trace("margin_normalized", {
             'building_type': building_enum.value,
             'subtype': subtype,
             'margin_pct': round(margin_pct, 4)
         })
-        if office_operating_expense_override is not None:
+        if hospitality_financials and hospitality_expense_pct is not None:
+            total_expenses = round(annual_revenue * hospitality_expense_pct, 2)
+        elif office_operating_expense_override is not None:
             total_expenses = round(office_operating_expense_override, 2)
             if annual_revenue > 0:
                 margin_pct = max(0.05, min(0.65, 1 - (total_expenses / annual_revenue)))
@@ -710,6 +835,49 @@ class UnifiedEngine:
             total_expenses = round(annual_revenue * (1 - margin_pct), 2)
 
         net_income = round(annual_revenue - total_expenses, 2)
+        if hospitality_financials:
+            hospitality_financials['total_operating_expenses'] = total_expenses
+            hospitality_financials['annual_noi'] = net_income
+            hospitality_financials['noi_margin'] = margin_pct
+            rooms_value = hospitality_financials.get('rooms')
+            adr_value = hospitality_financials.get('adr')
+            occupancy_value = hospitality_financials.get('occupancy')
+            revpar_value = hospitality_financials.get('revpar')
+            if rooms_value is not None:
+                calculations['rooms'] = float(rooms_value)
+                total_cost_value = (
+                    calculations.get('total_project_cost')
+                    or calculations.get('total_cost')
+                    or total_cost
+                )
+                if isinstance(total_cost_value, (int, float)) and total_cost_value > 0:
+                    try:
+                        calculations['cost_per_key'] = float(total_cost_value) / float(rooms_value)
+                    except (TypeError, ValueError, ZeroDivisionError):
+                        pass
+            if adr_value is not None:
+                calculations['adr'] = float(adr_value)
+            if occupancy_value is not None:
+                calculations['occupancy'] = float(occupancy_value)
+                if adr_value is not None:
+                    calculations['revpar'] = float(adr_value) * float(occupancy_value)
+            elif revpar_value is not None:
+                calculations['revpar'] = float(revpar_value)
+            key_map = {
+                'rooms': 'rooms',
+                'adr': 'adr',
+                'occupancy': 'occupancy',
+                'revpar': 'revpar',
+                'cost_per_key': 'cost_per_key'
+            }
+            for source_key, dest_key in key_map.items():
+                hosp_value = hospitality_financials.get(source_key)
+                if hosp_value is None:
+                    continue
+                try:
+                    calculations[dest_key] = float(hosp_value)
+                except (TypeError, ValueError):
+                    calculations[dest_key] = hosp_value
         cam_charges_value = round(office_cam_charges, 2) if office_cam_charges is not None else round(float(calculations.get('cam_charges', 0) or 0), 2)
         market_cap_rate_config = getattr(subtype_config, 'market_cap_rate', None)
         yield_on_cost = net_income / total_cost if total_cost > 0 else 0
@@ -747,46 +915,45 @@ class UnifiedEngine:
         # Standard projection period for IRR calculation
         years = 10
 
-        property_value = None
+        property_value = 0
         market_cap_rate = None
+        exit_cap_rate, discount_rate = self.get_exit_cap_and_discount_rate(building_enum)
 
-        if net_income <= 0:
+        if net_income <= 0 or total_cost <= 0:
             npv = -total_cost
             irr = 0.0
-            property_value = 0
+            market_cap_rate = exit_cap_rate
         else:
-            logger.info(f"🏢 Building enum check: {building_enum} == {BuildingType.MULTIFAMILY}? {building_enum == BuildingType.MULTIFAMILY}")
-            if building_enum == BuildingType.MULTIFAMILY:
-                market_cap_rate = getattr(subtype_config, 'market_cap_rate', 0.06)
-                property_value = net_income / market_cap_rate if market_cap_rate > 0 else 0
+            market_cap_rate = exit_cap_rate
+            terminal_value = net_income / exit_cap_rate if exit_cap_rate > 0 else 0
+            property_value = terminal_value
+            cashflows = self.build_unlevered_cashflows_with_exit(
+                total_project_cost=total_cost,
+                annual_noi=net_income,
+                years=years,
+                exit_cap_rate=exit_cap_rate
+            )
+            if not cashflows:
                 npv = property_value - total_cost
-                logger.info(f"🏢 Multifamily Cap Rate Valuation:")
-                logger.info(f"   NOI: ${net_income:,.0f}")
-                logger.info(f"   Cap Rate: {market_cap_rate:.1%}")
-                logger.info(f"   Property Value: ${property_value:,.0f}")
-                logger.info(f"   NPV: ${npv:,.0f}")
+                irr = 0.0
+            else:
                 try:
-                    irr = self.calculate_irr_with_terminal_value(
+                    npv = self.calculate_npv(
                         initial_investment=total_cost,
                         annual_cash_flow=net_income,
-                        terminal_value=property_value,
-                        years=years
-                    ) if property_value else 0.0
+                        years=years,
+                        discount_rate=discount_rate,
+                        cashflows=cashflows
+                    )
                 except OverflowError:
-                    irr = 0.0
-            else:
-                discount_rate = getattr(subtype_config, 'discount_rate', None) or 0.08
-                npv = self.calculate_npv(
-                    initial_investment=total_cost,
-                    annual_cash_flow=net_income,
-                    years=years,
-                    discount_rate=discount_rate
-                )
+                    npv = property_value - total_cost
+
                 try:
                     irr = self.calculate_irr(
                         initial_investment=total_cost,
                         annual_cash_flow=net_income,
-                        years=years
+                        years=years,
+                        cashflows=cashflows
                     )
                 except OverflowError:
                     irr = 0.0
@@ -803,6 +970,21 @@ class UnifiedEngine:
         # Calculate payback period
         payback_period = round(total_cost / net_income, 1) if net_income > 0 else 999
         
+        # Derive units for display/per-unit metrics when not provided.
+        units = calculations.get('units')
+        if not units:
+            units = 0
+            if (
+                building_enum == BuildingType.MULTIFAMILY
+                and hasattr(subtype_config, 'units_per_sf')
+                and square_footage > 0
+            ):
+                try:
+                    units_estimate = float(subtype_config.units_per_sf) * float(square_footage)
+                    units = max(1, int(round(units_estimate)))
+                except (TypeError, ValueError):
+                    units = 0
+        
         # Calculate display-ready operational metrics
         operational_metrics = self.calculate_operational_metrics_for_display(
             building_type=building_type,
@@ -810,9 +992,75 @@ class UnifiedEngine:
             operational_efficiency=operational_efficiency,
             square_footage=square_footage,
             annual_revenue=annual_revenue,
-            units=calculations.get('units', 0)
+            units=units
         )
         
+        # Surface per-unit data for downstream cards (MF heavy).
+        operational_metrics.setdefault('per_unit', {})
+        operational_metrics['per_unit'].setdefault('units', units or 0)
+        if units and units > 0:
+            cost_per_unit = total_cost / units
+            annual_revenue_per_unit = annual_revenue / units
+            monthly_revenue_per_unit = annual_revenue_per_unit / 12.0
+            operational_metrics['per_unit'].update({
+                'cost_per_unit': round(cost_per_unit, 2),
+                'annual_revenue_per_unit': round(annual_revenue_per_unit, 2),
+                'monthly_revenue_per_unit': round(monthly_revenue_per_unit, 2),
+            })
+        
+        # Underwriting refinement metrics: yield gap, break-even occupancy, sensitivity
+        building_profile = get_building_profile(building_enum)
+        target_yield = building_profile.get('target_yield') if building_profile else None
+        yield_gap_bps = None
+        if isinstance(target_yield, (int, float)):
+            try:
+                yield_gap_bps = int(round((target_yield - yield_on_cost) * 10000))
+            except (TypeError, ValueError):
+                yield_gap_bps = None
+
+        break_even_occupancy_for_yield = None
+        if (
+            isinstance(target_yield, (int, float))
+            and yield_on_cost > 0
+            and isinstance(occupancy_rate, (int, float))
+        ):
+            try:
+                occ_required = occupancy_rate * (target_yield / yield_on_cost)
+                break_even_occupancy_for_yield = max(0.0, min(1.0, float(occ_required)))
+            except (TypeError, ValueError, ZeroDivisionError):
+                break_even_occupancy_for_yield = None
+
+        sensitivity_analysis = None
+        if total_cost > 0:
+            try:
+                base_yoc = yield_on_cost
+                noi_up = net_income * 1.10
+                noi_down = net_income * 0.90
+                total_cost_up = total_cost * 1.10
+                total_cost_down = total_cost * 0.90
+
+                sensitivity_analysis = {
+                    'base': {'yield_on_cost': round(base_yoc, 4)},
+                    'revenue_up_10': {
+                        'yield_on_cost': round(noi_up / total_cost, 4)
+                        if total_cost > 0 else None
+                    },
+                    'revenue_down_10': {
+                        'yield_on_cost': round(noi_down / total_cost, 4)
+                        if total_cost > 0 else None
+                    },
+                    'cost_up_10': {
+                        'yield_on_cost': round(net_income / total_cost_up, 4)
+                        if total_cost_up > 0 else None
+                    },
+                    'cost_down_10': {
+                        'yield_on_cost': round(net_income / total_cost_down, 4)
+                        if total_cost_down > 0 else None
+                    },
+                }
+            except Exception:
+                sensitivity_analysis = None
+
         cash_on_cash_return_pct = round((net_income / total_cost) * 100, 2) if total_cost > 0 else 0
         cap_rate_pct = round((net_income / total_cost) * 100, 2) if total_cost > 0 else 0
 
@@ -841,6 +1089,8 @@ class UnifiedEngine:
                 'management_fee': 0.0,
                 'capex_reserve': 0.0,
             }
+
+        project_timeline = build_project_timeline(building_enum, None)
 
         return {
             'revenue_analysis': {
@@ -871,19 +1121,25 @@ class UnifiedEngine:
                 'feasible': feasible
             },
             'yield_on_cost': round(yield_on_cost, 4),
+            'yield_gap_bps': yield_gap_bps,
+            'break_even_occupancy_for_target_yield': break_even_occupancy_for_yield,
             'market_cap_rate': round(market_cap_rate_config, 4) if isinstance(market_cap_rate_config, (int, float)) else None,
             'cap_rate_spread_bps': cap_rate_spread_bps,
             'revenue_requirements': revenue_requirements,
             'operational_efficiency': operational_efficiency,  # Keep raw data
             'operational_metrics': operational_metrics,  # ADD formatted display data
-            'underwriting': underwriting
+            'underwriting': underwriting,
+            'sensitivity_analysis': sensitivity_analysis,
+            'project_timeline': project_timeline,
+            'hospitality_financials': calculations.get('hospitality_financials'),
         }
 
-    def _calculate_revenue_by_type(self, building_enum, config, square_footage, quality_factor, occupancy_rate):
+    def _calculate_revenue_by_type(self, building_enum, config, square_footage, quality_factor, occupancy_rate, calculation_context: Optional[Dict[str, Any]] = None):
         """Calculate revenue based on the specific building type's metrics"""
         
         # Initialize base_revenue to avoid uninitialized variable
         base_revenue = 0
+        context = calculation_context or {}
         
         # Healthcare - uses beds, visits, procedures, or scans
         if building_enum == BuildingType.HEALTHCARE:
@@ -911,10 +1167,20 @@ class UnifiedEngine:
             monthly_rent = config.base_revenue_per_unit_monthly
             base_revenue = units * monthly_rent * 12
         
-        # Hospitality - uses revenue per room
+        # Hospitality - use ADR x occupancy x room count with expense profiling
         elif building_enum == BuildingType.HOSPITALITY:
-            rooms = square_footage * config.rooms_per_sf
-            base_revenue = rooms * config.base_revenue_per_room_annual
+            hospitality_financials = self._build_hospitality_financials(
+                config=config,
+                square_footage=square_footage,
+                context=context
+            )
+            if hospitality_financials:
+                context['hospitality_financials'] = hospitality_financials
+                base_revenue = hospitality_financials.get('annual_room_revenue', 0)
+                occupancy_rate = 1.0  # Occupancy already captured in the revenue model
+            else:
+                rooms = square_footage * getattr(config, 'rooms_per_sf', 0)
+                base_revenue = rooms * getattr(config, 'base_revenue_per_room_annual', 0)
         
         # Educational - uses revenue per student
         elif building_enum == BuildingType.EDUCATIONAL:
@@ -941,9 +1207,17 @@ class UnifiedEngine:
         elif building_enum == BuildingType.CIVIC:
             return 0
         
-        # Default - uses revenue per SF (Office, Retail, Restaurant, Industrial, etc.)
+        # Default - uses revenue per SF (Office, Retail, Restaurant, etc.)
         else:
-            base_revenue = square_footage * config.base_revenue_per_sf_annual
+            # Industrial revenue is tied directly to square footage rents (NNN).
+            if building_enum == BuildingType.INDUSTRIAL:
+                base_psf = getattr(config, 'base_revenue_per_sf_annual', None)
+                if base_psf is None:
+                    # Fallback if config missing: assume ~$12/SF EGI at 95% occ.
+                    base_psf = 11.5
+                base_revenue = square_footage * base_psf
+            else:
+                base_revenue = square_footage * config.base_revenue_per_sf_annual
         
         # Apply quality factor and occupancy
         # Ensure no None values
@@ -954,6 +1228,124 @@ class UnifiedEngine:
         adjusted_revenue = base_revenue * quality_factor * occupancy_rate
         
         return adjusted_revenue
+
+    def _build_hospitality_financials(self, config, square_footage: float, context: Dict[str, Any]) -> Optional[Dict[str, float]]:
+        """Derive select-service hotel revenue + expense assumptions from config."""
+        modifiers = context.get('modifiers') or {}
+
+        def _first_number(*candidates) -> Optional[float]:
+            for candidate in candidates:
+                if candidate is None:
+                    continue
+                try:
+                    value = float(candidate)
+                except (TypeError, ValueError):
+                    continue
+                return value
+            return None
+
+        rooms_override = _first_number(
+            context.get('rooms'),
+            context.get('room_count'),
+            context.get('keys'),
+            modifiers.get('rooms'),
+            modifiers.get('room_count'),
+            modifiers.get('keys')
+        )
+        rooms_per_sf = getattr(config, 'rooms_per_sf', None)
+        if rooms_override is not None:
+            rooms = max(0.0, rooms_override)
+        elif rooms_per_sf and square_footage:
+            try:
+                rooms = max(0.0, float(rooms_per_sf) * float(square_footage))
+            except (TypeError, ValueError):
+                rooms = 0.0
+        else:
+            rooms = 0.0
+
+        adr_override = _first_number(
+            context.get('adr'),
+            context.get('average_daily_rate'),
+            context.get('room_rate'),
+            context.get('hotel_adr'),
+            modifiers.get('adr'),
+            modifiers.get('adr_override')
+        )
+        occupancy_override = _first_number(
+            context.get('hotel_occupancy'),
+            context.get('occupancy'),
+            context.get('occupancy_rate_override'),
+            context.get('occupancy_rate'),
+            modifiers.get('occupancy'),
+            modifiers.get('hotel_occupancy')
+        )
+
+        base_adr = None
+        base_adr_by_market = getattr(config, 'base_adr_by_market', None)
+        if isinstance(base_adr_by_market, dict):
+            base_adr = (
+                base_adr_by_market.get('primary')
+                or next(iter(base_adr_by_market.values()), None)
+            )
+        base_occupancy = None
+        base_occ_by_market = getattr(config, 'base_occupancy_by_market', None)
+        if isinstance(base_occ_by_market, dict):
+            base_occupancy = (
+                base_occ_by_market.get('primary')
+                or next(iter(base_occ_by_market.values()), None)
+            )
+        if base_occupancy is None:
+            base_occupancy = getattr(config, 'occupancy_rate_base', None)
+
+        if base_adr is None:
+            annual_room_rev = getattr(config, 'base_revenue_per_room_annual', None)
+            if annual_room_rev and base_occupancy:
+                try:
+                    base_adr = float(annual_room_rev) / (365.0 * float(base_occupancy))
+                except (TypeError, ValueError, ZeroDivisionError):
+                    base_adr = None
+
+        adr = float(adr_override) if adr_override is not None else float(base_adr or 0.0)
+
+        if occupancy_override is not None:
+            occupancy = float(occupancy_override)
+        else:
+            occupancy = float(base_occupancy or 0.0)
+        if occupancy > 1 and occupancy <= 100:
+            occupancy = occupancy / 100.0
+        occupancy = max(0.0, min(occupancy, 1.0))
+
+        if rooms <= 0 or adr <= 0 or occupancy <= 0:
+            annual_room_revenue = 0.0
+        else:
+            annual_room_revenue = rooms * adr * occupancy * 365.0
+
+        expense_percentages = getattr(config, 'expense_percentages', None) or {}
+        total_expense_pct = 0.0
+        if isinstance(expense_percentages, dict):
+            for value in expense_percentages.values():
+                if isinstance(value, (int, float)):
+                    total_expense_pct += float(value)
+        if total_expense_pct <= 0:
+            fallback_margin = getattr(config, 'operating_margin_base', None)
+            if isinstance(fallback_margin, (int, float)) and fallback_margin > 0:
+                total_expense_pct = max(0.0, 1.0 - float(fallback_margin))
+        total_expense_pct = max(0.0, min(total_expense_pct, 0.95))
+
+        total_operating_expenses = annual_room_revenue * total_expense_pct
+        annual_noi = annual_room_revenue - total_operating_expenses
+        noi_margin = (annual_noi / annual_room_revenue) if annual_room_revenue > 0 else 0.0
+
+        return {
+            'rooms': rooms,
+            'adr': adr,
+            'occupancy': occupancy,
+            'annual_room_revenue': annual_room_revenue,
+            'total_operating_expenses': total_operating_expenses,
+            'annual_noi': annual_noi,
+            'noi_margin': noi_margin,
+            'expense_pct': total_expense_pct
+        }
 
     def _get_building_enum(self, building_type_str: str):
         """Convert string building type to BuildingType enum"""
@@ -1009,18 +1401,115 @@ class UnifiedEngine:
                 'expense_ratio': 0
             }
         }
+
+    def get_exit_cap_and_discount_rate(self, building_type) -> Tuple[float, float]:
+        """
+        Simple fallback mapping for exit cap and discount rate by building type.
+        This keeps assumptions centralized until we migrate them into master_config.
+        """
+        exit_cap = 0.07
+        discount_rate = 0.08
+
+        try:
+            bt_name = building_type.name.upper()
+        except AttributeError:
+            bt_name = str(building_type).upper()
+
+        if "MULTIFAMILY" in bt_name:
+            exit_cap = 0.055
+            discount_rate = 0.075
+        elif "INDUSTRIAL" in bt_name or "WAREHOUSE" in bt_name:
+            exit_cap = 0.0675
+            discount_rate = 0.08
+        elif "HOSPITALITY" in bt_name or "HOTEL" in bt_name:
+            # Select-service hotel underwriting assumptions
+            exit_cap = 0.085
+            discount_rate = 0.10
+
+        return exit_cap, discount_rate
+
+    def build_unlevered_cashflows_with_exit(
+        self,
+        total_project_cost: float,
+        annual_noi: float,
+        years: int,
+        exit_cap_rate: float,
+    ) -> List[float]:
+        """
+        Build a standard unlevered cashflow stream for IRR/NPV with a terminal value.
+        Year 0: negative total project cost
+        Years 1..years-1: stabilized NOI
+        Year `years`: NOI + sale proceeds (NOI / exit cap)
+        """
+        if total_project_cost is None or annual_noi is None:
+            return []
+
+        try:
+            total_cost_value = float(total_project_cost)
+            noi_value = float(annual_noi)
+        except (TypeError, ValueError):
+            return []
+
+        try:
+            years_int = int(years)
+        except (TypeError, ValueError):
+            years_int = 10
+
+        years_int = years_int if years_int > 0 else 10
+
+        cashflows: List[float] = [-total_cost_value]
+
+        # Intermediate years receive stabilized NOI
+        for _ in range(max(years_int - 1, 0)):
+            cashflows.append(noi_value)
+
+        terminal_value = noi_value / float(exit_cap_rate) if exit_cap_rate and exit_cap_rate > 0 else 0.0
+        cashflows.append(noi_value + terminal_value)
+        return cashflows
     
     def calculate_npv(self, initial_investment: float, annual_cash_flow: float, 
-                      years: int, discount_rate: float) -> float:
+                      years: int, discount_rate: float, cashflows: Optional[List[float]] = None) -> float:
         """Calculate Net Present Value using discount rate from config"""
+        if cashflows:
+            npv = 0.0
+            rate = discount_rate if isinstance(discount_rate, (int, float)) else 0.0
+            for year, cashflow in enumerate(cashflows):
+                if year == 0:
+                    npv += cashflow
+                else:
+                    npv += cashflow / ((1 + rate) ** year)
+            return round(npv, 2)
+
         npv = -initial_investment
         for year in range(1, years + 1):
             npv += annual_cash_flow / ((1 + discount_rate) ** year)
         return round(npv, 2)
 
     def calculate_irr(self, initial_investment: float, annual_cash_flow: float, 
-                      years: int = 10) -> float:
+                      years: int = 10, cashflows: Optional[List[float]] = None) -> float:
         """Calculate Internal Rate of Return using Newton-Raphson approximation"""
+        if cashflows:
+            rate = 0.1
+            for _ in range(50):
+                npv = 0.0
+                dnpv = 0.0
+                for year, cashflow in enumerate(cashflows):
+                    if year == 0:
+                        npv += cashflow
+                        continue
+                    npv += cashflow / ((1 + rate) ** year)
+                    dnpv -= year * cashflow / ((1 + rate) ** (year + 1))
+                if abs(npv) < 0.01:
+                    break
+                if dnpv == 0:
+                    break
+                rate = rate - npv / dnpv
+                if rate < -0.99:
+                    rate = -0.99
+                elif rate > 10:
+                    rate = 10
+            return round(rate, 4)
+
         # Simple approximation for constant cash flows
         if annual_cash_flow <= 0 or initial_investment <= 0:
             return 0.0
@@ -1049,38 +1538,31 @@ class UnifiedEngine:
         """
         if initial_investment <= 0:
             return 0.0
-        
-        # Newton-Raphson method for IRR with terminal value
-        rate = 0.1  # Initial guess
-        for _ in range(50):  # More iterations for complex calculation
-            npv = -initial_investment
-            dnpv = 0
-            
-            # Annual cash flows
-            for year in range(1, years + 1):
-                npv += annual_cash_flow / ((1 + rate) ** year)
-                dnpv -= year * annual_cash_flow / ((1 + rate) ** (year + 1))
-            
-            # Terminal value at end of last year
-            npv += terminal_value / ((1 + rate) ** years)
-            dnpv -= years * terminal_value / ((1 + rate) ** (years + 1))
-            
-            if abs(npv) < 0.01:  # Converged
-                break
-            
-            # Update rate estimate
-            if dnpv != 0:
-                new_rate = rate - npv / dnpv
-                # Bound the rate to prevent divergence
-                if new_rate < -0.99:
-                    new_rate = -0.99
-                elif new_rate > 10:
-                    new_rate = 10
-                rate = new_rate
-            else:
-                break
-        
-        return round(rate, 4)
+
+        try:
+            total_cost_value = float(initial_investment)
+            noi_value = float(annual_cash_flow)
+            terminal_value = float(terminal_value) if terminal_value is not None else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
+        try:
+            years_int = int(years)
+        except (TypeError, ValueError):
+            years_int = 10
+
+        years_int = years_int if years_int > 0 else 10
+        cashflows = [-total_cost_value]
+        for _ in range(max(years_int - 1, 0)):
+            cashflows.append(noi_value)
+        cashflows.append(noi_value + terminal_value)
+
+        return self.calculate_irr(
+            initial_investment=total_cost_value,
+            annual_cash_flow=noi_value,
+            years=years_int,
+            cashflows=cashflows
+        )
 
     def calculate_revenue_requirements(
         self,

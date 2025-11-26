@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Project } from '../../types';
 import { formatters, safeGet } from '../../utils/displayFormatters';
@@ -68,8 +68,30 @@ const buildSafeAnalysis = (project?: Project | null): AnyRecord => {
   };
 };
 
+interface SectionCardProps {
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
+  className?: string;
+  children: React.ReactNode;
+}
+
+const SectionCard: React.FC<SectionCardProps> = ({ title, subtitle, className, children }) => (
+  <div className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${className ?? ''}`}>
+    <div className="px-6 py-5 border-b border-slate-100 space-y-2">
+      {typeof title === 'string' ? (
+        <h3 className="text-xl font-semibold text-slate-900">{title}</h3>
+      ) : (
+        title
+      )}
+      {subtitle ? <p className="text-sm text-slate-500">{subtitle}</p> : null}
+    </div>
+    <div className="p-6">{children}</div>
+  </div>
+);
+
 export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   const navigate = useNavigate();
+  const [isScenarioOpen, setIsScenarioOpen] = useState(false);
   
   // Early return if no project data - check multiple paths for data
   if (!project?.analysis && !project?.calculation_data) {
@@ -85,6 +107,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   
   // Map backend data through our mapper
   const displayData = BackendDataMapper.mapToDisplay(analysis || {});
+  let { buildingType, facilityMetrics } = displayData;
+  const projectTimeline = displayData.projectTimeline;
   const dscrFromDisplay = typeof displayData.dscr === 'number' ? displayData.dscr : undefined;
   const dscrFromOwnership = typeof (analysis as AnyRecord)?.calculations?.ownership_analysis?.debt_metrics?.calculated_dscr === 'number'
     ? (analysis as AnyRecord).calculations.ownership_analysis.debt_metrics.calculated_dscr
@@ -107,29 +131,177 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   const capRateSpreadBps = typeof displayData.capRateSpreadBps === 'number' && Number.isFinite(displayData.capRateSpreadBps)
     ? displayData.capRateSpreadBps
     : undefined;
+  const effectiveYield = typeof yieldOnCost === 'number'
+    ? yieldOnCost
+    : (typeof displayData.roi === 'number' && Number.isFinite(displayData.roi) ? displayData.roi : undefined);
+  const marketCapRateValue = marketCapRateDisplay;
+  const computedYieldCapSpreadPct = typeof effectiveYield === 'number' && typeof marketCapRateValue === 'number'
+    ? effectiveYield - marketCapRateValue
+    : undefined;
+  const yieldCapSpreadPct = typeof capRateSpreadBps === 'number'
+    ? capRateSpreadBps / 10000
+    : computedYieldCapSpreadPct;
+  const yieldCapSpreadBps = typeof capRateSpreadBps === 'number'
+    ? capRateSpreadBps
+    : (typeof computedYieldCapSpreadPct === 'number' ? computedYieldCapSpreadPct * 10000 : undefined);
   const equityReturn = typeof displayData.roi === 'number' && Number.isFinite(displayData.roi)
     ? displayData.roi
     : undefined;
   const investmentDecisionFromDisplay = displayData.investmentDecision;
   const feasibilityFlag = typeof displayData.feasible === 'boolean' ? displayData.feasible : undefined;
-  const derivedDecision = typeof investmentDecisionFromDisplay === 'string'
-    ? investmentDecisionFromDisplay
-    : investmentDecisionFromDisplay?.recommendation || 'PENDING';
-  const decisionStatus = feasibilityFlag === true
-    ? 'GO'
-    : feasibilityFlag === false
-      ? 'NO-GO'
-      : derivedDecision;
+  type DecisionStatus = 'GO' | 'Needs Work' | 'NO-GO' | 'PENDING';
+  const normalizeBackendDecision = (value: unknown): DecisionStatus | undefined => {
+    if (typeof value === 'string') {
+      if (value.toLowerCase().includes('go')) return 'GO';
+      if (value.toLowerCase().includes('no-go') || value.toLowerCase().includes('no_go')) return 'NO-GO';
+      if (value.toLowerCase().includes('work') || value.toLowerCase().includes('near')) return 'Needs Work';
+    }
+    return undefined;
+  };
+  const backendDecision = normalizeBackendDecision(
+    typeof investmentDecisionFromDisplay === 'string'
+      ? investmentDecisionFromDisplay
+      : investmentDecisionFromDisplay?.recommendation
+  );
+  const fallbackDecisionStatus: DecisionStatus =
+    backendDecision ??
+    (feasibilityFlag === true
+      ? 'GO'
+      : feasibilityFlag === false
+        ? 'NO-GO'
+        : 'PENDING');
+  const spreadBpsValue =
+    typeof yieldOnCost === 'number' &&
+    Number.isFinite(yieldOnCost) &&
+    typeof marketCapRateDisplay === 'number' &&
+    Number.isFinite(marketCapRateDisplay)
+      ? (yieldOnCost - marketCapRateDisplay) * 10000
+      : undefined;
+  const dscrValue = typeof dscr === 'number' && Number.isFinite(dscr) ? dscr : undefined;
+  const spreadPctValue = typeof spreadBpsValue === 'number' ? spreadBpsValue / 100 : undefined;
+  const derivedDecisionStatus: DecisionStatus | undefined = (() => {
+    if (
+      typeof spreadBpsValue === 'number' &&
+      typeof marketCapRateDisplay === 'number' &&
+      typeof yieldOnCost === 'number' &&
+      Number.isFinite(yieldOnCost) &&
+      typeof dscrValue === 'number'
+    ) {
+      if (spreadBpsValue >= 200 && dscrValue >= resolvedTargetDscr) {
+        return 'GO';
+      }
+      if (spreadBpsValue >= 0 && dscrValue >= resolvedTargetDscr) {
+        return 'Needs Work';
+      }
+      return 'NO-GO';
+    }
+    return undefined;
+  })();
+  let decisionStatus: DecisionStatus = derivedDecisionStatus ?? fallbackDecisionStatus;
+  // Industrial override: evaluate directly against target yield and DSCR so a
+  // 7+% warehouse at 1.25x+ DSCR is a clear GO.
+  (() => {
+    const bt = (buildingType || '').toLowerCase();
+    if (bt !== 'industrial') return;
+
+    const yoc =
+      typeof displayData.yieldOnCost === 'number' && Number.isFinite(displayData.yieldOnCost)
+        ? displayData.yieldOnCost
+        : undefined;
+    const targetYieldFromDisplay =
+      typeof displayData.targetYield === 'number' && Number.isFinite(displayData.targetYield)
+        ? displayData.targetYield
+        : undefined;
+    const dscrOk =
+      typeof dscrValue === 'number' &&
+      typeof resolvedTargetDscr === 'number' &&
+      Number.isFinite(dscrValue) &&
+      Number.isFinite(resolvedTargetDscr)
+        ? dscrValue >= resolvedTargetDscr
+        : false;
+
+    if (typeof yoc !== 'number' || typeof targetYieldFromDisplay !== 'number') {
+      return;
+    }
+
+    if (dscrOk && yoc >= targetYieldFromDisplay) {
+      decisionStatus = 'GO';
+      return;
+    }
+
+    if (dscrOk && yoc >= targetYieldFromDisplay * 0.95) {
+      decisionStatus = 'Needs Work';
+      return;
+    }
+
+    decisionStatus = 'NO-GO';
+  })();
+  const decisionStatusLabel =
+    decisionStatus === 'Needs Work'
+      ? 'Needs Work'
+      : decisionStatus === 'NO-GO'
+        ? 'NO-GO'
+        : decisionStatus === 'PENDING'
+          ? 'Under Review'
+          : 'GO';
+  const feasibilityChipLabel =
+    decisionStatus === 'Needs Work'
+      ? 'Needs Work'
+      : decisionStatus === 'NO-GO'
+        ? 'NO-GO'
+        : decisionStatus === 'GO'
+          ? 'GO'
+          : 'Needs Review';
   const decisionReasonText = displayData.decisionReason || (
     typeof investmentDecisionFromDisplay === 'object'
       ? investmentDecisionFromDisplay?.summary
-      : undefined
-  ) || 'Investment analysis in progress';
-  const feasibilityChipLabel = feasibilityFlag === true
-    ? 'Feasible'
-    : feasibilityFlag === false
-      ? 'Needs Work'
-      : 'Pending Review';
+    : undefined
+  ) || 'Debt coverage and yield metrics are still loading.';
+  const formatPct = (value?: number) =>
+    typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(1)}%` : '—';
+  const yieldPctValue = typeof yieldOnCost === 'number' && Number.isFinite(yieldOnCost)
+    ? yieldOnCost * 100
+    : undefined;
+  const marketCapPctValue = typeof marketCapRateDisplay === 'number' && Number.isFinite(marketCapRateDisplay)
+    ? marketCapRateDisplay * 100
+    : undefined;
+  const dscrText = typeof dscrValue === 'number' ? `${dscrValue.toFixed(2)}×` : undefined;
+  const dscrTargetText = `${resolvedTargetDscr.toFixed(2)}×`;
+  const decisionCopy = (() => {
+    const yieldText = formatPct(yieldPctValue);
+    const marketText = formatPct(marketCapPctValue);
+    const spreadText = typeof spreadPctValue === 'number'
+      ? `${spreadPctValue >= 0 ? '+' : ''}${spreadPctValue.toFixed(1)}%`
+      : undefined;
+    if (decisionStatus === 'GO') {
+      return {
+        body: 'Project meets underwriting criteria with strong returns and healthy debt coverage.',
+        detail: `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'}${marketCapPctValue !== undefined ? ` vs market cap ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''}${dscrText ? ` and DSCR ${dscrText} meets the ${dscrTargetText} requirement.` : '.'}`
+      };
+    }
+    if (decisionStatus === 'Needs Work') {
+      return {
+        body: 'Project is close to the yield hurdle but still needs improvement.',
+        detail: `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'} is roughly in line with the market cap${spreadText ? ` (${spreadText})` : ''}. Keep DSCR ${dscrText ?? '—'}× at or above ${dscrTargetText} while lifting NOI or trimming costs to add at least 200 bp of spread.`
+      };
+    }
+    if (decisionStatus === 'NO-GO') {
+      return {
+        body: 'Project currently falls below underwriting thresholds.',
+        detail: `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'}${marketCapPctValue !== undefined ? ` vs market cap ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''} and/or DSCR ${dscrText ?? '—'}× are below the ${dscrTargetText} requirement. Improve rents, cut scope, or rework the capital stack before advancing.`
+      };
+    }
+    return {
+      body: 'Investment analysis is still running.',
+      detail: 'Once NOI, yield on cost, and DSCR metrics are available, this banner will classify the deal automatically.'
+    };
+  })();
+  const decisionBodyClass = `mt-1 text-sm ${
+    decisionStatus === 'GO' ? 'text-green-700' : decisionStatus === 'NO-GO' ? 'text-red-700' : 'text-amber-700'
+  }`;
+  const decisionDetailClass = `mt-1 text-xs ${
+    decisionStatus === 'GO' ? 'text-green-600' : decisionStatus === 'NO-GO' ? 'text-red-600' : 'text-amber-600'
+  }`;
   
   // Extract additional raw data we need - check multiple paths for data
   const parsed = analysis?.parsed_input || {};
@@ -142,6 +314,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   const ownership = calculations?.ownership_analysis || {};
   const investmentAnalysis = ownership?.investment_analysis || {};
   const debtMetrics = ownership?.debt_metrics || calculations?.debt_metrics || {};
+  const annualDebtService = typeof debtMetrics?.annual_debt_service === 'number' && Number.isFinite(debtMetrics.annual_debt_service)
+    ? debtMetrics.annual_debt_service
+    : undefined;
   const hasDebt = typeof debtMetrics?.annual_debt_service === 'number' && debtMetrics.annual_debt_service > 0;
   const calculationTrace = Array.isArray(calculations?.calculation_trace)
     ? calculations.calculation_trace.filter((entry: any) => entry && typeof entry === 'object' && entry.step)
@@ -204,6 +379,13 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   const costPerSFDeltaPct = typeof costPerSFValue === 'number' && typeof marketCostPerSF === 'number' && marketCostPerSF !== 0
     ? ((costPerSFValue - marketCostPerSF) / marketCostPerSF) * 100
     : undefined;
+  const costPerSFGaugePosition = (() => {
+    if (typeof costPerSFDeltaPct === 'number') {
+      const clamped = Math.max(-20, Math.min(20, costPerSFDeltaPct));
+      return ((clamped + 20) / 40) * 100;
+    }
+    return 50;
+  })();
   const softCostRatio = typeof displayData.softCosts === 'number' &&
     typeof displayData.totalProjectCost === 'number' &&
     displayData.totalProjectCost > 0
@@ -262,7 +444,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     Number(calculations?.construction_costs?.square_footage) ||
     Number(calculations?.totals?.square_footage) ||
     0;
-  const buildingType = (enrichedParsed?.building_type || parsed?.building_type || 'general') as string;
+  if (!buildingType) {
+    buildingType = (enrichedParsed?.building_type || parsed?.building_type || 'general') as string;
+  }
   const buildingSubtype = parsed?.building_subtype || parsed?.subtype || 'general';
   const location = parsed?.location || 'Nashville';
   const friendlyType =
@@ -368,62 +552,340 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   const revenueReq = calculations?.revenue_requirements || 
                      calculations?.ownership_analysis?.revenue_requirements || 
                      null;
-  const requiredNoi = typeof revenueReq?.required_value === 'number' ? revenueReq.required_value : undefined;
-  const currentNoi = typeof revenueReq?.actual_net_income === 'number' ? revenueReq.actual_net_income : undefined;
-  const noiGap = typeof revenueReq?.gap === 'number'
-    ? revenueReq.gap
-    : (typeof currentNoi === 'number' && typeof requiredNoi === 'number' ? currentNoi - requiredNoi : undefined);
-  const noiGapPct = typeof revenueReq?.gap_percentage === 'number'
-    ? revenueReq.gap_percentage
-    : (typeof noiGap === 'number' && typeof requiredNoi === 'number' && requiredNoi !== 0
-        ? (noiGap / requiredNoi) * 100
-        : undefined);
-  const requiredRentPerSf = typeof revenueReq?.required_revenue_per_sf === 'number' ? revenueReq.required_revenue_per_sf : undefined;
-  const currentRentPerSf = typeof revenueReq?.actual_revenue_per_sf === 'number' ? revenueReq.actual_revenue_per_sf : undefined;
-  const rentGap = typeof requiredRentPerSf === 'number' && typeof currentRentPerSf === 'number'
-    ? currentRentPerSf - requiredRentPerSf
+  const normalizeRate = (value?: number | null) => {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+      return undefined;
+    }
+    return value > 1 ? value / 100 : value;
+  };
+  const targetYieldRate =
+    normalizeRate(revenueReq?.target_yield) ||
+    normalizeRate(investmentAnalysis?.target_yield) ||
+    normalizeRate(calculations?.ownership_analysis?.return_metrics?.target_roi) ||
+    normalizeRate((ownership as AnyRecord)?.return_metrics?.target_yield) ||
+    normalizeRate((displayData as AnyRecord)?.targetYield) ||
+    normalizeRate((displayData as AnyRecord)?.targetYieldPct) ||
+    normalizeRate((displayData as AnyRecord)?.yieldTarget) ||
+    0.08;
+  const requiredNoi = typeof totalProjectCost === 'number' && Number.isFinite(totalProjectCost)
+    ? totalProjectCost * targetYieldRate
+    : (typeof revenueReq?.required_value === 'number' ? revenueReq.required_value : undefined);
+  const currentNoi = typeof noi === 'number' && Number.isFinite(noi)
+    ? noi
+    : (typeof revenueReq?.actual_net_income === 'number' ? revenueReq.actual_net_income : undefined);
+  const noiGap = typeof currentNoi === 'number' && typeof requiredNoi === 'number'
+    ? currentNoi - requiredNoi
     : undefined;
-  const rentGapPct = typeof rentGap === 'number' && typeof requiredRentPerSf === 'number' && requiredRentPerSf !== 0
-    ? (rentGap / requiredRentPerSf) * 100
+  const noiGapPct = typeof noiGap === 'number' && typeof requiredNoi === 'number' && requiredNoi !== 0
+    ? (noiGap / requiredNoi) * 100
     : undefined;
+  const currentRevenuePerSf =
+    typeof annualRevenue === 'number' &&
+    Number.isFinite(annualRevenue) &&
+    typeof squareFootage === 'number' &&
+    squareFootage > 0
+      ? annualRevenue / squareFootage
+      : (typeof revenueReq?.actual_revenue_per_sf === 'number' ? revenueReq.actual_revenue_per_sf : undefined);
+  const requiredRevenuePerSf = (() => {
+    if (
+      typeof requiredNoi === 'number' &&
+      typeof operatingMargin === 'number' &&
+      operatingMargin > 0 &&
+      typeof squareFootage === 'number' &&
+      squareFootage > 0
+    ) {
+      return (requiredNoi / operatingMargin) / squareFootage;
+    }
+    if (
+      typeof revenueReq?.required_revenue === 'number' &&
+      typeof squareFootage === 'number' &&
+      squareFootage > 0
+    ) {
+      return revenueReq.required_revenue / squareFootage;
+    }
+    if (typeof revenueReq?.required_revenue_per_sf === 'number') {
+      return revenueReq.required_revenue_per_sf;
+    }
+    return undefined;
+  })();
+  const revenuePerSfGap = typeof currentRevenuePerSf === 'number' && typeof requiredRevenuePerSf === 'number'
+    ? currentRevenuePerSf - requiredRevenuePerSf
+    : undefined;
+  const revenuePerSfGapPct = typeof revenuePerSfGap === 'number' && typeof requiredRevenuePerSf === 'number' && requiredRevenuePerSf !== 0
+    ? (revenuePerSfGap / requiredRevenuePerSf) * 100
+    : undefined;
+  const normalizedFacilityType = (buildingType || '').toUpperCase();
+  const showHotelFacilityMetrics =
+    normalizedFacilityType === 'HOSPITALITY' || normalizedFacilityType === 'HOTEL';
+  const showIndustrialFacilityMetrics =
+    normalizedFacilityType === 'INDUSTRIAL' || normalizedFacilityType === 'WAREHOUSE';
+  const isHospitalityProject = showHotelFacilityMetrics;
+  const hospitalityRooms =
+    typeof facilityMetrics?.rooms === 'number' ? facilityMetrics.rooms : undefined;
+  const hospitalityAdr =
+    typeof facilityMetrics?.adr === 'number' ? facilityMetrics.adr : undefined;
+  const hospitalityOccupancy =
+    typeof facilityMetrics?.occupancy === 'number' ? facilityMetrics.occupancy : undefined;
+  const hospitalityRevpar =
+    typeof facilityMetrics?.revpar === 'number' ? facilityMetrics.revpar : undefined;
+  const hospitalityCostPerKey =
+    typeof facilityMetrics?.costPerKey === 'number' ? facilityMetrics.costPerKey : undefined;
+  const hospitalityAdrText = hospitalityAdr !== undefined ? `$${hospitalityAdr.toFixed(0)}` : 'ADR pending';
+  const hospitalityOccupancyText =
+    hospitalityOccupancy !== undefined ? `${(hospitalityOccupancy * 100).toFixed(0)}% occupancy` : 'stabilized occupancy';
+  const hospitalityRevparText =
+    hospitalityRevpar !== undefined ? `$${hospitalityRevpar.toFixed(0)} RevPAR` : 'RevPAR loading';
+  const hospitalityMarginText =
+    typeof operatingMargin === 'number'
+      ? `${(operatingMargin * 100).toFixed(1)}% NOI margin`
+      : 'NOI margin pending';
 
-  const decisionBullets: string[] = [];
-  if (typeof costPerSFValue === 'number' && typeof marketCostPerSF === 'number') {
-    const direction = (costPerSFDeltaPct ?? 0) >= 0 ? 'above' : 'below';
-    decisionBullets.push(
-      `Total cost of ${formatters.costPerSF(costPerSFValue)} is ${Math.abs(costPerSFDeltaPct ?? 0).toFixed(1)}% ${direction} typical ${formatters.costPerSF(marketCostPerSF)} for this market.`
-    );
-  } else if (typeof costPerSFValue === 'number') {
-    decisionBullets.push(
-      `Total cost of ${formatters.costPerSF(costPerSFValue)} reflects the current scope; market benchmarks are not available for this scenario.`
-    );
-  } else {
-    decisionBullets.push('Total project cost appears elevated relative to the typical basis for this asset type.');
-  }
+  const hospitalityRequiredNoiPerKeyValue =
+    displayData.requiredNoiPerKey ??
+    (isHospitalityProject &&
+    typeof requiredNoi === 'number' &&
+    typeof hospitalityRooms === 'number' &&
+    hospitalityRooms > 0
+      ? requiredNoi / hospitalityRooms
+      : undefined);
+  const hospitalityCurrentNoiPerKeyValue =
+    displayData.currentNoiPerKey ??
+    (isHospitalityProject &&
+    typeof currentNoi === 'number' &&
+    typeof hospitalityRooms === 'number' &&
+    hospitalityRooms > 0
+      ? currentNoi / hospitalityRooms
+      : undefined);
+  const hospitalityRequiredRevparValue =
+    displayData.requiredRevpar ??
+    (isHospitalityProject &&
+    typeof requiredNoi === 'number' &&
+    typeof operatingMargin === 'number' &&
+    operatingMargin > 0 &&
+    typeof hospitalityRooms === 'number' &&
+    hospitalityRooms > 0
+      ? (requiredNoi / operatingMargin) / (hospitalityRooms * 365)
+      : undefined);
+  const fallbackCurrentRevpar =
+    hospitalityRevpar !== undefined
+      ? hospitalityRevpar
+      : isHospitalityProject &&
+        typeof hospitalityRooms === 'number' &&
+        hospitalityRooms > 0 &&
+        typeof annualRevenue === 'number'
+        ? annualRevenue / (hospitalityRooms * 365)
+        : undefined;
+  const hospitalityCurrentRevparValue = displayData.currentRevpar ?? fallbackCurrentRevpar;
+  const hospitalityRevparGap =
+    typeof hospitalityRequiredRevparValue === 'number' && typeof hospitalityCurrentRevparValue === 'number'
+      ? hospitalityRequiredRevparValue - hospitalityCurrentRevparValue
+      : undefined;
+  const hospitalityRevparGapPct =
+    typeof hospitalityRevparGap === 'number' &&
+    typeof hospitalityRequiredRevparValue === 'number' &&
+    hospitalityRequiredRevparValue !== 0
+      ? (hospitalityRevparGap / hospitalityRequiredRevparValue) * 100
+      : undefined;
+  const feasibilityGapCopy = (() => {
+    if (typeof noiGap !== 'number') {
+      return 'Feasibility update pending NOI inputs.';
+    }
+    const gapCurrency = formatters.currency(Math.abs(noiGap));
+    const pctText = `${Math.abs(noiGapPct ?? 0).toFixed(1)}%`;
+    if (noiGap >= 0) {
+      return `Current NOI is ${gapCurrency} (${pctText}) ahead of requirement.`;
+    }
+    return `Need ${gapCurrency} (${pctText}) more NOI to meet the yield target.`;
+  })();
 
-  if (typeof yieldOnCost === 'number' && typeof marketCapRateDisplay === 'number') {
-    const spreadBps = Math.round((yieldOnCost - marketCapRateDisplay) * 10000);
-    const direction = spreadBps >= 0 ? 'above' : 'below';
-    decisionBullets.push(
-      `Yield on cost ${(yieldOnCost * 100).toFixed(1)}% is ${Math.abs(spreadBps)} bp ${direction} the market cap rate ${(marketCapRateDisplay * 100).toFixed(1)}%, indicating ${spreadBps >= 0 ? 'value creation' : 'basis risk'} at this basis.`
-    );
-  } else {
-    decisionBullets.push('Current yield appears low relative to prevailing cap rates in this market.');
-  }
+  const isIndustrialProject = (buildingType || '').toLowerCase() === 'industrial';
+  // Enhanced, context-aware Executive Decision Points
+  const decisionBullets: string[] = (() => {
+    const bullets: string[] = [];
+    if (isHospitalityProject) {
+      const basisSnippets: string[] = [];
+      if (typeof costPerSFValue === 'number') {
+        basisSnippets.push(formatters.costPerSF(costPerSFValue));
+      }
+      if (typeof facilityMetrics?.costPerKey === 'number') {
+        basisSnippets.push(`${formatters.currencyExact(facilityMetrics.costPerKey)} per key`);
+      }
+      const basisCopy = basisSnippets.length
+        ? basisSnippets.join(' | ')
+        : 'basis inputs still populating';
+      bullets.push(
+        `Basis & keys: ${basisCopy}. Benchmark this against recent select-service trades so site, flag, and amenity mix justify the spend.`
+      );
 
-  if (typeof softCostRatio === 'number') {
-    const status = softCostRatio > 0.25 ? 'above' : softCostRatio < 0.2 ? 'below' : 'within';
-    const action = softCostRatio > 0.25
-      ? 'a strong case for value engineering.'
-      : softCostRatio < 0.2
-        ? 'lean owner costs with limited contingency.'
-        : 'alignment with the typical 20–25% range.';
-    decisionBullets.push(
-      `Soft costs at ${(softCostRatio * 100).toFixed(1)}% are ${status} the usual 20–25% range, suggesting ${action}`
-    );
-  } else {
-    decisionBullets.push('Soft costs may present an opportunity for value engineering once estimates firm up.');
-  }
+      const hotelAdr = typeof facilityMetrics?.adr === 'number' ? `$${facilityMetrics.adr.toFixed(0)}` : 'ADR inputs';
+      const hotelOcc =
+        typeof facilityMetrics?.occupancy === 'number'
+          ? `${(facilityMetrics.occupancy * 100).toFixed(0)}% occupancy`
+          : 'stabilized occupancy';
+      const hotelRevpar =
+        typeof facilityMetrics?.revpar === 'number' ? `$${facilityMetrics.revpar.toFixed(0)} RevPAR` : 'RevPAR inputs';
+      const marginText =
+        typeof operatingMargin === 'number'
+          ? `${(operatingMargin * 100).toFixed(1)}% NOI margin`
+          : 'NOI margin pending';
+
+      const capRate = marketCapRateValue;
+      const spreadBps = yieldCapSpreadBps;
+      const dscrValue = typeof dscr === 'number' ? dscr : undefined;
+      const dscrTarget = resolvedTargetDscr;
+      const returnParts: string[] = [`ADR ${hotelAdr}`, hotelOcc, hotelRevpar, marginText];
+      if (typeof effectiveYield === 'number' && typeof capRate === 'number' && typeof spreadBps === 'number') {
+        returnParts.push(
+          `yield ${(effectiveYield * 100).toFixed(1)}% vs ${(capRate * 100).toFixed(1)}% cap (${Math.abs(spreadBps).toFixed(0)} bp ${spreadBps >= 0 ? 'above' : 'below'})`
+        );
+      }
+      if (typeof dscrValue === 'number') {
+        const delta = dscrValue - dscrTarget;
+        returnParts.push(`DSCR ${dscrValue.toFixed(2)}× ${delta >= 0 ? '≥' : '<'} ${dscrTarget.toFixed(2)}×`);
+      }
+      bullets.push(
+        `Returns: ${returnParts.join(' · ')}. Stress ADR/occupancy against the comp set so RevPAR, DSCR, and IRR stay inside the acceptable hotel range.`
+      );
+
+      if (typeof softCostRatio === 'number') {
+        const softPct = (softCostRatio * 100).toFixed(1);
+        bullets.push(
+          `Soft costs & reserves: ${softPct}% of total. Confirm franchise fees, management fees, FF&E/PIP reserves, and pre-opening spend align with brand standards so RevPAR doesn't erode.`
+        );
+      } else {
+        bullets.push(
+          'Soft costs & reserves: finalize FF&E, franchise, and management agreements to protect RevPAR and lender covenants.'
+        );
+      }
+
+      return bullets;
+    }
+
+    // Non-hospitality branch preserves existing logic
+    // 1) Cost positioning - cost/SF vs market benchmarks
+    if (
+      typeof costPerSFValue === 'number' &&
+      typeof marketCostPerSF === 'number' &&
+      typeof costPerSFDeltaPct === 'number'
+    ) {
+      const deltaPct = Math.abs(costPerSFDeltaPct).toFixed(1);
+      const direction = costPerSFDeltaPct >= 0 ? 'above' : 'below';
+      const implication =
+        costPerSFDeltaPct >= 0 ? 'stretching the basis' : 'leaving cushion vs peers';
+      bullets.push(
+        `Basis risk: ${formatters.costPerSF(costPerSFValue)} sits ${deltaPct}% ${direction} market ${formatters.costPerSF(marketCostPerSF)} — ${implication}.`
+      );
+    } else if (typeof costPerSFValue === 'number') {
+      bullets.push(
+        `Basis check: ${formatters.costPerSF(costPerSFValue)} with no peer benchmarks loaded yet.`
+      );
+    } else {
+      bullets.push('Basis check pending: total project cost still reconciling; confirm scope and inputs.');
+    }
+
+    // 2) Return positioning - yield vs cap + DSCR vs target
+    const capRate = marketCapRateValue;
+    const spreadBps = yieldCapSpreadBps;
+    const dscrValue = typeof dscr === 'number' ? dscr : undefined;
+    const dscrTarget = resolvedTargetDscr;
+
+    if (typeof effectiveYield === 'number' || typeof dscrValue === 'number') {
+      const parts: string[] = [];
+      if (typeof effectiveYield === 'number' && typeof capRate === 'number' && typeof spreadBps === 'number') {
+        const yieldPct = (effectiveYield * 100).toFixed(1);
+        const capPct = (capRate * 100).toFixed(1);
+        const spreadText = `${Math.abs(spreadBps).toFixed(0)} bp ${spreadBps >= 0 ? 'above' : 'below'}`;
+        parts.push(`yield ${yieldPct}% vs ${capPct}% cap (${spreadText})`);
+      } else if (typeof effectiveYield === 'number') {
+        parts.push(`yield ${(effectiveYield * 100).toFixed(1)}% (cap TBD)`);
+      } else if (typeof capRate === 'number') {
+        parts.push(`market cap ${(capRate * 100).toFixed(1)}% (yield TBD)`);
+      }
+
+      if (typeof dscrValue === 'number') {
+        const delta = dscrValue - dscrTarget;
+        const meetsTarget = delta >= 0;
+        parts.push(
+          `DSCR ${dscrValue.toFixed(2)}× ${meetsTarget ? '≥' : '<'} ${dscrTarget.toFixed(2)}× target (${delta >= 0 ? '+' : ''}${delta.toFixed(2)}×)`
+        );
+      }
+
+      let returnsText = `Returns: ${parts.join('; ')}.`;
+      returnsText += isIndustrialProject
+        ? ' For industrial, this signals whether the rent roll, dock configuration, and truck flow can clear both equity and lender hurdles.'
+        : ' Together these determine whether the project clears both equity and lender hurdles.';
+      bullets.push(returnsText);
+    } else {
+      bullets.push('Returns: yield and DSCR metrics are still populating from the latest underwriting run.');
+    }
+
+    // 3) Soft-cost positioning - compare to 18-25% band
+    if (typeof softCostRatio === 'number') {
+      const softPct = (softCostRatio * 100).toFixed(1);
+      let posture = 'within the 18-25% guardrail; balanced owner costs.';
+      if (softCostRatio > 0.25) {
+        posture = 'high vs the 18-25% band — trim VE or contingency.';
+      } else if (softCostRatio < 0.18) {
+        posture = 'below the band — confirm allowances and contingency.';
+      }
+      if (isIndustrialProject) {
+        bullets.push(
+          `Scope & sitework: ${softPct}% of total — prioritize slab thickness, dock count, ESFR coverage, and truck court design with your GC to keep the budget aligned.`
+        );
+      } else {
+        bullets.push(`Soft costs: ${softPct}% of total — ${posture}`);
+      }
+    } else {
+      bullets.push(
+        isIndustrialProject
+          ? 'Scope & sitework: awaiting detailed estimates to validate slab, dock, ESFR, and sitework allowances.'
+          : 'Soft costs: awaiting latest estimates to benchmark against the 18-25% guidance band.'
+      );
+    }
+
+    // 4) Optional “what needs to change” bullet when gaps are material
+    const yieldShortfallBps =
+      typeof spreadBps === 'number' && spreadBps < 0 ? Math.abs(spreadBps) : undefined;
+    const dscrShortfall =
+      typeof dscrValue === 'number' && dscrValue < dscrTarget ? dscrTarget - dscrValue : undefined;
+    const revenueLiftNeeded =
+      typeof requiredRevenuePerSf === 'number' &&
+      typeof currentRevenuePerSf === 'number' &&
+      requiredRevenuePerSf > currentRevenuePerSf
+        ? requiredRevenuePerSf - currentRevenuePerSf
+        : undefined;
+    const noiLiftNeeded =
+      typeof requiredNoi === 'number' &&
+      typeof currentNoi === 'number' &&
+      requiredNoi > currentNoi
+        ? requiredNoi - currentNoi
+        : undefined;
+    const needsRemedy =
+      (yieldShortfallBps ?? 0) >= 40 ||
+      (dscrShortfall ?? 0) >= 0.05;
+
+    if (needsRemedy) {
+      const gapDetails: string[] = [];
+      if (yieldShortfallBps) gapDetails.push(`${yieldShortfallBps.toFixed(0)} bp yield shortfall`);
+      if (dscrShortfall) gapDetails.push(`${dscrShortfall.toFixed(2)}× DSCR gap`);
+
+      const actionHints: string[] = [];
+      if (typeof revenueLiftNeeded === 'number' && revenueLiftNeeded > 0) {
+        actionHints.push(`~$${revenueLiftNeeded.toFixed(2)}/SF/yr revenue lift`);
+      }
+      if (typeof noiLiftNeeded === 'number' && noiLiftNeeded > 0) {
+        actionHints.push(`${formatters.currency(noiLiftNeeded)} NOI improvement`);
+      }
+
+      const remedyText =
+        actionHints.length > 0
+          ? actionHints.join(' or ')
+          : 'rent growth, scope reductions, or cheaper capital';
+      bullets.push(`Adjustments: ${gapDetails.join(' and ')} flagged; plan for ${remedyText} to hit targets.`);
+    }
+
+    return bullets;
+  })();
 
   // Financial Requirements removed - was only implemented for hospital
   
@@ -493,7 +955,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         ['Annual Revenue', formatters.currency(annualRevenue)],
         ['Annual NOI', formatters.currency(noi)],
         [''],
-        ['DECISION', decisionStatus === 'PENDING' ? 'Under Review' : decisionStatus],
+        ['DECISION', decisionStatusLabel],
         ['Reason', decisionReasonText]
       ];
       
@@ -648,6 +1110,13 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                 <Download className="h-4 w-4" />
                 Export Excel
               </button>
+              <button
+                onClick={() => setIsScenarioOpen(true)}
+                className="px-4 py-2 border border-white/30 text-white rounded-lg hover:bg-white/10 transition flex items-center gap-2"
+              >
+                <Target className="h-4 w-4" />
+                Scenario
+              </button>
             </div>
           </div>
           
@@ -725,6 +1194,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       </div>
 
       {/* Investment Decision Section with Enhanced Feedback */}
+      {/* Patch 12F: legacy static NO-GO banner removed; the dynamic 3-state component below now owns all decision copy. */}
       <div className="space-y-4">
         {/* Decision Header */}
         <div
@@ -750,23 +1220,45 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                     ? 'text-red-900'
                     : 'text-amber-900'}`}
               >
-                Investment Decision: {decisionStatus === 'PENDING' ? 'Under Review' : decisionStatus}
+                Investment Decision: {decisionStatusLabel}
               </h3>
-              <p
-                className={`mt-1 ${decisionStatus === 'GO'
-                  ? 'text-green-700'
-                  : decisionStatus === 'NO-GO'
-                    ? 'text-red-700'
-                    : 'text-amber-700'}`}
-              >
-                {decisionReasonText}
-              </p>
-              {decisionStatus === 'NO-GO' &&
-                hasDebt &&
+              {isHospitalityProject ? (
+                <>
+                  <p className={decisionBodyClass}>
+                    Hotel clears underwriting at {hospitalityAdrText}, {hospitalityOccupancyText}, and {hospitalityRevparText}, generating {hospitalityMarginText} to support the flagged room count and debt sizing.
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600">
+                    Hospitality memo: validate ADR and RevPAR against comp sets, keep DSCR comfortably above lender hotel hurdles, and confirm franchise, management, and FF&E reserves stay in sync with brand requirements.
+                  </p>
+                  {decisionReasonText && (
+                    <p className="mt-2 text-xs text-slate-600">
+                      Analyst context: {decisionReasonText}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className={decisionBodyClass}>
+                    {decisionCopy.body}
+                  </p>
+                  {decisionCopy.detail && (
+                    <p className={decisionDetailClass}>
+                      {decisionCopy.detail}
+                    </p>
+                  )}
+                  {decisionReasonText && (
+                    <p className="mt-2 text-xs text-slate-600">
+                      Analyzer note: {decisionReasonText}
+                    </p>
+                  )}
+                </>
+              )}
+              {hasDebt &&
                 typeof dscr === 'number' &&
-                Number.isFinite(dscr) && (
+                Number.isFinite(dscr) &&
+                dscr < resolvedTargetDscr && (
                   <p className="text-xs md:text-sm opacity-80 mt-0.5 text-red-700">
-                    DSCR {dscr.toFixed(2)}× vs target {resolvedTargetDscr.toFixed(2)}×: coverage is adequate but does not meet lender sizing.
+                    DSCR {dscr.toFixed(2)}× vs target {resolvedTargetDscr.toFixed(2)}×: coverage is below lender sizing.
                   </p>
                 )}
               {typeof yieldOnCost === 'number' && yieldOnCost > 0 && (
@@ -780,26 +1272,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                   )}
                 </p>
               )}
-              {decisionStatus === 'NO-GO' &&
-                typeof dscr === 'number' &&
-                Number.isFinite(dscr) &&
-                dscr >= resolvedTargetDscr && (
-                  <p className="mt-2 text-sm text-red-600">
-                    Debt coverage is healthy (DSCR&nbsp;
-                    {dscr.toFixed(2)}×) but projected equity returns remain
-                    below the hurdle
-                    {equityReturn ? ` (~${(equityReturn * 100).toFixed(1)}%)` : ''}
-                    {typeof yieldOnCost === 'number' && yieldOnCost > 0 && (
-                      <>
-                        {' '}
-                        and yield on cost {(yieldOnCost * 100).toFixed(1)}%
-                        {` vs ${(typeof marketCapRateDisplay === 'number'
-                          ? marketCapRateDisplay
-                          : 0.06) * 100}% cap`}
-                      </>
-                    )}, so the recommendation remains NO-GO.
-                  </p>
-                )}
             </div>
           </div>
         </div>
@@ -985,18 +1457,128 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               </div>
               <h3 className="font-semibold text-gray-900">Facility Metrics</h3>
             </div>
-            <p className="text-3xl font-bold text-gray-900">{formatters.units(displayData.unitCount)}</p>
-            <p className="text-sm text-gray-500 mb-4">{displayData.unitLabel}</p>
-            <div className="space-y-2 pt-4 border-t">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Cost per {displayData.unitType}</span>
-                <span className="font-bold">{formatters.currencyExact(displayData.costPerUnit)}</span>
+            {showHotelFacilityMetrics ? (
+              <div className="grid gap-4 md:grid-cols-3 text-xs text-slate-700">
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Rooms
+                  </div>
+                  <div className="text-2xl font-semibold">
+                    {typeof facilityMetrics?.rooms === 'number'
+                      ? facilityMetrics.rooms.toLocaleString()
+                      : '—'}
+                  </div>
+                  <div className="text-[11px] text-slate-500">Keys in the hotel</div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    ADR
+                  </div>
+                  <div className="text-lg font-semibold">
+                    {typeof facilityMetrics?.adr === 'number'
+                      ? `$${facilityMetrics.adr.toFixed(0)}`
+                      : '—'}
+                  </div>
+                  <div className="text-[11px] text-slate-500">Average daily rate</div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Occupancy
+                  </div>
+                  <div className="text-lg font-semibold">
+                    {typeof facilityMetrics?.occupancy === 'number'
+                      ? `${(facilityMetrics.occupancy * 100).toFixed(0)}%`
+                      : '—'}
+                  </div>
+                  <div className="text-[11px] text-slate-500">Stabilized occupancy</div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    RevPAR
+                  </div>
+                  <div className="text-lg font-semibold">
+                    {typeof facilityMetrics?.revpar === 'number'
+                      ? `$${facilityMetrics.revpar.toFixed(0)}`
+                      : '—'}
+                  </div>
+                  <div className="text-[11px] text-slate-500">Revenue per available room</div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1 md:col-span-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Cost per Key
+                  </div>
+                  <div className="text-lg font-semibold">
+                    {typeof facilityMetrics?.costPerKey === 'number'
+                      ? `$${facilityMetrics.costPerKey.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                      : '—'}
+                  </div>
+                  <div className="text-[11px] text-slate-500">Total project cost per room</div>
+                </div>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Revenue per {displayData.unitType}</span>
-                <span className="font-bold">{formatters.currency(displayData.revenuePerUnit)}</span>
+            ) : showIndustrialFacilityMetrics ? (
+              <div className="grid gap-4 md:grid-cols-3 text-xs text-slate-700">
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Building Size
+                  </div>
+                  <div className="text-2xl font-semibold">
+                    {typeof facilityMetrics?.buildingSize === 'number'
+                      ? `${facilityMetrics.buildingSize.toLocaleString()} SF`
+                      : '—'}
+                  </div>
+                  <div className="text-[11px] text-slate-500">Total gross building area</div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Cost per SF
+                  </div>
+                  <div className="text-lg font-semibold">
+                    {typeof facilityMetrics?.costPerSf === 'number'
+                      ? formatters.currencyExact(facilityMetrics.costPerSf)
+                      : '—'}
+                  </div>
+                  <div className="text-[11px] text-slate-500">Total project cost divided by SF</div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Revenue & NOI per SF
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[11px] text-slate-500">Revenue</span>
+                      <span className="text-sm font-semibold">
+                        {typeof facilityMetrics?.revenuePerSf === 'number'
+                          ? `$${facilityMetrics.revenuePerSf.toFixed(1)} /SF`
+                          : '—'}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[11px] text-slate-500">NOI</span>
+                      <span className="text-sm font-semibold">
+                        {typeof facilityMetrics?.noiPerSf === 'number'
+                          ? `$${facilityMetrics.noiPerSf.toFixed(1)} /SF`
+                          : '—'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <>
+                <p className="text-3xl font-bold text-gray-900">{formatters.units(displayData.unitCount)}</p>
+                <p className="text-sm text-gray-500 mb-4">{displayData.unitLabel}</p>
+                <div className="space-y-2 pt-4 border-t">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Cost per {displayData.unitType}</span>
+                    <span className="font-bold">{formatters.currencyExact(displayData.costPerUnit)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Revenue per {displayData.unitType}</span>
+                    <span className="font-bold">{formatters.currency(displayData.revenuePerUnit)}</span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -1076,14 +1658,257 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         </div>
       )}
 
+      {/* Target Yield Prescription */}
+      <div className="bg-white rounded-xl border border-slate-200/70 shadow-lg shadow-slate-200/50 mb-8">
+        <div className="px-6 py-5 border-b border-slate-100">
+          <div className="inline-flex items-center text-[11px] font-semibold uppercase mb-4 px-3 py-1 rounded-full bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-700 tracking-wide shadow-sm border border-indigo-200/50">
+            Prescriptive Playbook
+          </div>
+          <h3 className="text-xl font-semibold text-slate-900">What It Would Take to Hit Target Yield</h3>
+          <p className="text-sm text-slate-500 mt-1">See how much NOI or cost needs to move for this project to hit its underwriting hurdle.</p>
+        </div>
+        <div className="p-6 md:p-8">
+        {(() => {
+          const formatMoney = (value?: number) =>
+              typeof value === 'number' && Number.isFinite(value) ? formatters.currency(value) : '—';
+            const formatPercent = (value?: number) =>
+              typeof value === 'number' && Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : '—';
+            const formatMultiplier = (value?: number) =>
+              typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(2)}x` : '—';
+
+            const totalCostValue =
+              typeof totalProjectCost === 'number' && Number.isFinite(totalProjectCost) && totalProjectCost > 0
+                ? totalProjectCost
+                : undefined;
+            const currentNoiValue = typeof currentNoi === 'number' && Number.isFinite(currentNoi) ? currentNoi : undefined;
+            const requiredNoiValue = typeof requiredNoi === 'number' && Number.isFinite(requiredNoi) ? requiredNoi : undefined;
+            const currentYieldValue = typeof stabilizedYield === 'number' && Number.isFinite(stabilizedYield) ? stabilizedYield : undefined;
+            const targetYieldValue =
+              typeof targetYieldRate === 'number' && Number.isFinite(targetYieldRate) && targetYieldRate > 0 ? targetYieldRate : undefined;
+            const dscrValue = typeof dscr === 'number' && Number.isFinite(dscr) ? dscr : undefined;
+            const targetDscrValue =
+              typeof resolvedTargetDscr === 'number' && Number.isFinite(resolvedTargetDscr) ? resolvedTargetDscr : undefined;
+
+            const noiShortfall =
+              typeof requiredNoiValue === 'number' && typeof currentNoiValue === 'number'
+                ? requiredNoiValue - currentNoiValue
+                : undefined;
+            const noiShortfallPct =
+              typeof noiShortfall === 'number' && typeof currentNoiValue === 'number' && currentNoiValue !== 0
+                ? noiShortfall / currentNoiValue
+                : undefined;
+
+            const maxCostForTarget =
+              typeof currentNoiValue === 'number' &&
+              typeof targetYieldValue === 'number' &&
+              targetYieldValue > 0
+                ? currentNoiValue / targetYieldValue
+                : undefined;
+            const costReductionNeeded =
+              typeof totalCostValue === 'number' && typeof maxCostForTarget === 'number'
+                ? totalCostValue - maxCostForTarget
+                : undefined;
+
+            const gapBps =
+              typeof targetYieldValue === 'number' && typeof currentYieldValue === 'number'
+                ? Math.round((targetYieldValue - currentYieldValue) * 10000)
+                : undefined;
+
+            let yieldSummary = 'Yield-on-cost data is still loading.';
+            if (typeof currentYieldValue === 'number' && typeof targetYieldValue === 'number') {
+              const direction =
+                typeof gapBps === 'number'
+                  ? gapBps > 0
+                    ? `${Math.abs(gapBps)} bps below target`
+                    : `${Math.abs(gapBps)} bps above target`
+                  : null;
+              yieldSummary = `Current yield is ${formatPercent(currentYieldValue)} vs ${formatPercent(targetYieldValue)}${
+                direction ? ` (${direction})` : ''
+              }.`;
+            }
+
+            let dscrSummary = 'Debt coverage metrics are still loading. Use lender sizing once available.';
+            if (typeof dscrValue === 'number' && typeof targetDscrValue === 'number') {
+              dscrSummary =
+                dscrValue >= targetDscrValue
+                  ? `Debt coverage is solid at ${formatMultiplier(dscrValue)} vs ${formatMultiplier(targetDscrValue)} — equity returns are the main limiter.`
+                  : `Debt coverage is ${formatMultiplier(dscrValue)} vs ${formatMultiplier(
+                      targetDscrValue
+                    )}; expect lenders to require NOI lift, lower leverage, or added credit support.`;
+            } else if (typeof dscrValue === 'number') {
+              dscrSummary = `Debt coverage is ${formatMultiplier(dscrValue)}. Target DSCR not provided.`;
+            }
+
+          return (
+              <div className="grid gap-6 md:gap-8 md:grid-cols-3 text-sm text-slate-700">
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-[0.2em]">Path 1 · Increase NOI</p>
+                    <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2 shadow-md shadow-slate-100">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Current NOI</span>
+                      <span className="font-semibold text-slate-900">{formatMoney(currentNoiValue)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">NOI needed</span>
+                      <span className="font-semibold text-slate-900">{formatMoney(requiredNoiValue)}</span>
+                    </div>
+                    <p className="text-[12px] text-slate-500 leading-relaxed border-t border-slate-100 pt-2">
+                      {typeof noiShortfall === 'number' && noiShortfall > 0 ? (
+                        <>
+                          Increase annual NOI by <span className="font-semibold text-slate-900">{formatMoney(noiShortfall)}</span>
+                          {typeof noiShortfallPct === 'number' && Number.isFinite(noiShortfallPct)
+                            ? ` (${(noiShortfallPct * 100).toFixed(1)}% lift)`
+                            : ''}{' '}
+                          to reach {formatPercent(targetYieldValue)}.
+                        </>
+                      ) : requiredNoiValue && currentNoiValue ? (
+                        'Current NOI already meets the target yield — keep this level of performance through stabilization.'
+                      ) : (
+                        'Once NOI and target yield metrics load, this path highlights the lift required.'
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-[0.2em]">Path 2 · Reduce Project Cost</p>
+                    <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2 shadow-md shadow-slate-100">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Current total cost</span>
+                      <span className="font-semibold text-slate-900">{formatMoney(totalCostValue)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Max cost supported</span>
+                      <span className="font-semibold text-slate-900">{formatMoney(maxCostForTarget)}</span>
+                    </div>
+                    <p className="text-[12px] text-slate-500 leading-relaxed border-t border-slate-100 pt-2">
+                      {typeof costReductionNeeded === 'number' && costReductionNeeded > 0 ? (
+                        <>
+                          Value engineer roughly <span className="font-semibold text-slate-900">{formatMoney(costReductionNeeded)}</span> from the budget or
+                          source grants/equity to close the gap.
+                        </>
+                      ) : totalCostValue && maxCostForTarget ? (
+                        'Today’s cost basis already supports the target yield at current NOI.'
+                      ) : (
+                        'Cost stack guidance appears once current NOI and target yield inputs are ready.'
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-[0.2em]">Summary & Perspective</p>
+                  <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3 shadow-md shadow-slate-100">
+                    <p className="text-sm text-slate-600 leading-relaxed">{yieldSummary}</p>
+                    <p className="text-sm text-slate-600 leading-relaxed">{dscrSummary}</p>
+                    <p className="text-sm text-slate-500 leading-relaxed">
+                      Use this as the talking track for lease-up assumptions, cost value engineering, or capital-stack tweaks.
+                    </p>
+                  </div>
+                </div>
+              </div>
+          );
+        })()}
+        </div>
+      </div>
+
       {/* Revenue Requirements Card */}
       {revenueReq && (
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
           <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4">
             <h3 className="text-lg font-bold text-white">Revenue Required to Hit Target Yield</h3>
-            <p className="text-sm text-emerald-100">Compare required NOI and rent per SF against current performance.</p>
+            <p className="text-sm text-emerald-100">
+              {isHospitalityProject
+                ? 'Benchmark NOI per key and RevPAR against the brand’s underwriting targets.'
+                : 'Compare required NOI and revenue per SF against current performance.'}
+            </p>
           </div>
           <div className="p-6 space-y-5">
+            {isHospitalityProject ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-600 mb-1">Required NOI (target yield)</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {formatters.currency(requiredNoi ?? revenueReq.required_value)}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-2">
+                    Current NOI:{' '}
+                    <span className="font-semibold text-gray-900">
+                      {formatters.currency(currentNoi ?? revenueReq.market_value)}
+                    </span>
+                  </p>
+                  {typeof noiGap === 'number' && (
+                    <p className={`text-xs mt-1 ${noiGap >= 0 ? 'text-green-600' : 'text-amber-600'}`}>
+                      Gap: {formatters.currency(Math.abs(noiGap))} ({Math.abs(noiGapPct || 0).toFixed(1)}%)&nbsp;
+                      {noiGap >= 0 ? 'surplus vs target' : 'shortfall vs target'}
+                    </p>
+                  )}
+                  <div className="mt-3 text-xs text-gray-600 space-y-1">
+                    <div>
+                      Required NOI per key:{' '}
+                      <span className="font-semibold text-gray-900">
+                        {typeof hospitalityRequiredNoiPerKeyValue === 'number'
+                          ? formatters.currency(hospitalityRequiredNoiPerKeyValue)
+                          : '—'}
+                      </span>
+                    </div>
+                    <div>
+                      Current NOI per key:{' '}
+                      <span className="font-semibold text-gray-900">
+                        {typeof hospitalityCurrentNoiPerKeyValue === 'number'
+                          ? formatters.currency(hospitalityCurrentNoiPerKeyValue)
+                          : '—'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-blue-900/80 mb-1">Required RevPAR</p>
+                  <p className="text-2xl font-bold text-blue-700">
+                    {typeof hospitalityRequiredRevparValue === 'number'
+                      ? `$${hospitalityRequiredRevparValue.toFixed(0)}`
+                      : '—'}
+                  </p>
+                  <p className="text-xs text-blue-900/80 mt-2">
+                    Current RevPAR:{' '}
+                    <span className="font-semibold">
+                      {typeof hospitalityCurrentRevparValue === 'number'
+                        ? `$${hospitalityCurrentRevparValue.toFixed(0)}`
+                        : '—'}
+                    </span>
+                  </p>
+                  {typeof hospitalityRevparGap === 'number' && (
+                    <p className={`text-xs mt-1 ${hospitalityRevparGap <= 0 ? 'text-green-700' : 'text-amber-600'}`}>
+                      Gap: ${Math.abs(hospitalityRevparGap).toFixed(0)} ({Math.abs(hospitalityRevparGapPct || 0).toFixed(1)}%)&nbsp;
+                      {hospitalityRevparGap <= 0 ? 'above requirement' : 'needed to reach target'}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Feasibility vs Target Yield
+              </div>
+              {(() => {
+                const label =
+                  decisionStatus === 'GO'
+                    ? 'GO'
+                    : decisionStatus === 'NO-GO'
+                      ? 'Not Feasible'
+                      : 'Marginal';
+                const baseClasses =
+                  'rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide';
+                const colorClasses =
+                  decisionStatus === 'GO'
+                    ? 'bg-emerald-100 text-emerald-900'
+                    : decisionStatus === 'NO-GO'
+                      ? 'bg-red-100 text-red-900'
+                      : 'bg-amber-100 text-amber-900';
+                return <div className={`${baseClasses} ${colorClasses}`}>{label}</div>;
+              })()}
+            </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="p-4 bg-gray-50 rounded-lg">
                 <p className="text-sm text-gray-600 mb-1">Required NOI (target yield)</p>
@@ -1104,47 +1929,49 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                 )}
               </div>
               <div className="p-4 bg-blue-50 rounded-lg">
-                <p className="text-sm text-blue-900/80 mb-1">Required Rent per SF</p>
+                <p className="text-sm text-blue-900/80 mb-1">Required Revenue per SF</p>
                 <p className="text-2xl font-bold text-blue-700">
-                  {typeof requiredRentPerSf === 'number' ? formatters.currency(requiredRentPerSf) : '—'}
+                  {typeof requiredRevenuePerSf === 'number' ? formatters.currency(requiredRevenuePerSf) : '—'}
                 </p>
                 <p className="text-xs text-blue-900/80 mt-2">
-                  Current Rent per SF:{' '}
+                  Current Revenue per SF:{' '}
                   <span className="font-semibold">
-                    {typeof currentRentPerSf === 'number' ? formatters.currency(currentRentPerSf) : '—'}
+                    {typeof currentRevenuePerSf === 'number' ? formatters.currency(currentRevenuePerSf) : '—'}
                   </span>
                 </p>
-                {typeof rentGap === 'number' && (
-                  <p className={`text-xs mt-1 ${rentGap >= 0 ? 'text-green-700' : 'text-amber-600'}`}>
-                    Gap: {formatters.currency(Math.abs(rentGap))} ({Math.abs(rentGapPct || 0).toFixed(1)}%)&nbsp;
-                    {rentGap >= 0 ? 'above requirement' : 'needed to reach target'}
+                {typeof revenuePerSfGap === 'number' && (
+                  <p className={`text-xs mt-1 ${revenuePerSfGap >= 0 ? 'text-green-700' : 'text-amber-600'}`}>
+                    Gap: {formatters.currency(Math.abs(revenuePerSfGap))} ({Math.abs(revenuePerSfGapPct || 0).toFixed(1)}%)&nbsp;
+                    {revenuePerSfGap >= 0 ? 'above requirement' : 'needed to reach target'}
                   </p>
                 )}
               </div>
             </div>
+              </>
+            )}
 
             <div className={`p-4 rounded-lg ${
               (revenueReq.feasibility?.status || revenueReq.feasibility) === 'Feasible' 
                 ? 'bg-green-50 border border-green-200' 
                 : 'bg-amber-50 border border-amber-200'
             }`}>
-              <div className="flex items-center justify-between">
-                <span className="font-semibold">Feasibility vs Target Yield</span>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Feasibility vs Target Yield
+                  </p>
+                  <p className="text-sm text-gray-800 leading-snug mt-1">
+                    {feasibilityGapCopy}
+                  </p>
+                </div>
                 <span className={`font-bold ${
                   (revenueReq.feasibility?.status || revenueReq.feasibility) === 'Feasible' ? 'text-green-600' : 'text-amber-600'
                 }`}>
                   {revenueReq.feasibility?.status || revenueReq.feasibility}
                 </span>
               </div>
-              {typeof noiGap === 'number' && (
-                <p className="text-sm mt-2">
-                  {noiGap >= 0
-                    ? `Current NOI exceeds requirement by ${formatters.currency(Math.abs(noiGap))} (${Math.abs(noiGapPct || 0).toFixed(1)}%).`
-                    : `Need ${formatters.currency(Math.abs(noiGap))} (${Math.abs(noiGapPct || 0).toFixed(1)}%) more NOI to meet the yield target.`}
-                </p>
-              )}
               {revenueReq.feasibility?.recommendation && (
-                <p className="text-sm mt-2 text-gray-600">
+                <p className="text-sm mt-3 text-gray-600">
                   {revenueReq.feasibility.recommendation}
                 </p>
               )}
@@ -1247,36 +2074,79 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               Market Position
             </h3>
           </div>
-          <div className="p-6">
-            <div className="space-y-4">
-              <div className="bg-white rounded-lg p-4 shadow-sm">
-                <div className="flex justify-between items-center mb-3">
-                  <span className="text-sm font-medium text-gray-600">Your Cost</span>
-                  <span className="text-xl font-bold text-blue-600">{formatters.costPerSF(totals.cost_per_sf)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Regional Average</span>
-                  <span className="font-medium text-gray-700">${Math.round((totals.cost_per_sf || 261) * 0.91)}/SF</span>
-                </div>
-              </div>
-              
-              <div className="relative">
-                <div className="w-full bg-gradient-to-r from-green-100 via-yellow-100 to-red-100 rounded-full h-4 relative">
-                  <div 
-                    className="absolute top-1/2 transform -translate-y-1/2 w-6 h-6 bg-blue-600 rounded-full border-2 border-white shadow-lg z-10"
-                    style={{ left: '59%', marginLeft: '-12px' }}
-                  >
+          <div className="p-6 space-y-4 text-sm">
+            {(() => {
+              const formatCost = (value?: number) =>
+                typeof value === 'number' && Number.isFinite(value)
+                  ? formatters.costPerSF(value)
+                  : 'n/a';
+              const basisCopy = typeof costPerSFDeltaPct === 'number'
+                ? `${Math.abs(costPerSFDeltaPct).toFixed(1)}% ${costPerSFDeltaPct >= 0 ? 'above' : 'below'} benchmark`
+                : 'Benchmark comparison pending additional market data.';
+              return (
+                <div className="bg-white rounded-lg p-4 shadow-sm space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-600">Your cost basis</span>
+                    <span className="text-xl font-bold text-blue-600">
+                      {formatCost(costPerSFValue ?? totals.cost_per_sf)}
+                    </span>
                   </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-500">Market benchmark</span>
+                    <span className="font-medium text-gray-700">
+                      {formatCost(marketCostPerSF)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">{basisCopy}</p>
                 </div>
-                <div className="flex justify-between text-xs text-gray-500 mt-2">
-                  <span>-20%</span>
-                  <span>Market Avg</span>
-                  <span>+20%</span>
-                </div>
-                <div className="mt-4 p-3 bg-blue-50 rounded-lg text-center">
-                  <p className="text-sm font-bold text-blue-700">9% above regional average</p>
-                </div>
+              );
+            })()}
+
+            <div className="relative">
+              <div className="w-full bg-gradient-to-r from-green-100 via-yellow-100 to-red-100 rounded-full h-4 relative">
+                <div
+                  className="absolute top-1/2 transform -translate-y-1/2 w-6 h-6 bg-blue-600 rounded-full border-2 border-white shadow-lg z-10 transition-all"
+                  style={{ left: `calc(${costPerSFGaugePosition}% - 12px)` }}
+                />
               </div>
+              <div className="flex justify-between text-xs text-gray-500 mt-2">
+                <span>-20%</span>
+                <span>Market Avg</span>
+                <span>+20%</span>
+              </div>
+              <div className="mt-4 p-3 bg-blue-50 rounded-lg text-center text-blue-800 text-sm font-semibold">
+                {typeof costPerSFDeltaPct === 'number'
+                  ? `${Math.abs(costPerSFDeltaPct).toFixed(1)}% ${costPerSFDeltaPct >= 0 ? 'above' : 'below'} market`
+                  : 'Waiting on market cost inputs'}
+              </div>
+            </div>
+
+            <div className="bg-slate-900/40 border border-slate-800/50 rounded-lg p-4 text-slate-100">
+              {(() => {
+                const formatPct = (value?: number) =>
+                  typeof value === 'number' && Number.isFinite(value)
+                    ? `${(value * 100).toFixed(1)}%`
+                    : 'n/a';
+                const spreadCopy = typeof yieldCapSpreadBps === 'number' && typeof yieldCapSpreadPct === 'number'
+                  ? `Spread: ${yieldCapSpreadBps >= 0 ? '+' : '-'}${Math.abs(yieldCapSpreadBps).toFixed(0)} bp (${formatPct(Math.abs(yieldCapSpreadPct))}) ${yieldCapSpreadBps >= 0 ? 'above' : 'below'} market`
+                  : 'Add a market cap benchmark to calculate spread.';
+                return (
+                  <>
+                    <p className="text-xs uppercase tracking-wider text-slate-400 mb-2">Yield vs market cap</p>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-300">Yield on cost</span>
+                        <span className="font-semibold">{formatPct(effectiveYield)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-300">Market cap rate</span>
+                        <span className="font-semibold">{formatPct(marketCapRateValue)}</span>
+                      </div>
+                      <p className="text-xs text-amber-200 mt-1">{spreadCopy}</p>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -1290,24 +2160,97 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             </h3>
           </div>
           <div className="p-6 space-y-4">
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">If costs +10%:</p>
-              <div className="flex items-center justify-between">
-                <TrendingDown className="h-5 w-5 text-red-500" />
-                <span className="text-lg font-bold text-red-600">ROI drops to {formatters.percentage(displayData.roi * 0.75)}</span>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">If revenue +10%:</p>
-              <div className="flex items-center justify-between">
-                <TrendingUp className="h-5 w-5 text-green-500" />
-                <span className="text-lg font-bold text-green-600">ROI rises to {formatters.percentage(displayData.roi * 1.25)}</span>
-              </div>
-            </div>
-            <div className="p-4 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg">
-              <p className="text-xs text-gray-600 uppercase tracking-wider mb-2">Break-even needs:</p>
-              <span className="text-xl font-bold text-purple-700">{formatters.percentage(displayData.breakEvenOccupancy)} occupancy</span>
-            </div>
+            {(() => {
+              const sensitivity = displayData?.sensitivity || {};
+
+              // Prefer backend-supplied base; fallback to the mapped yield so cards always have context.
+              const baseYOC =
+                typeof sensitivity.baseYieldOnCost === 'number' && Number.isFinite(sensitivity.baseYieldOnCost)
+                  ? sensitivity.baseYieldOnCost
+                  : typeof displayData.yieldOnCost === 'number' && Number.isFinite(displayData.yieldOnCost)
+                    ? displayData.yieldOnCost
+                    : undefined;
+
+              const fmt = (value?: number) =>
+                typeof value === 'number' && Number.isFinite(value)
+                  ? formatters.percentage(value)
+                  : '—';
+              const breakEvenOcc =
+                typeof displayData.breakEvenOccupancyForTargetYield === 'number'
+                  ? displayData.breakEvenOccupancyForTargetYield
+                  : typeof displayData.breakEvenOccupancy === 'number'
+                    ? displayData.breakEvenOccupancy
+                    : undefined;
+              const occLabel =
+                typeof breakEvenOcc === 'number'
+                  ? breakEvenOcc > 1.02
+                    ? '> 100% (not achievable)'
+                    : formatters.percentage(breakEvenOcc)
+                  : 'N/A';
+
+              // Return backend scenario metric when present; otherwise fall back to naive +/-10% adjustments.
+              const scenarioValue = (
+                backendValue: number | undefined,
+                fallbackFn: (base: number) => number
+              ): string => {
+                if (typeof backendValue === 'number' && Number.isFinite(backendValue)) {
+                  return fmt(backendValue);
+                }
+                if (typeof baseYOC === 'number') {
+                  return fmt(fallbackFn(baseYOC));
+                }
+                return '—';
+              };
+
+              const cards = [
+                {
+                  label: 'If costs +10%',
+                  icon: <TrendingDown className="h-5 w-5 text-red-500" />,
+                  value: scenarioValue(sensitivity.costUp10YieldOnCost, (base) => base / 1.1),
+                  color: 'text-red-600'
+                },
+                {
+                  label: 'If costs -10%',
+                  icon: <TrendingUp className="h-5 w-5 text-green-500" />,
+                  value: scenarioValue(sensitivity.costDown10YieldOnCost, (base) => base / 0.9),
+                  color: 'text-green-600'
+                },
+                {
+                  label: 'If revenue +10%',
+                  icon: <TrendingUp className="h-5 w-5 text-green-500" />,
+                  value: scenarioValue(sensitivity.revenueUp10YieldOnCost, (base) => base * 1.1),
+                  color: 'text-green-600'
+                },
+                {
+                  label: 'If revenue -10%',
+                  icon: <TrendingDown className="h-5 w-5 text-red-500" />,
+                  value: scenarioValue(sensitivity.revenueDown10YieldOnCost, (base) => base * 0.9),
+                  color: 'text-red-600'
+                }
+              ];
+
+              return (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {cards.map(({ label, icon, value, color }) => (
+                      <div key={label} className="bg-white rounded-lg p-4 shadow-sm">
+                        <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">{label}</p>
+                        <div className="flex items-center justify-between">
+                          {icon}
+                          <span className={`text-lg font-bold ${color}`}>
+                            {value !== '—' ? `${value} yield` : '—'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="p-4 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg">
+                    <p className="text-xs text-gray-600 uppercase tracking-wider mb-2">Break-even needs:</p>
+                    <span className="text-xl font-bold text-purple-700">{occLabel}</span>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -1322,10 +2265,30 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           <div className="absolute left-10 top-10 bottom-0 w-0.5 bg-gradient-to-b from-blue-400 via-purple-400 to-pink-400"></div>
           <div className="space-y-8">
             {[
-              { icon: CheckCircle, color: 'green', title: 'Groundbreaking', date: 'Q1 2025' },
-              { icon: Building, color: 'blue', title: 'Structure Complete', date: 'Q3 2025' },
-              { icon: Users, color: 'purple', title: 'Substantial Completion', date: 'Q2 2027' },
-              { icon: Target, color: 'orange', title: buildingType === 'multifamily' ? 'First Tenant Move-in' : 'Grand Opening', date: 'Q3 2027' }
+              {
+                icon: CheckCircle,
+                color: 'green',
+                title: 'Groundbreaking',
+                date: projectTimeline?.groundbreaking ?? 'TBD'
+              },
+              {
+                icon: Building,
+                color: 'blue',
+                title: 'Structure Complete',
+                date: projectTimeline?.structureComplete ?? 'TBD'
+              },
+              {
+                icon: Users,
+                color: 'purple',
+                title: 'Substantial Completion',
+                date: projectTimeline?.substantialCompletion ?? 'TBD'
+              },
+              {
+                icon: Target,
+                color: 'orange',
+                title: buildingType === 'multifamily' ? 'First Tenant Move-in' : 'Grand Opening',
+                date: projectTimeline?.grandOpening ?? 'TBD'
+              }
             ].map((milestone, idx) => {
               const Icon = milestone.icon;
               return (
@@ -1507,13 +2470,13 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       </div>
 
       {/* Executive Financial Summary Footer */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 rounded-xl p-8 shadow-2xl">
-        <div className="grid grid-cols-4 gap-8">
-          <div className="text-center">
-            <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">TOTAL CAPITAL REQUIRED</p>
-            <p className="text-3xl font-bold text-white">{formatters.currency(totalProjectCost)}</p>
-            <p className="text-sm text-slate-500">Construction + Soft Costs</p>
-          </div>
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 rounded-xl p-8 shadow-2xl">
+          <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+            <div className="text-center">
+              <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">TOTAL CAPITAL REQUIRED</p>
+              <p className="text-3xl font-bold text-white">{formatters.currency(totalProjectCost)}</p>
+              <p className="text-sm text-slate-500">Construction + Soft Costs</p>
+            </div>
           <div className="text-center">
             <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">EXPECTED ANNUAL RETURN</p>
             <p className="text-3xl font-bold text-white">{formatters.currency(noi)}</p>
@@ -1521,19 +2484,197 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           </div>
           <div className="text-center">
             <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">
-              INVESTMENT PER {displayData.unitType.toUpperCase()}
+              INVESTMENT PER UNIT
             </p>
-            <p className="text-3xl font-bold text-white">{formatters.currencyExact(displayData.costPerUnit)}</p>
-            <p className="text-sm text-slate-500">Total cost / {displayData.unitType}</p>
+            <p className="text-3xl font-bold text-white">
+              {displayData.costPerUnit > 0 ? formatters.currencyExact(displayData.costPerUnit) : 'N/A'}
+            </p>
+            <p className="text-sm text-slate-500">Total project cost divided by units</p>
           </div>
-          <div className="text-center">
-            <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">DEBT COVERAGE</p>
-            <p className="text-3xl font-bold text-white">{formatters.multiplier(displayData.dscr)}</p>
-            <p className="text-sm text-slate-500">DSCR (Target: 1.25x)</p>
+            <div className="text-center">
+              <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">DEBT COVERAGE</p>
+              <p className="text-3xl font-bold text-white">{formatters.multiplier(displayData.dscr)}</p>
+              <p className="text-sm text-slate-500">DSCR (Target: 1.25x)</p>
+            </div>
+          {(() => {
+            const showTotalUnitsFooter =
+              (buildingType || '').toLowerCase() !== 'industrial' &&
+              typeof displayData.units === 'number' &&
+              displayData.units > 0;
+            if (!showTotalUnitsFooter) return null;
+            return (
+            <div className="text-center">
+              <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">TOTAL UNITS</p>
+              <p className="text-3xl font-bold text-white">{displayData.units.toLocaleString()}</p>
+              <p className="text-sm text-slate-500">Derived from square footage and density</p>
+            </div>
+            );
+          })()}
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Scenario Comparison Modal */}
+      {isScenarioOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 py-8" onClick={() => setIsScenarioOpen(false)}>
+          <div className="w-full max-w-6xl rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl" onClick={event => event.stopPropagation()}>
+            <div className="flex items-center justify-between gap-4 border-b border-slate-800 px-6 py-4">
+              <div>
+                <p className="text-sm font-semibold text-white">Scenario Comparison – Current vs Target Yield</p>
+                <p className="text-xs text-slate-400">Shows the current case alongside the target yield requirements.</p>
+              </div>
+              <button
+                className="inline-flex items-center gap-2 rounded-full border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-800"
+                onClick={() => setIsScenarioOpen(false)}
+              >
+                <XCircle className="h-4 w-4" />
+                Close
+              </button>
+            </div>
+            <div className="px-6 py-6">
+              {(() => {
+                const formatPct = (value?: number) => (typeof value === 'number' && Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : '—');
+                const formatCurrency0 = (value?: number) =>
+                  typeof value === 'number' && Number.isFinite(value)
+                    ? value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+                    : '—';
+                const formatPerSf = (value?: number) => (typeof value === 'number' && Number.isFinite(value) ? `$${value.toFixed(0)}/SF` : '—');
+                const formatDscrValue = (value?: number) => (typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(2)}×` : '—');
+
+                const currentYieldValue = typeof stabilizedYield === 'number' && Number.isFinite(stabilizedYield) ? stabilizedYield : undefined;
+                const targetYieldValue = typeof targetYieldRate === 'number' && Number.isFinite(targetYieldRate) ? targetYieldRate : undefined;
+
+                const currentNoiValue = typeof noi === 'number' && Number.isFinite(noi) ? noi : undefined;
+                const requiredNoiValue = typeof requiredNoi === 'number' && Number.isFinite(requiredNoi) ? requiredNoi : undefined;
+
+                const currentRevenuePerSfValue =
+                  typeof currentRevenuePerSf === 'number' && Number.isFinite(currentRevenuePerSf) ? currentRevenuePerSf : undefined;
+                const requiredRevenuePerSfValue =
+                  typeof requiredRevenuePerSf === 'number' && Number.isFinite(requiredRevenuePerSf) ? requiredRevenuePerSf : undefined;
+
+                const currentDscrValue =
+                  typeof dscr === 'number' && Number.isFinite(dscr)
+                    ? dscr
+                    : typeof annualDebtService === 'number' && annualDebtService > 0 && typeof currentNoiValue === 'number'
+                      ? currentNoiValue / annualDebtService
+                      : undefined;
+                const targetDscrValue =
+                  typeof requiredNoiValue === 'number' && typeof annualDebtService === 'number' && annualDebtService > 0
+                    ? requiredNoiValue / annualDebtService
+                    : undefined;
+
+                const yieldGap = typeof targetYieldValue === 'number' && typeof currentYieldValue === 'number' ? targetYieldValue - currentYieldValue : undefined;
+                const noiDelta =
+                  typeof requiredNoiValue === 'number' && typeof currentNoiValue === 'number' ? requiredNoiValue - currentNoiValue : undefined;
+                const noiDeltaPct =
+                  typeof noiDelta === 'number' && typeof requiredNoiValue === 'number' && requiredNoiValue !== 0 ? noiDelta / requiredNoiValue : undefined;
+                const revenueDeltaPerSf =
+                  typeof requiredRevenuePerSfValue === 'number' && typeof currentRevenuePerSfValue === 'number'
+                    ? requiredRevenuePerSfValue - currentRevenuePerSfValue
+                    : undefined;
+                const revenueDeltaPct =
+                  typeof revenueDeltaPerSf === 'number' &&
+                  typeof requiredRevenuePerSfValue === 'number' &&
+                  requiredRevenuePerSfValue !== 0
+                    ? revenueDeltaPerSf / requiredRevenuePerSfValue
+                    : undefined;
+
+                return (
+                  <div className="space-y-4 text-xs md:text-sm text-slate-100">
+                    <div className="rounded-lg border border-slate-800/60 bg-slate-900/70 px-4 py-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <div className="text-xs font-semibold text-slate-200">Gaps to target</div>
+                        <div className="text-xs text-slate-300 mt-1">
+                          Yield gap:{' '}
+                          <span className="font-semibold">
+                            {typeof yieldGap === 'number' ? formatPct(yieldGap) : 'n/a'}
+                          </span>
+                          {targetYieldValue != null && currentYieldValue != null && (
+                            <span className="text-slate-400">
+                              {' '}
+                              (current {formatPct(currentYieldValue)} vs target {formatPct(targetYieldValue)})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-xs text-slate-300">
+                        NOI gap:{' '}
+                        <span className="font-semibold">
+                          {formatCurrency0(noiDelta)}
+                          {typeof noiDeltaPct === 'number' ? ` (${(noiDeltaPct * 100).toFixed(1)}%)` : ''}
+                        </span>
+                        <span className="mx-3 text-slate-700">|</span>
+                        Revenue gap:{' '}
+                        <span className="font-semibold">
+                          {formatPerSf(revenueDeltaPerSf)}
+                          {typeof revenueDeltaPct === 'number' ? ` (${(revenueDeltaPct * 100).toFixed(1)}%)` : ''}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Current scenario</p>
+                        <div className="mt-3 space-y-2 text-sm text-slate-200">
+                          <div className="flex justify-between">
+                            <span>Yield on cost</span>
+                            <span className="font-semibold">{formatPct(currentYieldValue)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>NOI</span>
+                            <span className="font-semibold">{formatCurrency0(currentNoiValue)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Revenue per SF</span>
+                            <span className="font-semibold">{formatPerSf(currentRevenuePerSfValue)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>DSCR</span>
+                            <span className="font-semibold">{formatDscrValue(currentDscrValue)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Target yield scenario</p>
+                        <div className="mt-3 space-y-2 text-sm text-slate-200">
+                          <div className="flex justify-between">
+                            <span>Yield on cost (target)</span>
+                            <span className="font-semibold">{formatPct(targetYieldValue)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Required NOI</span>
+                            <span className="font-semibold">{formatCurrency0(requiredNoiValue)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Required revenue per SF</span>
+                            <span className="font-semibold">{formatPerSf(requiredRevenuePerSfValue)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>DSCR at target NOI</span>
+                            <span className="font-semibold">{formatDscrValue(targetDscrValue)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-xs text-slate-300">
+                      {typeof yieldGap === 'number' && typeof targetYieldValue === 'number' && yieldGap > 0 ? (
+                        <>
+                          To reach a yield on cost of <span className="font-semibold">{formatPct(targetYieldValue)}</span>, the project needs roughly{' '}
+                          <span className="font-semibold">{formatCurrency0(noiDelta)}</span> more NOI and{' '}
+                          <span className="font-semibold">{formatPerSf(revenueDeltaPerSf)}</span> more revenue per SF (or equivalent cost savings).
+                        </>
+                      ) : (
+                        <>Target yield isn’t configured for this asset yet—showing the current snapshot only.</>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

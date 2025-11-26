@@ -1164,23 +1164,62 @@ function ProjectDetail() {
                     </div>
                   </div>
 
-                  {/* Simple Risk Sensitivity */}
+                  {/* Refined Quick Sensitivity — now uses real underwriting metrics from DisplayData */}
                   <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-amber-500">
                     <h3 className="text-lg font-semibold text-gray-800 mb-4">Quick Sensitivity</h3>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span>If costs +10%:</span>
-                        <span className="font-bold text-red-600">ROI drops to {((ownerViewData?.roi_analysis?.financial_metrics?.roi_percentage || 1.2) - 0.7).toFixed(1)}%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>If revenue +10%:</span>
-                        <span className="font-bold text-green-600">ROI rises to {((ownerViewData?.roi_analysis?.financial_metrics?.roi_percentage || 1.2) + 1.6).toFixed(1)}%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Break-even needs:</span>
-                        <span className="font-bold">{((ownerViewData?.roi_analysis?.assumptions?.occupancy_rate || 0.85) * 100).toFixed(0)}% occupancy</span>
-                      </div>
-                    </div>
+                    {(() => {
+                      const s = displayData?.sensitivity || {};
+                      const fmt = (v: number | undefined) =>
+                        typeof v === 'number' ? `${(v * 100).toFixed(1)}%` : '—';
+
+                      const breakEvenOcc =
+                        typeof displayData?.breakEvenOccupancyForTargetYield === 'number'
+                          ? displayData.breakEvenOccupancyForTargetYield
+                          : null;
+
+                      const occLabel = (() => {
+                        if (breakEvenOcc == null) return 'N/A';
+                        if (breakEvenOcc > 1.02) return '> 100% (not achievable)';
+                        return `${(breakEvenOcc * 100).toFixed(1)}% occupancy`;
+                      })();
+
+                      return (
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span>If costs +10%:</span>
+                            <span className="font-bold text-red-600">
+                              {fmt(s.costUp10YieldOnCost)}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between">
+                            <span>If costs -10%:</span>
+                            <span className="font-bold text-green-600">
+                              {fmt(s.costDown10YieldOnCost)}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between">
+                            <span>If revenue +10%:</span>
+                            <span className="font-bold text-green-600">
+                              {fmt(s.revenueUp10YieldOnCost)}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between">
+                            <span>If revenue -10%:</span>
+                            <span className="font-bold text-red-600">
+                              {fmt(s.revenueDown10YieldOnCost)}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between pt-2">
+                            <span>Break-even needs:</span>
+                            <span className="font-bold text-amber-600">{occLabel}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Project Timeline */}

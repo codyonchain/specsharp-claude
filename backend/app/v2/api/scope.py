@@ -8,7 +8,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 import uuid
 from sqlalchemy.orm import Session
-from app.v2.engines.unified_engine import unified_engine
+from app.v2.engines.unified_engine import unified_engine, build_project_timeline
 from app.services.nlp_service import NLPService
 nlp_service = NLPService()
 from app.v2.config.master_config import (
@@ -559,8 +559,9 @@ async def generate_scope(
                 logger.info(f"Normalized building type from '{parsed.get('building_type')}' to '{canonical_type}'")
         
         # Use unified engine for calculations
+        building_type_enum = BuildingType(parsed.get('building_type', 'office'))
         result = unified_engine.calculate_project(
-            building_type=BuildingType(parsed.get('building_type', 'office')),
+            building_type=building_type_enum,
             subtype=parsed.get('subtype'),
             square_footage=parsed.get('square_footage', 10000),
             location=parsed.get('location', 'Nashville, TN'),
@@ -583,6 +584,19 @@ async def generate_scope(
             project_name = f"{building_type_display} - {location_short}"
         
         # Create project with new schema
+        import json
+        project_timeline = build_project_timeline(building_type_enum, None)
+        calculations_block = None
+        if isinstance(result, dict) and 'calculations' in result:
+            calculations_block = result['calculations']
+        elif isinstance(result, dict):
+            calculations_block = result
+        else:
+            calculations_block = {}
+        if isinstance(calculations_block, dict) and 'project_timeline' not in calculations_block:
+            calculations_block['project_timeline'] = project_timeline
+            if isinstance(result, dict) and 'calculations' in result:
+                result['calculations'] = calculations_block
         import json
         project = Project(
             # Required fields
