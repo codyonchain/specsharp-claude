@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Project } from '../../types';
 import { formatCurrency, formatNumber, formatPercent } from '../../utils/formatters';
 import { 
@@ -26,6 +26,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
   const parsed_input = analysis.parsed_input || {};
   const displayData = BackendDataMapper.mapToDisplay(project.analysis);
   const isDev = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
+  const constructionSchedule = calculations?.construction_schedule;
 
   // ========================================
   // PULL FROM SAME CALCULATION ENGINE
@@ -165,15 +166,96 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
     costBuildUpLogRef.current = true;
   }, [isDev, costBuildUp]);
 
-  // Construction schedule phases
-  const schedule = [
-    { phase: 'Site Foundation', startMonth: 0, duration: 5, color: 'blue', cost: 9000000 },
-    { phase: 'Structural', startMonth: 3, duration: 11, color: 'green', cost: tradeBreakdown.structural.amount },
-    { phase: 'Exterior Envelope', startMonth: 8, duration: 9, color: 'orange', cost: 8000000 },
-    { phase: 'MEP Rough', startMonth: 8, duration: 9, color: 'purple', cost: 9000000 },
-    { phase: 'Interior Finishes', startMonth: 14, duration: 12, color: 'pink', cost: tradeBreakdown.finishes.amount },
-    { phase: 'MEP Finishes', startMonth: 17, duration: 9, color: 'teal', cost: 9000000 }
+  type BackendPhase = {
+    id?: string;
+    label?: string;
+    start_month?: number;
+    startMonth?: number;
+    duration?: number;
+    color?: string;
+  };
+
+  type TimelinePhase = {
+    id: string;
+    label: string;
+    startMonth: number;
+    duration: number;
+    color: string;
+  };
+
+  const backendPhases: BackendPhase[] = Array.isArray(constructionSchedule?.phases)
+    ? (constructionSchedule?.phases as BackendPhase[])
+    : [];
+
+  const fallbackPhases: TimelinePhase[] = [
+    { id: 'site_foundation', label: 'Site & Podium Work', startMonth: 0, duration: 6, color: 'blue' },
+    { id: 'structural', label: 'Structure & Garage', startMonth: 4, duration: 14, color: 'green' },
+    { id: 'exterior_envelope', label: 'Exterior Envelope', startMonth: 10, duration: 10, color: 'orange' },
+    { id: 'mep_rough', label: 'MEP Rough', startMonth: 12, duration: 10, color: 'purple' },
+    { id: 'interior_finishes', label: 'Interior Finishes', startMonth: 18, duration: 12, color: 'pink' },
+    { id: 'mep_finishes', label: 'Commissioning & Punch', startMonth: 22, duration: 8, color: 'teal' }
   ];
+
+  const phases: TimelinePhase[] =
+    backendPhases.length > 0
+      ? backendPhases.map((phase, index) => ({
+          id: phase.id || phase.label || `phase-${index}`,
+          label: phase.label || phase.id || `Phase ${index + 1}`,
+          startMonth:
+            typeof phase.start_month === 'number'
+              ? phase.start_month
+              : typeof phase.startMonth === 'number'
+                ? phase.startMonth
+                : 0,
+          duration: typeof phase.duration === 'number' ? phase.duration : 0,
+          color: phase.color || 'blue'
+        }))
+      : fallbackPhases;
+
+  const totalMonthsRaw =
+    typeof constructionSchedule?.total_months === 'number' ? constructionSchedule.total_months : 0;
+  const totalMonths = totalMonthsRaw > 0 ? totalMonthsRaw : 30;
+
+  const timelineMarkers = useMemo(() => {
+    const segments = 4;
+    const labels: string[] = [];
+    for (let i = 0; i <= segments; i++) {
+      const monthValue = i === 0 ? 1 : Math.max(1, Math.round((totalMonths / segments) * i));
+      labels.push(`M${monthValue}`);
+    }
+    return labels;
+  }, [totalMonths]);
+
+  const timelineStartYearSource =
+    calculations.project_timeline?.start_year ||
+    parsed_input?.start_year ||
+    new Date().getFullYear();
+  const timelineStartYear =
+    typeof timelineStartYearSource === 'number'
+      ? timelineStartYearSource
+      : Number(timelineStartYearSource) || new Date().getFullYear();
+
+  const formatMonthToQuarter = (monthValue: number) => {
+    if (typeof monthValue !== 'number' || Number.isNaN(monthValue)) {
+      return 'TBD';
+    }
+    const normalized = Math.max(0, Math.round(monthValue));
+    const yearOffset = Math.floor(normalized / 12);
+    const quarter = Math.floor((normalized % 12) / 3) + 1;
+    const displayYear = timelineStartYear + yearOffset;
+    return `Q${quarter} ${displayYear}`;
+  };
+
+  const milestoneIcons = [HardHat, Building, Wrench, TrendingUp];
+  const milestonePhases = phases.slice(0, 4);
+  const milestones = milestonePhases.map((phase, index) => {
+    const midpoint = phase.startMonth + phase.duration / 2;
+    return {
+      id: phase.id || `milestone-${index}`,
+      label: phase.label,
+      dateLabel: formatMonthToQuarter(midpoint)
+    };
+  });
 
   // Helper function for donut chart
   const createPath = (startAngle: number, endAngle: number, innerRadius: number = 25, outerRadius: number = 40) => {
@@ -194,6 +276,8 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
     
     return `M ${x1} ${y1} A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${x2} ${y2} L ${x3} ${y3} A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${x4} ${y4} Z`;
   };
+
+  const timelineMonthsLabel = `${totalMonths} Month${totalMonths === 1 ? '' : 's'} Timeline`;
 
   return (
     <div className="space-y-6">
@@ -237,7 +321,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
         
         <div className="flex items-center gap-2 mt-6 text-sm text-slate-400">
           <Calendar className="h-4 w-4" />
-          <span>27 Month Timeline</span>
+          <span>{timelineMonthsLabel}</span>
           <span className="mx-2">•</span>
           <Clock className="h-4 w-4" />
           <span>Q1 2025 - Q2 2027</span>
@@ -337,23 +421,23 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
               <h3 className="font-semibold text-gray-900">Construction Schedule</h3>
               <span className="text-sm text-gray-500 flex items-center gap-1">
                 <Clock className="h-4 w-4" />
-                27 months
+                {timelineMonthsLabel}
               </span>
             </div>
             <p className="text-sm text-gray-600 mb-4">Phased timeline with trade overlap optimization</p>
             
             {/* Timeline Labels */}
             <div className="flex text-xs text-gray-400 mb-3 ml-24">
-              <span className="flex-1">M1</span>
-              <span className="flex-1">M7</span>
-              <span className="flex-1">M13</span>
-              <span className="flex-1">M19</span>
-              <span className="flex-1">M27</span>
+              {timelineMarkers.map((marker, index) => (
+                <span key={`${marker}-${index}`} className="flex-1">
+                  {marker}
+                </span>
+              ))}
             </div>
             
             {/* Gantt Chart */}
             <div className="space-y-2">
-              {schedule.map((phase) => {
+              {phases.map((phase) => {
                 const colors = {
                   blue: 'bg-blue-500',
                   green: 'bg-green-500',
@@ -364,14 +448,14 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                 };
                 
                 return (
-                  <div key={phase.phase} className="flex items-center gap-2">
-                    <div className="w-20 text-xs text-gray-700 text-right truncate">{phase.phase}</div>
+                  <div key={phase.id} className="flex items-center gap-2">
+                    <div className="w-20 text-xs text-gray-700 text-right truncate">{phase.label}</div>
                     <div className="flex-1 relative h-7 bg-gray-200 rounded">
                       <div 
-                        className={`absolute h-full ${colors[phase.color as keyof typeof colors]} rounded flex items-center justify-center text-xs text-white font-medium`}
+                        className={`absolute h-full ${colors[phase.color as keyof typeof colors] || 'bg-blue-500'} rounded flex items-center justify-center text-xs text-white font-medium`}
                         style={{
-                          left: `${(phase.startMonth / 27) * 100}%`,
-                          width: `${(phase.duration / 27) * 100}%`
+                          left: `${(phase.startMonth / totalMonths) * 100}%`,
+                          width: `${(phase.duration / totalMonths) * 100}%`
                         }}
                       >
                         {phase.duration}m
@@ -381,6 +465,30 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                   </div>
                 );
               })}
+            </div>
+
+            {/* Key Milestones */}
+            <div className="mt-6">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Key Milestones</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {milestones.map((milestone, index) => {
+                  const Icon = milestoneIcons[index % milestoneIcons.length];
+                  return (
+                    <div
+                      key={milestone.id}
+                      className="flex items-center gap-3 bg-white rounded-lg border border-gray-200 p-3"
+                    >
+                      <div className="p-2 rounded-full bg-slate-100">
+                        <Icon className="h-4 w-4 text-slate-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">{milestone.label}</p>
+                        <p className="text-xs text-gray-500">{milestone.dateLabel}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
             
             {/* Warning - Dynamic based on building type */}

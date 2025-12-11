@@ -127,6 +127,9 @@ class BuildingConfig:
     
     # Special features that add cost
     special_features: Optional[Dict[str, float]] = None
+    ti_allowance_per_sf: Optional[float] = None
+    soft_costs_pct_of_hard: Optional[float] = None
+    contingency_pct_of_hard: Optional[float] = None
     
     # Revenue and financial metrics - base values
     base_revenue_per_sf_annual: Optional[float] = None
@@ -151,6 +154,7 @@ class BuildingConfig:
     cap_rate_defaults: Optional[Dict[str, float]] = None
     yield_on_cost_hurdle: Optional[float] = None
     dscr_target: Optional[float] = None
+    basis_risk_tolerance_pct: Optional[float] = None
     
     # Unit metrics
     units_per_sf: Optional[float] = None
@@ -239,6 +243,70 @@ PROJECT_TIMELINES = {
                 "substantial_completion": 24,
                 "grand_opening": 30,
             },
+        },
+    },
+    BuildingType.RESTAURANT: {
+        "ground_up": {
+            "total_months": 14,
+            "milestones": [
+                {
+                    "id": "groundbreaking",
+                    "label": "Groundbreaking / Site & Shell Start",
+                    "offset_months": 0,
+                },
+                {
+                    "id": "structure_complete",
+                    "label": "Structure & Shell Complete",
+                    "offset_months": 6,
+                },
+                {
+                    "id": "kitchen_mep_rough_in",
+                    "label": "Kitchen & MEP Rough-In Complete",
+                    "offset_months": 9,
+                },
+                {
+                    "id": "substantial_completion",
+                    "label": "Health & Code Inspections + Final Punch",
+                    "offset_months": 11,
+                },
+                {
+                    "id": "grand_opening",
+                    "label": "Soft / Grand Opening",
+                    "offset_months": 13,
+                },
+            ],
+        },
+    },
+    BuildingType.HEALTHCARE: {
+        "ground_up": {
+            "total_months": 18,
+            "milestones": [
+                {
+                    "id": "design_licensing",
+                    "label": "Design & Licensing",
+                    "offset_months": 0,
+                },
+                {
+                    "id": "shell_mep_rough_in",
+                    "label": "Shell & MEP Rough-In",
+                    "offset_months": 4,
+                },
+                {
+                    "id": "interior_buildout",
+                    "label": "Interior Buildout & Finishes",
+                    "offset_months": 8,
+                },
+                {
+                    "id": "equipment_low_voltage",
+                    "label": "Equipment & Low Voltage",
+                    "offset_months": 12,
+                },
+                {
+                    "id": "soft_opening",
+                    "label": "Soft Opening & Ramp-Up",
+                    "offset_months": 16,
+                },
+            ],
         },
     },
 }
@@ -334,6 +402,32 @@ BUILDING_PROFILES: Dict[BuildingType, Dict[str, float]] = {
         'target_yield': 0.0900,
         'target_dscr': 1.25,
     },
+}
+
+# Class A office profile for strong urban markets (e.g., downtown Nashville).
+# Assumes full-service gross rent around $38/SF, 92% stabilized occupancy,
+# 6% vacancy/credit loss, 40% OpEx load, and amortized TI/LC over lease term.
+OFFICE_UNDERWRITING_CONFIG: Dict[str, Dict[str, float]] = {
+    "class_a": {
+        # Rent & occupancy
+        "base_rent_per_sf": 38.0,                # $/RSF/year, gross baseline
+        "stabilized_occupancy": 0.92,            # 92% occupied once stabilized
+        "vacancy_and_credit_loss_pct": 0.06,     # 6% of PGI
+
+        # Operating expenses (non-reimbursed share of EGI)
+        "opex_pct_of_egi": 0.40,
+
+        # Leasing costs (amortized over average lease term)
+        "ti_per_sf": 70.0,
+        "ti_amort_years": 10,
+        "lc_pct_of_lease_value": 0.06,
+        "lc_amort_years": 10,
+
+        # Capitalization / hurdle assumptions
+        "exit_cap_rate": 0.0675,                 # 6.75% stabilized exit cap
+        "yield_on_cost_hurdle": 0.09,            # 9.0% development hurdle
+        "discount_rate": 0.0825,                 # midpoint of 8.0–8.5%
+    }
 }
 
 MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
@@ -457,45 +551,40 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
         
         'surgical_center': BuildingConfig(
             display_name='Ambulatory Surgical Center',
-            base_cost_per_sf=550,
-            cost_range=(700, 850),
-            equipment_cost_per_sf=200,  # OR equipment
+            base_cost_per_sf=480,
+            cost_range=(600, 780),
+            equipment_cost_per_sf=180,
             typical_floors=1,
+            ti_allowance_per_sf=0,
             
             trades=TradeBreakdown(
                 structural=0.12,
-                mechanical=0.40,  # OR ventilation requirements
+                mechanical=0.40,  # Heavy MEP scope for OR pressurization
                 electrical=0.20,
                 plumbing=0.14,
                 finishes=0.14
             ),
             
             soft_costs=SoftCosts(
-                design_fees=0.08,
-                permits=0.025,
-                legal=0.02,
-                financing=0.03,
-                contingency=0.10,
-                testing=0.02,  # Higher for OR validation
-                construction_management=0.04,
-                startup=0.025
+                design_fees=0.07,
+                permits=0.02,
+                legal=0.015,
+                financing=0.025,
+                contingency=0.08,
+                testing=0.015,
+                construction_management=0.025,
+                startup=0.01
             ),
+            soft_costs_pct_of_hard=0.26,
+            contingency_pct_of_hard=0.08,
             
             ownership_types={
                 OwnershipType.FOR_PROFIT: FinancingTerms(
-                    debt_ratio=0.60,
-                    debt_rate=0.07,
-                    equity_ratio=0.40,
-                    target_dscr=1.30,
-                    target_roi=0.12,
-                ),
-                OwnershipType.NON_PROFIT: FinancingTerms(
-                    debt_ratio=0.70,
-                    debt_rate=0.045,
-                    equity_ratio=0.20,
-                    philanthropy_ratio=0.10,
-                    target_dscr=1.20,
-                    target_roi=0.05
+                    debt_ratio=0.65,
+                    debt_rate=0.065,
+                    equity_ratio=0.35,
+                    target_dscr=1.45,
+                    target_roi=0.115,
                 )
             },
             
@@ -522,26 +611,33 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
                 'operating_room': 100,  # Per OR
                 'recovery_room': 40,
                 'pre_op': 35,
-                'sterile_processing': 60
+                'sterile_processing': 60,
+                'hc_asc_expanded_pacu': 75,
+                'hc_asc_sterile_core_upgrade': 50,
+                'hc_asc_pain_management_suite': 60,
+                'hc_asc_hybrid_or_cath_lab': 125
             },
 
-            # Revenue metrics
-            base_revenue_per_sf_annual=1000,
-            base_revenue_per_procedure=3500,
-            procedures_per_day=12,
-            days_per_year=250,
-            occupancy_rate_base=0.80,
-            occupancy_rate_premium=0.85,
-            operating_margin_base=0.35,
-            operating_margin_premium=0.40,
+            financial_metrics={
+                'primary_unit': 'operating rooms',
+                'units_per_sf': 1.0 / 950.0,
+                'revenue_per_unit_annual': 1200000,
+                'display_name': 'Per OR Requirements'
+            },
+
+            base_revenue_per_sf_annual=650,
+            operating_margin_base=0.24,
+            yield_on_cost_hurdle=0.115,
+            dscr_target=1.45,
+            basis_risk_tolerance_pct=0.10,
             
-            # Expense ratios for operational efficiency calculations
-            labor_cost_ratio=0.45,           # 45% - slightly lower than hospital
-            supply_cost_ratio=0.20,          # 20% - higher surgical supply costs
-            management_fee_ratio=0.08,       # 8% - leaner administration
-            insurance_cost_ratio=0.04,       # 4% - higher malpractice risk
-            utility_cost_ratio=0.02,         # 2% - smaller facility
-            maintenance_cost_ratio=0.05      # 5% - specialized equipment maintenance
+            # Expense ratios tuned to ASC throughput
+            labor_cost_ratio=0.38,
+            supply_cost_ratio=0.20,
+            management_fee_ratio=0.07,
+            insurance_cost_ratio=0.04,
+            utility_cost_ratio=0.025,
+            maintenance_cost_ratio=0.045
         ),
         
         'medical_center': BuildingConfig(
@@ -633,47 +729,45 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
         
         'imaging_center': BuildingConfig(
             display_name='Diagnostic Imaging Center',
-            base_cost_per_sf=500,
-            cost_range=(750, 900),
-            equipment_cost_per_sf=300,  # MRI/CT equipment heavy
+            base_cost_per_sf=420,
+            cost_range=(420, 560),
+            equipment_cost_per_sf=120,
             typical_floors=1,
-            
+            ti_allowance_per_sf=0,
             trades=TradeBreakdown(
-                structural=0.22,  # Reinforced for equipment
-                mechanical=0.30,
-                electrical=0.24,  # High power requirements
-                plumbing=0.10,
-                finishes=0.14
+                structural=0.24,
+                mechanical=0.32,
+                electrical=0.24,
+                plumbing=0.08,
+                finishes=0.12
             ),
-            
             soft_costs=SoftCosts(
-                design_fees=0.08,
-                permits=0.025,
+                design_fees=0.09,
+                permits=0.02,
                 legal=0.02,
                 financing=0.03,
-                contingency=0.10,
-                testing=0.02,  # Equipment calibration
-                construction_management=0.035,
-                startup=0.025
+                contingency=0.07,
+                testing=0.02,
+                construction_management=0.04,
+                startup=0.02
             ),
-            
+            soft_costs_pct_of_hard=0.25,
+            contingency_pct_of_hard=0.07,
             ownership_types={
                 OwnershipType.FOR_PROFIT: FinancingTerms(
-                    debt_ratio=0.55,  # Equipment-heavy financing
-                    debt_rate=0.072,
-                    equity_ratio=0.45,
-                    target_dscr=1.35,
-                    target_roi=0.14,
+                    debt_ratio=0.65,
+                    debt_rate=0.065,
+                    equity_ratio=0.35,
+                    target_dscr=1.4,
+                    target_roi=0.10,
                 )
             },
-            
             nlp=NLPConfig(
                 keywords=['imaging center', 'diagnostic center', 'MRI', 'CT scan',
                          'radiology', 'x-ray', 'medical imaging', 'diagnostic imaging'],
                 priority=3,
                 incompatible_classes=[]
             ),
-            
             regional_multipliers={
                 'Nashville': 1.03,
                 'Franklin': 1.03,
@@ -685,33 +779,36 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
                 'Chicago': 1.15,
                 'Miami': 1.08
             },
-            
             special_features={
                 'mri_suite': 80,
                 'ct_suite': 60,
                 'pet_scan': 90,
                 'mammography': 35,
-                'ultrasound': 20
+                'ultrasound': 20,
+                'hc_imaging_second_mri': 100,
+                'hc_imaging_pet_ct_suite': 150,
+                'hc_imaging_interventional_rad': 125
             },
-
-            # Revenue metrics
-            base_revenue_per_sf_annual=800,
-            base_revenue_per_scan=800,
-            scans_per_day=25,
-            days_per_year=260,
-            occupancy_rate_base=0.75,
-            occupancy_rate_premium=0.85,
-            operating_margin_base=0.40,
-            operating_margin_premium=0.45,
-            
-            # Expense ratios for operational efficiency calculations
-            labor_cost_ratio=0.35,           # 35% - specialized technicians
-            supply_cost_ratio=0.08,          # 8% - contrast agents and supplies
-            management_fee_ratio=0.10,       # 10% - administration
-            insurance_cost_ratio=0.02,       # 2% - lower risk than surgery
-            utility_cost_ratio=0.04,         # 4% - high power for equipment
-            maintenance_cost_ratio=0.15,     # 15% - expensive equipment maintenance
-            equipment_lease_ratio=0.10       # 10% - often lease MRI/CT scanners
+            base_revenue_per_sf_annual=525,
+            operating_margin_base=0.22,
+            occupancy_rate_base=0.80,
+            occupancy_rate_premium=0.88,
+            units_per_sf=1.0 / 800.0,
+            financial_metrics={
+                'primary_unit': 'scan rooms',
+                'units_per_sf': 1.0 / 800.0,
+                'revenue_per_unit_annual': 850000,
+            },
+            yield_on_cost_hurdle=0.10,
+            dscr_target=1.4,
+            basis_risk_tolerance_pct=0.10,
+            labor_cost_ratio=0.35,
+            supply_cost_ratio=0.08,
+            management_fee_ratio=0.10,
+            insurance_cost_ratio=0.02,
+            utility_cost_ratio=0.04,
+            maintenance_cost_ratio=0.15,
+            equipment_lease_ratio=0.10
         ),
         
         'outpatient_clinic': BuildingConfig(
@@ -759,9 +856,20 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
             },
             
             nlp=NLPConfig(
-                keywords=['outpatient clinic', 'clinic', 'ambulatory care',
-                         'outpatient facility', 'health clinic'],
-                priority=4,
+                keywords=[
+                    'outpatient clinic',
+                    'primary care clinic',
+                    'primary care',
+                    'family medicine clinic',
+                    'family practice clinic',
+                    'internal medicine clinic',
+                    'health clinic',
+                    'ambulatory care',
+                    'outpatient facility',
+                    'exam rooms',
+                    'exam room'
+                ],
+                priority=3,
                 incompatible_classes=[]
             ),
             
@@ -780,26 +888,43 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
                 'exam_rooms': 15,
                 'procedure_room': 25,
                 'laboratory': 20,
-                'pharmacy': 30
+                'pharmacy': 30,
+                'hc_outpatient_on_site_lab': 30,
+                'hc_outpatient_imaging_pod': 60,
+                'hc_outpatient_behavioral_suite': 25
             },
 
-            # Revenue metrics
-            base_revenue_per_sf_annual=500,
-            base_revenue_per_visit=250,
-            visits_per_day=40,
+            financial_metrics={
+                'primary_unit': 'exam rooms',
+                # ~650 SF per exam room (clinic + support)
+                'units_per_sf': 1 / 650,
+                # Annual revenue per exam room, calibrated to ~1.4–1.6M total
+                # for a 12-room, 8,000 SF clinic.
+                'revenue_per_unit_annual': 130000,
+                'target_occupancy': 0.85,
+                'breakeven_occupancy': 0.70,
+                'market_rate_type': 'revenue_per_visit',
+                'market_rate_default': 120,
+                'display_name': 'Per Exam Room Performance'
+            },
+
+            # Revenue metrics – primary care / outpatient clinic
+            base_revenue_per_sf_annual=195,
+            base_revenue_per_visit=120,
+            visits_per_day=50,
             days_per_year=260,
-            occupancy_rate_base=0.80,
+            occupancy_rate_base=0.85,
             occupancy_rate_premium=0.90,
-            operating_margin_base=0.22,
-            operating_margin_premium=0.28,
+            operating_margin_base=0.16,
+            operating_margin_premium=0.20,
             
-            # Expense ratios for operational efficiency calculations
-            labor_cost_ratio=0.42,           # 42% - clinical staff
-            supply_cost_ratio=0.10,          # 10% - basic medical supplies
-            management_fee_ratio=0.08,       # 8% - simpler administration
-            insurance_cost_ratio=0.02,       # 2% - lower risk profile
-            utility_cost_ratio=0.02,         # 2% - standard office utilities
-            maintenance_cost_ratio=0.03      # 3% - basic maintenance
+            # Expense ratios
+            labor_cost_ratio=0.42,
+            supply_cost_ratio=0.10,
+            management_fee_ratio=0.08,
+            insurance_cost_ratio=0.02,
+            utility_cost_ratio=0.02,
+            maintenance_cost_ratio=0.03
         ),
         
         'urgent_care': BuildingConfig(
@@ -860,7 +985,23 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
                 'trauma_room': 30,
                 'x_ray': 25,
                 'laboratory': 20,
-                'pharmacy': 25
+                'pharmacy': 25,
+                'hc_urgent_on_site_lab': 38,
+                'hc_urgent_imaging_suite': 75,
+                'hc_urgent_observation_bays': 25
+            },
+
+            financial_metrics={
+                'primary_unit': 'exam rooms',
+                # Urgent care is denser than primary care; ~450 SF per room
+                'units_per_sf': 1 / 450,
+                # Calibrated to roughly $2M / 11 rooms ≈ $180k per room
+                'revenue_per_unit_annual': 180000,
+                'target_occupancy': 0.75,
+                'breakeven_occupancy': 0.65,
+                'market_rate_type': 'revenue_per_visit',
+                'market_rate_default': 150,
+                'display_name': 'Per Exam Room Performance',
             },
 
             # Revenue metrics
@@ -885,19 +1026,18 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
         
         'medical_office': BuildingConfig(
             display_name='Medical Office Building',
-            base_cost_per_sf=320,
-            cost_range=(325, 375),
-            equipment_cost_per_sf=20,
+            base_cost_per_sf=270,
+            cost_range=(260, 320),
+            equipment_cost_per_sf=0,
             typical_floors=3,
-            
+            ti_allowance_per_sf=40,
             trades=TradeBreakdown(
-                structural=0.25,
-                mechanical=0.24,
-                electrical=0.12,
-                plumbing=0.14,
-                finishes=0.25
+                structural=0.22,
+                mechanical=0.28,
+                electrical=0.16,
+                plumbing=0.12,
+                finishes=0.22
             ),
-            
             soft_costs=SoftCosts(
                 design_fees=0.06,
                 permits=0.02,
@@ -908,97 +1048,108 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
                 construction_management=0.03,
                 startup=0.01
             ),
-            
+            soft_costs_pct_of_hard=0.20,
+            contingency_pct_of_hard=0.05,
             ownership_types={
                 OwnershipType.FOR_PROFIT: FinancingTerms(
                     debt_ratio=0.70,
                     debt_rate=0.065,
                     equity_ratio=0.30,
-                    target_dscr=1.20,
-                    target_roi=0.09,
+                    target_dscr=1.35,
+                    target_roi=0.07,
                 )
             },
-            
             nlp=NLPConfig(
-                keywords=['medical office', 'MOB', 'physician office', 'doctor office', 
-                         'medical suite', 'practice', 'medical building'],
-                priority=5,
+                keywords=[
+                    'medical office building',
+                    'mob',
+                    'medical office suites',
+                    'physician office',
+                    'doctor office building',
+                    'medical office landlord',
+                    'medical office tower',
+                    'medical office complex'
+                ],
+                priority=4,
                 incompatible_classes=[]
             ),
-            
             regional_multipliers={
                 'Nashville': 1.03,
                 'Franklin': 1.03,
                 'Franklin': 1.03,
                 'Manchester': 0.96,
                 'Memphis': 0.94,
-                'New York': 1.30,
-                'San Francisco': 1.35,
-                'Chicago': 1.12,
-                'Miami': 1.05
+                'New York': 1.28,
+                'San Francisco': 1.34,
+                'Chicago': 1.15,
+                'Miami': 1.08
             },
-            
             special_features={
-                'exam_room': 10,
-                'procedure_room': 20,
-                'lab_space': 15
+                'tenant_improvements': 40,
+                'ambulatory_buildout': 60,
+                'ambulatory_imaging': 35,
+                'mob_imaging_ready_shell': 40,
+                'mob_enhanced_mep': 20,
+                'mob_procedure_suite': 30,
+                'mob_pharmacy_shell': 15,
+                'mob_covered_dropoff': 15
             },
-
-            # Revenue metrics
-            base_revenue_per_sf_annual=45,
-            occupancy_rate_base=0.92,
-            occupancy_rate_premium=0.95,
+            financial_metrics={
+                'primary_unit': 'tenant suites',
+                'units_per_sf': 1.0 / 2500.0,
+                'revenue_per_unit_annual': 100000,
+                'display_name': 'Per Suite Performance'
+            },
+            base_revenue_per_sf_annual=40,
             operating_margin_base=0.65,
             operating_margin_premium=0.70,
-            
-            # Expense ratios for operational efficiency calculations
-            labor_cost_ratio=0.38,           # 38% - physicians and staff
-            supply_cost_ratio=0.08,          # 8% - office medical supplies
-            management_fee_ratio=0.12,       # 12% - practice management
-            insurance_cost_ratio=0.02,       # 2% - malpractice insurance
-            utility_cost_ratio=0.02,         # 2% - standard office
-            maintenance_cost_ratio=0.02      # 2% - minimal maintenance
+            yield_on_cost_hurdle=0.07,
+            dscr_target=1.35,
+            basis_risk_tolerance_pct=0.08
         ),
         
         'dental_office': BuildingConfig(
             display_name='Dental Office',
-            base_cost_per_sf=300,
-            cost_range=(315, 360),
-            equipment_cost_per_sf=30,
+            base_cost_per_sf=340,
+            cost_range=(360, 440),
+            equipment_cost_per_sf=110,
             typical_floors=1,
+            ti_allowance_per_sf=35,
             
             trades=TradeBreakdown(
-                structural=0.24,
-                mechanical=0.22,
-                electrical=0.14,  # Dental equipment power
-                plumbing=0.18,   # Specialized plumbing
-                finishes=0.22
+                structural=0.18,
+                mechanical=0.24,
+                electrical=0.20,  # Heavy imaging and chair loads
+                plumbing=0.18,   # Wet columns, vac, suction, med gas
+                finishes=0.20
             ),
             
             soft_costs=SoftCosts(
-                design_fees=0.06,
+                design_fees=0.07,
                 permits=0.02,
                 legal=0.015,
-                financing=0.025,
-                contingency=0.08,
-                testing=0.008,
-                construction_management=0.03,
-                startup=0.012
+                financing=0.02,
+                contingency=0.07,
+                testing=0.005,
+                construction_management=0.02,
+                startup=0.01
             ),
+            soft_costs_pct_of_hard=0.22,
+            contingency_pct_of_hard=0.07,
             
             ownership_types={
                 OwnershipType.FOR_PROFIT: FinancingTerms(
-                    debt_ratio=0.65,
-                    debt_rate=0.067,
-                    equity_ratio=0.35,
-                    target_dscr=1.22,
-                    target_roi=0.11,
+                    debt_ratio=0.70,
+                    debt_rate=0.065,
+                    equity_ratio=0.30,
+                    target_dscr=1.45,
+                    target_roi=0.12,
                 )
             },
             
             nlp=NLPConfig(
                 keywords=['dental office', 'dentist', 'dental practice', 'dental clinic',
-                         'orthodontist', 'oral surgery', 'dental'],
+        'orthodontist', 'oral surgery', 'dental'],
                 priority=6,
                 incompatible_classes=[]
             ),
@@ -1018,24 +1169,38 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
                 'operatory': 15,  # Per dental chair
                 'sterilization': 10,
                 'x_ray': 12,
-                'lab': 15
+                'lab': 15,
+                'hc_dental_pano_ceph': 45,
+                'hc_dental_sedation_suite': 60,
+                'hc_dental_sterilization_upgrade': 25,
+                'hc_dental_ortho_bay_expansion': 35
             },
 
-            # Revenue metrics
-            base_revenue_per_sf_annual=85,
-            occupancy_rate_base=0.90,
-            occupancy_rate_premium=0.95,
-            operating_margin_base=0.30,
-            operating_margin_premium=0.38,
+            financial_metrics={
+                'primary_unit': 'operatories',
+                'units_per_sf': 1.0 / 350.0,
+                'revenue_per_unit_annual': 550000,
+                'display_name': 'Per Operatory Performance'
+            },
+
+            base_revenue_per_sf_annual=430,
+            occupancy_rate_base=0.96,
+            occupancy_rate_premium=0.98,
+            operating_margin_base=0.62,
+            operating_margin_premium=0.68,
+            units_per_sf=1.0 / 350.0,
+            yield_on_cost_hurdle=0.10,
+            dscr_target=1.45,
+            basis_risk_tolerance_pct=0.10,
             
             # Expense ratios for operational efficiency calculations
-            labor_cost_ratio=0.35,           # 35% - dentists and hygienists
-            supply_cost_ratio=0.12,          # 12% - dental materials
-            management_fee_ratio=0.08,       # 8% - practice management
-            insurance_cost_ratio=0.02,       # 2% - malpractice
-            utility_cost_ratio=0.02,         # 2% - standard utilities
-            maintenance_cost_ratio=0.03,     # 3% - equipment maintenance
-            equipment_lease_ratio=0.05       # 5% - dental equipment leases
+            labor_cost_ratio=0.24,           # Lean dental staffing
+            supply_cost_ratio=0.09,
+            management_fee_ratio=0.06,
+            insurance_cost_ratio=0.02,
+            utility_cost_ratio=0.03,
+            maintenance_cost_ratio=0.04,
+            equipment_lease_ratio=0.05
         ),
         
         'rehabilitation': BuildingConfig(
@@ -1546,6 +1711,7 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
             staffing_pct_property_mgmt=0.06,
             staffing_pct_maintenance=0.12,
             market_cap_rate=0.06,
+            financial_metrics=OFFICE_UNDERWRITING_CONFIG["class_a"],
             
             # Expense ratios for operational efficiency calculations
             utility_cost_ratio=0.08,         # 8% - HVAC, electric, water for premium space
@@ -1790,9 +1956,9 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
     BuildingType.RESTAURANT: {
         'quick_service': BuildingConfig(
             display_name='Quick Service Restaurant',
-            base_cost_per_sf=300,
+            base_cost_per_sf=360,
             cost_range=(250, 350),
-            equipment_cost_per_sf=25,  # Kitchen equipment mostly in base cost
+            equipment_cost_per_sf=40,  # Kitchen equipment mostly in base cost
             typical_floors=1,
             
             trades=TradeBreakdown(
@@ -1804,14 +1970,14 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
             ),
             
             soft_costs=SoftCosts(
-                design_fees=0.05,      # 5% - simpler design than complex buildings
-                permits=0.015,         # 1.5%
-                legal=0.005,           # 0.5%
-                financing=0.02,        # 2% - shorter construction period
-                contingency=0.05,      # 5% - well-understood building type
-                testing=0.005,         # 0.5% - kitchen equipment testing
-                construction_management=0.025,  # 2.5%
-                startup=0.01           # 1% - training, initial inventory
+                design_fees=0.055,
+                permits=0.02,
+                legal=0.007,
+                financing=0.02,
+                contingency=0.06,
+                testing=0.005,
+                construction_management=0.03,
+                startup=0.015
             ),  # Total: 18% soft costs
             
             ownership_types={
@@ -1849,8 +2015,8 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
             },
 
             # Revenue metrics
-            base_revenue_per_sf_annual=600,
-            occupancy_rate_base=0.90,
+            base_revenue_per_sf_annual=525,
+            occupancy_rate_base=0.88,
             occupancy_rate_premium=0.95,
             operating_margin_base=0.12,
             operating_margin_premium=0.18,
@@ -1930,10 +2096,10 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
             },
 
             # Revenue metrics
-            base_revenue_per_sf_annual=450,
-            occupancy_rate_base=0.85,
+            base_revenue_per_sf_annual=350,
+            occupancy_rate_base=0.80,
             occupancy_rate_premium=0.90,
-            operating_margin_base=0.08,
+            operating_margin_base=0.10,
             operating_margin_premium=0.12,
             
             # Expense ratios for operational efficiency calculations
@@ -2011,8 +2177,8 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
             },
 
             # Revenue metrics - higher per SF due to premium pricing
-            base_revenue_per_sf_annual=650,
-            occupancy_rate_base=0.75,      # Lower occupancy but higher prices
+            base_revenue_per_sf_annual=750,
+            occupancy_rate_base=0.82,      # Lower occupancy but higher prices
             occupancy_rate_premium=0.85,
             operating_margin_base=0.12,    # Better margins on premium food
             operating_margin_premium=0.18,
@@ -2094,8 +2260,8 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
             base_revenue_per_sf_annual=450,
             occupancy_rate_base=0.80,
             occupancy_rate_premium=0.88,
-            operating_margin_base=0.15,
-            operating_margin_premium=0.20,
+            operating_margin_base=0.14,
+            operating_margin_premium=0.18,
             
             # Expense ratios for operational efficiency calculations
             food_cost_ratio=0.25,            # 25% - limited food menu
@@ -2173,8 +2339,8 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
             base_revenue_per_sf_annual=350,
             occupancy_rate_base=0.80,
             occupancy_rate_premium=0.85,
-            operating_margin_base=0.15,
-            operating_margin_premium=0.22,
+            operating_margin_base=0.11,
+            operating_margin_premium=0.14,
             
             # Expense ratios for operational efficiency calculations
             food_cost_ratio=0.30,            # 30% - pastries and light food

@@ -60,13 +60,177 @@ class NLPService:
         """Additional mappings for common variations"""
         return {
             'healthcare': {
-                'keywords': ['hospital', 'medical', 'clinic', 'health', 'surgery', 'emergency', 'dental', 'rehabilitation'],
+                # High-level words that mean "this is some kind of healthcare asset"
+                'keywords': [
+                    'hospital',
+                    'medical',
+                    'clinic',
+                    'health',
+                    'surgery',
+                    'emergency',
+                    'dental',
+                    'rehabilitation',
+                    'urgent care',
+                    'imaging'
+                ],
                 'subtypes': {
-                    'hospital': ['hospital', 'medical center', 'emergency department', 'emergency room'],
-                    'medical_center': ['medical center', 'health center'],
-                    'medical_office': ['medical office', 'doctors office', 'physician office'],
-                    'dental_office': ['dental office', 'dental clinic', 'dentist', 'orthodontist'],
-                    'surgical_center': ['surgery center', 'surgical center', 'outpatient surgery']
+                    # Inpatient, acute-care hospital
+                    'hospital': [
+                        'hospital',
+                        'acute care hospital',
+                        'inpatient hospital',
+                        'emergency department',
+                        'emergency room',
+                        'er dept',
+                        'icu',
+                        'trauma center',
+                        'medical campus'
+                    ],
+
+                    # Ambulatory surgical center / ASC
+                    'surgical_center': [
+                        'surgery center',
+                        'surgical center',
+                        'outpatient surgery',
+                        'ambulatory surgery center',
+                        'asc',
+                        'day surgery center',
+                        'same day surgery'
+                    ],
+
+                    # TRUE medical office building / landlord asset
+                    'medical_office': [
+                        'medical office',
+                        'medical office building',
+                        'mob',
+                        'm.o.b.',
+                        'multi-tenant medical office',
+                        'multi tenant medical office',
+                        'medical office tower',
+                        'physician office building',
+                        'physician office suites',
+                        'medical office suites',
+                        'physician office',
+                        'doctor office building',
+                        'doctors office building',
+                        "doctor's office building",
+                        'clinic office building',
+                        'ambulatory office building'
+                    ],
+
+                    # Outpatient primary care / multispecialty clinic
+                    'outpatient_clinic': [
+                        'outpatient clinic',
+                        'outpatient primary care clinic',
+                        'primary care clinic',
+                        'primary care',
+                        'family medicine clinic',
+                        'family practice clinic',
+                        'internal medicine clinic',
+                        'community health clinic',
+                        'community health center',
+                        'health clinic',
+                        'ambulatory clinic',
+                        'ambulatory care clinic',
+                        'multispecialty clinic',
+                        'multi-specialty clinic',
+                        'group practice clinic'
+                    ],
+
+                    # Urgent care / walk-in
+                    'urgent_care': [
+                        'urgent care',
+                        'urgent care center',
+                        'walk-in clinic',
+                        'walk in clinic',
+                        'immediate care',
+                        'immediate care center',
+                        'express care',
+                        'after hours clinic'
+                    ],
+
+                    # Dental office / practice
+                    'dental_office': [
+                        'dental office',
+                        'dental clinic',
+                        'dentist office',
+                        "dentist's office",
+                        'dentistry office',
+                        'general dentistry',
+                        'family dentistry',
+                        'orthodontic office',
+                        'orthodontist office',
+                        'pediatric dental office',
+                        'oral surgery office',
+                        'endodontic office',
+                        'prosthodontic office'
+                    ],
+
+                    # Diagnostic imaging
+                    'imaging_center': [
+                        # Core generic labels
+                        'imaging center',
+                        'diagnostic imaging center',
+                        'diagnostic imaging facility',
+                        'medical imaging center',
+                        'medical imaging facility',
+                        'outpatient imaging center',
+                        'outpatient imaging facility',
+                        'radiology center',
+                        'radiology clinic',
+                        'radiology imaging center',
+
+                        # Modality-driven phrases (MRI / CT / PET, etc.)
+                        'mri center',
+                        'mri imaging center',
+                        'ct center',
+                        'ct imaging center',
+                        'mri and ct center',
+                        'mri ct imaging center',
+                        'pet center',
+                        'pet ct center',
+                        'pet-ct imaging center',
+
+                        # Department-style phrases that typically mean a dedicated imaging suite
+                        'imaging suite',
+                        'diagnostic imaging suite',
+                        'radiology department',
+                    ],
+
+                    # Larger integrated medical center / campus
+                    'medical_center': [
+                        'medical center',
+                        'health center',
+                        'healthcare center',
+                        'regional medical center',
+                        'medical complex'
+                    ],
+
+                    # Seniors / long-term care
+                    'nursing_home': [
+                        'nursing home',
+                        'senior care facility',
+                        'assisted living',
+                        'assisted living facility',
+                        'elder care',
+                        'senior living',
+                        'long term care',
+                        'long-term care',
+                        'skilled nursing facility',
+                        'snf'
+                    ],
+
+                    # Rehab / therapy
+                    'rehabilitation': [
+                        'rehab center',
+                        'rehabilitation center',
+                        'physical therapy center',
+                        'pt clinic',
+                        'therapy clinic',
+                        'therapy center',
+                        'occupational therapy center',
+                        'speech therapy center'
+                    ]
                 }
             },
             'educational': {
@@ -189,6 +353,26 @@ class NLPService:
 
         # Detect classification first
         classification = self.detect_project_classification(text)
+
+        dental_phrases = [
+            'dental office',
+            'dental clinic',
+            'dentist office',
+            "dentist's office",
+            'orthodontic office'
+        ]
+        if any(phrase in text_lower for phrase in dental_phrases):
+            return 'healthcare', 'dental_office', classification
+
+        mob_keywords = [
+            'medical office',
+            'medical office building',
+            'mob ',
+            ' mob',
+            'm.o.b.'
+        ]
+        if any(keyword in text_lower for keyword in mob_keywords):
+            return 'healthcare', 'medical_office', classification
 
         # Priority order (check specific before general)
         PRIORITY_ORDER = [

@@ -44,7 +44,18 @@
         },
         "medical_office": {
           "display_name": "Medical Office Building",
-          "keywords": ["medical office", "MOB", "clinic", "outpatient", "doctor office"],
+          "keywords": [
+            "medical office building",
+            "mob",
+            "multi-tenant medical office",
+            "multi tenant medical office",
+            "medical office tower",
+            "physician office building",
+            "physician office suites",
+            "medical office suites",
+            "doctor office building",
+            "doctors office building"
+          ],
           "base_cost_per_sf": 450
         },
         "urgent_care": {
@@ -57,9 +68,27 @@
           "keywords": ["surgical", "surgery center", "ASC", "ambulatory surgery"],
           "base_cost_per_sf": 750
         },
-        "specialty_clinic": {
+        "outpatient_clinic": {
           "display_name": "Specialty Clinic",
-          "keywords": ["specialty", "diagnostic", "imaging", "dialysis"],
+          "keywords": [
+            "outpatient clinic",
+            "outpatient primary care clinic",
+            "primary care clinic",
+            "primary care",
+            "family medicine clinic",
+            "family practice clinic",
+            "internal medicine clinic",
+            "community health clinic",
+            "community health center",
+            "health clinic",
+            "ambulatory clinic",
+            "ambulatory care clinic",
+            "multispecialty clinic",
+            "multi-specialty clinic",
+            "group practice clinic",
+            "exam room",
+            "exam rooms"
+          ],
           "base_cost_per_sf": 550
         }
       }

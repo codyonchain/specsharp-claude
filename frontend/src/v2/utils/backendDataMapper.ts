@@ -10,11 +10,19 @@ import { safeGet } from './displayFormatters';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let modifiers: any = {};
 
+interface FacilityMetricEntry {
+  id: string;
+  label: string;
+  value?: number;
+  unit?: string;
+}
+
 interface FacilityMetrics {
   units?: number;
   costPerUnit?: number;
   revenuePerUnit?: number;
   monthlyRevenuePerUnit?: number;
+  unitLabel?: string;
   buildingSize?: number;
   costPerSf?: number;
   revenuePerSf?: number;
@@ -24,6 +32,13 @@ interface FacilityMetrics {
   occupancy?: number;
   revpar?: number;
   costPerKey?: number;
+  officeRentPerSf?: number;
+  officeNoiPerSf?: number;
+  type?: string;
+  entries?: FacilityMetricEntry[];
+  restaurantSalesPerSf?: number;
+  restaurantNoiPerSf?: number;
+  restaurantCostPerSf?: number;
 }
 
 export interface DisplayData {
@@ -95,6 +110,7 @@ export interface DisplayData {
     revenueDown10YieldOnCost?: number | null;
     costUp10YieldOnCost?: number | null;
     costDown10YieldOnCost?: number | null;
+    scenarios?: any[] | null;
   };
   
   // Operational metrics
@@ -165,6 +181,10 @@ export interface DisplayData {
   currentNoiPerKey?: number;
   requiredRevpar?: number;
   currentRevpar?: number;
+  impliedAdrForTargetRevpar?: number;
+  impliedOccupancyForTargetRevpar?: number;
+  requiredNoiPerSf?: number;
+  currentNoiPerSf?: number;
 }
 
 export class BackendDataMapper {
@@ -292,6 +312,10 @@ export class BackendDataMapper {
     const isHospitalityFacility =
       buildingTypeString.toUpperCase().includes('HOSPITALITY') ||
       lowerBuildingType.includes('hotel');
+    const isOfficeFacility =
+      buildingTypeString.toUpperCase().includes('OFFICE');
+    const isRestaurantFacility =
+      buildingTypeString.toUpperCase().includes('RESTAURANT');
 
     if (!parsedInput.square_footage || Number(parsedInput.square_footage) === 0) {
       const fallbackSF =
@@ -407,8 +431,8 @@ export class BackendDataMapper {
     
     // Extract unit metrics
     const totalCost = safeGet(totals, 'total_project_cost', 0);
-    const unitLabel = safeGet(projectInfo, 'unit_label', 'Units');
-    const unitType = safeGet(projectInfo, 'unit_type', 'units');
+    const unitLabel = safeGet(projectInfo, 'unit_label', safeGet(calculations, 'unit_label', 'Units'));
+    const unitType = safeGet(projectInfo, 'unit_type', safeGet(calculations, 'unit_type', 'units'));
     
     // Extract operational metrics
     const breakEvenOccupancy = safeGet(investmentAnalysis, 'breakeven_metrics.occupancy', 0.85);
@@ -432,6 +456,19 @@ export class BackendDataMapper {
     const sensitivityRevenueDown = sensitivityAnalysis.revenue_down_10 || {};
     const sensitivityCostUp = sensitivityAnalysis.cost_up_10 || {};
     const sensitivityCostDown = sensitivityAnalysis.cost_down_10 || {};
+    const sensitivityScenarios = Array.isArray(sensitivityAnalysis.scenarios)
+      ? sensitivityAnalysis.scenarios
+      : null;
+    if (sensitivityScenarios && calculations && typeof calculations === 'object') {
+      const existingSensitivityAnalysis =
+        calculations.sensitivity_analysis && typeof calculations.sensitivity_analysis === 'object'
+          ? calculations.sensitivity_analysis
+          : {};
+      calculations.sensitivity_analysis = {
+        ...existingSensitivityAnalysis,
+        scenarios: sensitivityScenarios,
+      };
+    }
     
     // Extract metrics for backward compatibility
     const staffingMetrics = operationalMetrics.staffing || [];
@@ -608,6 +645,45 @@ export class BackendDataMapper {
           costPerKey: hotelCostPerKey,
         }
       : undefined;
+    const officeBuildingSize =
+      toFiniteNumber(calculations?.total_gross_sf) ??
+      toFiniteNumber(calculations?.total_building_area) ??
+      toFiniteNumber(calculations?.square_footage) ??
+      toFiniteNumber(parsedInput?.square_footage) ??
+      toFiniteNumber(projectInfo?.square_footage) ??
+      undefined;
+    const officeTotalCost =
+      toFiniteNumber(calculations?.total_project_cost) ??
+      toFiniteNumber(calculations?.total_cost) ??
+      toFiniteNumber(calculations?.investment_required) ??
+      undefined;
+    const officeRentPerSf =
+      toFiniteNumber(calculations?.rent_per_sf) ??
+      toFiniteNumber(calculations?.office_rent_per_sf) ??
+      toFiniteNumber(ownership?.rent_per_sf) ??
+      undefined;
+    const officeNoiPerSf =
+      toFiniteNumber(calculations?.noi_per_sf) ??
+      toFiniteNumber(calculations?.office_noi_per_sf) ??
+      toFiniteNumber(ownership?.noi_per_sf) ??
+      undefined;
+    const officeCostPerSf =
+      typeof officeBuildingSize === 'number' &&
+      officeBuildingSize > 0 &&
+      typeof officeTotalCost === 'number' &&
+      officeTotalCost > 0
+        ? officeTotalCost / officeBuildingSize
+        : undefined;
+    const officeFacilityMetrics: FacilityMetrics | undefined = isOfficeFacility
+      ? {
+          buildingSize: officeBuildingSize,
+          costPerSf: officeCostPerSf,
+          revenuePerSf: officeRentPerSf,
+          noiPerSf: officeNoiPerSf,
+          officeRentPerSf,
+          officeNoiPerSf
+        }
+      : undefined;
 
     const requiredNoiResolved =
       toFiniteNumber(calculations?.revenue_requirements?.required_value) ??
@@ -648,6 +724,16 @@ export class BackendDataMapper {
     ) {
       hospitalityRequiredRevpar = (requiredNoiResolved / hospitalityMargin) / (hotelRooms * 365);
     }
+    let impliedAdrForTargetRevpar: number | undefined;
+    let impliedOccupancyForTargetRevpar: number | undefined;
+    if (isHospitalityFacility && typeof hospitalityRequiredRevpar === 'number') {
+      if (typeof hotelOccupancy === 'number' && hotelOccupancy > 0) {
+        impliedAdrForTargetRevpar = hospitalityRequiredRevpar / hotelOccupancy;
+      }
+      if (typeof hotelAdr === 'number' && hotelAdr > 0) {
+        impliedOccupancyForTargetRevpar = hospitalityRequiredRevpar / hotelAdr;
+      }
+    }
 
     const industrialFacilityMetrics: FacilityMetrics | undefined = isIndustrialFacility
       ? {
@@ -665,18 +751,128 @@ export class BackendDataMapper {
         }
       : undefined;
 
-    const standardFacilityMetrics: FacilityMetrics | undefined = !isIndustrialFacility
+    const facilityMetricsPayload = calculations?.facility_metrics;
+    const payloadUnits = toFiniteNumber(
+      facilityMetricsPayload?.units ??
+      facilityMetricsPayload?.scan_rooms ??
+      facilityMetricsPayload?.scanRooms
+    );
+    const payloadCostPerUnit = toFiniteNumber(
+      facilityMetricsPayload?.cost_per_unit ?? facilityMetricsPayload?.costPerUnit
+    );
+    const payloadRevenuePerUnit = toFiniteNumber(
+      facilityMetricsPayload?.revenue_per_unit ?? facilityMetricsPayload?.revenuePerUnit
+    );
+    const payloadMonthlyRevenuePerUnit = toFiniteNumber(
+      facilityMetricsPayload?.monthly_revenue_per_unit ?? facilityMetricsPayload?.monthlyRevenuePerUnit
+    );
+    const payloadUnitLabel =
+      typeof facilityMetricsPayload?.unit_label === 'string'
+        ? facilityMetricsPayload.unit_label
+        : undefined;
+    const restaurantFacilityMetrics: FacilityMetrics | undefined = isRestaurantFacility
+      ? (() => {
+          const metricEntries = Array.isArray(facilityMetricsPayload?.metrics)
+            ? facilityMetricsPayload?.metrics
+            : [];
+          const metricMap: Record<string, number | undefined> = {};
+          for (const entry of metricEntries) {
+            const id = typeof entry?.id === 'string' ? entry.id : '';
+            if (!id) {
+              continue;
+            }
+            const numericValue = toFiniteNumber(entry?.value);
+            if (numericValue !== undefined) {
+              metricMap[id] = numericValue;
+            }
+          }
+          const salesPerSfValue =
+            metricMap['sales_per_sf'] ??
+            (typeof resolvedSquareFootage === 'number' &&
+            resolvedSquareFootage > 0 &&
+            typeof resolvedAnnualRevenue === 'number'
+              ? resolvedAnnualRevenue / resolvedSquareFootage
+              : undefined);
+          const noiPerSfValue =
+            metricMap['noi_per_sf'] ??
+            (typeof resolvedSquareFootage === 'number' &&
+            resolvedSquareFootage > 0 &&
+            typeof resolvedNoi === 'number'
+              ? resolvedNoi / resolvedSquareFootage
+              : undefined);
+          const costPerSfValue =
+            metricMap['cost_per_sf'] ??
+            (typeof resolvedSquareFootage === 'number' &&
+            resolvedSquareFootage > 0 &&
+            typeof resolvedTotalCost === 'number'
+              ? resolvedTotalCost / resolvedSquareFootage
+              : undefined);
+          if (
+            salesPerSfValue === undefined &&
+            noiPerSfValue === undefined &&
+            costPerSfValue === undefined
+          ) {
+            return undefined;
+          }
+          return {
+            type: 'restaurant',
+            restaurantSalesPerSf: salesPerSfValue,
+            restaurantNoiPerSf: noiPerSfValue,
+            restaurantCostPerSf: costPerSfValue,
+            revenuePerSf: salesPerSfValue,
+            noiPerSf: noiPerSfValue,
+            costPerSf: costPerSfValue,
+            entries: metricEntries.length > 0 ? metricEntries : undefined,
+          };
+        })()
+      : undefined;
+
+    const standardFacilityMetrics: FacilityMetrics | undefined = !isIndustrialFacility && !isRestaurantFacility
       ? {
-          units: unitCount > 0 ? unitCount : undefined,
-          costPerUnit: typeof costPerUnit === 'number' ? costPerUnit : undefined,
-          revenuePerUnit: typeof revenuePerUnit === 'number' ? revenuePerUnit : undefined,
+          units:
+            payloadUnits ??
+            (unitCount > 0 ? unitCount : undefined),
+          costPerUnit:
+            payloadCostPerUnit ??
+            (typeof costPerUnit === 'number' ? costPerUnit : undefined),
+          revenuePerUnit:
+            payloadRevenuePerUnit ??
+            (typeof revenuePerUnit === 'number' ? revenuePerUnit : undefined),
           monthlyRevenuePerUnit:
-            typeof monthlyRevenuePerUnit === 'number' ? monthlyRevenuePerUnit : undefined,
+            payloadMonthlyRevenuePerUnit ??
+            (typeof payloadRevenuePerUnit === 'number'
+              ? payloadRevenuePerUnit / 12
+              : typeof monthlyRevenuePerUnit === 'number'
+                ? monthlyRevenuePerUnit
+                : undefined),
+          unitLabel: payloadUnitLabel ?? unitLabel,
         }
       : undefined;
 
     const facilityMetrics =
-      hospitalityFacilityMetrics ?? industrialFacilityMetrics ?? standardFacilityMetrics;
+      restaurantFacilityMetrics ??
+      hospitalityFacilityMetrics ??
+      officeFacilityMetrics ??
+      industrialFacilityMetrics ??
+      standardFacilityMetrics;
+    const revenueRequirementsTotalSf =
+      officeBuildingSize ??
+      resolvedSquareFootage ??
+      squareFootage;
+    let officeRequiredNoiPerSf: number | undefined;
+    let officeCurrentNoiPerSf: number | undefined;
+    if (
+      isOfficeFacility &&
+      typeof revenueRequirementsTotalSf === 'number' &&
+      revenueRequirementsTotalSf > 0
+    ) {
+      if (typeof requiredNoiResolved === 'number') {
+        officeRequiredNoiPerSf = requiredNoiResolved / revenueRequirementsTotalSf;
+      }
+      if (typeof currentNoiResolved === 'number') {
+        officeCurrentNoiPerSf = currentNoiResolved / revenueRequirementsTotalSf;
+      }
+    }
     
     return {
       roi,
@@ -742,6 +938,10 @@ export class BackendDataMapper {
       currentNoiPerKey: isHospitalityFacility ? hospitalityCurrentNoiPerKey : undefined,
       requiredRevpar: isHospitalityFacility ? hospitalityRequiredRevpar : undefined,
       currentRevpar: isHospitalityFacility ? hospitalityCurrentRevpar : undefined,
+      impliedAdrForTargetRevpar: isHospitalityFacility ? impliedAdrForTargetRevpar : undefined,
+      impliedOccupancyForTargetRevpar: isHospitalityFacility ? impliedOccupancyForTargetRevpar : undefined,
+      requiredNoiPerSf: isOfficeFacility ? officeRequiredNoiPerSf : undefined,
+      currentNoiPerSf: isOfficeFacility ? officeCurrentNoiPerSf : undefined,
       squareFootage,
       buildingType: safeGet(parsedInput, 'building_type', 'office'),
       buildingSubtype: safeGet(parsedInput, 'building_subtype', safeGet(parsedInput, 'subtype', 'standard')),
@@ -770,6 +970,7 @@ export class BackendDataMapper {
           typeof sensitivityCostUp.yield_on_cost === 'number' ? sensitivityCostUp.yield_on_cost : undefined,
         costDown10YieldOnCost:
           typeof sensitivityCostDown.yield_on_cost === 'number' ? sensitivityCostDown.yield_on_cost : undefined,
+        scenarios: sensitivityScenarios ?? undefined,
       }
     };
   }
@@ -821,6 +1022,7 @@ export class BackendDataMapper {
         revenueDown10YieldOnCost: undefined,
         costUp10YieldOnCost: undefined,
         costDown10YieldOnCost: undefined,
+        scenarios: undefined,
       },
       totalProjectCost: 0,
       constructionCost: 0,
@@ -831,6 +1033,8 @@ export class BackendDataMapper {
       marketCostPerSf: undefined,
       costPerSFDeltaPct: undefined,
       costPerSfDeltaPct: undefined,
+      impliedAdrForTargetRevpar: undefined,
+      impliedOccupancyForTargetRevpar: undefined,
       squareFootage: 0,
       buildingType: '',
       buildingSubtype: '',

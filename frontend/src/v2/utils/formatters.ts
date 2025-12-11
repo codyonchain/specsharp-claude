@@ -84,3 +84,20 @@ export function getProjectClassDisplay(projectClass: string): string {
   };
   return displays[projectClass] || projectClass;
 }
+
+export function formatPerSf(value?: number | null): string {
+  if (value == null || !isFinite(value)) return '—';
+
+  // Choose rounding step:
+  // - Larger values (>= 100) rounded to nearest $10
+  // - Smaller values rounded to nearest $5
+  const step = value >= 100 ? 10 : 5;
+  const rounded = Math.round(value / step) * step;
+
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+  }).format(rounded);
+}

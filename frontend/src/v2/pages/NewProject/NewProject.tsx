@@ -188,14 +188,212 @@ export const NewProject: React.FC = () => {
   ];
   
   // Special features by building type
+  type SpecialFeatureOption = {
+    id: string;
+    name: string;
+    cost: number;
+    description: string;
+    allowedSubtypes?: string[];
+  };
+
   const getAvailableFeatures = (buildingType: string) => {
-    const features: Record<string, Array<{id: string, name: string, cost: number, description: string}>> = {
+    const features: Record<string, SpecialFeatureOption[]> = {
       healthcare: [
-        { id: 'emergency', name: 'Emergency Department', cost: 10000000, description: 'Full 24/7 emergency room with trauma center' },
-        { id: 'imaging', name: 'Imaging Center', cost: 5000000, description: 'MRI, CT, X-ray equipment and rooms' },
-        { id: 'surgery', name: 'Surgery Center', cost: 8000000, description: 'Operating rooms and recovery areas' },
-        { id: 'icu', name: 'ICU Unit', cost: 6000000, description: 'Intensive care unit with specialized equipment' },
-        { id: 'lab', name: 'Laboratory', cost: 3000000, description: 'Full medical testing laboratory' }
+        {
+          id: 'emergency',
+          name: 'Emergency Department',
+          cost: 10000000,
+          description: 'Full 24/7 emergency room with trauma center',
+          allowedSubtypes: ['hospital', 'medical_center']
+        },
+        {
+          id: 'imaging',
+          name: 'Imaging Center',
+          cost: 5000000,
+          description: 'MRI, CT, X-ray equipment and rooms',
+          allowedSubtypes: ['hospital', 'medical_center']
+        },
+        {
+          id: 'surgery',
+          name: 'Surgery Center',
+          cost: 8000000,
+          description: 'Operating rooms and recovery areas',
+          allowedSubtypes: ['hospital', 'medical_center']
+        },
+        {
+          id: 'icu',
+          name: 'ICU Unit',
+          cost: 6000000,
+          description: 'Intensive care unit with specialized equipment',
+          allowedSubtypes: ['hospital', 'medical_center']
+        },
+        {
+          id: 'lab',
+          name: 'Laboratory',
+          cost: 3000000,
+          description: 'Full medical testing laboratory',
+          allowedSubtypes: ['outpatient_clinic', 'urgent_care', 'imaging_center', 'medical_center', 'hospital']
+        },
+        // Outpatient clinic specials
+        {
+          id: 'hc_outpatient_on_site_lab',
+          name: 'On-Site Lab',
+          cost: 600000,
+          description: 'Adds a small on-site laboratory for basic bloodwork and diagnostics.',
+          allowedSubtypes: ['outpatient_clinic']
+        },
+        {
+          id: 'hc_outpatient_imaging_pod',
+          name: 'Imaging Pod (X-ray/Ultrasound)',
+          cost: 1200000,
+          description: 'Adds a small imaging pod with X-ray and ultrasound for in-clinic diagnostics.',
+          allowedSubtypes: ['outpatient_clinic']
+        },
+        {
+          id: 'hc_outpatient_behavioral_suite',
+          name: 'Behavioral Health Suite',
+          cost: 500000,
+          description: 'Builds out dedicated rooms for behavioral health and counseling.',
+          allowedSubtypes: ['outpatient_clinic']
+        },
+        // Urgent care specials
+        {
+          id: 'hc_urgent_on_site_lab',
+          name: 'On-Site Lab',
+          cost: 750000,
+          description: 'Full CLIA-waived urgent-care lab for rapid tests and basic diagnostics.',
+          allowedSubtypes: ['urgent_care']
+        },
+        {
+          id: 'hc_urgent_imaging_suite',
+          name: 'Imaging Suite (X-ray/CT)',
+          cost: 1500000,
+          description: 'Adds dedicated X-ray and CT equipment with control room and shielding.',
+          allowedSubtypes: ['urgent_care']
+        },
+        {
+          id: 'hc_urgent_observation_bays',
+          name: 'Observation Bays',
+          cost: 500000,
+          description: 'Adds short-stay observation bays for 4–8 hour monitoring.',
+          allowedSubtypes: ['urgent_care']
+        },
+        // Imaging center specials
+        {
+          id: 'hc_imaging_second_mri',
+          name: 'Second MRI Room',
+          cost: 2000000,
+          description: 'Adds a second MRI gantry with control room and support spaces.',
+          allowedSubtypes: ['imaging_center']
+        },
+        {
+          id: 'hc_imaging_pet_ct_suite',
+          name: 'PET/CT Suite',
+          cost: 3000000,
+          description: 'Adds a PET/CT suite including hot lab and shielding.',
+          allowedSubtypes: ['imaging_center']
+        },
+        {
+          id: 'hc_imaging_interventional_rad',
+          name: 'Interventional Radiology Room',
+          cost: 2500000,
+          description: 'Builds an interventional radiology / angio room with procedure support.',
+          allowedSubtypes: ['imaging_center']
+        },
+        // Surgical center specials
+        {
+          id: 'hc_asc_expanded_pacu',
+          name: 'Expanded PACU',
+          cost: 1500000,
+          description: 'Larger post-anesthesia care unit for higher case volume or longer recoveries.',
+          allowedSubtypes: ['surgical_center']
+        },
+        {
+          id: 'hc_asc_sterile_core_upgrade',
+          name: 'Sterile Core Upgrade',
+          cost: 1000000,
+          description: 'Upgrades sterile processing, clean/dirty cores, and instrument storage.',
+          allowedSubtypes: ['surgical_center']
+        },
+        {
+          id: 'hc_asc_pain_management_suite',
+          name: 'Pain Management Suite',
+          cost: 1200000,
+          description: 'Adds dedicated pain management procedure rooms within the ASC.',
+          allowedSubtypes: ['surgical_center']
+        },
+        {
+          id: 'hc_asc_hybrid_or_cath_lab',
+          name: 'Hybrid OR / Cath Lab',
+          cost: 2500000,
+          description: 'Builds a hybrid OR or cath lab with advanced imaging and structural support.',
+          allowedSubtypes: ['surgical_center']
+        },
+        // --- Medical Office Building (MOB) Special Features ---
+        {
+          id: 'mob_imaging_ready_shell',
+          name: 'Imaging-Ready Shell',
+          cost: 800000,
+          description: 'Structural, vibration, and electrical upgrades to support future MRI/CT tenants.',
+          allowedSubtypes: ['medical_office']
+        },
+        {
+          id: 'mob_enhanced_mep',
+          name: 'Enhanced MEP Capacity',
+          cost: 400000,
+          description: 'Upgrades to HVAC, electrical, med-gas routing, and risers for specialty tenants.',
+          allowedSubtypes: ['medical_office']
+        },
+        {
+          id: 'mob_procedure_suite',
+          name: 'Procedure Suite Buildout',
+          cost: 600000,
+          description: 'Adds 1–2 Class B/C procedure rooms for multi-specialty and high-acuity tenants.',
+          allowedSubtypes: ['medical_office']
+        },
+        {
+          id: 'mob_pharmacy_shell',
+          name: 'Pharmacy / Retail Shell',
+          cost: 250000,
+          description: 'First-floor shell space for pharmacy or medical retail tenants.',
+          allowedSubtypes: ['medical_office']
+        },
+        {
+          id: 'mob_covered_dropoff',
+          name: 'Covered Drop-Off Canopy',
+          cost: 300000,
+          description: 'Adds a patient drop-off canopy with lighting and accessibility upgrades.',
+          allowedSubtypes: ['medical_office']
+        },
+        // Dental office specials
+        {
+          id: 'hc_dental_pano_ceph',
+          name: 'Panoramic X-ray / Ceph Suite',
+          cost: 250000,
+          description: 'Dedicated pano/ceph room with shielding, mechanical, and positioning equipment.',
+          allowedSubtypes: ['dental_office']
+        },
+        {
+          id: 'hc_dental_sedation_suite',
+          name: 'Sedation / Surgery Suite',
+          cost: 350000,
+          description: 'Upgrades one operatory to IV sedation standards with gases, exhaust, and monitoring.',
+          allowedSubtypes: ['dental_office']
+        },
+        {
+          id: 'hc_dental_sterilization_upgrade',
+          name: 'Central Sterilization Upgrade',
+          cost: 150000,
+          description: 'Expanded sterilization core with added autoclaves, casework, and clean/dirty zoning.',
+          allowedSubtypes: ['dental_office']
+        },
+        {
+          id: 'hc_dental_ortho_bay_expansion',
+          name: 'Orthodontic Bay Expansion',
+          cost: 200000,
+          description: 'Open-bay ortho layout with additional chairs, suction, power, and task lighting.',
+          allowedSubtypes: ['dental_office']
+        }
       ],
       educational: [
         { id: 'gymnasium', name: 'Gymnasium', cost: 2000000, description: 'Full-size gym with bleachers' },
@@ -331,6 +529,19 @@ export const NewProject: React.FC = () => {
     return `${label} ×${formatted}`;
   };
 
+  const parsedInput = result?.parsed_input;
+  const currentSubtype = parsedInput?.subtype || parsedInput?.building_subtype;
+  const availableSpecialFeatures = parsedInput ? getAvailableFeatures(parsedInput.building_type) : [];
+  const applicableSpecialFeatures = availableSpecialFeatures.filter(feature => {
+    if (!feature.allowedSubtypes || feature.allowedSubtypes.length === 0) {
+      return true;
+    }
+    if (!currentSubtype) {
+      return true;
+    }
+    return feature.allowedSubtypes.includes(currentSubtype);
+  });
+
   // Live preview effect
   useEffect(() => {
     if (previewTimeoutRef.current) {
@@ -431,6 +642,7 @@ export const NewProject: React.FC = () => {
       location: locationInput.trim() || undefined,
       finishLevel,
       projectClass: projectComplexity,
+      specialFeatures,
     });
     
     if (analysis) {
@@ -1027,8 +1239,8 @@ export const NewProject: React.FC = () => {
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-3">Special Features</p>
                   <div className="space-y-2 max-h-80 overflow-y-auto border border-gray-100 rounded-lg p-3">
-                    {result.parsed_input && getAvailableFeatures(result.parsed_input.building_type).length > 0 ? (
-                      getAvailableFeatures(result.parsed_input.building_type).map(feature => (
+                    {parsedInput && applicableSpecialFeatures.length > 0 ? (
+                      applicableSpecialFeatures.map(feature => (
                         <label
                           key={feature.id}
                           className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer border border-transparent hover:border-gray-200 transition"

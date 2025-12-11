@@ -23,6 +23,7 @@ export function useProjectAnalysis() {
       finishLevel?: 'standard' | 'premium' | 'luxury';
       projectClass?: 'ground_up' | 'renovation' | 'addition';
       signal?: AbortSignal;
+      specialFeatures?: string[];
     }
   ) => {
     if (!description.trim()) {
@@ -44,6 +45,7 @@ export function useProjectAnalysis() {
         finishLevel,
         projectClass: overrides?.projectClass,
         signal: overrides?.signal,
+        special_features: overrides?.specialFeatures,
       });
       console.log('Setting result in hook:', analysis);
       setResult(analysis);

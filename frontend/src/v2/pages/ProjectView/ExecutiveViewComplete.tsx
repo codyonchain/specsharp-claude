@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Project } from '../../types';
 import { formatters, safeGet } from '../../utils/displayFormatters';
+import { formatPerSf } from '@/v2/utils/formatters';
 import { BackendDataMapper } from '../../utils/backendDataMapper';
 // Removed FinancialRequirementsCard - was only implemented for hospital
 import * as XLSX from 'xlsx';
@@ -107,7 +108,451 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   
   // Map backend data through our mapper
   const displayData = BackendDataMapper.mapToDisplay(analysis || {});
+  const revenueAnalysis =
+    displayData?.revenueAnalysis ??
+    displayData?.revenue_analysis ??
+    {};
+  const calculations = analysis?.calculations || {};
+  const calculationsRecord = toRecord(calculations);
+  const calculationFacilityMetrics = toRecord(
+    calculationsRecord.facilityMetrics ?? calculationsRecord.facility_metrics
+  );
   let { buildingType, facilityMetrics } = displayData;
+  const rawBuildingType =
+    analysis?.parsed_input?.building_type ??
+    analysis?.parsed_input?.buildingType ??
+    buildingType ??
+    displayData?.buildingType ??
+    '';
+  const parsedBuildingType = rawBuildingType.toString().toLowerCase();
+  const rawSubtype =
+    analysis?.parsed_input?.subtype ??
+    analysis?.parsed_input?.building_subtype ??
+    analysis?.parsed_input?.buildingSubtype ??
+    displayData?.buildingSubtype ??
+    '';
+  const parsedSubtype = rawSubtype
+    .toString()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+  const displaySubtypeLower = (displayData?.buildingSubtype || '')
+    .toString()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+  const displayUnitLabelRaw =
+    typeof displayData?.unitLabel === 'string' ? displayData.unitLabel : undefined;
+  const facilityUnitLabel =
+    typeof facilityMetrics?.unitLabel === 'string'
+      ? facilityMetrics.unitLabel
+      : typeof (facilityMetrics as AnyRecord)?.unit_label === 'string'
+        ? (facilityMetrics as AnyRecord).unit_label
+        : undefined;
+  const calculationUnitLabel =
+    typeof calculationsRecord.unit_label === 'string'
+      ? calculationsRecord.unit_label
+      : typeof calculationsRecord.unitLabel === 'string'
+        ? calculationsRecord.unitLabel
+        : undefined;
+  const unitLabelCandidates = [facilityUnitLabel, calculationUnitLabel, displayUnitLabelRaw]
+    .filter((label): label is string => typeof label === 'string');
+  const unitLabelIndicatesDental = unitLabelCandidates.some(label => {
+    const lower = label.toLowerCase();
+    return (
+      lower.includes('operatory') ||
+      lower.includes('operatories') ||
+      lower.includes('operat') ||
+      lower.includes('dent')
+    );
+  });
+
+  const isDentalOffice =
+    (
+      analysis?.parsed_input?.building_type === 'healthcare' &&
+      analysis?.parsed_input?.subtype === 'dental_office'
+    ) ||
+    displaySubtypeLower === 'dental_office' ||
+    unitLabelIndicatesDental;
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[SpecSharp][OE Debug]', {
+      parsedSubtype: analysis?.parsed_input?.subtype,
+      displaySubtype: displaySubtypeLower,
+      unitLabelCandidates,
+      unitLabelIndicatesDental,
+      isDentalOffice
+    });
+  }
+  const isHealthcareOutpatient =
+    parsedBuildingType === 'healthcare' &&
+    ['outpatient_clinic', 'urgent_care'].includes(parsedSubtype);
+  const isImagingCenter =
+    parsedBuildingType === 'healthcare' && parsedSubtype === 'imaging_center';
+  const isSurgicalCenter =
+    parsedBuildingType === 'healthcare' && parsedSubtype === 'surgical_center';
+  const isHealthcareMob =
+    parsedBuildingType === 'healthcare' &&
+    (
+      parsedSubtype === 'medical_office' ||
+      displaySubtypeLower === 'medical_office' ||
+      displaySubtypeLower.includes('medical_office') ||
+      (typeof facilityUnitLabel === 'string' &&
+        facilityUnitLabel.toLowerCase().includes('tenant suite'))
+    );
+  const isHealthcareSurgicalCenter =
+    isSurgicalCenter ||
+    (typeof facilityUnitLabel === 'string' &&
+      facilityUnitLabel.toLowerCase().includes('operating room'));
+  const revenuePerUnitLabel = isHealthcareSurgicalCenter
+    ? 'Revenue per Operating Room'
+    : isHealthcareMob
+      ? 'Revenue per Suite'
+      : 'Revenue per Bed';
+  const unitsPerNurseLabel = isHealthcareSurgicalCenter
+    ? 'ORs per Nurse'
+    : 'Beds per Nurse';
+  let unitLabel = facilityUnitLabel
+    ? toTitleCase(facilityUnitLabel)
+    : displayUnitLabelRaw
+      ? toTitleCase(displayUnitLabelRaw)
+      : 'Units';
+  let unitType = (facilityUnitLabel || displayData?.unitType || unitLabel || 'units').toString().toLowerCase();
+  if (parsedBuildingType === 'healthcare') {
+    if (isHealthcareOutpatient) {
+      unitLabel = 'Exam Rooms';
+      unitType = 'exam rooms';
+    } else if (isSurgicalCenter) {
+      unitLabel = 'Operating Rooms';
+      unitType = 'operating rooms';
+    } else if (isDentalOffice) {
+      unitLabel = 'Operatories';
+      unitType = 'operatories';
+    }
+  }
+  const isOffice =
+    buildingType === 'OFFICE' ||
+    (typeof buildingType === 'string' && buildingType.toUpperCase().includes('OFFICE'));
+  const staffing = toRecord(
+    displayData?.operational_metrics?.staffing ??
+    displayData?.operational_metrics ??
+    displayData?.staffing
+  );
+  const facilityUnitsValue =
+    calculationFacilityMetrics.units ??
+    facilityMetrics?.units ??
+    displayData?.facilityMetrics?.units ??
+    null;
+  const backendStaffing = toRecord(
+    calculationsRecord.staffing ??
+    calculationsRecord.staffing_metrics ??
+    {}
+  );
+  const providersFromBackend =
+    typeof backendStaffing.providers === 'number' && backendStaffing.providers > 0
+      ? backendStaffing.providers
+      : typeof backendStaffing.total_providers === 'number' && backendStaffing.total_providers > 0
+        ? backendStaffing.total_providers
+        : undefined;
+  const fallbackProvidersValue =
+    typeof staffing?.providers === 'number' && staffing.providers > 0
+      ? staffing.providers
+      : undefined;
+  const dentalProviderCount = providersFromBackend ?? fallbackProvidersValue ?? 1;
+
+  const parseNumericOrNull = (value: unknown): number | null => {
+    if (typeof value === 'number' && !Number.isNaN(value)) return value;
+    if (typeof value === 'string') {
+      const cleaned = value.replace(/[^0-9.\-]/g, '');
+      const parsed = parseFloat(cleaned);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+  };
+
+  let dentalAnnualRevenueValue = parseNumericOrNull(
+    (revenueAnalysis as AnyRecord | null | undefined)?.annual_revenue
+  );
+
+  if (dentalAnnualRevenueValue == null) {
+    dentalAnnualRevenueValue =
+      typeof displayData?.annualRevenue === 'number'
+        ? displayData.annualRevenue
+        : null;
+  }
+
+  let dentalNoiMarginRaw = parseNumericOrNull(
+    (revenueAnalysis as AnyRecord | null | undefined)?.operating_margin
+  );
+
+  if (dentalNoiMarginRaw == null) {
+    dentalNoiMarginRaw =
+      typeof displayData?.operatingMargin === 'number'
+        ? displayData.operatingMargin
+        : null;
+  }
+
+  const dentalNoiMarginValue =
+    dentalNoiMarginRaw != null
+      ? dentalNoiMarginRaw > 1
+        ? dentalNoiMarginRaw / 100
+        : dentalNoiMarginRaw
+      : null;
+  const dentalOperatoriesValue =
+    typeof facilityUnitsValue === 'number' ? facilityUnitsValue : null;
+  const dentalRevenuePerProviderValue =
+    dentalAnnualRevenueValue != null && dentalProviderCount > 0
+      ? dentalAnnualRevenueValue / dentalProviderCount
+      : null;
+  const dentalRevenuePerOperatoryValue =
+    dentalAnnualRevenueValue != null &&
+    typeof dentalOperatoriesValue === 'number' &&
+    dentalOperatoriesValue > 0
+      ? dentalAnnualRevenueValue / dentalOperatoriesValue
+      : null;
+  const dentalUtilizationValue =
+    dentalRevenuePerOperatoryValue != null
+      ? Math.min(dentalRevenuePerOperatoryValue / 600000, 1)
+      : null;
+  const dentalOpsPerProviderValue =
+    typeof dentalOperatoriesValue === 'number' &&
+    dentalOperatoriesValue > 0 &&
+    dentalProviderCount > 0
+      ? (dentalOperatoriesValue / dentalProviderCount).toFixed(1)
+      : null;
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[SpecSharp][OE Dental Metrics]', {
+      revenueAnalysis,
+      staffingRecord: backendStaffing,
+      dentalAnnualRevenueValue,
+      dentalNoiMarginValue,
+      dentalProviderCount,
+      dentalOperatoriesValue,
+      dentalRevenuePerProviderValue,
+      dentalRevenuePerOperatoryValue,
+      dentalUtilizationValue,
+      dentalOpsPerProviderValue
+    });
+  }
+  const quickSensitivity = displayData?.sensitivity || {};
+  const revenueRequired = {
+    impliedAdrForTargetRevpar: displayData.impliedAdrForTargetRevpar,
+    impliedOccupancyForTargetRevpar: displayData.impliedOccupancyForTargetRevpar,
+    requiredNoiPerSf: displayData.requiredNoiPerSf,
+    currentNoiPerSf: displayData.currentNoiPerSf,
+  };
+  const staffingMetricsArray = Array.isArray(displayData.staffingMetrics)
+    ? displayData.staffingMetrics
+    : [];
+  let normalizedStaffingMetrics = staffingMetricsArray.map(metric => {
+    if (
+      isHealthcareSurgicalCenter &&
+      typeof metric?.label === 'string' &&
+      metric.label.toLowerCase().includes('beds per nurse')
+    ) {
+      return { ...metric, label: unitsPerNurseLabel };
+    }
+    return metric;
+  });
+  if (isDentalOffice) {
+    const operatories = facilityUnitsValue;
+    const noiMarginValue = typeof revenueAnalysis?.operating_margin === 'number'
+      ? revenueAnalysis.operating_margin
+      : null;
+    normalizedStaffingMetrics = [
+      {
+        label: 'Operatories',
+        value: operatories != null ? operatories : '-',
+      },
+      {
+        label: 'NOI Margin',
+        value: noiMarginValue != null
+          ? formatters.percentage(noiMarginValue)
+          : formatters.percentage(0),
+      },
+    ];
+  }
+  if (isHealthcareMob) {
+    const tenantSuites =
+      facilityMetrics?.units ??
+      displayData?.facilityMetrics?.units ??
+      null;
+    const noiMarginValue =
+      typeof displayData?.operatingMargin === 'number'
+        ? displayData.operatingMargin
+        : typeof displayData?.operationalEfficiency?.operating_margin === 'number'
+          ? displayData.operationalEfficiency.operating_margin
+          : typeof displayData?.operational_metrics?.operating_margin === 'number'
+            ? displayData.operational_metrics.operating_margin
+            : typeof revenueAnalysis?.operating_margin === 'number'
+              ? revenueAnalysis.operating_margin
+              : null;
+    normalizedStaffingMetrics = [
+      {
+        label: 'Tenant Suites',
+        value: tenantSuites != null ? tenantSuites : '-',
+      },
+      {
+        label: 'NOI Margin',
+        value: typeof noiMarginValue === 'number'
+          ? formatters.percentage(noiMarginValue)
+          : formatters.percentage(0),
+      },
+    ];
+  }
+  const revenueMetricsRecord = toRecord(displayData.revenueMetrics || {});
+  let normalizedRevenueMetrics = Object.entries(revenueMetricsRecord).map(
+    ([key, value]) => {
+      const normalizedKey = typeof key === 'string' ? key : '';
+      const normalizedKeyLower = normalizedKey.trim().toLowerCase();
+      const spacedLabel = normalizedKey.includes('_')
+        ? normalizedKey.replace(/_/g, ' ')
+        : normalizedKey;
+      const isPerBedMetric =
+        normalizedKeyLower === 'revenue_per_bed' ||
+        spacedLabel.toLowerCase() === 'revenue per bed';
+      const label =
+        isPerBedMetric && (isHealthcareSurgicalCenter || isHealthcareMob)
+          ? revenuePerUnitLabel
+          : spacedLabel.toLowerCase() === 'labor cost ratio' && isHealthcareMob
+            ? 'Labor Cost Ratio (N/A)'
+            : spacedLabel;
+      return { key: normalizedKey || 'metric', label, value };
+    }
+  );
+  if (isDentalOffice) {
+    const providersRaw =
+      typeof staffing?.providers === 'number'
+        ? staffing.providers
+        : null;
+    const providers = providersRaw && providersRaw > 0 ? providersRaw : 1;
+    const annualRevenueValue = typeof revenueAnalysis?.annual_revenue === 'number'
+      ? revenueAnalysis.annual_revenue
+      : null;
+    const operatories = facilityUnitsValue;
+    const revenuePerProvider = annualRevenueValue != null && providers > 0
+      ? formatters.currencyExact(annualRevenueValue / providers)
+      : formatters.currencyExact(0);
+    const revenuePerOperatory = annualRevenueValue != null &&
+      typeof operatories === 'number' &&
+      operatories > 0
+        ? formatters.currencyExact(annualRevenueValue / operatories)
+        : formatters.currencyExact(0);
+    const opMargin = typeof revenueAnalysis?.operating_margin === 'number'
+      ? formatters.percentage(revenueAnalysis.operating_margin)
+      : formatters.percentage(0);
+    normalizedRevenueMetrics = [
+      {
+        key: 'rev_provider',
+        label: 'Revenue per Provider',
+        value: revenuePerProvider
+      },
+      {
+        key: 'rev_operatory',
+        label: 'Revenue per Operatory',
+        value: revenuePerOperatory
+      },
+      {
+        key: 'op_margin',
+        label: 'Operating Margin',
+        value: opMargin
+      }
+    ];
+  }
+  let operationalKpis = displayData.kpis || [];
+  if (isHealthcareMob) {
+    const totalsData = displayData?.totals || calculations?.totals || {};
+    const softCostsValue =
+      totalsData?.soft_costs ??
+      totalsData?.soft_costs_total ??
+      totalsData?.softCosts ??
+      totalsData?.softCostsTotal ??
+      0;
+    const totalCostValue =
+      totalsData?.total_project_cost ??
+      totalsData?.total_cost ??
+      totalsData?.totalProjectCost ??
+      totalsData?.totalCost ??
+      0;
+    const yieldOnCostValue =
+      displayData?.yieldOnCost ??
+      displayData?.yield_on_cost ??
+      calculations?.ownership_analysis?.yield_on_cost ??
+      calculations?.ownership_analysis?.yieldOnCost ??
+      undefined;
+    const dscrValue =
+      displayData?.dscr ??
+      calculations?.ownership_analysis?.debt_metrics?.calculated_dscr ??
+      calculations?.ownership_analysis?.debt_metrics?.calculatedDSCR ??
+      undefined;
+    const softCostPct =
+      totalCostValue && softCostsValue
+        ? softCostsValue / totalCostValue
+        : undefined;
+    operationalKpis = [
+      {
+        label: 'Yield on Cost',
+        value: typeof yieldOnCostValue === 'number'
+          ? formatters.percentage(yieldOnCostValue)
+          : formatters.percentage(0),
+        color: 'purple'
+      },
+      {
+        label: 'DSCR',
+        value: typeof dscrValue === 'number'
+          ? `${dscrValue.toFixed(2)}×`
+          : '—',
+        color: 'indigo'
+      },
+      {
+        label: 'Soft Costs % of Total',
+        value: typeof softCostPct === 'number'
+          ? formatters.percentage(softCostPct)
+          : formatters.percentage(0),
+        color: 'pink'
+      }
+    ];
+  }
+  if (isDentalOffice) {
+    const providersRaw =
+      typeof staffing?.providers === 'number'
+        ? staffing.providers
+        : null;
+    const providers = providersRaw && providersRaw > 0 ? providersRaw : 1;
+    const annualRevenueValue = typeof revenueAnalysis?.annual_revenue === 'number'
+      ? revenueAnalysis.annual_revenue
+      : null;
+    const operatories = facilityUnitsValue;
+    const productionPerProvider = annualRevenueValue != null && providers > 0
+      ? formatters.currencyExact(annualRevenueValue / providers)
+      : formatters.currencyExact(0);
+    const utilizationPct = annualRevenueValue != null &&
+      typeof operatories === 'number' &&
+      operatories > 0
+        ? formatters.percentage(Math.min(annualRevenueValue / (operatories * 600000), 1))
+        : formatters.percentage(0);
+    const opsPerProvider = typeof operatories === 'number' &&
+      operatories > 0 &&
+      providers > 0
+        ? (operatories / providers).toFixed(1)
+        : '0.0';
+    operationalKpis = [
+      {
+        label: 'Production / Provider',
+        value: productionPerProvider,
+        color: 'purple'
+      },
+      {
+        label: 'Chair Utilization',
+        value: utilizationPct,
+        color: 'indigo'
+      },
+      {
+        label: 'Ops per Provider',
+        value: opsPerProvider,
+        color: 'pink'
+      }
+    ];
+  }
   const projectTimeline = displayData.projectTimeline;
   const dscrFromDisplay = typeof displayData.dscr === 'number' ? displayData.dscr : undefined;
   const dscrFromOwnership = typeof (analysis as AnyRecord)?.calculations?.ownership_analysis?.debt_metrics?.calculated_dscr === 'number'
@@ -305,13 +750,27 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   
   // Extract additional raw data we need - check multiple paths for data
   const parsed = analysis?.parsed_input || {};
-  // Look for calculations in multiple places due to data mapping
-  const calculations = analysis?.calculations || {};
+  const ownership = calculations?.ownership_analysis || {};
+  const backendSensitivity =
+    ownership?.sensitivity_analysis ||
+    calculations?.sensitivity_analysis ||
+    calculations?.quick_sensitivity ||
+    null;
+  const backendSensitivityScenarios = Array.isArray(backendSensitivity?.scenarios)
+    ? backendSensitivity.scenarios
+    : null;
+  // TEMP: debug Quick Sensitivity wiring
+  if (process.env.NODE_ENV === 'development') {
+    // eslint-disable-next-line no-console
+    console.log('QS debug – backendSensitivity:', backendSensitivity);
+    // eslint-disable-next-line no-console
+    console.log('QS debug – backendSensitivityScenarios:', backendSensitivityScenarios);
+  }
+  const rawConstructionSchedule = calculations?.construction_schedule;
   const projectInfo = calculations?.project_info || {};
   const totals = calculations?.totals || {};
   const construction_costs = calculations?.construction_costs || {};
   const soft_costs = calculations?.soft_costs || {};
-  const ownership = calculations?.ownership_analysis || {};
   const investmentAnalysis = ownership?.investment_analysis || {};
   const debtMetrics = ownership?.debt_metrics || calculations?.debt_metrics || {};
   const annualDebtService = typeof debtMetrics?.annual_debt_service === 'number' && Number.isFinite(debtMetrics.annual_debt_service)
@@ -619,7 +1078,12 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     normalizedFacilityType === 'HOSPITALITY' || normalizedFacilityType === 'HOTEL';
   const showIndustrialFacilityMetrics =
     normalizedFacilityType === 'INDUSTRIAL' || normalizedFacilityType === 'WAREHOUSE';
+  const showRestaurantFacilityMetrics = normalizedFacilityType === 'RESTAURANT';
+  const isOfficeProject = isOffice;
   const isHospitalityProject = showHotelFacilityMetrics;
+  const isRestaurantProject =
+    normalizedFacilityType === 'RESTAURANT' ||
+    (buildingType || '').toString().toUpperCase().includes('RESTAURANT');
   const hospitalityRooms =
     typeof facilityMetrics?.rooms === 'number' ? facilityMetrics.rooms : undefined;
   const hospitalityAdr =
@@ -639,6 +1103,206 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     typeof operatingMargin === 'number'
       ? `${(operatingMargin * 100).toFixed(1)}% NOI margin`
       : 'NOI margin pending';
+  const restaurantSalesPerSf =
+    typeof facilityMetrics?.restaurantSalesPerSf === 'number'
+      ? facilityMetrics.restaurantSalesPerSf
+      : typeof facilityMetrics?.revenuePerSf === 'number'
+        ? facilityMetrics.revenuePerSf
+        : undefined;
+  const restaurantNoiPerSf =
+    typeof facilityMetrics?.restaurantNoiPerSf === 'number'
+      ? facilityMetrics.restaurantNoiPerSf
+      : typeof facilityMetrics?.noiPerSf === 'number'
+        ? facilityMetrics.noiPerSf
+        : undefined;
+  const restaurantCostPerSf =
+    typeof facilityMetrics?.restaurantCostPerSf === 'number'
+      ? facilityMetrics.restaurantCostPerSf
+      : typeof facilityMetrics?.costPerSf === 'number'
+        ? facilityMetrics.costPerSf
+        : undefined;
+  const hasRestaurantSalesPerSf = typeof restaurantSalesPerSf === 'number' && Number.isFinite(restaurantSalesPerSf);
+  const hasRestaurantNoiPerSf = typeof restaurantNoiPerSf === 'number' && Number.isFinite(restaurantNoiPerSf);
+  const hasRestaurantCostPerSf = typeof restaurantCostPerSf === 'number' && Number.isFinite(restaurantCostPerSf);
+  const salesPerSfText = hasRestaurantSalesPerSf ? formatPerSf(restaurantSalesPerSf) : '—';
+  const noiPerSfText = hasRestaurantNoiPerSf ? formatPerSf(restaurantNoiPerSf) : '—';
+  const costPerSfText = hasRestaurantCostPerSf ? formatPerSf(restaurantCostPerSf) : '—';
+  const baselineRevenue = typeof annualRevenue === 'number' && Number.isFinite(annualRevenue) ? annualRevenue : undefined;
+  const baselineNoi = typeof noi === 'number' && Number.isFinite(noi) ? noi : undefined;
+  const baselineTotalCost =
+    typeof totalProjectCost === 'number' && Number.isFinite(totalProjectCost) && totalProjectCost > 0
+      ? totalProjectCost
+      : undefined;
+  const baselineYieldOnCost =
+    typeof baselineNoi === 'number' && typeof baselineTotalCost === 'number' && baselineTotalCost > 0
+      ? baselineNoi / baselineTotalCost
+      : undefined;
+  const baselineDscr = typeof dscrValue === 'number' ? dscrValue : undefined;
+  const baselineOperatingMargin =
+    typeof baselineRevenue === 'number' &&
+    baselineRevenue > 0 &&
+    typeof baselineNoi === 'number'
+      ? baselineNoi / baselineRevenue
+      : undefined;
+  type RestaurantSensitivityScenario = {
+    id: string;
+    label: string;
+    subtitle: string;
+    yieldOnCost?: number;
+    dscr?: number;
+  };
+  let restaurantSensitivityScenarios: RestaurantSensitivityScenario[] | undefined;
+  if (
+    isRestaurantProject &&
+    typeof baselineRevenue === 'number' &&
+    typeof baselineNoi === 'number' &&
+    typeof baselineTotalCost === 'number' &&
+    baselineTotalCost > 0
+  ) {
+    const baseYield = typeof baselineYieldOnCost === 'number' ? baselineYieldOnCost : undefined;
+    const baseDscr = typeof baselineDscr === 'number' ? baselineDscr : undefined;
+    const margin = baselineOperatingMargin;
+    const scaleDscr = (noiMultiplier: number): number | undefined =>
+      typeof baseDscr === 'number' ? baseDscr * noiMultiplier : undefined;
+
+    restaurantSensitivityScenarios = [];
+
+    const pushScenario = (
+      id: string,
+      label: string,
+      subtitle: string,
+      noiMultiplier: number | undefined
+    ) => {
+      const scenarioYield =
+        typeof baseYield === 'number' && typeof noiMultiplier === 'number'
+          ? baseYield * noiMultiplier
+          : undefined;
+      const scenarioDscr =
+        typeof noiMultiplier === 'number' ? scaleDscr(noiMultiplier) : undefined;
+      restaurantSensitivityScenarios?.push({
+        id,
+        label,
+        subtitle,
+        yieldOnCost: scenarioYield,
+        dscr: scenarioDscr,
+      });
+    };
+
+    pushScenario('sales_plus_5', 'Sales +5%', 'Top-line sales increase by 5%.', 1.05);
+    pushScenario('sales_minus_5', 'Sales –5%', 'Top-line sales decrease by 5%.', 0.95);
+
+    if (typeof margin === 'number') {
+      const adjustForMargin = (deltaPts: number): number | undefined => {
+        const newMargin = Math.max(0, margin - deltaPts);
+        if (!baselineRevenue || !baselineNoi || baselineNoi === 0) {
+          return undefined;
+        }
+        return (baselineRevenue * newMargin) / baselineNoi;
+      };
+
+      pushScenario(
+        'cogs_plus_2',
+        'COGS +2 pts',
+        'Food & beverage cost ratio increases by 2 percentage points.',
+        adjustForMargin(0.02)
+      );
+
+      pushScenario(
+        'labor_plus_2',
+        'Labor +2 pts',
+        'Labor cost ratio increases by 2 percentage points.',
+        adjustForMargin(0.02)
+      );
+    }
+  }
+  const officeNoiGapValue =
+    typeof requiredNoi === 'number' && typeof currentNoi === 'number'
+      ? requiredNoi - currentNoi
+      : undefined;
+  const officeNoiGapPct =
+    typeof officeNoiGapValue === 'number' && typeof requiredNoi === 'number' && requiredNoi !== 0
+      ? (officeNoiGapValue / requiredNoi) * 100
+      : undefined;
+  const officeRentGapValue =
+    typeof requiredRevenuePerSf === 'number' && typeof currentRevenuePerSf === 'number'
+      ? requiredRevenuePerSf - currentRevenuePerSf
+      : undefined;
+  const officeRentGapPct =
+    typeof officeRentGapValue === 'number' &&
+    typeof requiredRevenuePerSf === 'number' &&
+    requiredRevenuePerSf !== 0
+      ? (officeRentGapValue / requiredRevenuePerSf) * 100
+      : undefined;
+  const quickSensitivityBaseYield = (() => {
+    const candidates = [
+      quickSensitivity?.currentYield,
+      quickSensitivity?.yieldBase,
+      quickSensitivity?.yieldOnCost,
+      quickSensitivity?.baseYieldOnCost,
+      displayData?.yieldOnCost,
+    ];
+    for (const value of candidates) {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+      }
+    }
+    return undefined;
+  })();
+  const breakEvenOccupancyValue =
+    typeof displayData.breakEvenOccupancyForTargetYield === 'number'
+      ? displayData.breakEvenOccupancyForTargetYield
+      : typeof displayData.breakEvenOccupancy === 'number'
+        ? displayData.breakEvenOccupancy
+        : undefined;
+  const breakEvenLabel =
+    typeof breakEvenOccupancyValue === 'number'
+      ? breakEvenOccupancyValue > 1.02
+        ? '> 100% (not achievable)'
+        : formatters.percentage(breakEvenOccupancyValue)
+      : 'N/A';
+  const isHotel = isHospitalityProject;
+  let adrMinus10Yield: number | undefined;
+  let adrPlus10Yield: number | undefined;
+  let occMinus5Yield: number | undefined;
+  let occPlus5Yield: number | undefined;
+  const adrForSensitivity = typeof hospitalityAdr === 'number' ? hospitalityAdr : undefined;
+  const occForSensitivity = typeof hospitalityOccupancy === 'number' ? hospitalityOccupancy : undefined;
+  if (
+    isHotel &&
+    typeof quickSensitivityBaseYield === 'number' &&
+    typeof adrForSensitivity === 'number' &&
+    adrForSensitivity > 0 &&
+    typeof occForSensitivity === 'number' &&
+    occForSensitivity > 0
+  ) {
+    const revparBase = adrForSensitivity * occForSensitivity;
+    if (revparBase > 0) {
+      const adrMinus10 = adrForSensitivity - 10;
+      const adrPlus10 = adrForSensitivity + 10;
+      const occMinus5 = occForSensitivity - 0.05;
+      const occPlus5 = occForSensitivity + 0.05;
+
+      if (adrMinus10 > 0) {
+        const revparAdrMinus10 = adrMinus10 * occForSensitivity;
+        adrMinus10Yield = quickSensitivityBaseYield * (revparAdrMinus10 / revparBase);
+      }
+
+      if (adrPlus10 > 0) {
+        const revparAdrPlus10 = adrPlus10 * occForSensitivity;
+        adrPlus10Yield = quickSensitivityBaseYield * (revparAdrPlus10 / revparBase);
+      }
+
+      if (occMinus5 > 0) {
+        const revparOccMinus5 = adrForSensitivity * occMinus5;
+        occMinus5Yield = quickSensitivityBaseYield * (revparOccMinus5 / revparBase);
+      }
+
+      if (occPlus5 < 1.0) {
+        const revparOccPlus5 = adrForSensitivity * occPlus5;
+        occPlus5Yield = quickSensitivityBaseYield * (revparOccPlus5 / revparBase);
+      }
+    }
+  }
 
   const hospitalityRequiredNoiPerKeyValue =
     displayData.requiredNoiPerKey ??
@@ -693,9 +1357,13 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     const gapCurrency = formatters.currency(Math.abs(noiGap));
     const pctText = `${Math.abs(noiGapPct ?? 0).toFixed(1)}%`;
     if (noiGap >= 0) {
-      return `Current NOI is ${gapCurrency} (${pctText}) ahead of requirement.`;
+      return isRestaurantProject
+        ? `Store-level NOI is ${gapCurrency} (${pctText}) above requirement. Keep sales per SF and prime costs on track to preserve that cushion.`
+        : `Current NOI is ${gapCurrency} (${pctText}) ahead of requirement.`;
     }
-    return `Need ${gapCurrency} (${pctText}) more NOI to meet the yield target.`;
+    return isRestaurantProject
+      ? `Need ${gapCurrency} (${pctText}) more NOI — meaning higher sales per SF. Pressure-test day-part volume, check size, and prime cost discipline to close the gap.`
+      : `Need ${gapCurrency} (${pctText}) more NOI to meet the yield target.`;
   })();
 
   const isIndustrialProject = (buildingType || '').toLowerCase() === 'industrial';
@@ -885,6 +1553,40 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     }
 
     return bullets;
+  })();
+  const officeBasisSummary = (() => {
+    if (typeof costPerSFValue === 'number') {
+      if (typeof marketCostPerSF === 'number' && typeof costPerSFDeltaPct === 'number') {
+        const deltaText = `${Math.abs(costPerSFDeltaPct).toFixed(1)}% ${costPerSFDeltaPct >= 0 ? 'above' : 'below'}`;
+        return `${formatters.costPerSF(costPerSFValue)} vs ${formatters.costPerSF(marketCostPerSF)} (${deltaText} market)`;
+      }
+      return `${formatters.costPerSF(costPerSFValue)} (market comps pending)`;
+    }
+    return 'basis inputs still populating';
+  })();
+  const officeRentSummary =
+    typeof facilityMetrics?.revenuePerSf === 'number'
+      ? `$${facilityMetrics.revenuePerSf.toFixed(2)}/SF rent`
+      : 'rent inputs loading';
+  const officeReturnSummary = (() => {
+    const parts: string[] = [];
+    if (
+      typeof effectiveYield === 'number' &&
+      typeof marketCapRateDisplay === 'number' &&
+      typeof yieldCapSpreadBps === 'number'
+    ) {
+      const spreadText = `${Math.abs(yieldCapSpreadBps).toFixed(0)} bp ${yieldCapSpreadBps >= 0 ? 'above' : 'below'}`;
+      parts.push(
+        `yield ${(effectiveYield * 100).toFixed(1)}% vs ${(marketCapRateDisplay * 100).toFixed(1)}% cap (${spreadText})`
+      );
+    } else if (typeof effectiveYield === 'number') {
+      parts.push(`yield ${(effectiveYield * 100).toFixed(1)}%`);
+    }
+    if (typeof dscr === 'number') {
+      const delta = dscr - resolvedTargetDscr;
+      parts.push(`DSCR ${dscr.toFixed(2)}× ${delta >= 0 ? '≥' : '<'} ${resolvedTargetDscr.toFixed(2)}×`);
+    }
+    return parts.length ? parts.join(' · ') : 'yield and DSCR metrics still populating';
   })();
 
   // Financial Requirements removed - was only implemented for hospital
@@ -1238,18 +1940,39 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                 </>
               ) : (
                 <>
-                  <p className={decisionBodyClass}>
-                    {decisionCopy.body}
-                  </p>
-                  {decisionCopy.detail && (
-                    <p className={decisionDetailClass}>
-                      {decisionCopy.detail}
-                    </p>
-                  )}
-                  {decisionReasonText && (
-                    <p className="mt-2 text-xs text-slate-600">
-                      Analyzer note: {decisionReasonText}
-                    </p>
+                  {isOffice ? (
+                    <>
+                      <p className="text-sm text-slate-700">
+                        Office deal currently underperforms Class A underwriting targets. With current rent levels, occupancy, and TI/LC load, stabilized NOI is not sufficient to clear both equity and lender hurdles.
+                      </p>
+                      <p className="mt-1 text-sm text-slate-700">
+                        Yield on cost and DSCR here should be read in the context of lease-up risk, tenant credit, and renewal probabilities. Use this view to test whether the rent and occupancy story is strong enough for this basis.
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Analyzer note: Focus first on achievable rent per SF, realistic stabilized occupancy, and the average TI/LC burden for this submarket. Debt sizing and return metrics will follow from the rent roll quality. If the gap is large, re-scope the project, lower hard costs, or revisit the target tenant mix.
+                      </p>
+                      {decisionReasonText && (
+                        <p className="mt-2 text-xs text-slate-600">
+                          Additional analyzer note: {decisionReasonText}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p className={decisionBodyClass}>
+                        {decisionCopy.body}
+                      </p>
+                      {decisionCopy.detail && (
+                        <p className={decisionDetailClass}>
+                          {decisionCopy.detail}
+                        </p>
+                      )}
+                      {decisionReasonText && (
+                        <p className="mt-2 text-xs text-slate-600">
+                          Analyzer note: {decisionReasonText}
+                        </p>
+                      )}
+                    </>
                   )}
                 </>
               )}
@@ -1563,17 +2286,205 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                   </div>
                 </div>
               </div>
+            ) : showRestaurantFacilityMetrics ? (
+              <div className="grid gap-4 md:grid-cols-3 text-xs text-slate-700">
+                {/* --- SALES PER SF --- */}
+                <div className="rounded-2xl border border-slate-100 bg-white/90 p-5 shadow-md shadow-slate-100/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Sales
+                    </div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500/90 border border-slate-200 bg-slate-50 rounded-full px-2 py-[2px] shadow-sm">
+                      /SF
+                    </div>
+                  </div>
+                  <div className="text-3xl font-semibold leading-none font-mono tabular-nums">
+                    {salesPerSfText}
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    Annual revenue divided by footprint
+                  </div>
+                </div>
+
+                {/* --- NOI PER SF --- */}
+                <div className="rounded-2xl border border-slate-100 bg-white/90 p-5 shadow-md shadow-slate-100/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      NOI
+                    </div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500/90 border border-slate-200 bg-slate-50 rounded-full px-2 py-[2px] shadow-sm">
+                      /SF
+                    </div>
+                  </div>
+                  <div className="text-3xl font-semibold leading-none font-mono tabular-nums">
+                    {noiPerSfText}
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    Net income generated per square foot
+                  </div>
+                </div>
+
+                {/* --- ALL-IN COST PER SF --- */}
+                <div className="rounded-2xl border border-slate-100 bg-white/90 p-5 shadow-md shadow-slate-100/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      All-in cost
+                    </div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500/90 border border-slate-200 bg-slate-50 rounded-full px-2 py-[2px] shadow-sm">
+                      /SF
+                    </div>
+                  </div>
+                  <div className="text-3xl font-semibold leading-none font-mono tabular-nums">
+                    {costPerSfText}
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    Total project cost divided by SF
+                  </div>
+                </div>
+              </div>
+            ) : isOfficeProject ? (
+              <div className="grid gap-4 md:grid-cols-3 text-xs text-slate-700">
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Building Size
+                  </div>
+                  <div className="text-2xl font-semibold">
+                    {typeof facilityMetrics?.buildingSize === 'number'
+                      ? `${facilityMetrics.buildingSize.toLocaleString()} SF`
+                      : '—'}
+                  </div>
+                  <div className="text-[11px] text-slate-500">Total rentable area</div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Cost per SF
+                  </div>
+                  <div className="text-lg font-semibold">
+                    {typeof facilityMetrics?.costPerSf === 'number'
+                      ? formatters.currencyExact(facilityMetrics.costPerSf)
+                      : '—'}
+                  </div>
+                  <div className="text-[11px] text-slate-500">Total project cost divided by SF</div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Rent & NOI per SF
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[11px] text-slate-500">Rent</span>
+                      <span className="text-sm font-semibold">
+                        {typeof facilityMetrics?.revenuePerSf === 'number'
+                          ? `$${facilityMetrics.revenuePerSf.toFixed(2)}`
+                          : '—'}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[11px] text-slate-500">NOI</span>
+                      <span className="text-sm font-semibold">
+                        {typeof facilityMetrics?.noiPerSf === 'number'
+                          ? `$${facilityMetrics.noiPerSf.toFixed(2)}`
+                          : '—'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : isOffice ? (
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Required NOI (target yield)
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                      {formatters.currency(requiredNoi ?? revenueReq.required_value)}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Current NOI:{' '}
+                      <span className="font-semibold">
+                        {formatters.currency(currentNoi ?? revenueReq.market_value)}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Gap:{' '}
+                      {typeof officeNoiGapValue === 'number' ? (
+                        <>
+                          {formatters.currency(officeNoiGapValue)}{' '}
+                          {typeof officeNoiGapPct === 'number' ? (
+                            <>({officeNoiGapPct.toFixed(1)}%)</>
+                          ) : null}
+                        </>
+                      ) : (
+                        '—'
+                      )}
+                    </div>
+                    <div className="mt-3 text-xs text-slate-500 space-y-1">
+                      <div>
+                        Required NOI per SF:{' '}
+                        <span className="font-semibold">
+                          {typeof revenueRequired.requiredNoiPerSf === 'number'
+                            ? `$${revenueRequired.requiredNoiPerSf.toFixed(2)}`
+                            : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        Current NOI per SF:{' '}
+                        <span className="font-semibold">
+                          {typeof revenueRequired.currentNoiPerSf === 'number'
+                            ? `$${revenueRequired.currentNoiPerSf.toFixed(2)}`
+                            : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Rent per SF vs Target
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                      {typeof requiredRevenuePerSf === 'number'
+                        ? `$${requiredRevenuePerSf.toFixed(0)}`
+                        : '—'}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Current rent per SF:{' '}
+                      <span className="font-semibold">
+                        {typeof currentRevenuePerSf === 'number'
+                          ? `$${currentRevenuePerSf.toFixed(0)}`
+                          : '—'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Rent gap:{' '}
+                      {typeof officeRentGapValue === 'number' ? (
+                        <>
+                          {`$${officeRentGapValue.toFixed(0)}`}{' '}
+                          {typeof officeRentGapPct === 'number' ? (
+                            <>({officeRentGapPct.toFixed(1)}%)</>
+                          ) : null}
+                        </>
+                      ) : (
+                        '—'
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-xs text-slate-500">
+                  For office, focus on whether the required rent and NOI per SF are achievable given comp-set leases and realistic TI/LC packages. If required rent per SF is materially above market, the leasing and amenity plan must justify that premium to investors and lenders.
+                </div>
+              </div>
             ) : (
               <>
                 <p className="text-3xl font-bold text-gray-900">{formatters.units(displayData.unitCount)}</p>
-                <p className="text-sm text-gray-500 mb-4">{displayData.unitLabel}</p>
+                <p className="text-sm text-gray-500 mb-4">{unitLabel}</p>
                 <div className="space-y-2 pt-4 border-t">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Cost per {displayData.unitType}</span>
+                    <span className="text-gray-600">Cost per {unitType}</span>
                     <span className="font-bold">{formatters.currencyExact(displayData.costPerUnit)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Revenue per {displayData.unitType}</span>
+                    <span className="text-gray-600">Revenue per {unitType}</span>
                     <span className="font-bold">{formatters.currency(displayData.revenuePerUnit)}</span>
                   </div>
                 </div>
@@ -1668,7 +2579,119 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           <p className="text-sm text-slate-500 mt-1">See how much NOI or cost needs to move for this project to hit its underwriting hurdle.</p>
         </div>
         <div className="p-6 md:p-8">
-        {(() => {
+        {isOffice ? (
+          <div className="space-y-3 text-sm text-slate-700">
+            <p className="text-xs uppercase tracking-wide text-slate-400">
+              How to move this office deal toward the target yield
+            </p>
+
+            <div>
+              <div className="font-semibold text-slate-800">
+                1. Tighten the rent &amp; occupancy story
+              </div>
+              <div className="mt-1 text-xs text-slate-600">
+                Underwrite a rent per SF and stabilized occupancy that reflect the actual Class A comp set. If the model assumes above-market rent or unrealistic absorption, either dial those inputs back or invest in a tenant mix and amenity package that can sustain the premium.
+              </div>
+            </div>
+
+            <div>
+              <div className="font-semibold text-slate-800">
+                2. Re-scope TI and leasing economics
+              </div>
+              <div className="mt-1 text-xs text-slate-600">
+                Tenant improvements and leasing commissions are often the biggest drag on office NOI. Consider spec suites, staggered TI packages, or shorter lease terms to reduce upfront burn while keeping rents achievable for tenants.
+              </div>
+            </div>
+
+            <div>
+              <div className="font-semibold text-slate-800">
+                3. Value-engineer the building &amp; OpEx
+              </div>
+              <div className="mt-1 text-xs text-slate-600">
+                Revisit shell vs. build-out scope, amenity spend, and parking strategy. Pressure-test OpEx per SF against similar towers and explore service contracts or systems that keep long-term operating costs contained without undercutting tenant experience.
+              </div>
+            </div>
+          </div>
+        ) : isHospitalityProject ? (
+          <div className="space-y-3 text-sm text-slate-700">
+            <p className="text-xs uppercase tracking-wide text-slate-400">
+              How to move this hotel toward the target yield
+            </p>
+
+            <div>
+              <div className="font-semibold text-slate-800">
+                1. Optimize ADR and RevPAR
+              </div>
+              <div className="mt-1 text-xs text-slate-600">
+                Use dynamic pricing and channel mix to close the RevPAR gap. Focus on rate integrity during peak periods and carefully
+                discount only shoulder nights and weak segments. Benchmark ADR and RevPAR index against the comp set rather than chasing
+                occupancy alone.
+              </div>
+            </div>
+
+            <div>
+              <div className="font-semibold text-slate-800">
+                2. Build a defensible occupancy plan
+              </div>
+              <div className="mt-1 text-xs text-slate-600">
+                Layer in corporate, group, and transient demand to support the required stabilized occupancy. Secure key accounts and repeat
+                business, and align sales activity with the events calendar so shoulder nights and weekends are protected.
+              </div>
+            </div>
+
+            <div>
+              <div className="font-semibold text-slate-800">
+                3. Tighten operating and fee load
+              </div>
+              <div className="mt-1 text-xs text-slate-600">
+                Review staffing ratios, outsource vs. in-house services, and franchise/management fee structure. Confirm FF&amp;E and PIP
+                reserves are adequate so the property can maintain rate and RevPAR over the hold period without unexpected capital calls.
+              </div>
+            </div>
+          </div>
+        ) : isRestaurantProject ? (
+          <div className="grid gap-6 md:gap-8 md:grid-cols-3 text-sm text-slate-700">
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Path 1 · Increase Sales per SF
+              </p>
+              <div className="text-slate-900 font-medium">
+                Grow day-part mix and digital channels.
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Push more volume through the box by improving lunch and dinner balance, expanding takeout, delivery, and kiosk ordering,
+                and using menu engineering plus upsells to lift the average check size.
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Path 2 · Tighten Food &amp; Labor Costs
+              </p>
+              <div className="text-slate-900 font-medium">
+                Keep prime costs in the 60–65% range.
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Reduce waste, tighten portions, negotiate vendor pricing, and optimize staffing schedules so food plus labor stay near
+                60–65% of sales and can absorb rent, utilities, and operating costs.
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Path 3 · Right-size TI, Kitchen &amp; Occupancy Cost
+              </p>
+              <div className="text-slate-900 font-medium">
+                Protect NOI by trimming non-essential spend.
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Value-engineer finishes and kitchen scope that do not change the guest experience. Standardize layouts, reuse prototypes, and
+                stress-test base rent plus NNN charges against projected sales in both upside and downside cases.
+              </p>
+            </div>
+          </div>
+        ) : (
+        (() => {
           const formatMoney = (value?: number) =>
               typeof value === 'number' && Number.isFinite(value) ? formatters.currency(value) : '—';
             const formatPercent = (value?: number) =>
@@ -1808,7 +2831,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                 </div>
               </div>
           );
-        })()}
+        })()
+        )}
         </div>
       </div>
 
@@ -1820,7 +2844,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             <p className="text-sm text-emerald-100">
               {isHospitalityProject
                 ? 'Benchmark NOI per key and RevPAR against the brand’s underwriting targets.'
-                : 'Compare required NOI and revenue per SF against current performance.'}
+                : isRestaurantProject
+                  ? 'Compare required NOI and sales per SF against current performance. Use this to see how far store-level sales would need to move to hit the underwriting hurdle.'
+                  : 'Compare required NOI and revenue per SF against current performance.'}
             </p>
           </div>
           <div className="p-6 space-y-5">
@@ -1883,6 +2909,24 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                       {hospitalityRevparGap <= 0 ? 'above requirement' : 'needed to reach target'}
                     </p>
                   )}
+                  <div className="mt-2 space-y-1 text-xs text-slate-500">
+                    <div className="flex items-baseline justify-between">
+                      <span>Implied ADR needed</span>
+                      <span className="font-semibold">
+                        {typeof revenueRequired.impliedAdrForTargetRevpar === 'number'
+                          ? `$${revenueRequired.impliedAdrForTargetRevpar.toFixed(0)}`
+                          : '—'}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline justify-between">
+                      <span>Implied occupancy needed</span>
+                      <span className="font-semibold">
+                        {typeof revenueRequired.impliedOccupancyForTargetRevpar === 'number'
+                          ? `${(revenueRequired.impliedOccupancyForTargetRevpar * 100).toFixed(0)}%`
+                          : '—'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -1929,12 +2973,14 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                 )}
               </div>
               <div className="p-4 bg-blue-50 rounded-lg">
-                <p className="text-sm text-blue-900/80 mb-1">Required Revenue per SF</p>
+                <p className="text-sm text-blue-900/80 mb-1">
+                  {isRestaurantProject ? 'Required Sales per SF' : 'Required Revenue per SF'}
+                </p>
                 <p className="text-2xl font-bold text-blue-700">
                   {typeof requiredRevenuePerSf === 'number' ? formatters.currency(requiredRevenuePerSf) : '—'}
                 </p>
                 <p className="text-xs text-blue-900/80 mt-2">
-                  Current Revenue per SF:{' '}
+                  {isRestaurantProject ? 'Current sales per SF:' : 'Current revenue per SF:'}{' '}
                   <span className="font-semibold">
                     {typeof currentRevenuePerSf === 'number' ? formatters.currency(currentRevenuePerSf) : '—'}
                   </span>
@@ -1942,7 +2988,13 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                 {typeof revenuePerSfGap === 'number' && (
                   <p className={`text-xs mt-1 ${revenuePerSfGap >= 0 ? 'text-green-700' : 'text-amber-600'}`}>
                     Gap: {formatters.currency(Math.abs(revenuePerSfGap))} ({Math.abs(revenuePerSfGapPct || 0).toFixed(1)}%)&nbsp;
-                    {revenuePerSfGap >= 0 ? 'above requirement' : 'needed to reach target'}
+                    {revenuePerSfGap >= 0
+                      ? isRestaurantProject
+                        ? 'sales per SF already above requirement'
+                        : 'above requirement'
+                      : isRestaurantProject
+                        ? 'additional sales needed to reach target'
+                        : 'needed to reach target'}
                   </p>
                 )}
               </div>
@@ -2160,152 +3212,385 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             </h3>
           </div>
           <div className="p-6 space-y-4">
-            {(() => {
-              const sensitivity = displayData?.sensitivity || {};
-
-              // Prefer backend-supplied base; fallback to the mapped yield so cards always have context.
-              const baseYOC =
-                typeof sensitivity.baseYieldOnCost === 'number' && Number.isFinite(sensitivity.baseYieldOnCost)
-                  ? sensitivity.baseYieldOnCost
-                  : typeof displayData.yieldOnCost === 'number' && Number.isFinite(displayData.yieldOnCost)
-                    ? displayData.yieldOnCost
-                    : undefined;
-
-              const fmt = (value?: number) =>
-                typeof value === 'number' && Number.isFinite(value)
-                  ? formatters.percentage(value)
-                  : '—';
-              const breakEvenOcc =
-                typeof displayData.breakEvenOccupancyForTargetYield === 'number'
-                  ? displayData.breakEvenOccupancyForTargetYield
-                  : typeof displayData.breakEvenOccupancy === 'number'
-                    ? displayData.breakEvenOccupancy
-                    : undefined;
-              const occLabel =
-                typeof breakEvenOcc === 'number'
-                  ? breakEvenOcc > 1.02
-                    ? '> 100% (not achievable)'
-                    : formatters.percentage(breakEvenOcc)
-                  : 'N/A';
-
-              // Return backend scenario metric when present; otherwise fall back to naive +/-10% adjustments.
-              const scenarioValue = (
-                backendValue: number | undefined,
-                fallbackFn: (base: number) => number
-              ): string => {
-                if (typeof backendValue === 'number' && Number.isFinite(backendValue)) {
-                  return fmt(backendValue);
-                }
-                if (typeof baseYOC === 'number') {
-                  return fmt(fallbackFn(baseYOC));
-                }
-                return '—';
-              };
-
-              const cards = [
-                {
-                  label: 'If costs +10%',
-                  icon: <TrendingDown className="h-5 w-5 text-red-500" />,
-                  value: scenarioValue(sensitivity.costUp10YieldOnCost, (base) => base / 1.1),
-                  color: 'text-red-600'
-                },
-                {
-                  label: 'If costs -10%',
-                  icon: <TrendingUp className="h-5 w-5 text-green-500" />,
-                  value: scenarioValue(sensitivity.costDown10YieldOnCost, (base) => base / 0.9),
-                  color: 'text-green-600'
-                },
-                {
-                  label: 'If revenue +10%',
-                  icon: <TrendingUp className="h-5 w-5 text-green-500" />,
-                  value: scenarioValue(sensitivity.revenueUp10YieldOnCost, (base) => base * 1.1),
-                  color: 'text-green-600'
-                },
-                {
-                  label: 'If revenue -10%',
-                  icon: <TrendingDown className="h-5 w-5 text-red-500" />,
-                  value: scenarioValue(sensitivity.revenueDown10YieldOnCost, (base) => base * 0.9),
-                  color: 'text-red-600'
-                }
-              ];
-
-              return (
-                <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {cards.map(({ label, icon, value, color }) => (
-                      <div key={label} className="bg-white rounded-lg p-4 shadow-sm">
-                        <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">{label}</p>
-                        <div className="flex items-center justify-between">
-                          {icon}
-                          <span className={`text-lg font-bold ${color}`}>
-                            {value !== '—' ? `${value} yield` : '—'}
+            {isRestaurantProject && restaurantSensitivityScenarios ? (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {restaurantSensitivityScenarios.map((scenario) => (
+                    <div
+                      key={scenario.id}
+                      className="bg-white rounded-lg p-4 shadow-sm border border-slate-200 space-y-2"
+                    >
+                      <p className="text-xs text-gray-500 uppercase tracking-wider">{scenario.label}</p>
+                      <p className="text-[11px] text-slate-500">{scenario.subtitle}</p>
+                      <div className="mt-2 text-xs text-slate-600 space-y-1">
+                        <div className="flex justify-between">
+                          <span>Yield on cost</span>
+                          <span className="font-semibold text-slate-900">
+                            {typeof scenario.yieldOnCost === 'number'
+                              ? `${(scenario.yieldOnCost * 100).toFixed(1)}%`
+                              : '—'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>DSCR</span>
+                          <span className="font-semibold text-slate-900">
+                            {typeof scenario.dscr === 'number' ? `${scenario.dscr.toFixed(2)}×` : '—'}
                           </span>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                  <div className="p-4 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg">
-                    <p className="text-xs text-gray-600 uppercase tracking-wider mb-2">Break-even needs:</p>
-                    <span className="text-xl font-bold text-purple-700">{occLabel}</span>
-                  </div>
-                </>
-              );
-            })()}
+                    </div>
+                  ))}
+                </div>
+                <div className="p-4 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg">
+                  <p className="text-xs text-gray-600 uppercase tracking-wider mb-2">Break-even needs:</p>
+                  <span className="text-xl font-bold text-purple-700">{breakEvenLabel}</span>
+                </div>
+              </>
+            ) : (
+              (() => {
+                const sensitivity = backendSensitivity ?? quickSensitivity ?? {};
+                const baseYOC = quickSensitivityBaseYield;
+
+                const fmt = (value?: number) =>
+                  typeof value === 'number' && Number.isFinite(value)
+                    ? formatters.percentage(value)
+                    : '—';
+                const occLabel = breakEvenLabel;
+
+                // Return backend scenario metric when present; otherwise fall back to naive +/-10% adjustments.
+                const scenarioValue = (
+                  backendValue: number | undefined,
+                  fallbackFn: (base: number) => number
+                ): string => {
+                  if (typeof backendValue === 'number' && Number.isFinite(backendValue)) {
+                    return fmt(backendValue);
+                  }
+                  if (typeof baseYOC === 'number') {
+                    return fmt(fallbackFn(baseYOC));
+                  }
+                  return '—';
+                };
+
+                const scenarioCards = Array.isArray(backendSensitivityScenarios)
+                  ? backendSensitivityScenarios.map((scenario: any, index: number) => {
+                      const scenarioYield = typeof scenario?.yield_on_cost === 'number'
+                        ? scenario.yield_on_cost
+                        : typeof scenario?.yield === 'number'
+                          ? scenario.yield
+                          : undefined;
+                      const delta = typeof scenario?.yield_delta === 'number'
+                        ? scenario.yield_delta
+                        : typeof scenario?.yieldDelta === 'number'
+                          ? scenario.yieldDelta
+                          : null;
+                      const isPositive = typeof delta === 'number'
+                        ? delta >= 0
+                        : (typeof scenarioYield === 'number' && typeof baseYOC === 'number'
+                            ? scenarioYield >= baseYOC
+                            : true);
+                      const iconElement = isPositive ? (
+                        <TrendingUp className="h-5 w-5 text-green-500" />
+                      ) : (
+                        <TrendingDown className="h-5 w-5 text-red-500" />
+                      );
+                      return {
+                        key: scenario?.label || `scenario-${index}`,
+                        label: scenario?.label || 'Scenario',
+                        icon: iconElement,
+                        value: scenarioYield !== undefined ? fmt(scenarioYield) : '—',
+                        color: isPositive ? 'text-green-600' : 'text-red-600'
+                      };
+                    })
+                  : null;
+
+                let cards;
+                if (scenarioCards && scenarioCards.length > 0) {
+                  cards = scenarioCards;
+                } else if (isDentalOffice) {
+                  cards = [
+                    {
+                      label: 'If build cost / SF +10%',
+                      icon: <TrendingDown className="h-5 w-5 text-red-500" />,
+                      value: scenarioValue(
+                        sensitivity?.cost_up_10?.yield_on_cost ?? sensitivity?.costUp10YieldOnCost,
+                        (base) => base / 1.1
+                      ),
+                      color: 'text-red-600'
+                    },
+                    {
+                      label: 'If build cost / SF -10%',
+                      icon: <TrendingUp className="h-5 w-5 text-green-500" />,
+                      value: scenarioValue(
+                        sensitivity?.cost_down_10?.yield_on_cost ?? sensitivity?.costDown10YieldOnCost,
+                        (base) => base / 0.9
+                      ),
+                      color: 'text-green-600'
+                    },
+                    {
+                      label: 'If production +10%',
+                      icon: <TrendingUp className="h-5 w-5 text-green-500" />,
+                      value: scenarioValue(
+                        sensitivity?.revenue_up_10?.yield_on_cost ?? sensitivity?.revenueUp10YieldOnCost,
+                        (base) => base * 1.1
+                      ),
+                      color: 'text-green-600'
+                    },
+                    {
+                      label: 'If production -10%',
+                      icon: <TrendingDown className="h-5 w-5 text-red-500" />,
+                      value: scenarioValue(
+                        sensitivity?.revenue_down_10?.yield_on_cost ?? sensitivity?.revenueDown10YieldOnCost,
+                        (base) => base * 0.9
+                      ),
+                      color: 'text-red-600'
+                    }
+                  ];
+                } else {
+                  cards = [
+                    {
+                      label: 'If costs +10%',
+                      icon: <TrendingDown className="h-5 w-5 text-red-500" />,
+                      value: scenarioValue(
+                        sensitivity?.cost_up_10?.yield_on_cost ?? sensitivity?.costUp10YieldOnCost,
+                        (base) => base / 1.1
+                      ),
+                      color: 'text-red-600'
+                    },
+                    {
+                      label: 'If costs -10%',
+                      icon: <TrendingUp className="h-5 w-5 text-green-500" />,
+                      value: scenarioValue(
+                        sensitivity?.cost_down_10?.yield_on_cost ?? sensitivity?.costDown10YieldOnCost,
+                        (base) => base / 0.9
+                      ),
+                      color: 'text-green-600'
+                    },
+                    {
+                      label: 'If revenue +10%',
+                      icon: <TrendingUp className="h-5 w-5 text-green-500" />,
+                      value: scenarioValue(
+                        sensitivity?.revenue_up_10?.yield_on_cost ?? sensitivity?.revenueUp10YieldOnCost,
+                        (base) => base * 1.1
+                      ),
+                      color: 'text-green-600'
+                    },
+                    {
+                      label: 'If revenue -10%',
+                      icon: <TrendingDown className="h-5 w-5 text-red-500" />,
+                      value: scenarioValue(
+                        sensitivity?.revenue_down_10?.yield_on_cost ?? sensitivity?.revenueDown10YieldOnCost,
+                        (base) => base * 0.9
+                      ),
+                      color: 'text-red-600'
+                    }
+                  ];
+                }
+
+                return (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {cards.map(({ label, icon, value, color }) => (
+                        <div key={label} className="bg-white rounded-lg p-4 shadow-sm">
+                          <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">{label}</p>
+                          <div className="flex items-center justify-between">
+                            {icon}
+                            <span className={`text-lg font-bold ${color}`}>
+                              {value !== '—' ? `${value} yield` : '—'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {isHotel && (
+                      <div className="mt-4 border-t border-slate-100 pt-4">
+                        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          ADR &amp; Occupancy Sensitivity (Hotel)
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 text-xs text-slate-600">
+                          <div className="rounded-xl bg-slate-50 p-3">
+                            <div className="font-semibold">If ADR -$10</div>
+                            <div className="mt-1">
+                              {typeof adrMinus10Yield === 'number'
+                                ? `${formatters.percentage(adrMinus10Yield)} yield`
+                                : '—'}
+                            </div>
+                          </div>
+                          <div className="rounded-xl bg-slate-50 p-3">
+                            <div className="font-semibold">If ADR +$10</div>
+                            <div className="mt-1">
+                              {typeof adrPlus10Yield === 'number'
+                                ? `${formatters.percentage(adrPlus10Yield)} yield`
+                                : '—'}
+                            </div>
+                          </div>
+                          <div className="rounded-xl bg-slate-50 p-3">
+                            <div className="font-semibold">If occupancy -5 pts</div>
+                            <div className="mt-1">
+                              {typeof occMinus5Yield === 'number'
+                                ? `${formatters.percentage(occMinus5Yield)} yield`
+                                : '—'}
+                            </div>
+                          </div>
+                          <div className="rounded-xl bg-slate-50 p-3">
+                            <div className="font-semibold">If occupancy +5 pts</div>
+                            <div className="mt-1">
+                              {typeof occPlus5Yield === 'number'
+                                ? `${formatters.percentage(occPlus5Yield)} yield`
+                                : '—'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <div className="p-4 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg">
+                      <p className="text-xs text-gray-600 uppercase tracking-wider mb-2">Break-even needs:</p>
+                      <span className="text-xl font-bold text-purple-700">{occLabel}</span>
+                    </div>
+                  </>
+                );
+              })()
+            )}
           </div>
         </div>
       </div>
 
-      {/* Key Milestones Timeline */}
-      <div className="bg-gradient-to-br from-white via-blue-50 to-indigo-50 rounded-xl shadow-lg p-8 border border-blue-100">
-        <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-          <Calendar className="h-6 w-6 text-blue-600" />
-          Key Milestones
-        </h3>
-        <div className="relative">
-          <div className="absolute left-10 top-10 bottom-0 w-0.5 bg-gradient-to-b from-blue-400 via-purple-400 to-pink-400"></div>
-          <div className="space-y-8">
-            {[
-              {
-                icon: CheckCircle,
-                color: 'green',
-                title: 'Groundbreaking',
-                date: projectTimeline?.groundbreaking ?? 'TBD'
-              },
-              {
-                icon: Building,
-                color: 'blue',
-                title: 'Structure Complete',
-                date: projectTimeline?.structureComplete ?? 'TBD'
-              },
-              {
-                icon: Users,
-                color: 'purple',
-                title: 'Substantial Completion',
-                date: projectTimeline?.substantialCompletion ?? 'TBD'
-              },
-              {
-                icon: Target,
-                color: 'orange',
-                title: buildingType === 'multifamily' ? 'First Tenant Move-in' : 'Grand Opening',
-                date: projectTimeline?.grandOpening ?? 'TBD'
-              }
-            ].map((milestone, idx) => {
-              const Icon = milestone.icon;
-              return (
-                <div key={idx} className="flex items-center gap-6 group">
-                  <div className={`w-20 h-20 bg-gradient-to-br from-${milestone.color}-100 to-${milestone.color}-200 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform`}>
-                    <Icon className={`h-10 w-10 text-${milestone.color}-600`} />
-                  </div>
-                  <div className="flex-1 bg-white rounded-lg p-4 shadow-md group-hover:shadow-lg transition-shadow">
-                    <p className="font-bold text-gray-900 text-lg">{milestone.title}</p>
-                    <p className="text-sm text-gray-600">{milestone.date}</p>
-                  </div>
-                </div>
-              );
-            })}
+      {(() => {
+        type SchedulePhase = {
+          id?: string;
+          label?: string;
+          start_month?: number;
+          startMonth?: number;
+          duration?: number;
+        };
+
+        const schedulePhases: SchedulePhase[] = Array.isArray(rawConstructionSchedule?.phases)
+          ? (rawConstructionSchedule?.phases as SchedulePhase[])
+          : [];
+
+        const milestoneStartYearSource =
+          rawConstructionSchedule?.start_year ||
+          calculations?.project_timeline?.start_year ||
+          parsed?.start_year ||
+          new Date().getFullYear();
+        const milestoneStartYear =
+          typeof milestoneStartYearSource === 'number'
+            ? milestoneStartYearSource
+            : Number(milestoneStartYearSource) || new Date().getFullYear();
+
+        const formatScheduleMonthToQuarter = (monthValue: number) => {
+          if (typeof monthValue !== 'number' || Number.isNaN(monthValue)) {
+            return 'TBD';
+          }
+          const normalized = Math.max(0, monthValue);
+          const yearOffset = Math.floor(normalized / 12);
+          const quarter = Math.floor((normalized % 12) / 3) + 1;
+          return `Q${quarter} ${milestoneStartYear + yearOffset}`;
+        };
+
+        const fallbackMilestones = [
+          {
+            id: 'groundbreaking',
+            label: 'Groundbreaking',
+            dateLabel: projectTimeline?.groundbreaking ?? 'TBD'
+          },
+          {
+            id: 'structure',
+            label: 'Structure Complete',
+            dateLabel: projectTimeline?.structureComplete ?? 'TBD'
+          },
+          {
+            id: 'substantial',
+            label: 'Substantial Completion',
+            dateLabel: projectTimeline?.substantialCompletion ?? 'TBD'
+          },
+          {
+            id: 'grand_opening',
+            label: buildingType === 'multifamily' ? 'First Tenant Move-in' : 'Grand Opening',
+            dateLabel: projectTimeline?.grandOpening ?? 'TBD'
+          },
+          {
+            id: 'soft_opening',
+            label: 'Soft Opening & Ramp-Up',
+            dateLabel:
+              projectTimeline?._details?.find?.((detail: any) => detail?.id === 'soft_opening')?.date ??
+              projectTimeline?.softOpening ??
+              'TBD'
+          }
+        ];
+
+        const scheduledMilestones =
+          schedulePhases.length > 0
+            ? schedulePhases.slice(0, 5).map((phase, idx) => {
+                const startMonth =
+                  typeof phase.start_month === 'number'
+                    ? phase.start_month
+                    : typeof phase.startMonth === 'number'
+                      ? phase.startMonth
+                      : 0;
+                const duration = typeof phase.duration === 'number' ? phase.duration : 0;
+                const midPoint = startMonth + duration / 2;
+                return {
+                  id: phase.id ?? `phase_${idx}`,
+                  label: phase.label ?? `Phase ${idx + 1}`,
+                  dateLabel: formatScheduleMonthToQuarter(midPoint)
+                };
+              })
+            : [];
+
+        let milestones = scheduledMilestones.length > 0 ? scheduledMilestones : fallbackMilestones;
+
+        if (isDentalOffice) {
+          const dentalMilestoneLabels = [
+            'Design & Licensing',
+            'Shell & Core / MEP Rough-In',
+            'Dental Buildout & Finishes',
+            'Equipment Installation & Sterilization',
+            'Final Inspections & Commissioning'
+          ];
+
+          milestones = milestones.map((milestone, idx) => ({
+            ...milestone,
+            label: dentalMilestoneLabels[idx] ?? milestone.label
+          }));
+        }
+        const milestoneIconMap = [
+          { icon: CheckCircle, color: 'green' },
+          { icon: Building, color: 'blue' },
+          { icon: Users, color: 'purple' },
+          { icon: Target, color: 'orange' },
+          { icon: Activity, color: 'pink' }
+        ];
+
+        return (
+          <div className="bg-gradient-to-br from-white via-blue-50 to-indigo-50 rounded-xl shadow-lg p-8 border border-blue-100">
+            <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+              <Calendar className="h-6 w-6 text-blue-600" />
+              Key Milestones
+            </h3>
+            <div className="relative">
+              <div className="absolute left-10 top-10 bottom-0 w-0.5 bg-gradient-to-b from-blue-400 via-purple-400 to-pink-400"></div>
+              <div className="space-y-8">
+                {milestones.map((milestone, idx) => {
+                  const iconConfig = milestoneIconMap[idx] || milestoneIconMap[milestoneIconMap.length - 1];
+                  const Icon = iconConfig.icon;
+                  const color = iconConfig.color;
+                  return (
+                    <div key={idx} className="flex items-center gap-6 group">
+                      <div className={`w-20 h-20 bg-gradient-to-br from-${color}-100 to-${color}-200 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform`}>
+                        <Icon className={`h-10 w-10 text-${color}-600`} />
+                      </div>
+                      <div className="flex-1 bg-white rounded-lg p-4 shadow-md group-hover:shadow-lg transition-shadow">
+                        <p className="font-bold text-gray-900 text-lg">{milestone.label}</p>
+                        <p className="text-sm text-gray-600">{milestone.dateLabel}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Financing Structure & Operational Efficiency */}
       <div className="grid grid-cols-2 gap-6">
@@ -2363,76 +3648,97 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         </div>
 
         {/* Operational Efficiency */}
-        <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl shadow-lg border border-purple-100 overflow-hidden">
-          <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <Activity className="h-5 w-5" />
-              Operational Efficiency
-            </h3>
-          </div>
-          <div className="p-6">
-            {/* Staffing Metrics */}
-            {displayData.staffingMetrics.length > 0 && (
-              <div className="mb-4">
+        {isDentalOffice ? (
+          <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl shadow-lg border border-purple-100 overflow-hidden">
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Activity className="h-5 w-5" />
+                Operational Efficiency
+              </h3>
+            </div>
+            <div className="p-6 space-y-6">
+              <div>
                 <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Staffing Metrics</h4>
                 <div className="grid grid-cols-2 gap-3">
-                  {displayData.staffingMetrics.slice(0, 2).map((metric, idx) => (
+                  {[
+                    {
+                      label: 'Operatories',
+                      value: dentalOperatoriesValue != null ? dentalOperatoriesValue : '-',
+                      color: 'purple'
+                    },
+                    {
+                      label: 'NOI Margin',
+                      value: dentalNoiMarginValue != null
+                        ? formatters.percentage(dentalNoiMarginValue)
+                        : formatters.percentage(0),
+                      color: 'pink'
+                    }
+                  ].map((tile, idx) => (
                     <div key={idx} className="bg-white text-center p-4 rounded-lg shadow-sm">
-                      <p className={`text-3xl font-bold ${idx === 0 ? 'text-purple-600' : 'text-pink-600'}`}>
-                        {metric.value}
+                      <p className={`text-3xl font-bold ${tile.color === 'purple' ? 'text-purple-600' : 'text-pink-600'}`}>
+                        {tile.value}
                       </p>
-                      <p className="text-xs text-gray-600">{metric.label}</p>
+                      <p className="text-xs text-gray-600">{tile.label}</p>
                     </div>
                   ))}
                 </div>
               </div>
-            )}
-            
-            {/* Revenue Efficiency */}
-            {Object.keys(displayData.revenueMetrics).length > 0 && (
-              <div className="mb-4">
+
+              <div>
                 <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Revenue Efficiency</h4>
                 <div className="bg-white rounded-lg p-3 space-y-2 shadow-sm">
-                  {Object.entries(displayData.revenueMetrics).slice(0, 3).map(([key, value]) => (
-                    <div key={key} className="flex justify-between text-sm">
-                      <span className="text-gray-600">{key.replace(/_/g, ' ')}</span>
-                      <span className="font-bold text-gray-900">{value}</span>
+                  {[
+                    {
+                      label: 'Revenue per Provider',
+                      value: dentalRevenuePerProviderValue != null
+                        ? formatters.currencyExact(dentalRevenuePerProviderValue)
+                        : formatters.currencyExact(0)
+                    },
+                    {
+                      label: 'Revenue per Operatory',
+                      value: dentalRevenuePerOperatoryValue != null
+                        ? formatters.currencyExact(dentalRevenuePerOperatoryValue)
+                        : formatters.currencyExact(0)
+                    },
+                    {
+                      label: 'Operating Margin',
+                      value: dentalNoiMarginValue != null
+                        ? formatters.percentage(dentalNoiMarginValue)
+                        : formatters.percentage(0)
+                    }
+                  ].map((row, idx) => (
+                    <div key={idx} className="flex justify-between text-sm">
+                      <span className="text-gray-600">{row.label}</span>
+                      <span className="font-bold text-gray-900">{row.value}</span>
                     </div>
                   ))}
                 </div>
               </div>
-            )}
 
-            {buildingType === 'office' && (
-              <div className="mb-4">
-                <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Office Opex & CAM</h4>
-                <div className="bg-white rounded-lg p-3 shadow-sm space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Operating Expenses</span>
-                    <span className="font-bold text-gray-900">
-                      {formatters.currency(operatingExpensesTotal)}
-                      {' '}
-                      ({formatters.currencyExact(operatingExpensesTotal / normalizedOfficeSquareFootage)}/SF)
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Recoverable CAM</span>
-                    <span className="font-bold text-gray-900">
-                      {camChargesTotal > 0
-                        ? `${formatters.currency(camChargesTotal)} (${formatters.currencyExact(camChargesTotal / normalizedOfficeSquareFootage)}/SF)`
-                        : 'Included in rent'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {/* Target KPIs */}
-            {displayData.kpis.length > 0 && (
               <div>
                 <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Target KPIs</h4>
                 <div className="grid grid-cols-3 gap-2">
-                  {displayData.kpis.slice(0, 3).map((kpi, idx) => (
+                  {[
+                    {
+                      label: 'Production / Provider',
+                      value: dentalRevenuePerProviderValue != null
+                        ? formatters.currencyExact(dentalRevenuePerProviderValue)
+                        : formatters.currencyExact(0),
+                      color: 'purple'
+                    },
+                    {
+                      label: 'Chair Utilization',
+                      value: dentalUtilizationValue != null
+                        ? formatters.percentage(dentalUtilizationValue)
+                        : formatters.percentage(0),
+                      color: 'indigo'
+                    },
+                    {
+                      label: 'Ops per Provider',
+                      value: dentalOpsPerProviderValue ?? '0.0',
+                      color: 'pink'
+                    }
+                  ].map((kpi, idx) => (
                     <div key={idx} className={`bg-gradient-to-br from-${kpi.color}-100 to-${kpi.color}-200 p-3 rounded-lg text-center`}>
                       <p className={`text-xl font-bold text-${kpi.color}-700`}>{kpi.value}</p>
                       <p className={`text-xs text-${kpi.color}-600`}>{kpi.label}</p>
@@ -2440,9 +3746,85 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                   ))}
                 </div>
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl shadow-lg border border-purple-100 overflow-hidden">
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Activity className="h-5 w-5" />
+                Operational Efficiency
+              </h3>
+            </div>
+            <div className="p-6">
+              {normalizedStaffingMetrics.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Staffing Metrics</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    {normalizedStaffingMetrics.slice(0, 2).map((metric, idx) => (
+                      <div key={idx} className="bg-white text-center p-4 rounded-lg shadow-sm">
+                        <p className={`text-3xl font-bold ${idx === 0 ? 'text-purple-600' : 'text-pink-600'}`}>
+                          {metric.value}
+                        </p>
+                        <p className="text-xs text-gray-600">{metric.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {normalizedRevenueMetrics.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Revenue Efficiency</h4>
+                  <div className="bg-white rounded-lg p-3 space-y-2 shadow-sm">
+                    {normalizedRevenueMetrics.slice(0, 3).map(({ key, label, value }) => (
+                      <div key={key} className="flex justify-between text-sm">
+                        <span className="text-gray-600">{label}</span>
+                        <span className="font-bold text-gray-900">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {buildingType === 'office' && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Office Opex & CAM</h4>
+                  <div className="bg-white rounded-lg p-3 shadow-sm space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Operating Expenses</span>
+                      <span className="font-bold text-gray-900">
+                        {formatters.currency(operatingExpensesTotal)} ({formatters.currencyExact(operatingExpensesTotal / normalizedOfficeSquareFootage)}/SF)
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Recoverable CAM</span>
+                      <span className="font-bold text-gray-900">
+                        {camChargesTotal > 0
+                          ? `${formatters.currency(camChargesTotal)} (${formatters.currencyExact(camChargesTotal / normalizedOfficeSquareFootage)}/SF)`
+                          : 'Included in rent'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {operationalKpis.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Target KPIs</h4>
+                  <div className="grid grid-cols-3 gap-2">
+                    {operationalKpis.slice(0, 3).map((kpi, idx) => (
+                      <div key={idx} className={`bg-gradient-to-br from-${kpi.color}-100 to-${kpi.color}-200 p-3 rounded-lg text-center`}>
+                        <p className={`text-xl font-bold text-${kpi.color}-700`}>{kpi.value}</p>
+                        <p className={`text-xs text-${kpi.color}-600`}>{kpi.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Executive Decision Points */}
@@ -2454,7 +3836,26 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           Executive Decision Points
         </h3>
         <div className="space-y-3">
-          {decisionBullets.length > 0 ? (
+          {isOffice ? (
+            <ol className="space-y-2 text-sm text-slate-700">
+              <li>
+                <span className="font-semibold">Basis &amp; rent/SF:</span>{' '}
+                Current basis around {officeBasisSummary} with {officeRentSummary} implies a high bar for rent and tenant quality.
+                Benchmark total project cost per SF and rentable SF against recent Class A trades in this submarket.
+              </li>
+              <li>
+                <span className="font-semibold">Returns &amp; lease-up risk:</span>{' '}
+                {officeReturnSummary}. Yield and DSCR are driven by rent/SF, stabilized occupancy, and the amortized impact of TI
+                and leasing commissions — stress these assumptions against comp sets and renewal probabilities.
+              </li>
+              <li>
+                <span className="font-semibold">TI/LC load &amp; OpEx:</span>{' '}
+                Confirm TI allowances, leasing commissions, and operating expenses per SF align with broker guidance. Elevated TI/LC
+                burn or underestimated OpEx compress NOI quickly even when headline rent appears strong, so validate the rent roll
+                and tenant mix before moving forward.
+              </li>
+            </ol>
+          ) : decisionBullets.length > 0 ? (
             decisionBullets.slice(0, 3).map((point, idx) => (
               <div key={idx} className="flex items-start gap-3 bg-white rounded-lg p-3 shadow-sm">
                 <div className="w-6 h-6 bg-amber-200 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -2502,9 +3903,26 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               typeof displayData.units === 'number' &&
               displayData.units > 0;
             if (!showTotalUnitsFooter) return null;
+            const footerUnitLabel = (() => {
+              if (parsedBuildingType !== 'healthcare') {
+                return 'Total Units';
+              }
+              if (isHealthcareOutpatient) {
+                return 'Total Exam Rooms';
+              }
+              if (isImagingCenter) {
+                return 'Total Scan Rooms';
+              }
+              if (isSurgicalCenter) {
+                return 'Total Operating Rooms';
+              }
+              return 'Total Units';
+            })();
             return (
             <div className="text-center">
-              <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">TOTAL UNITS</p>
+              <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">
+                {footerUnitLabel}
+              </p>
               <p className="text-3xl font-bold text-white">{displayData.units.toLocaleString()}</p>
               <p className="text-sm text-slate-500">Derived from square footage and density</p>
             </div>
@@ -2538,7 +3956,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                   typeof value === 'number' && Number.isFinite(value)
                     ? value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
                     : '—';
-                const formatPerSf = (value?: number) => (typeof value === 'number' && Number.isFinite(value) ? `$${value.toFixed(0)}/SF` : '—');
+                const formatRevenuePerSf = (value?: number) =>
+                  typeof value === 'number' && Number.isFinite(value) ? `$${value.toFixed(0)}/SF` : '—';
                 const formatDscrValue = (value?: number) => (typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(2)}×` : '—');
 
                 const currentYieldValue = typeof stabilizedYield === 'number' && Number.isFinite(stabilizedYield) ? stabilizedYield : undefined;
@@ -2606,7 +4025,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                         <span className="mx-3 text-slate-700">|</span>
                         Revenue gap:{' '}
                         <span className="font-semibold">
-                          {formatPerSf(revenueDeltaPerSf)}
+                          {formatRevenuePerSf(revenueDeltaPerSf)}
                           {typeof revenueDeltaPct === 'number' ? ` (${(revenueDeltaPct * 100).toFixed(1)}%)` : ''}
                         </span>
                       </div>
@@ -2626,7 +4045,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                           </div>
                           <div className="flex justify-between">
                             <span>Revenue per SF</span>
-                            <span className="font-semibold">{formatPerSf(currentRevenuePerSfValue)}</span>
+                            <span className="font-semibold">{formatRevenuePerSf(currentRevenuePerSfValue)}</span>
                           </div>
                           <div className="flex justify-between">
                             <span>DSCR</span>
@@ -2647,7 +4066,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                           </div>
                           <div className="flex justify-between">
                             <span>Required revenue per SF</span>
-                            <span className="font-semibold">{formatPerSf(requiredRevenuePerSfValue)}</span>
+                            <span className="font-semibold">{formatRevenuePerSf(requiredRevenuePerSfValue)}</span>
                           </div>
                           <div className="flex justify-between">
                             <span>DSCR at target NOI</span>
@@ -2662,7 +4081,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                         <>
                           To reach a yield on cost of <span className="font-semibold">{formatPct(targetYieldValue)}</span>, the project needs roughly{' '}
                           <span className="font-semibold">{formatCurrency0(noiDelta)}</span> more NOI and{' '}
-                          <span className="font-semibold">{formatPerSf(revenueDeltaPerSf)}</span> more revenue per SF (or equivalent cost savings).
+                          <span className="font-semibold">{formatRevenuePerSf(revenueDeltaPerSf)}</span> more revenue per SF (or equivalent cost savings).
                         </>
                       ) : (
                         <>Target yield isn’t configured for this asset yet—showing the current snapshot only.</>

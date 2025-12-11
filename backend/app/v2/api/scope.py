@@ -8,7 +8,11 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 import uuid
 from sqlalchemy.orm import Session
-from app.v2.engines.unified_engine import unified_engine, build_project_timeline
+from app.v2.engines.unified_engine import (
+    unified_engine,
+    build_project_timeline,
+    build_construction_schedule,
+)
 from app.services.nlp_service import NLPService
 nlp_service = NLPService()
 from app.v2.config.master_config import (
@@ -48,6 +52,10 @@ class AnalyzeRequest(BaseModel):
         alias="finishLevel",
         validation_alias=AliasChoices("finishLevel", "finish_level"),
         description="Finish level selection (Standard, Premium, Luxury)"
+    )
+    special_features: List[str] = Field(
+        default_factory=list,
+        description="Special feature IDs to price into the estimate"
     )
 
 class CalculateRequest(BaseModel):
@@ -95,6 +103,7 @@ async def analyze_project(request: AnalyzeRequest):
     try:
         # Parse the description using phrase-first parser
         parsed = nlp_service.extract_project_details(request.description)
+        parsed['special_features'] = request.special_features or []
         
         # Normalize building type using taxonomy
         if parsed.get('building_type'):
@@ -519,6 +528,7 @@ async def generate_scope(
     try:
         # Parse the description using NLP
         parsed = nlp_service.extract_project_details(request.description)
+        parsed['special_features'] = request.special_features or []
         
         # Add any missing fields from request
         if request.location:
@@ -586,6 +596,7 @@ async def generate_scope(
         # Create project with new schema
         import json
         project_timeline = build_project_timeline(building_type_enum, None)
+        construction_schedule = build_construction_schedule(building_type_enum)
         calculations_block = None
         if isinstance(result, dict) and 'calculations' in result:
             calculations_block = result['calculations']
@@ -595,8 +606,10 @@ async def generate_scope(
             calculations_block = {}
         if isinstance(calculations_block, dict) and 'project_timeline' not in calculations_block:
             calculations_block['project_timeline'] = project_timeline
-            if isinstance(result, dict) and 'calculations' in result:
-                result['calculations'] = calculations_block
+        if isinstance(calculations_block, dict) and 'construction_schedule' not in calculations_block:
+            calculations_block['construction_schedule'] = construction_schedule
+        if isinstance(result, dict) and 'calculations' in result:
+            result['calculations'] = calculations_block
         import json
         project = Project(
             # Required fields

@@ -22,6 +22,10 @@ from app.v2.config.master_config import (
     infer_finish_level,
     get_building_profile,
 )
+from app.v2.config.construction_schedule import (
+    CONSTRUCTION_SCHEDULES,
+    CONSTRUCTION_SCHEDULE_FALLBACKS,
+)
 # from app.v2.services.financial_analyzer import FinancialAnalyzer  # TODO: Implement this
 from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import asdict
@@ -45,6 +49,46 @@ def _month_to_quarter_string(d: date) -> str:
     return f"Q{quarter} {d.year}"
 
 
+def build_construction_schedule(building_type: BuildingType) -> Dict[str, Any]:
+    """
+    Build the construction schedule payload (total duration + phase timings)
+    for the Construction Schedule card.
+    """
+    schedule_config = CONSTRUCTION_SCHEDULES.get(building_type)
+    if not schedule_config:
+        fallback_type = CONSTRUCTION_SCHEDULE_FALLBACKS.get(building_type)
+        if fallback_type:
+            schedule_config = CONSTRUCTION_SCHEDULES.get(fallback_type)
+    if not schedule_config:
+        schedule_config = CONSTRUCTION_SCHEDULES.get(BuildingType.OFFICE, {})
+
+    total_months = int(schedule_config.get("total_months", 0) or 0)
+    phases_payload: List[Dict[str, Any]] = []
+    for phase in schedule_config.get("phases", []):
+        start_month = int(phase.get("start_month", 0) or 0)
+        duration = int(phase.get("duration", 0) or 0)
+        end_month = start_month + duration
+        if total_months:
+            end_month = min(end_month, total_months)
+        phase_payload = {
+            "id": phase.get("id"),
+            "label": phase.get("label"),
+            "start_month": start_month,
+            "duration_months": duration,
+            "end_month": end_month,
+        }
+        color = phase.get("color")
+        if color:
+            phase_payload["color"] = color
+        phases_payload.append(phase_payload)
+
+    return {
+        "building_type": building_type.value if isinstance(building_type, BuildingType) else building_type,
+        "total_months": total_months,
+        "phases": phases_payload,
+    }
+
+
 def build_project_timeline(building_type: BuildingType, start_date: Optional[date] = None) -> Dict[str, str]:
     """
     Build a project timeline dictionary for the Executive View "Key Milestones" card.
@@ -53,24 +97,51 @@ def build_project_timeline(building_type: BuildingType, start_date: Optional[dat
     base_date = start_date or date(2025, 1, 1)
 
     config = PROJECT_TIMELINES.get(building_type)
+    milestones = None
+    timeline_details: List[Dict[str, str]] = []
     if config:
         ground_up = config.get("ground_up", {})
         milestones = ground_up.get("milestones")
-    else:
-        milestones = None
 
-    if not milestones:
-        milestones = {
+    timeline: Dict[str, str] = {}
+    if isinstance(milestones, dict):
+        iterable = milestones.items()
+        for key, offset_months in iterable:
+            milestone_date = _add_months(base_date, int(offset_months))
+            timeline[key] = _month_to_quarter_string(milestone_date)
+    elif isinstance(milestones, list):
+        for entry in milestones:
+            if not isinstance(entry, dict):
+                continue
+            milestone_id = entry.get("id") or entry.get("key")
+            offset_value = entry.get("offset_months")
+            if offset_value is None:
+                offset_value = entry.get("month")
+            if milestone_id is None or offset_value is None:
+                continue
+            milestone_date = _add_months(base_date, int(offset_value))
+            quarter_label = _month_to_quarter_string(milestone_date)
+            timeline[milestone_id] = quarter_label
+            label = entry.get("label")
+            if label:
+                timeline_details.append({
+                    "id": milestone_id,
+                    "label": label,
+                    "date": quarter_label,
+                })
+    else:
+        defaults = {
             "groundbreaking": 0,
             "structure_complete": 8,
             "substantial_completion": 18,
             "grand_opening": 24,
         }
+        for key, offset_months in defaults.items():
+            milestone_date = _add_months(base_date, int(offset_months))
+            timeline[key] = _month_to_quarter_string(milestone_date)
 
-    timeline: Dict[str, str] = {}
-    for key, offset_months in milestones.items():
-        milestone_date = _add_months(base_date, int(offset_months))
-        timeline[key] = _month_to_quarter_string(milestone_date)
+    if timeline_details:
+        timeline["_details"] = timeline_details
 
     return timeline
 
@@ -221,6 +292,19 @@ class UnifiedEngine:
             location,
             warning_callback=_city_only_warning
         )
+        margin_pct_override = None
+        try:
+            cfg_margin = getattr(building_config, 'operating_margin_base', None)
+            if cfg_margin is not None:
+                margin_pct_override = float(cfg_margin)
+        except (TypeError, ValueError):
+            margin_pct_override = None
+        if (
+            building_type == BuildingType.HEALTHCARE
+            and subtype == 'medical_office'
+            and margin_pct_override is not None
+        ):
+            modifiers = {**modifiers, 'margin_pct': margin_pct_override}
 
         self._log_trace("finish_cost_applied", {
             'finish_level': normalized_finish_level or 'standard',
@@ -352,6 +436,8 @@ class UnifiedEngine:
                 ownership_analysis['revenue_requirements'] = revenue_data.get('revenue_requirements', {})
                 ownership_analysis['operational_efficiency'] = revenue_data.get('operational_efficiency', {})
                 ownership_analysis['operational_metrics'] = revenue_data.get('operational_metrics', {})
+                if 'sensitivity_analysis' in revenue_data:
+                    ownership_analysis['sensitivity_analysis'] = revenue_data.get('sensitivity_analysis')
                 if 'yield_on_cost' in revenue_data:
                     ownership_analysis['yield_on_cost'] = revenue_data.get('yield_on_cost')
                 if 'market_cap_rate' in revenue_data:
@@ -445,6 +531,13 @@ class UnifiedEngine:
 
         profile = get_building_profile(building_type)
 
+        # Surface sensitivity analysis for frontend quick sensitivity tiles
+        sensitivity_analysis = None
+        if ownership_analysis and isinstance(ownership_analysis, dict):
+            # For healthcare (outpatient / urgent care) this will contain a base object
+            # and a scenarios list. For other types it may be missing or None.
+            sensitivity_analysis = ownership_analysis.get('sensitivity_analysis')
+
         # Build comprehensive response - FLATTENED structure to match frontend expectations
         result = {
             'project_info': {
@@ -507,9 +600,81 @@ class UnifiedEngine:
             # Add department and operational metrics at top level for easy frontend access
             'department_allocation': ownership_analysis.get('department_allocation', []) if ownership_analysis else [],
             'operational_metrics': ownership_analysis.get('operational_metrics', {}) if ownership_analysis else {},
+            # Expose sensitivity analysis at the top level for the v2 frontend
+            'sensitivity_analysis': sensitivity_analysis,
             'calculation_trace': self.calculation_trace,
             'timestamp': datetime.now().isoformat()
         }
+
+        facility_metrics_payload = None
+        if building_type == BuildingType.RESTAURANT:
+            total_sf = float(square_footage) if square_footage else 0.0
+            revenue_block = result.get('revenue_analysis') or {}
+            return_block = result.get('return_metrics') or {}
+            totals_block = result.get('totals') or {}
+            annual_revenue_value = revenue_block.get('annual_revenue')
+            annual_noi_value = return_block.get('estimated_annual_noi')
+            total_cost_value = totals_block.get('total_project_cost')
+
+            def _per_sf(value: Optional[float]) -> float:
+                if not value or not total_sf:
+                    return 0.0
+                try:
+                    return float(value) / float(total_sf)
+                except (TypeError, ZeroDivisionError):
+                    return 0.0
+
+            facility_metrics_payload = {
+                'type': 'restaurant',
+                'metrics': [
+                    {
+                        'id': 'sales_per_sf',
+                        'label': 'Sales per SF',
+                        'value': _per_sf(annual_revenue_value),
+                        'unit': '$/SF'
+                    },
+                    {
+                        'id': 'noi_per_sf',
+                        'label': 'NOI per SF',
+                        'value': _per_sf(annual_noi_value),
+                        'unit': '$/SF'
+                    },
+                    {
+                        'id': 'cost_per_sf',
+                        'label': 'All-in Cost per SF',
+                        'value': _per_sf(total_cost_value),
+                        'unit': '$/SF'
+                    }
+                ],
+                'total_square_feet': total_sf
+            }
+        elif building_type == BuildingType.HEALTHCARE and subtype in ('outpatient_clinic', 'urgent_care', 'imaging_center', 'surgical_center', 'medical_office', 'dental_office'):
+            financial_metrics_cfg = getattr(building_config, 'financial_metrics', {}) or {}
+            units_per_sf_value = financial_metrics_cfg.get('units_per_sf')
+            primary_unit_label = financial_metrics_cfg.get('primary_unit', 'Units')
+            revenue_per_unit_cfg = financial_metrics_cfg.get('revenue_per_unit_annual')
+            computed_units = 0
+            if units_per_sf_value and square_footage:
+                try:
+                    computed_units = max(1, int(round(float(square_footage) * float(units_per_sf_value))))
+                except (TypeError, ValueError):
+                    computed_units = 1
+            if computed_units <= 0:
+                computed_units = 1
+            cost_per_unit = total_project_cost / computed_units if computed_units else 0
+            revenue_per_unit = revenue_per_unit_cfg if revenue_per_unit_cfg else (
+                annual_revenue / computed_units if computed_units else 0
+            )
+            facility_metrics_payload = {
+                'type': 'healthcare',
+                'units': computed_units,
+                'unit_label': primary_unit_label,
+                'cost_per_unit': cost_per_unit,
+                'revenue_per_unit': revenue_per_unit
+            }
+
+        if facility_metrics_payload:
+            result['facility_metrics'] = facility_metrics_payload
         
         # Financial requirements removed - was only partially implemented
         
@@ -737,6 +902,7 @@ class UnifiedEngine:
         square_footage = calculations.get('square_footage', 0)
         total_cost = calculations.get('total_cost', 0)
         construction_cost = calculations.get('subtotal', 0)
+        total_project_cost = total_cost
         
         # Get the config for this building/subtype
         building_enum = self._get_building_enum(building_type)
@@ -801,6 +967,18 @@ class UnifiedEngine:
         
         # Apply revenue modifiers
         annual_revenue *= revenue_factor
+        restaurant_full_service = (
+            building_enum == BuildingType.RESTAURANT
+            and isinstance(subtype, str)
+            and subtype.strip().lower() == 'full_service'
+        )
+        if restaurant_full_service:
+            finish_occ_override = calculations.get('restaurant_finish_occupancy_override')
+            if isinstance(finish_occ_override, (int, float)):
+                occupancy_rate = float(finish_occ_override)
+            finish_margin_override = calculations.get('restaurant_finish_margin_override')
+            if isinstance(finish_margin_override, (int, float)):
+                margin_pct = float(finish_margin_override)
         hospitality_financials = calculations.get('hospitality_financials') if building_enum == BuildingType.HOSPITALITY else None
         hospitality_expense_pct = None
         if hospitality_financials:
@@ -825,8 +1003,22 @@ class UnifiedEngine:
             'subtype': subtype,
             'margin_pct': round(margin_pct, 4)
         })
+        office_financials = calculations.get('office_financials') if building_enum == BuildingType.OFFICE else None
         if hospitality_financials and hospitality_expense_pct is not None:
             total_expenses = round(annual_revenue * hospitality_expense_pct, 2)
+        elif office_financials:
+            annual_revenue = office_financials.get('egi', annual_revenue)
+            total_expenses = round(
+                office_financials.get('opex', 0.0)
+                + office_financials.get('ti_amort', 0.0)
+                + office_financials.get('lc_amort', 0.0),
+                2
+            )
+            derived_margin = office_financials.get('noi_margin')
+            if isinstance(derived_margin, (int, float)):
+                margin_pct = float(derived_margin)
+            elif annual_revenue > 0:
+                margin_pct = max(0.05, min(0.65, 1 - (total_expenses / annual_revenue)))
         elif office_operating_expense_override is not None:
             total_expenses = round(office_operating_expense_override, 2)
             if annual_revenue > 0:
@@ -984,6 +1176,40 @@ class UnifiedEngine:
                     units = max(1, int(round(units_estimate)))
                 except (TypeError, ValueError):
                     units = 0
+            elif (
+                building_enum == BuildingType.HEALTHCARE
+                and subtype in ('outpatient_clinic', 'urgent_care', 'imaging_center', 'surgical_center', 'medical_office', 'dental_office')
+                and hasattr(subtype_config, 'financial_metrics')
+                and isinstance(subtype_config.financial_metrics, dict)
+            ):
+                fm = subtype_config.financial_metrics
+                units_per_sf = fm.get('units_per_sf') or 0
+                if square_footage and units_per_sf:
+                    try:
+                        units = max(1, int(round(float(square_footage) * float(units_per_sf))))
+                    except (TypeError, ValueError):
+                        units = 0
+                if units:
+                    calculations['units'] = units
+                    unit_label_value = fm.get('primary_unit', 'units')
+                    calculations['unit_label'] = unit_label_value
+                    calculations['unit_type'] = unit_label_value
+            if (
+                units
+                and building_enum == BuildingType.HEALTHCARE
+                and subtype in ('outpatient_clinic', 'urgent_care', 'imaging_center', 'surgical_center', 'medical_office', 'dental_office')
+                and hasattr(subtype_config, 'financial_metrics')
+                and isinstance(subtype_config.financial_metrics, dict)
+            ):
+                fm = subtype_config.financial_metrics
+                unit_label_value = fm.get('primary_unit', 'units')
+                calculations.setdefault('unit_label', unit_label_value)
+                calculations.setdefault('unit_type', unit_label_value)
+                total_cost_value = total_cost
+                annual_revenue_value = annual_revenue
+                if units > 0:
+                    calculations['cost_per_unit'] = total_cost_value / units if units else 0
+                    calculations['revenue_per_unit'] = annual_revenue_value / units if units else 0
         
         # Calculate display-ready operational metrics
         operational_metrics = self.calculate_operational_metrics_for_display(
@@ -1034,30 +1260,92 @@ class UnifiedEngine:
         if total_cost > 0:
             try:
                 base_yoc = yield_on_cost
-                noi_up = net_income * 1.10
-                noi_down = net_income * 0.90
-                total_cost_up = total_cost * 1.10
-                total_cost_down = total_cost * 0.90
+                subtype_normalized = subtype.strip().lower() if isinstance(subtype, str) else ''
+                if (
+                    building_enum == BuildingType.HEALTHCARE
+                    and subtype_normalized in ('outpatient_clinic', 'urgent_care', 'surgical_center')
+                ):
+                    base_revenue = float(annual_revenue or 0)
+                    base_margin = (float(net_income) / base_revenue) if base_revenue else 0.0
+                    asc_mode = subtype_normalized == 'surgical_center'
 
-                sensitivity_analysis = {
-                    'base': {'yield_on_cost': round(base_yoc, 4)},
-                    'revenue_up_10': {
-                        'yield_on_cost': round(noi_up / total_cost, 4)
-                        if total_cost > 0 else None
-                    },
-                    'revenue_down_10': {
-                        'yield_on_cost': round(noi_down / total_cost, 4)
-                        if total_cost > 0 else None
-                    },
-                    'cost_up_10': {
-                        'yield_on_cost': round(net_income / total_cost_up, 4)
-                        if total_cost_up > 0 else None
-                    },
-                    'cost_down_10': {
-                        'yield_on_cost': round(net_income / total_cost_down, 4)
-                        if total_cost_down > 0 else None
-                    },
-                }
+                    def build_tile(label: str, scenario_yield: Optional[float]):
+                        if scenario_yield is None:
+                            return {'label': label, 'yield_on_cost': None, 'yield_delta': None}
+                        delta = scenario_yield - base_yoc
+                        return {
+                            'label': label,
+                            'yield_on_cost': round(scenario_yield, 4),
+                            'yield_delta': round(delta, 4) if delta is not None else None,
+                            'yield_delta_bps': int(round(delta * 10000)) if delta is not None else None
+                        }
+
+                    def yield_from_revenue(revenue_value: float, margin_value: float) -> Optional[float]:
+                        if total_cost <= 0:
+                            return None
+                        noi_value = revenue_value * margin_value
+                        return noi_value / total_cost if total_cost else None
+
+                    visits_up_revenue = base_revenue * 1.05
+                    visits_down_revenue = base_revenue * 0.95
+                    reimbursement_up_revenue = base_revenue * 1.02
+                    labor_margin = max(0.0, base_margin - 0.02)
+
+                    visits_up_yield = yield_from_revenue(visits_up_revenue, base_margin)
+                    visits_down_yield = yield_from_revenue(visits_down_revenue, base_margin)
+                    reimbursement_yield = yield_from_revenue(reimbursement_up_revenue, base_margin)
+                    labor_yield = yield_from_revenue(base_revenue, labor_margin)
+
+                    sensitivity_analysis = {
+                        'base': {'yield_on_cost': round(base_yoc, 4)},
+                        'revenue_up_10': {
+                            'yield_on_cost': round(visits_up_yield, 4) if visits_up_yield is not None else None,
+                            'label': 'IF Case Volume +5%' if asc_mode else 'IF Visits / Day +5%'
+                        },
+                        'revenue_down_10': {
+                            'yield_on_cost': round(visits_down_yield, 4) if visits_down_yield is not None else None,
+                            'label': 'IF Case Volume -5%' if asc_mode else 'IF Visits / Day -5%'
+                        },
+                        'cost_up_10': {
+                            'yield_on_cost': round(labor_yield, 4) if labor_yield is not None else None,
+                            'label': 'IF Operating Costs +2 pts' if asc_mode else 'IF Labor Cost +2 pts'
+                        },
+                        'cost_down_10': {
+                            'yield_on_cost': round(reimbursement_yield, 4) if reimbursement_yield is not None else None,
+                            'label': 'IF Reimbursement +2%'
+                        },
+                        'scenarios': [
+                            build_tile('IF Case Volume +5%' if asc_mode else 'IF Visits / Day +5%', visits_up_yield),
+                            build_tile('IF Case Volume -5%' if asc_mode else 'IF Visits / Day -5%', visits_down_yield),
+                            build_tile('IF Reimbursement +2%', reimbursement_yield),
+                            build_tile('IF Operating Costs +2 pts' if asc_mode else 'IF Labor Cost +2 pts', labor_yield),
+                        ]
+                    }
+                else:
+                    noi_up = net_income * 1.10
+                    noi_down = net_income * 0.90
+                    total_cost_up = total_cost * 1.10
+                    total_cost_down = total_cost * 0.90
+
+                    sensitivity_analysis = {
+                        'base': {'yield_on_cost': round(base_yoc, 4)},
+                        'revenue_up_10': {
+                            'yield_on_cost': round(noi_up / total_cost, 4)
+                            if total_cost > 0 else None
+                        },
+                        'revenue_down_10': {
+                            'yield_on_cost': round(noi_down / total_cost, 4)
+                            if total_cost > 0 else None
+                        },
+                        'cost_up_10': {
+                            'yield_on_cost': round(net_income / total_cost_up, 4)
+                            if total_cost_up > 0 else None
+                        },
+                        'cost_down_10': {
+                            'yield_on_cost': round(net_income / total_cost_down, 4)
+                            if total_cost_down > 0 else None
+                        },
+                    }
             except Exception:
                 sensitivity_analysis = None
 
@@ -1091,6 +1379,7 @@ class UnifiedEngine:
             }
 
         project_timeline = build_project_timeline(building_enum, None)
+        construction_schedule = build_construction_schedule(building_enum)
 
         return {
             'revenue_analysis': {
@@ -1131,6 +1420,7 @@ class UnifiedEngine:
             'underwriting': underwriting,
             'sensitivity_analysis': sensitivity_analysis,
             'project_timeline': project_timeline,
+            'construction_schedule': construction_schedule,
             'hospitality_financials': calculations.get('hospitality_financials'),
         }
 
@@ -1140,6 +1430,12 @@ class UnifiedEngine:
         # Initialize base_revenue to avoid uninitialized variable
         base_revenue = 0
         context = calculation_context or {}
+        subtype_key = (str(context.get('subtype')) if context.get('subtype') is not None else '').strip().lower()
+        finish_level_value = context.get('finish_level') or context.get('finishLevel') or 'standard'
+        if isinstance(finish_level_value, str):
+            finish_level_value = finish_level_value.strip().lower() or 'standard'
+        else:
+            finish_level_value = 'standard'
         
         # Healthcare - uses beds, visits, procedures, or scans
         if building_enum == BuildingType.HEALTHCARE:
@@ -1160,6 +1456,28 @@ class UnifiedEngine:
             else:
                 # Fallback for healthcare with missing revenue config
                 base_revenue = 0
+            if subtype_key == 'medical_office':
+                base_revenue_per_sf = getattr(config, 'base_revenue_per_sf_annual', None)
+                operating_margin_base = getattr(config, 'operating_margin_base', None)
+                annual_revenue = 0.0
+                if base_revenue_per_sf and square_footage:
+                    try:
+                        annual_revenue = float(base_revenue_per_sf) * float(square_footage)
+                    except (TypeError, ValueError):
+                        annual_revenue = 0.0
+                if operating_margin_base is not None and annual_revenue:
+                    try:
+                        noi = float(annual_revenue) * float(operating_margin_base)
+                    except (TypeError, ValueError):
+                        noi = 0.0
+                else:
+                    noi = 0.0
+                context['mob_revenue'] = {
+                    'annual_revenue': annual_revenue,
+                    'operating_margin': operating_margin_base,
+                    'net_operating_income': noi
+                }
+                return annual_revenue
         
         # Multifamily - uses monthly rent per unit
         elif building_enum == BuildingType.MULTIFAMILY:
@@ -1173,7 +1491,7 @@ class UnifiedEngine:
                 config=config,
                 square_footage=square_footage,
                 context=context
-            )
+           )
             if hospitality_financials:
                 context['hospitality_financials'] = hospitality_financials
                 base_revenue = hospitality_financials.get('annual_room_revenue', 0)
@@ -1181,6 +1499,40 @@ class UnifiedEngine:
             else:
                 rooms = square_footage * getattr(config, 'rooms_per_sf', 0)
                 base_revenue = rooms * getattr(config, 'base_revenue_per_room_annual', 0)
+        
+        # Office - leverage Class A profile for PGI/EGI/NOI
+        elif building_enum == BuildingType.OFFICE:
+            office_profile = {}
+            profile_source = getattr(config, 'financial_metrics', None)
+            if isinstance(profile_source, dict):
+                office_profile = dict(profile_source)
+            if office_profile:
+                base_rent = office_profile.get('base_rent_per_sf')
+                try:
+                    if base_rent is not None:
+                        office_profile['base_rent_per_sf'] = float(base_rent) * float(quality_factor or 1.0)
+                except (TypeError, ValueError):
+                    pass
+                office_financials = self._build_office_financials(square_footage, office_profile)
+            else:
+                office_financials = {}
+            if office_financials:
+                context['office_financials'] = office_financials
+                context['stabilized_revenue'] = office_financials.get('egi')
+                context['stabilized_noi'] = office_financials.get('noi')
+                context['rent_per_sf'] = office_financials.get('rent_per_sf')
+                context['noi_per_sf'] = office_financials.get('noi_per_sf')
+                context['operating_margin'] = office_financials.get('noi_margin')
+                context['office_total_expenses'] = (
+                    office_financials.get('opex', 0.0)
+                    + office_financials.get('ti_amort', 0.0)
+                    + office_financials.get('lc_amort', 0.0)
+                )
+                context['office_pgi'] = office_financials.get('pgi')
+                context['office_vacancy_and_credit_loss'] = office_financials.get('vacancy_and_credit_loss')
+            base_revenue = office_financials.get('egi', square_footage * getattr(config, 'base_revenue_per_sf_annual', 0))
+            quality_factor = 1.0
+            occupancy_rate = 1.0
         
         # Educational - uses revenue per student
         elif building_enum == BuildingType.EDUCATIONAL:
@@ -1218,7 +1570,33 @@ class UnifiedEngine:
                 base_revenue = square_footage * base_psf
             else:
                 base_revenue = square_footage * config.base_revenue_per_sf_annual
-        
+
+        # Apply finish-level revenue/margin adjustments for full-service restaurants
+        if building_enum == BuildingType.RESTAURANT and subtype_key == 'full_service':
+            finish_rev_multiplier_map = {
+                'standard': 1.00,
+                'premium': 1.18,
+                'luxury': 1.32,
+            }
+            finish_occupancy_map = {
+                'standard': 0.80,
+                'premium': 0.82,
+                'luxury': 0.86,
+            }
+            finish_margin_map = {
+                'standard': 0.10,
+                'premium': 0.11,
+                'luxury': 0.12,
+            }
+            finish_rev_multiplier = finish_rev_multiplier_map.get(finish_level_value, 1.00)
+            adjusted_occupancy = finish_occupancy_map.get(finish_level_value, occupancy_rate)
+            adjusted_margin = finish_margin_map.get(finish_level_value)
+            base_revenue *= finish_rev_multiplier
+            occupancy_rate = adjusted_occupancy
+            if adjusted_margin is not None:
+                context['restaurant_finish_margin_override'] = adjusted_margin
+            context['restaurant_finish_occupancy_override'] = occupancy_rate
+
         # Apply quality factor and occupancy
         # Ensure no None values
         base_revenue = base_revenue or 0
@@ -1228,6 +1606,74 @@ class UnifiedEngine:
         adjusted_revenue = base_revenue * quality_factor * occupancy_rate
         
         return adjusted_revenue
+
+    def _build_office_financials(self, square_footage: float, office_profile: Optional[Dict[str, float]]) -> Dict[str, float]:
+        """
+        Build a simple Class A office underwriting model using configured profile inputs.
+        Returns PGI/EGI/NOI plus the major expense components so downstream callers
+        can keep NOI, rent-per-SF, and margin in sync with the UI.
+        """
+        if not square_footage or not office_profile:
+            return {}
+
+        try:
+            sf = float(square_footage)
+        except (TypeError, ValueError):
+            return {}
+        if sf <= 0:
+            return {}
+
+        def _to_float(name: str, default: float = 0.0) -> float:
+            value = office_profile.get(name, default)
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return default
+
+        base_rent_per_sf = _to_float("base_rent_per_sf")
+        stabilized_occupancy = _to_float("stabilized_occupancy")
+        vacancy_credit_pct = _to_float("vacancy_and_credit_loss_pct")
+        opex_pct = _to_float("opex_pct_of_egi")
+
+        ti_per_sf = _to_float("ti_per_sf")
+        ti_amort_years = int(office_profile.get("ti_amort_years", 10) or 10)
+        lc_pct_of_lease_value = _to_float("lc_pct_of_lease_value")
+        lc_amort_years = int(office_profile.get("lc_amort_years", 10) or 10)
+
+        pgi = base_rent_per_sf * sf * stabilized_occupancy
+        vacancy_and_credit_loss = vacancy_credit_pct * pgi
+        egi = pgi - vacancy_and_credit_loss
+
+        opex = opex_pct * egi
+        ti_amort = 0.0
+        if ti_per_sf > 0 and ti_amort_years > 0:
+            ti_amort = (ti_per_sf * sf) / ti_amort_years
+
+        lc_amort = 0.0
+        if lc_pct_of_lease_value > 0 and lc_amort_years > 0:
+            assumed_lease_term_years = 10
+            total_commissions = lc_pct_of_lease_value * pgi * assumed_lease_term_years
+            lc_amort = total_commissions / lc_amort_years
+
+        total_expenses = opex + ti_amort + lc_amort
+        noi = egi - total_expenses
+        noi_margin = (noi / egi) if egi > 0 else 0.0
+
+        rent_per_sf = (pgi / sf) if sf > 0 else 0.0
+        noi_per_sf = (noi / sf) if sf > 0 else 0.0
+
+        return {
+            "pgi": pgi,
+            "vacancy_and_credit_loss": vacancy_and_credit_loss,
+            "egi": egi,
+            "opex": opex,
+            "ti_amort": ti_amort,
+            "lc_amort": lc_amort,
+            "noi": noi,
+            "noi_margin": noi_margin,
+            "rent_per_sf": rent_per_sf,
+            "noi_per_sf": noi_per_sf,
+        }
 
     def _build_hospitality_financials(self, config, square_footage: float, context: Dict[str, Any]) -> Optional[Dict[str, float]]:
         """Derive select-service hotel revenue + expense assumptions from config."""
@@ -1421,6 +1867,10 @@ class UnifiedEngine:
         elif "INDUSTRIAL" in bt_name or "WAREHOUSE" in bt_name:
             exit_cap = 0.0675
             discount_rate = 0.08
+        elif "OFFICE" in bt_name:
+            # Class A office assumptions calibrated for strong urban markets.
+            exit_cap = 0.0675
+            discount_rate = 0.0825
         elif "HOSPITALITY" in bt_name or "HOTEL" in bt_name:
             # Select-service hotel underwriting assumptions
             exit_cap = 0.085
@@ -1728,29 +2178,93 @@ class UnifiedEngine:
             ]
             
         elif building_type == 'healthcare':
-            # Healthcare calculations based on industry standards
-            beds = round(square_footage / 600)  # Industry standard: ~600 SF per bed
-            nursing_fte = round(labor_cost * 0.4 / 75000) if labor_cost > 0 else 1  # 40% of labor is nursing, avg salary $75k
-            total_fte = round(labor_cost / 60000) if labor_cost > 0 else 1  # Average healthcare worker salary
-            
-            operational_metrics['staffing'] = [
-                {'label': 'Total FTEs Required', 'value': str(total_fte)},
-                {'label': 'Beds per Nurse', 'value': f'{beds / nursing_fte:.1f}' if nursing_fte > 0 else 'N/A'}
-            ]
-            
-            operational_metrics['revenue'] = {
-                'Revenue per Employee': f'${annual_revenue / total_fte:,.0f}' if total_fte > 0 else 'N/A',
-                'Revenue per Bed': f'${annual_revenue / beds:,.0f}' if beds > 0 else 'N/A',
-                'Labor Cost Ratio': f'{(labor_cost / annual_revenue * 100):.0f}%' if annual_revenue > 0 else 'N/A',
-                'Operating Margin': f'{operating_margin * 100:.1f}%'
-            }
-            
-            operational_metrics['kpis'] = [
-                {'label': 'ALOS Target', 'value': '3.8 days', 'color': 'green'},
-                {'label': 'Occupancy', 'value': '85%', 'color': 'green'},
-                {'label': 'Efficiency', 'value': f'{efficiency_score:.0f}%', 
-                 'color': 'green' if (efficiency_score or 0) > 20 else 'yellow' if (efficiency_score or 0) > 15 else 'red'}
-            ]
+            subtype_value = (
+                operational_efficiency.get('building_subtype')
+                or operational_efficiency.get('subtype')
+                or subtype
+            )
+            if subtype_value in ('outpatient_clinic', 'urgent_care'):
+                is_urgent_care = subtype_value == 'urgent_care'
+                exam_rooms = units
+                if not exam_rooms:
+                    if square_footage and square_footage > 0:
+                        if is_urgent_care:
+                            exam_rooms = max(1, round(square_footage / 450))
+                        else:
+                            exam_rooms = max(1, round(square_footage / 650))
+                    else:
+                        exam_rooms = 1
+                avg_reimbursement = 150.0 if is_urgent_care else 120.0
+                visits_per_year = annual_revenue / avg_reimbursement if annual_revenue and avg_reimbursement else 0
+                visits_per_day = visits_per_year / 260 if visits_per_year else 0
+                providers = max(1, round(visits_per_day / 20)) if visits_per_day else 1
+                support_staff = providers
+                room_capacity_per_day = 14.0 if is_urgent_care else 10.0
+                max_visits_capacity = exam_rooms * room_capacity_per_day if exam_rooms else 0
+                utilization_pct = (visits_per_day / max_visits_capacity * 100.0) if max_visits_capacity else 0
+                
+                operational_metrics['staffing'] = [
+                    {'label': 'Providers (MD/DO/NP/PA)', 'value': str(providers)},
+                    {'label': 'Support Staff (MAs)', 'value': str(support_staff)},
+                    {'label': 'Exam Rooms', 'value': str(exam_rooms)}
+                ]
+                
+                revenue_per_provider = annual_revenue / providers if providers else None
+                revenue_per_room = annual_revenue / exam_rooms if exam_rooms else None
+                revenue_per_sf = annual_revenue / square_footage if square_footage else None
+                labor_ratio_pct = (labor_cost / annual_revenue * 100.0) if annual_revenue else None
+                revenue_block = {}
+                if revenue_per_provider is not None:
+                    revenue_block['Revenue per Provider'] = f'${revenue_per_provider:,.0f}'
+                if revenue_per_room is not None:
+                    revenue_block['Revenue per Exam Room'] = f'${revenue_per_room:,.0f}'
+                if revenue_per_sf is not None:
+                    revenue_block['Revenue per SF'] = f'${revenue_per_sf:,.0f}'
+                if labor_ratio_pct is not None:
+                    revenue_block['Labor Cost Ratio'] = f'{labor_ratio_pct:.0f}%'
+                revenue_block['Operating Margin'] = f'{operating_margin * 100:.1f}%'
+                operational_metrics['revenue'] = revenue_block
+                
+                kpis = []
+                if visits_per_day:
+                    kpis.append({
+                        'label': 'Total Visits / Day',
+                        'value': f'{visits_per_day:,.1f}',
+                        'color': 'green' if visits_per_day > 60 else 'yellow'
+                    })
+                if providers and visits_per_day:
+                    visits_per_provider = visits_per_day / providers
+                    kpis.append({
+                        'label': 'Visits / Provider / Day',
+                        'value': f'{visits_per_provider:,.1f}',
+                        'color': 'green' if 18 <= visits_per_provider <= 24 else 'yellow'
+                    })
+                kpis.append({
+                    'label': 'Exam Room Utilization',
+                    'value': f'{utilization_pct:.0f}%',
+                    'color': 'green' if utilization_pct >= 75 else 'yellow' if utilization_pct >= 60 else 'red'
+                })
+                operational_metrics['kpis'] = kpis
+            else:
+                beds = round(square_footage / 600)
+                nursing_fte = round(labor_cost * 0.4 / 75000) if labor_cost > 0 else 1
+                total_fte = round(labor_cost / 60000) if labor_cost > 0 else 1
+                operational_metrics['staffing'] = [
+                    {'label': 'Total FTEs Required', 'value': str(total_fte)},
+                    {'label': 'Beds per Nurse', 'value': f'{beds / nursing_fte:.1f}' if nursing_fte > 0 else 'N/A'}
+                ]
+                operational_metrics['revenue'] = {
+                    'Revenue per Employee': f'${annual_revenue / total_fte:,.0f}' if total_fte > 0 else 'N/A',
+                    'Revenue per Bed': f'${annual_revenue / beds:,.0f}' if beds > 0 else 'N/A',
+                    'Labor Cost Ratio': f'{(labor_cost / annual_revenue * 100):.0f}%' if annual_revenue > 0 else 'N/A',
+                    'Operating Margin': f'{operating_margin * 100:.1f}%'
+                }
+                operational_metrics['kpis'] = [
+                    {'label': 'ALOS Target', 'value': '3.8 days', 'color': 'green'},
+                    {'label': 'Occupancy', 'value': '85%', 'color': 'green'},
+                    {'label': 'Efficiency', 'value': f'{efficiency_score:.0f}%',
+                     'color': 'green' if (efficiency_score or 0) > 20 else 'yellow' if (efficiency_score or 0) > 15 else 'red'}
+                ]
             
         elif building_type == 'multifamily':
             # Use units if provided, otherwise estimate

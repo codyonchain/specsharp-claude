@@ -19,6 +19,25 @@ if not TAXONOMY_PATH.exists():
 with open(TAXONOMY_PATH) as f:
     TAXONOMY = json.load(f)
 
+CUSTOM_SUBTYPE_KEYWORDS = {
+    'healthcare': {
+        'medical_office': [
+            'medical office',
+            'medical office building',
+            'mob',
+            'm.o.b.'
+        ],
+        'dental_office': [
+            'dental office',
+            'dental clinic',
+            'dentist office',
+            "dentist's office",
+            'orthodontic office',
+            'pediatric dental office'
+        ]
+    }
+}
+
 # Create enum from the canonical source - using UPPERCASE for consistency
 CanonicalBuildingType = Enum('CanonicalBuildingType', {
     k.upper(): k for k in TAXONOMY['building_types'].keys()
@@ -151,6 +170,14 @@ class BuildingTaxonomy:
         for valid_sub in valid_subtypes:
             if valid_sub in subtype_lower or subtype_lower in valid_sub:
                 return valid_sub
+
+        custom_keywords = CUSTOM_SUBTYPE_KEYWORDS.get(canonical_type, {})
+        for valid_sub, keywords in custom_keywords.items():
+            for keyword in keywords:
+                keyword_normalized = keyword.lower().replace('-', '_').replace(' ', '_')
+                if keyword_normalized in subtype_lower or subtype_lower in keyword_normalized:
+                    logger.debug(f"Normalized subtype '{subtype}' to '{valid_sub}' via custom keyword")
+                    return valid_sub
         
         return None
     

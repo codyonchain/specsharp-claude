@@ -150,16 +150,20 @@ class V2APIClient {
       square_footage?: number;
       location?: string;
       finishLevel?: 'Standard' | 'Premium' | 'Luxury';
+      projectClass?: string;
       signal?: AbortSignal;
+      special_features?: string[];
     } = {}
   ): Promise<ProjectAnalysis> {
-    const { square_footage, location, finishLevel, signal } = options;
+    const { square_footage, location, finishLevel, projectClass, signal, special_features } = options;
 
     tracer.trace('API_REQUEST', 'Sending analysis request', {
       description: text,
       square_footage,
       location,
       finishLevel,
+      projectClass,
+      special_features_count: special_features?.length ?? 0,
     });
 
     const payload: Record<string, unknown> = { description: text };
@@ -171,6 +175,12 @@ class V2APIClient {
     }
     if (finishLevel) {
       payload.finishLevel = finishLevel;
+    }
+    if (projectClass) {
+      payload.project_class = projectClass;
+    }
+    if (special_features && special_features.length > 0) {
+      payload.special_features = special_features;
     }
     
     const result = await this.request<ProjectAnalysis>('/analyze', {
