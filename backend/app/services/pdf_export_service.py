@@ -146,14 +146,18 @@ class ProfessionalPDFExportService:
         ))
 
     def _brand_hex(self, c: colors.Color) -> str:
-        """Return ReportLab color as hex string without leading # for font tags."""
+        """Return ReportLab color as hex string usable inside font tags."""
         try:
             hx = c.hexval()
-            if isinstance(hx, str) and hx.startswith('0x'):
+            if not isinstance(hx, str):
+                return "#111827"
+            if hx.startswith('0x'):
                 hx = hx[2:]
+            if not hx.startswith('#'):
+                hx = f"#{hx}"
             return hx
         except Exception:
-            return "111827"
+            return "#111827"
 
     def _safe_table_style(self, extra: Optional[List] = None) -> TableStyle:
         base = [
@@ -166,6 +170,32 @@ class ProfessionalPDFExportService:
         if extra:
             base.extend(extra)
         return TableStyle(base)
+
+    def _card(self, title: str, body_flowables: List[Any], keep_together: bool = False) -> List[Any]:
+        """Wrap a set of flowables inside a branded card. Optionally keep together."""
+        title_para = Paragraph(
+            f"<font color='{self._brand_hex(self.BRAND_DARK)}'><b>{title.upper()}</b></font>",
+            self.styles['BodyTextDark']
+        )
+        card_rows: List[List[Any]] = [[title_para], [Spacer(1, 0.15 * inch)]]
+        for flowable in body_flowables:
+            card_rows.append([flowable])
+
+        card_table = Table(card_rows, colWidths=[6.0 * inch])
+        card_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.white),
+            ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#E5E7EB')),
+            ('ROUNDEDCORNERS', [5, 5, 5, 5]),
+            ('LEFTPADDING', (0, 0), (-1, -1), 18),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 18),
+            ('TOPPADDING', (0, 0), (-1, -1), 18),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 18),
+        ]))
+
+        block: List[Any] = [card_table, Spacer(1, 0.25 * inch)]
+        if keep_together:
+            return [KeepTogether(block)]
+        return block
 
     def generate_professional_pdf(self, project_data: Dict, client_name: str = None) -> io.BytesIO:
         """Generate a premium PDF report"""
@@ -336,8 +366,9 @@ class ProfessionalPDFExportService:
         elements.append(Spacer(1, 0.3*inch))
         
         # Cost summary with visual emphasis
-        elements.append(Paragraph("Cost Summary", self.styles['SubsectionHeader']))
-        
+        # Build a premium "Cost Summary" card that keeps chart + table together
+        cost_summary_flowables: List[Any] = []
+
         # Create pie chart for trade distribution
         drawing = Drawing(400, 200)
         pie = Pie()
@@ -365,15 +396,15 @@ class ProfessionalPDFExportService:
             colors.HexColor('#F59E0B'), colors.HexColor('#EF4444'),
             colors.HexColor('#8B5CF6'), colors.HexColor('#EC4899')
         ]
-        
+
         for i, (cat, _) in enumerate(pie_source):
             pie.slices[i].fillColor = slice_colors[i % len(slice_colors)]
             pie.slices[i].labelRadius = 1.2
             pie.slices[i].fontName = 'Helvetica'
             pie.slices[i].fontSize = 9
-        
+
         drawing.add(pie)
-        elements.append(drawing)
+        cost_summary_flowables.append(drawing)
         
         # Trade breakdown table
         total_construction = (
@@ -397,43 +428,44 @@ class ProfessionalPDFExportService:
             format_currency(total_construction),
             '100.0%' if total_construction > 0 else '—'
         ])
-        
+
         trade_table = Table(trade_data, colWidths=[2.5*inch, 2*inch, 1.5*inch])
-        trade_table.setStyle(TableStyle([
+        trade_table.setStyle(self._safe_table_style([
             # Header row
             ('BACKGROUND', (0, 0), (-1, 0), self.BRAND_PRIMARY),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 12),
             ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-            
+
             # Data rows
             ('FONTNAME', (0, 1), (-1, -2), 'Helvetica'),
             ('FONTSIZE', (0, 1), (-1, -2), 11),
             ('ALIGN', (1, 1), (2, -1), 'RIGHT'),
             ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, self.BRAND_LIGHT]),
-            
+
             # Total row
             ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#FEF3C7')),
             ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
             ('LINEABOVE', (0, -1), (-1, -1), 2, self.BRAND_DARK),
-            
+
             # Grid
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
-            ('TOPPADDING', (0, 0), (-1, -1), 10),
         ]))
-        
-        elements.append(Spacer(1, 0.3*inch))
-        elements.append(trade_table)
+
+        cost_summary_flowables.append(Spacer(1, 0.2*inch))
+        cost_summary_flowables.append(trade_table)
+
+        # Allow splitting when the trade table spans many rows
+        keep_cost_summary_together = len(category_totals) <= 6
+        elements.extend(self._card("Cost Summary", cost_summary_flowables, keep_together=keep_cost_summary_together))
         
         # Developer-specific metrics
         developer_metrics = executive_summary.get('developer_metrics', {})
         if developer_metrics:
-            elements.append(Spacer(1, 0.3*inch))
-            elements.append(Paragraph("Developer Metrics", self.styles['SubsectionHeader']))
-            
+            dev_flowables: List[Any] = []
+
             # Create metrics table
             metrics_data = []
             if 'cost_per_room' in developer_metrics:
@@ -454,10 +486,10 @@ class ProfessionalPDFExportService:
                 if 'cost_per_desk' in developer_metrics:
                     metrics_data.append(['Cost per Desk:', developer_metrics['cost_per_desk']])
                     metrics_data.append(['Desk Capacity:', str(developer_metrics.get('desk_capacity', 'N/A'))])
-            
+
             if metrics_data:
                 dev_metrics_table = Table(metrics_data, colWidths=[3*inch, 3*inch])
-                dev_metrics_table.setStyle(TableStyle([
+                dev_metrics_table.setStyle(self._safe_table_style([
                     ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
                     ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
                     ('FONTSIZE', (0, 0), (-1, -1), 12),
@@ -469,8 +501,9 @@ class ProfessionalPDFExportService:
                     ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E2E8F0')),
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                 ]))
-                
-                elements.append(dev_metrics_table)
+
+                dev_flowables.append(dev_metrics_table)
+                elements.extend(self._card("Developer Metrics", dev_flowables, keep_together=True))
         
         return elements
     
@@ -495,17 +528,15 @@ class ProfessionalPDFExportService:
                     placeholder_scope = True
             
             if not systems or placeholder_scope:
-                elements.append(Paragraph(
-                    f"{trade_name}: {format_currency(category_subtotal)}",
-                    self.styles['BodyTextDark']
+                elements.extend(self._card(
+                    f"{trade_name}",
+                    [Paragraph(f"<b>Total:</b> {format_currency(category_subtotal)}", self.styles['BodyTextDark'])],
+                    keep_together=True
                 ))
-                elements.append(Spacer(1, 0.2*inch))
                 continue
-            
-            elements.append(Paragraph(
-                f"{trade_name} Systems",
-                self.styles['SubsectionHeader']
-            ))
+
+            # Build a "card" per trade so tables never awkwardly split
+            trade_flowables: List[Any] = []
             
             # Systems table
             systems_data = [['System', 'Quantity', 'Unit', 'Unit Cost', 'Total Cost']]
@@ -533,34 +564,32 @@ class ProfessionalPDFExportService:
             ])
             
             systems_table = Table(systems_data, colWidths=[2.5*inch, 1*inch, 0.7*inch, 1*inch, 1.3*inch])
-            systems_table.setStyle(TableStyle([
+            systems_table.setStyle(self._safe_table_style([
                 # Header
                 ('BACKGROUND', (0, 0), (-1, 0), self.BRAND_SECONDARY),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-                
+
                 # Data
                 ('FONTNAME', (0, 1), (-1, -2), 'Helvetica'),
                 ('FONTSIZE', (0, 1), (-1, -1), 10),
                 ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
                 ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#F9FAFB')]),
-                
+
                 # Subtotal row
                 ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
                 ('BACKGROUND', (0, -1), (-1, -1), self.BRAND_LIGHT),
                 ('LINEABOVE', (0, -1), (-1, -1), 1, self.BRAND_DARK),
-                
+
                 # Grid
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.lightgrey),
                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-                ('TOPPADDING', (0, 0), (-1, -1), 8),
             ]))
-            
-            elements.append(systems_table)
-            elements.append(Spacer(1, 0.3*inch))
-        
+
+            trade_flowables.append(systems_table)
+            elements.extend(self._card(f"{trade_name} Systems", trade_flowables))
+
         return elements
     
     def _create_trade_analysis_page(self, project_data: Dict) -> List:
