@@ -351,8 +351,8 @@ class ProfessionalPDFExportService:
             or debt_metrics.get("lender_min_dscr")
             or debt_metrics.get("dscr_requirement")
         )
-        required_value = oa_revenue_req.get("required_value")
-        gap_pct = oa_revenue_req.get("gap_percentage")
+        required_value = oa_reqs.get("required_value")
+        gap_pct = oa_reqs.get("gap_percentage")
 
         overview = (executive_summary or {}).get("project_overview", {}) or {}
         cost_summary = (executive_summary or {}).get("cost_summary", {}) or {}
