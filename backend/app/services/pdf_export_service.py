@@ -333,6 +333,26 @@ class ProfessionalPDFExportService:
 
         # DSCR is optional (older payloads may omit it)
         dscr = self._dig(calc, "ownership_analysis.debt_metrics.calculated_dscr")
+        debt_metrics = self._dig(calc, "ownership_analysis.debt_metrics", {}) or {}
+
+        # “vs target” comparators (use only what the payload already provides)
+        irr_target = oa_return.get("target_roi")
+        market_cap = (
+            oa_return.get("market_cap_rate")
+            or oa_return.get("marketCapRate")
+            or oa_return.get("market_cap")
+        )
+        cap_rate = oa_return.get("cap_rate")
+        dscr_target = (
+            debt_metrics.get("target_dscr")
+            or debt_metrics.get("dscr_target")
+            or debt_metrics.get("required_dscr")
+            or debt_metrics.get("minimum_dscr")
+            or debt_metrics.get("lender_min_dscr")
+            or debt_metrics.get("dscr_requirement")
+        )
+        required_value = oa_revenue_req.get("required_value")
+        gap_pct = oa_revenue_req.get("gap_percentage")
 
         overview = (executive_summary or {}).get("project_overview", {}) or {}
         cost_summary = (executive_summary or {}).get("cost_summary", {}) or {}
@@ -359,6 +379,23 @@ class ProfessionalPDFExportService:
                 .replace("<", "&lt;")
                 .replace(">", "&gt;")
             )
+
+        def kpi_subline(text: Optional[str]) -> str:
+            return f"<div class='sub'>{esc(text)}</div>" if text else ""
+
+        irr_sub = f"vs target {self._fmt_pct_smart(irr_target, 1)}" if irr_target is not None else ""
+        dscr_sub = f"vs target {self._fmt_num(dscr_target, 2)}" if dscr_target is not None else ""
+        noi_sub = ""
+        if required_value is not None:
+            if gap_pct is not None:
+                noi_sub = f"vs required {self._fmt_money_plain(required_value)} (gap {self._fmt_pct_smart(gap_pct, 1)})"
+            else:
+                noi_sub = f"vs required {self._fmt_money_plain(required_value)}"
+        coc_sub = ""
+        if market_cap is not None:
+            coc_sub = f"vs market cap {self._fmt_pct_smart(market_cap, 1)}"
+        elif cap_rate is not None:
+            coc_sub = f"cap rate {self._fmt_pct_smart(cap_rate, 1)}"
 
         major_rows = "".join(
             f"<tr><td>{esc(ms.get('system','—'))}</td><td class='r'>{esc(ms.get('cost','—'))}</td>"
@@ -531,10 +568,10 @@ class ProfessionalPDFExportService:
     <div class="grid">
       <div class="kpi"><div class="label">Total Project Cost</div><div class="value">{esc(total_cost) if total_cost is not None else "—"}</div></div>
       <div class="kpi"><div class="label">Cost per SF</div><div class="value">{esc(cost_psf) if cost_psf is not None else "—"}</div></div>
-      <div class="kpi"><div class="label">Stabilized NOI (Annual)</div><div class="value">{esc(self._fmt_money_plain(noi))}</div></div>
-      <div class="kpi"><div class="label">DSCR</div><div class="value">{esc(self._fmt_num(dscr, 2))}</div></div>
-      <div class="kpi"><div class="label">IRR</div><div class="value">{esc(self._fmt_pct_smart(irr, 1))}</div></div>
-      <div class="kpi"><div class="label">Cash-on-Cash Return</div><div class="value">{esc(self._fmt_pct_smart(coc, 1))}</div></div>
+      <div class="kpi"><div class="label">Stabilized NOI (Annual)</div><div class="value">{esc(self._fmt_money_plain(noi))}</div>{kpi_subline(noi_sub)}</div>
+      <div class="kpi"><div class="label">DSCR</div><div class="value">{esc(self._fmt_num(dscr, 2))}</div>{kpi_subline(dscr_sub)}</div>
+      <div class="kpi"><div class="label">IRR</div><div class="value">{esc(self._fmt_pct_smart(irr, 1))}</div>{kpi_subline(irr_sub)}</div>
+      <div class="kpi"><div class="label">Cash-on-Cash Return</div><div class="value">{esc(self._fmt_pct_smart(coc, 1))}</div>{kpi_subline(coc_sub)}</div>
       <div class="kpi"><div class="label">Equity Required</div><div class="value">{esc(self._fmt_money_plain(equity))}</div></div>
       <div class="kpi"><div class="label">Value @ Stabilization</div><div class="value">{esc(self._fmt_money_plain(value))}</div></div>
     </div>
