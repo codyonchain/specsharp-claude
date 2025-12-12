@@ -315,12 +315,24 @@ class ProfessionalPDFExportService:
 
     def _render_executive_overview_html(self, project_data: Dict, executive_summary: Dict, client_name: Optional[str]) -> str:
         calc = (project_data or {}).get("calculation_data") or {}
-        noi = self._dig(calc, "return_metrics.estimated_annual_noi")
-        dscr = self._dig(calc, "ownership_analysis.debt_metrics.calculated_dscr")
-        irr = self._dig(calc, "return_metrics.irr")
-        coc = self._dig(calc, "return_metrics.cash_on_cash_return")
+
+        # ExecutiveView decision + underwriting data is always under ownership_analysis.*
+        oa_return = self._dig(calc, "ownership_analysis.return_metrics", {}) or {}
+        oa_reqs = self._dig(calc, "ownership_analysis.revenue_requirements", {}) or {}
+        oa_feas_detail = oa_reqs.get("feasibility_detail") or {}
+
+        noi = oa_return.get("estimated_annual_noi")
+        irr = oa_return.get("irr")
+        coc = oa_return.get("cash_on_cash_return")
         equity = self._dig(calc, "ownership_analysis.financing_sources.equity_amount")
-        value = self._dig(calc, "return_metrics.property_value")
+        value = oa_return.get("property_value")
+        feasible_flag = oa_return.get("feasible")
+        feasibility_text = oa_reqs.get("feasibility")
+        feasibility_status = oa_feas_detail.get("status") or feasibility_text
+        feasibility_reco = oa_feas_detail.get("recommendation")
+
+        # DSCR is optional (older payloads may omit it)
+        dscr = self._dig(calc, "ownership_analysis.debt_metrics.calculated_dscr")
 
         overview = (executive_summary or {}).get("project_overview", {}) or {}
         cost_summary = (executive_summary or {}).get("cost_summary", {}) or {}
@@ -364,8 +376,18 @@ class ProfessionalPDFExportService:
         next_items = "".join(f"<li>{esc(step)}</li>" for step in next_steps[:8]) or "<li class='muted'>—</li>"
         assumption_items = "".join(f"<li>{esc(a)}</li>" for a in assumptions[:10]) or "<li class='muted'>—</li>"
 
-        decision = "EXECUTIVE OVERVIEW"
-        decision_reason = "Underwriting + construction snapshot (3-page executive brief)."
+        # Decision/why: re-use ExecutiveView output verbatim.
+        decision = "NEEDS WORK"
+        if (feasible_flag is True) or (isinstance(feasibility_text, str) and feasibility_text.strip().lower() == "feasible"):
+            decision = "GO"
+        else:
+            reco_text = (feasibility_reco or "")
+            if isinstance(reco_text, str) and ("minor" in reco_text.lower() or "optimization" in reco_text.lower()):
+                decision = "NEEDS WORK"
+            else:
+                decision = "NO-GO"
+
+        decision_reason = feasibility_reco or (f"Feasibility: {feasibility_status}" if feasibility_status else "Decision sourced from ExecutiveView underwriting logic.")
         generated = datetime.now().strftime("%B %d, %Y")
 
         return f"""<!doctype html>
