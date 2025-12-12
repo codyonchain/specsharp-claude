@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Project } from '../../types';
 import { formatCurrency, formatNumber, formatPercent } from '../../utils/formatters';
+import { pdfService } from '@/services/api';
+import { generateExportFilename } from '@/utils/filenameGenerator';
 import { 
   HardHat, TrendingUp, Calendar, Clock, ChevronRight, 
   AlertCircle, Info, FileText, Building, Wrench, Zap, 
@@ -8,14 +10,332 @@ import {
 } from 'lucide-react';
 import { ProvenanceModal } from '../../components/ProvenanceModal';
 import { BackendDataMapper } from '../../utils/backendDataMapper';
+import { ScenarioModal } from '@/v2/components/ScenarioModal';
+
+type TradeCostSplit = {
+  materials: number;
+  labor: number;
+  equipment: number;
+};
+
+type AnyRecord = Record<string, any>;
+
+const clampSplit = (split: TradeCostSplit): TradeCostSplit => {
+  const { materials, labor, equipment } = split;
+  const total = materials + labor + equipment || 1;
+  return {
+    materials: materials / total,
+    labor: labor / total,
+    equipment: equipment / total,
+  };
+};
+
+/**
+ * Get deterministic Materials / Labor / Equipment splits for a trade.
+ * We bias toward realistic industrial heuristics when building type is industrial.
+ */
+const getTradeCostSplit = (buildingTypeRaw: string, tradeNameRaw: string): TradeCostSplit => {
+  const buildingType = (buildingTypeRaw || '').toLowerCase();
+  const tradeName = (tradeNameRaw || '').toLowerCase();
+
+  // Industrial warehouse heuristics
+  if (buildingType === 'industrial') {
+    if (tradeName === 'structural') {
+      return clampSplit({ materials: 0.65, labor: 0.30, equipment: 0.05 });
+    }
+    if (tradeName === 'mechanical') {
+      return clampSplit({ materials: 0.10, labor: 0.25, equipment: 0.65 });
+    }
+    if (tradeName === 'electrical') {
+      return clampSplit({ materials: 0.35, labor: 0.55, equipment: 0.10 });
+    }
+    if (tradeName === 'plumbing') {
+      return clampSplit({ materials: 0.40, labor: 0.60, equipment: 0.00 });
+    }
+    if (tradeName === 'finishes') {
+      return clampSplit({ materials: 0.45, labor: 0.50, equipment: 0.05 });
+    }
+  }
+
+  // Generic fallback heuristics
+  if (tradeName === 'structural') {
+    return clampSplit({ materials: 0.60, labor: 0.35, equipment: 0.05 });
+  }
+  if (tradeName === 'mechanical') {
+    return clampSplit({ materials: 0.20, labor: 0.30, equipment: 0.50 });
+  }
+  if (tradeName === 'electrical') {
+    return clampSplit({ materials: 0.30, labor: 0.55, equipment: 0.15 });
+  }
+  if (tradeName === 'plumbing') {
+    return clampSplit({ materials: 0.40, labor: 0.60, equipment: 0.00 });
+  }
+  if (tradeName === 'finishes') {
+    return clampSplit({ materials: 0.45, labor: 0.50, equipment: 0.05 });
+  }
+
+  return clampSplit({ materials: 0.40, labor: 0.50, equipment: 0.10 });
+};
 
 interface Props {
   project: Project;
 }
 
+const formatCurrency2 = (value: number): string => {
+  if (typeof value !== 'number' || Number.isNaN(value)) return '—';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+};
+
+const formatQuantityWithUnit = (quantity?: number, unitRaw?: string): string => {
+  const hasQty = typeof quantity === 'number' && !Number.isNaN(quantity);
+  const unit = (unitRaw || '').trim().toUpperCase();
+
+  if (hasQty && unit) {
+    return `${formatNumber(quantity as number)} ${unit}`;
+  }
+  if (hasQty) {
+    return formatNumber(quantity as number);
+  }
+  if (unit) {
+    return unit === 'LUMP SUM' ? '1 LS' : unit;
+  }
+  return '—';
+};
+
+const getScopeHint = (
+  buildingTypeRaw: string,
+  tradeNameRaw: string,
+  systemNameRaw?: string
+): string | undefined => {
+  const buildingType = (buildingTypeRaw || '').toLowerCase();
+  const tradeName = (tradeNameRaw || '').toLowerCase();
+  const label = (systemNameRaw || '').toLowerCase();
+
+  if (buildingType === 'industrial') {
+    if (tradeName === 'structural') {
+      if (label.includes('slab on grade')) {
+        return 'Slab cost is scaled to total warehouse SF. Typical 6" slab with localized thickening at docks and racking lines.';
+      }
+      if (label.includes('tilt-wall') || label.includes('shell')) {
+        return 'Tilt-wall and shell costs scale with overall footprint and assumed clear height for a Class A distribution warehouse.';
+      }
+      if (label.includes('foundations')) {
+        return 'Foundations include footings, thickened slab strips, and isolated pads sized proportionally to building SF.';
+      }
+    }
+
+    if (tradeName === 'mechanical') {
+      if (label.includes('rooftop units') || label.includes('rtus')) {
+        return 'Assumes approximately 1 rooftop unit (RTU) per 15,000 SF of warehouse area. Adjust count for higher office or temperature control requirements.';
+      }
+      if (label.includes('ductwork') || label.includes('ventilation')) {
+        return 'Ductwork and ventilation costs scale with conditioned SF and the assumed RTU count.';
+      }
+    }
+
+    if (tradeName === 'electrical') {
+      if (label.includes('high-bay lighting') || label.includes('lighting')) {
+        return 'Lighting cost is sized to typical high-bay LED fixtures and controls at standard warehouse light levels.';
+      }
+      if (label.includes('power distribution') || label.includes('panels')) {
+        return 'Power distribution covers panels, feeders, and branch circuits sized for a typical dry warehouse with modest office load.';
+      }
+    }
+
+    if (tradeName === 'plumbing') {
+      if (label.includes('restroom groups') || label.includes('fixtures')) {
+        return 'Assumes roughly one pair of restrooms (fixture group) per 25,000 SF of building area, with code-minimum fixture counts.';
+      }
+      if (
+        label.includes('domestic water') ||
+        label.includes('hose bibs') ||
+        label.includes('roof drains')
+      ) {
+        return 'Domestic water, hose bibs, and roof drains are scaled to footprint and typical roof drainage requirements for this size warehouse.';
+      }
+    }
+
+    if (tradeName === 'finishes') {
+      if (label.includes('office build-out')) {
+        return 'Office build-out assumes approximately 5% of total SF (minimum 1,500 SF) for conditioned office, breakroom, and support space.';
+      }
+      if (label.includes('floor sealers') || label.includes('striping')) {
+        return 'Warehouse finish scope includes slab sealing, striping, and basic protection needed for racking and forklift traffic.';
+      }
+      if (label.includes('doors') || label.includes('hardware')) {
+        return 'Doors, frames, hardware, and misc interior finishes are sized proportionally to assumed office and dock door counts.';
+      }
+    }
+  }
+
+  return undefined;
+};
+
+type PhaseTradeMix = {
+  structural?: number;
+  mechanical?: number;
+  electrical?: number;
+  plumbing?: number;
+  finishes?: number;
+};
+
+const normalizeMix = (mix: PhaseTradeMix): PhaseTradeMix => {
+  const entries = Object.entries(mix).filter(([_, v]) => typeof v === 'number' && !Number.isNaN(v));
+  if (entries.length === 0) return {};
+  const total = entries.reduce((sum, [, v]) => sum + (v as number), 0) || 1;
+  const normalized: PhaseTradeMix = {};
+  for (const [k, v] of entries) {
+    normalized[k as keyof PhaseTradeMix] = (v as number) / total;
+  }
+  return normalized;
+};
+
+/**
+ * Get a heuristic trade mix for a given phase.
+ * For now we implement industrial warehouse logic; other building types can be added later.
+ */
+const getPhaseTradeMix = (buildingTypeRaw: string, phaseIdRaw: string): PhaseTradeMix => {
+  const bt = (buildingTypeRaw || '').toLowerCase();
+  const phaseId = (phaseIdRaw || '').toLowerCase();
+
+  if (bt === 'industrial') {
+    const isSite =
+      phaseId.includes('site') ||
+      phaseId.includes('foundation') ||
+      phaseId.includes('foundations') ||
+      phaseId.includes('podium');
+    const isStructure =
+      phaseId.includes('structure') ||
+      phaseId.includes('frame') ||
+      phaseId.includes('superstructure') ||
+      (phaseId.includes('shell') && !phaseId.includes('envelope'));
+    const isEnvelope =
+      phaseId.includes('envelope') ||
+      phaseId.includes('skin') ||
+      phaseId.includes('exterior');
+    const isMepRough =
+      phaseId.includes('mep_rough') ||
+      phaseId.includes('rough-in') ||
+      (phaseId.includes('rough') && phaseId.includes('mep'));
+    const isInteriorFinishes =
+      phaseId.includes('interior') ||
+      (phaseId.includes('finishes') && !phaseId.includes('mep'));
+    const isMepFinishes =
+      phaseId.includes('mep_finishes') ||
+      phaseId.includes('commissioning') ||
+      phaseId.includes('punch');
+
+    if (isSite) {
+      return normalizeMix({
+        structural: 0.7,
+        plumbing: 0.3,
+      });
+    }
+    if (isStructure) {
+      return normalizeMix({
+        structural: 1.0,
+      });
+    }
+    if (isEnvelope) {
+      return normalizeMix({
+        structural: 0.6,
+        finishes: 0.4,
+      });
+    }
+    if (isMepRough) {
+      return normalizeMix({
+        mechanical: 0.4,
+        electrical: 0.4,
+        plumbing: 0.2,
+      });
+    }
+    if (isInteriorFinishes) {
+      return normalizeMix({
+        finishes: 0.7,
+        electrical: 0.2,
+        mechanical: 0.1,
+      });
+    }
+    if (isMepFinishes) {
+      return normalizeMix({
+        mechanical: 0.4,
+        electrical: 0.4,
+        plumbing: 0.2,
+      });
+    }
+  }
+
+  return {};
+};
+
+const getPhaseTooltip = (
+  buildingTypeRaw: string,
+  phaseIdRaw: string,
+  mix: PhaseTradeMix | undefined
+): string | undefined => {
+  const bt = (buildingTypeRaw || '').toLowerCase();
+  const phaseId = (phaseIdRaw || '').toLowerCase();
+
+  const tradesPhrase = (() => {
+    if (!mix) return '';
+    const entries = Object.entries(mix)
+      .filter(([, v]) => typeof v === 'number' && (v as number) > 0.01)
+      .sort((a, b) => (b[1] as number) - (a[1] as number))
+      .slice(0, 3)
+      .map(([k, v]) => {
+        const name =
+          k === 'structural'
+            ? 'Structural'
+            : k === 'mechanical'
+              ? 'Mechanical'
+              : k === 'electrical'
+                ? 'Electrical'
+                : k === 'plumbing'
+                  ? 'Plumbing'
+                  : k === 'finishes'
+                    ? 'Finishes'
+                    : k;
+        return `${name} ${Math.round((v as number) * 100)}%`;
+      });
+    return entries.length ? ` Key trades: ${entries.join(', ')}.` : '';
+  })();
+  const tradesSuffix = tradesPhrase ? ` ${tradesPhrase}` : '';
+
+  if (bt === 'industrial') {
+    if (phaseId.includes('site') || phaseId.includes('foundation')) {
+      return `Sitework, foundations, and underground utilities for the warehouse structure.${tradesSuffix}`;
+    }
+    if (phaseId.includes('structure')) {
+      return `Erection of the primary structure and shell framing.${tradesSuffix}`;
+    }
+    if (phaseId.includes('envelope') || phaseId.includes('skin')) {
+      return `Exterior envelope, roofing, and weatherproofing of the building.${tradesSuffix}`;
+    }
+    if (phaseId.includes('mep_rough') || (phaseId.includes('rough') && phaseId.includes('mep'))) {
+      return `MEP rough-in in the field: ductwork, conduit, and piping runs before walls close.${tradesSuffix}`;
+    }
+    if (phaseId.includes('interior') || phaseId.includes('fit')) {
+      return `Interior office build-out and warehouse finishes.${tradesSuffix}`;
+    }
+    if (phaseId.includes('commissioning') || phaseId.includes('systems') || phaseId.includes('punch')) {
+      return `Final MEP trim, systems start-up, testing, and punch list closeout.${tradesSuffix}`;
+    }
+  }
+
+  return tradesSuffix || undefined;
+};
+
 export const ConstructionView: React.FC<Props> = ({ project }) => {
   const [expandedTrade, setExpandedTrade] = useState<string | null>(null);
   const [showProvenanceModal, setShowProvenanceModal] = useState(false);
+  const [showTraceModal, setShowTraceModal] = useState(false);
+  const [activeTradeFilter, setActiveTradeFilter] = useState<'all' | 'structural' | 'mechanical' | 'electrical' | 'plumbing' | 'finishes'>('all');
+  const [isScenarioOpen, setIsScenarioOpen] = useState(false);
   
   const analysis = project.analysis;
   if (!analysis) {
@@ -27,6 +347,16 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
   const displayData = BackendDataMapper.mapToDisplay(project.analysis);
   const isDev = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
   const constructionSchedule = calculations?.construction_schedule;
+
+  const calculationTraceRaw = Array.isArray(calculations.calculation_trace)
+    ? (calculations.calculation_trace as any[])
+    : [];
+
+  const calculationTrace = calculationTraceRaw.map((entry: any, index: number) => {
+    const step = typeof entry?.step === 'string' ? entry.step : `step_${index + 1}`;
+    const payload = entry?.payload ?? entry?.data ?? entry ?? {};
+    return { step, payload };
+  });
 
   // ========================================
   // PULL FROM SAME CALCULATION ENGINE
@@ -41,7 +371,12 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
         : 0;
   const squareFootage = squareFootageRaw > 0 ? squareFootageRaw : 0;
   const safeSquareFootage = squareFootage > 0 ? squareFootage : 1;
-  const buildingType = parsed_input.building_type || 'office';
+
+  const buildingTypeRaw =
+    parsed_input.building_type ||
+    calculations.project_info?.building_type ||
+    'office';
+  const buildingType = buildingTypeRaw;
   const baseCostPerSF = calculations.construction_costs?.base_cost_per_sf || 1150;
   const regionalMultiplier = calculations.construction_costs?.regional_multiplier || 1.03;
   const complexityMultiplier = calculations.construction_costs?.class_multiplier || 1.00;
@@ -70,6 +405,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
   }
   const costBuildUp =
     costBuildUpSource.length > 0 ? costBuildUpSource : fallbackCostBuildUp;
+
   
   // Debug: Log the actual values
   console.log('Construction View Debug:', {
@@ -81,53 +417,219 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
     location: calculations.project_info?.location,
     rawData: calculations.construction_costs
   });
-  // Use totals.hard_costs which includes base construction + special features
-  // This ensures consistency with Executive View
-  const constructionTotal = calculations.totals?.hard_costs || 246900000;
-  const baseConstructionTotal = calculations.construction_costs?.construction_total || 236900000;
-  const specialFeaturesTotal = calculations.construction_costs?.special_features_total || 0;
-  const equipmentTotal = calculations.construction_costs?.equipment_total || (constructionTotal - baseConstructionTotal - specialFeaturesTotal) || 0;
-  const displayCostPerSF = Math.round(finalCostPerSF || (constructionTotal / safeSquareFootage));
-  
-  // Trade breakdown from calculations - use actual percentages from backend
-  const actualTradeBreakdown = calculations.trade_breakdown || {};
-  const tradeTotal = Object.values(actualTradeBreakdown).reduce((sum: number, val: any) => sum + (val || 0), 0) || constructionTotal;
-  
+  // Use totals.hard_costs for the headline card (base construction + equipment + special features)
+  const constructionTotal =
+    typeof calculations.totals?.hard_costs === 'number'
+      ? calculations.totals.hard_costs
+      : 246900000;
+
+  // Scenario modal base metrics
+  const projectRecord = project as AnyRecord;
+  const analysisRecord = analysis as AnyRecord;
+  const scenarioProjectTitle =
+    (analysisRecord?.parsed_input?.display_name as string) ||
+    (analysisRecord?.parsed_input?.project_name as string) ||
+    projectRecord?.project_name ||
+    project?.name ||
+    'Project';
+
+  const scenarioLocationLine = [
+    (analysisRecord?.parsed_input?.location as string) || project?.location || '',
+    buildingType || '',
+    (analysisRecord?.parsed_input?.square_footage as AnyRecord)?.toString?.() ||
+      projectRecord?.square_footage?.toString?.() ||
+      '',
+  ]
+    .filter(Boolean)
+    .join(' • ');
+
+  const scenarioCalc = analysisRecord?.calculations || projectRecord?.calculation_data || {};
+  const scenarioReturn =
+    scenarioCalc?.ownership_analysis?.return_metrics ||
+    scenarioCalc?.ownershipAnalysis?.returnMetrics ||
+    {};
+  const scenarioDebtMetrics =
+    scenarioCalc?.ownership_analysis?.debt_metrics ||
+    scenarioCalc?.ownershipAnalysis?.debtMetrics ||
+    {};
+
+  const baseTotalInvestment =
+    (scenarioCalc?.totals?.total_investment_required ??
+      scenarioCalc?.totals?.totalInvestmentRequired ??
+      null) ??
+    projectRecord?.total_cost ??
+    projectRecord?.totalCost ??
+    null;
+
+  const baseCostPerSf =
+    projectRecord?.cost_per_sqft ??
+    projectRecord?.costPerSqft ??
+    null;
+
+  const baseNoi =
+    scenarioReturn?.estimated_annual_noi ??
+    scenarioReturn?.estimatedAnnualNoi ??
+    null;
+
+  const baseYieldPct =
+    scenarioReturn?.cash_on_cash_return ??
+    scenarioReturn?.cashOnCashReturn ??
+    null;
+
+  const baseDscr =
+    scenarioDebtMetrics?.calculated_dscr ??
+    scenarioDebtMetrics?.calculatedDscr ??
+    null;
+
+  const basePayback =
+    scenarioReturn?.payback_period ??
+    scenarioReturn?.paybackPeriod ??
+    null;
+
+  const scenarioBase = {
+    projectTitle: scenarioProjectTitle,
+    locationLine: scenarioLocationLine,
+    totalInvestment:
+      typeof baseTotalInvestment === 'number'
+        ? baseTotalInvestment
+        : Number(baseTotalInvestment) || null,
+    costPerSf:
+      typeof baseCostPerSf === 'number'
+        ? baseCostPerSf
+        : Number(baseCostPerSf) || null,
+    stabilizedNoi:
+      typeof baseNoi === 'number' ? baseNoi : Number(baseNoi) || null,
+    stabilizedYieldPct:
+      typeof baseYieldPct === 'number'
+        ? baseYieldPct
+        : Number(baseYieldPct) || null,
+    dscr:
+      typeof baseDscr === 'number' ? baseDscr : Number(baseDscr) || null,
+    paybackYears:
+      typeof basePayback === 'number'
+        ? basePayback
+        : Number(basePayback) || null,
+  };
+
+  // Use construction_total as the base for trade breakdown (excludes equipment + special features)
+  const baseConstructionTotal =
+    typeof calculations.construction_costs?.construction_total === 'number'
+      ? calculations.construction_costs.construction_total
+      : constructionTotal;
+
+  const specialFeaturesTotal =
+    typeof calculations.construction_costs?.special_features_total === 'number'
+      ? calculations.construction_costs.special_features_total
+      : 0;
+
+  const equipmentTotal =
+    typeof calculations.construction_costs?.equipment_total === 'number'
+      ? calculations.construction_costs.equipment_total
+      : Math.max(constructionTotal - baseConstructionTotal - specialFeaturesTotal, 0);
+  const equipmentBreakdown = (() => {
+    const total = typeof equipmentTotal === 'number' ? equipmentTotal : 0;
+    if (total <= 0) {
+      return null;
+    }
+    const mechShare = buildingTypeRaw.toLowerCase() === 'industrial' ? 0.6 : 0.5;
+    const elecShare = buildingTypeRaw.toLowerCase() === 'industrial' ? 0.25 : 0.3;
+    const dockShare = 1.0 - mechShare - elecShare;
+    const mech = total * mechShare;
+    const elec = total * elecShare;
+    const dock = total * dockShare;
+    return {
+      total,
+      mechanical: mech,
+      electrical: elec,
+      dock,
+    };
+  })();
+
+  const displayCostPerSF = Math.round(
+    finalCostPerSF || constructionTotal / safeSquareFootage
+  );
+
+  // Trade breakdown from calculations – backend is the source of truth.
+  // Normalize to a { [tradeName]: amount } map so this works whether
+  // trade_breakdown is a dict or an array of { name, amount, percent_of_construction }.
+  const rawTradeBreakdown: any = calculations.trade_breakdown || {};
+
+  const actualTradeBreakdown: Record<string, number> = Array.isArray(rawTradeBreakdown)
+    ? rawTradeBreakdown.reduce((acc: Record<string, number>, item: any) => {
+        if (!item || !item.name) return acc;
+        const key = String(item.name).toLowerCase();
+        const amount =
+          typeof item.amount === 'number'
+            ? item.amount
+            : typeof item.value === 'number'
+              ? item.value
+              : 0;
+        if (amount > 0) {
+          acc[key] = amount;
+        }
+        return acc;
+      }, {})
+    : (rawTradeBreakdown as Record<string, number>);
+
+  const tradeBaseTotal =
+    Object.values(actualTradeBreakdown).reduce(
+      (sum: number, val: any) => sum + (val || 0),
+      0
+    ) || baseConstructionTotal;
+
+  const getTradeAmount = (key: string, fallbackPct: number) => {
+    const value = actualTradeBreakdown[key];
+    if (typeof value === 'number' && value > 0) {
+      return value;
+    }
+    // Fallback only if backend data is missing for some reason.
+    return tradeBaseTotal * fallbackPct;
+  };
+
+  // Fallback percentages here are only a safety net; normally the backend should provide all amounts.
+  const structuralAmount = getTradeAmount('structural', 0.35);
+  const mechanicalAmount = getTradeAmount('mechanical', 0.15);
+  const electricalAmount = getTradeAmount('electrical', 0.12);
+  const plumbingAmount = getTradeAmount('plumbing', 0.08);
+  const finishesAmount = getTradeAmount('finishes', 0.30);
+
+  const safeTradeBaseTotal = tradeBaseTotal || 1; // avoid divide-by-zero
+
   const tradeBreakdown = {
     structural: {
-      amount: actualTradeBreakdown.structural || (constructionTotal * 0.22),
-      percent: Math.round(((actualTradeBreakdown.structural || (constructionTotal * 0.22)) / tradeTotal) * 100),
+      amount: structuralAmount,
+      percent: Math.round((structuralAmount / safeTradeBaseTotal) * 100),
       color: 'blue',
       icon: Building,
-      costPerSF: Math.round((actualTradeBreakdown.structural || (constructionTotal * 0.22)) / safeSquareFootage)
+      costPerSF: Math.round(structuralAmount / safeSquareFootage)
     },
     mechanical: {
-      amount: actualTradeBreakdown.mechanical || (constructionTotal * 0.25),
-      percent: Math.round(((actualTradeBreakdown.mechanical || (constructionTotal * 0.25)) / tradeTotal) * 100),
+      amount: mechanicalAmount,
+      percent: Math.round((mechanicalAmount / safeTradeBaseTotal) * 100),
       color: 'green',
       icon: Wrench,
-      costPerSF: Math.round((actualTradeBreakdown.mechanical || (constructionTotal * 0.25)) / safeSquareFootage)
+      costPerSF: Math.round(mechanicalAmount / safeSquareFootage)
     },
     electrical: {
-      amount: actualTradeBreakdown.electrical || (constructionTotal * 0.15),
-      percent: Math.round(((actualTradeBreakdown.electrical || (constructionTotal * 0.15)) / tradeTotal) * 100),
+      amount: electricalAmount,
+      percent: Math.round((electricalAmount / safeTradeBaseTotal) * 100),
       color: 'yellow',
       icon: Zap,
-      costPerSF: Math.round((actualTradeBreakdown.electrical || (constructionTotal * 0.15)) / safeSquareFootage)
+      costPerSF: Math.round(electricalAmount / safeSquareFootage)
     },
     plumbing: {
-      amount: actualTradeBreakdown.plumbing || (constructionTotal * 0.12),
-      percent: Math.round(((actualTradeBreakdown.plumbing || (constructionTotal * 0.12)) / tradeTotal) * 100),
+      amount: plumbingAmount,
+      percent: Math.round((plumbingAmount / safeTradeBaseTotal) * 100),
       color: 'purple',
       icon: Droplet,
-      costPerSF: Math.round((actualTradeBreakdown.plumbing || (constructionTotal * 0.12)) / safeSquareFootage)
+      costPerSF: Math.round(plumbingAmount / safeSquareFootage)
     },
     finishes: {
-      amount: actualTradeBreakdown.finishes || (constructionTotal * 0.26),
-      percent: Math.round(((actualTradeBreakdown.finishes || (constructionTotal * 0.26)) / tradeTotal) * 100),
+      amount: finishesAmount,
+      percent: Math.round((finishesAmount / safeTradeBaseTotal) * 100),
       color: 'pink',
       icon: PaintBucket,
-      costPerSF: Math.round((actualTradeBreakdown.finishes || (constructionTotal * 0.26)) / safeSquareFootage)
+      costPerSF: Math.round(finishesAmount / safeSquareFootage)
     }
   };
 
@@ -136,6 +638,242 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
     name: key.charAt(0).toUpperCase() + key.slice(1),
     ...value
   }));
+
+  const filteredTrades =
+    activeTradeFilter === 'all'
+      ? trades
+      : trades.filter(trade => trade.name.toLowerCase() === activeTradeFilter);
+
+  const tradeFilterOptions = [
+    { key: 'all', label: 'All Trades' },
+    { key: 'structural', label: 'Structural' },
+    { key: 'mechanical', label: 'Mechanical' },
+    { key: 'electrical', label: 'Electrical' },
+    { key: 'plumbing', label: 'Plumbing' },
+    { key: 'finishes', label: 'Finishes' },
+  ] as const;
+
+  const tradeFilterColorMap: Record<'structural' | 'mechanical' | 'electrical' | 'plumbing' | 'finishes', string> = {
+    structural: tradeBreakdown.structural.color,
+    mechanical: tradeBreakdown.mechanical.color,
+    electrical: tradeBreakdown.electrical.color,
+    plumbing: tradeBreakdown.plumbing.color,
+    finishes: tradeBreakdown.finishes.color,
+  };
+
+  const tradeLegendLabel =
+    activeTradeFilter === 'all'
+      ? `${trades.length} Major Trades`
+      : `${filteredTrades.length} trade${filteredTrades.length === 1 ? '' : 's'} selected`;
+
+  // ========================================
+  // Risk & Exposure – derived signals
+  // ========================================
+  const softCosts = (calculations.soft_costs || {}) as Record<string, number>;
+  const contingencyAmount =
+    typeof softCosts.contingency === 'number' ? softCosts.contingency : 0;
+  const constructionBase = baseConstructionTotal || constructionTotal || 0;
+  const contingencyPct =
+    constructionBase > 0 ? contingencyAmount / constructionBase : 0;
+
+  const costModifiers = calculations.modifiers || {};
+  const regionalFactor =
+    typeof costModifiers.cost_factor === 'number'
+      ? costModifiers.cost_factor
+      : (typeof costModifiers.regional_cost_factor === 'number'
+          ? costModifiers.regional_cost_factor
+          : 1);
+  const marketFactor =
+    typeof costModifiers.market_factor === 'number'
+      ? costModifiers.market_factor
+      : 1;
+
+  const totalTradesAmount =
+    structuralAmount +
+      mechanicalAmount +
+      electricalAmount +
+      plumbingAmount +
+      finishesAmount ||
+    constructionBase;
+
+  const mechElecPlumb =
+    mechanicalAmount + electricalAmount + plumbingAmount;
+
+  const contingencyLevel =
+    contingencyPct >= 0.12
+      ? 'High'
+      : contingencyPct >= 0.08
+        ? 'Moderate'
+        : contingencyPct > 0
+          ? 'Low'
+          : 'Not specified';
+
+  const longLeadExposure =
+    (structuralAmount + mechanicalAmount) / (totalTradesAmount || 1);
+
+  const laborHeavyTradesShare =
+    mechElecPlumb / (totalTradesAmount || 1);
+
+  const isHighLaborVolatility = laborHeavyTradesShare >= 0.45;
+
+  const isAboveMarketRegion = marketFactor > 1.05;
+  const isBelowMarketRegion = marketFactor < 0.95;
+
+  const riskInsights: {
+    title: string;
+    level?: 'low' | 'moderate' | 'high';
+    note: string;
+  }[] = [];
+
+  if (contingencyPct > 0) {
+    let level: 'low' | 'moderate' | 'high';
+    if (contingencyPct >= 0.12) level = 'high';
+    else if (contingencyPct >= 0.08) level = 'moderate';
+    else level = 'low';
+
+    riskInsights.push({
+      title: 'Contingency Coverage',
+      level,
+      note:
+        contingencyLevel === 'Not specified'
+          ? 'Contingency line item is minimal or not clearly specified in soft costs.'
+          : `Contingency is approximately ${formatPercent(
+              contingencyPct
+            )} of core construction. Level: ${contingencyLevel}.`,
+    });
+  } else {
+    riskInsights.push({
+      title: 'Contingency Coverage',
+      level: 'low',
+      note:
+        'No explicit contingency was detected in soft costs. Consider adding a buffer for scope growth and change orders.',
+    });
+  }
+
+  riskInsights.push({
+    title: 'Long-Lead Components',
+    level: longLeadExposure >= 0.45 ? 'high' : longLeadExposure >= 0.30 ? 'moderate' : 'low',
+    note:
+      buildingTypeRaw.toLowerCase() === 'industrial'
+        ? 'Structural steel, tilt-wall panels, roof systems, and major mechanical equipment drive a significant portion of cost. Locking in suppliers and lead times early will be important.'
+        : 'Major structural and mechanical systems typically carry longer lead times. Early procurement and schedule protection are recommended.',
+  });
+
+  riskInsights.push({
+    title: 'Labor Volatility',
+    level: isHighLaborVolatility ? 'high' : 'moderate',
+    note: isHighLaborVolatility
+      ? 'Mechanical, electrical, and plumbing trades represent a large share of cost. Availability of licensed trades in this market can materially impact schedule and pricing.'
+      : 'Labor exposure is balanced across trades. Standard local labor market risk still applies.',
+  });
+
+  if (isAboveMarketRegion) {
+    riskInsights.push({
+      title: 'Regional Cost Pressure',
+      level: 'moderate',
+      note:
+        'Regional cost index is above national average. Local wages, materials, or logistics are likely inflating hard costs relative to other markets.',
+    });
+  } else if (isBelowMarketRegion) {
+    riskInsights.push({
+      title: 'Regional Cost Pressure',
+      level: 'low',
+      note:
+        'Regional cost index is slightly below national average. This provides some buffer against cost escalation relative to higher-cost markets.',
+    });
+  } else {
+    riskInsights.push({
+      title: 'Regional Cost Pressure',
+      level: 'low',
+      note:
+        'Regional cost index is approximately in line with national averages.',
+    });
+  }
+
+  riskInsights.push({
+    title: 'Code & Compliance Considerations',
+    level: 'moderate',
+    note:
+      buildingTypeRaw.toLowerCase() === 'industrial'
+        ? 'Fire protection (ESFR vs. CMDA), egress, and dock / traffic layouts will be key coordination points with the AHJ. Early conversations with local plan reviewers can de-risk later redesign.'
+        : 'Life safety, accessibility, and energy code requirements can introduce design iteration late in the process. Early alignment with local code officials is recommended.',
+  });
+
+  // ========================================
+  // Scope items by trade (from backend payload)
+  // ========================================
+  const scopeItemsRaw: any =
+    (calculations as any).scope_items ||
+    (analysis as any).scope_items ||
+    (project as any).scope_items ||
+    [];
+
+  type ScopeSystem = {
+    name?: string;
+    quantity?: number;
+    unit?: string;
+    unit_cost?: number;
+    total_cost?: number;
+  };
+
+  type ScopeItemByTrade = {
+    tradeKey: string;
+    tradeLabel: string;
+    systems: ScopeSystem[];
+  };
+
+  const scopeItemsByTradeMap: Record<string, ScopeItemByTrade> = Array.isArray(scopeItemsRaw)
+    ? scopeItemsRaw.reduce((acc: Record<string, ScopeItemByTrade>, item: any) => {
+        if (!item) return acc;
+        const rawTrade = item.trade || item.name || '';
+        if (!rawTrade) return acc;
+        const tradeKey = String(rawTrade).toLowerCase();
+        const tradeLabel =
+          trades.find(t => t.name.toLowerCase() === tradeKey)?.name ||
+          rawTrade.toString();
+
+        const systemsArray: ScopeSystem[] = Array.isArray(item.systems)
+          ? item.systems
+          : [];
+
+        if (!acc[tradeKey]) {
+          acc[tradeKey] = {
+            tradeKey,
+            tradeLabel,
+            systems: []
+          };
+        }
+
+        acc[tradeKey].systems.push(
+          ...systemsArray.map((sys: any) => {
+            const rawUnit = sys?.unit || sys?.unit_type || sys?.unitType;
+            return {
+              name: sys?.name,
+              quantity: typeof sys?.quantity === 'number' ? sys.quantity : undefined,
+              unit: typeof rawUnit === 'string' && rawUnit ? rawUnit : undefined,
+              unit_cost: typeof sys?.unit_cost === 'number' ? sys.unit_cost : undefined,
+              total_cost: typeof sys?.total_cost === 'number' ? sys.total_cost : undefined
+            };
+          })
+        );
+
+        return acc;
+      }, {})
+    : {};
+
+  // Order scope items by the same trade order as the main trade cards
+  const scopeItemsByTrade: ScopeItemByTrade[] = [
+    ...trades
+      .map(trade => {
+        const key = trade.name.toLowerCase();
+        return scopeItemsByTradeMap[key];
+      })
+      .filter(Boolean) as ScopeItemByTrade[],
+    ...Object.values(scopeItemsByTradeMap).filter(item => {
+      return !trades.some(t => t.name.toLowerCase() === item.tradeKey);
+    })
+  ];
+
   const formatMultiplier = (value?: number) => {
     if (typeof value !== 'number' || Number.isNaN(value)) {
       return undefined;
@@ -165,6 +903,29 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
     console.log('[SpecSharp DEV] cost_build_up', costBuildUp);
     costBuildUpLogRef.current = true;
   }, [isDev, costBuildUp]);
+
+  useEffect(() => {
+    if (
+      expandedTrade &&
+      activeTradeFilter !== 'all' &&
+      expandedTrade.toLowerCase() !== activeTradeFilter
+    ) {
+      setExpandedTrade(null);
+    }
+  }, [activeTradeFilter, expandedTrade]);
+
+  useEffect(() => {
+    if (!showTraceModal) {
+      return;
+    }
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowTraceModal(false);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [showTraceModal]);
 
   type BackendPhase = {
     id?: string;
@@ -207,10 +968,20 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
               : typeof phase.startMonth === 'number'
                 ? phase.startMonth
                 : 0,
-          duration: typeof phase.duration === 'number' ? phase.duration : 0,
+          duration:
+            typeof (phase as any).duration === 'number'
+              ? (phase as any).duration
+              : typeof (phase as any).duration_months === 'number'
+                ? (phase as any).duration_months
+                : 0,
           color: phase.color || 'blue'
         }))
       : fallbackPhases;
+
+  const phasesWithTrades = phases.map(phase => ({
+    ...phase,
+    tradeMix: getPhaseTradeMix(buildingTypeRaw, phase.id),
+  }));
 
   const totalMonthsRaw =
     typeof constructionSchedule?.total_months === 'number' ? constructionSchedule.total_months : 0;
@@ -279,8 +1050,41 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
 
   const timelineMonthsLabel = `${totalMonths} Month${totalMonths === 1 ? '' : 's'} Timeline`;
 
+  const handleExportPdf = async () => {
+    try {
+      const projectId =
+        project?.project_id ||
+        project?.projectId ||
+        project?.id;
+
+      if (!projectId) {
+        alert('Unable to determine project ID for PDF export.');
+        return;
+      }
+
+      const response = await pdfService.exportProject(String(projectId));
+      const blob = new Blob(
+        [response.data],
+        { type: response.headers?.['content-type'] || 'application/pdf' }
+      );
+
+      const filename = generateExportFilename(project, 'pdf', { includeDate: true });
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      alert('Failed to export PDF report. Please try again.');
+    }
+  };
+
   return (
-    <div className="space-y-6">
+    <>
+      <div className="space-y-6">
       {/* Header Section - Dark Blue */}
       <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-6 text-white">
         <div className="flex justify-between items-start">
@@ -301,11 +1105,17 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
             </div>
             
             <div className="flex gap-3 mt-4">
-              <button className="flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur border border-white/20 text-white rounded-lg hover:bg-white/20 transition">
+              <button
+                onClick={handleExportPdf}
+                className="flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur border border-white/20 text-white rounded-lg hover:bg-white/20 transition"
+              >
                 <Download className="h-4 w-4" />
-                Export Excel
+                Export PDF
               </button>
-              <button className="flex items-center gap-2 px-4 py-2 bg-white text-slate-800 rounded-lg hover:bg-slate-100 transition font-medium">
+              <button
+                onClick={() => setIsScenarioOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-white text-slate-800 rounded-lg hover:bg-slate-100 transition font-medium"
+              >
                 <BarChart3 className="h-4 w-4" />
                 Compare Scenarios
               </button>
@@ -330,19 +1140,39 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
 
       {/* Trade Filter Pills */}
       <div className="bg-white rounded-lg shadow-sm p-4">
-        <div className="flex gap-2 flex-wrap">
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-medium">
-            All Trades
-          </button>
-          {trades.map(trade => (
-            <button 
-              key={trade.name}
-              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full text-sm hover:bg-gray-200 transition flex items-center gap-2"
-            >
-              <span className={`w-2 h-2 rounded-full bg-${trade.color}-500`}></span>
-              {trade.name}
-            </button>
-          ))}
+        <div className="flex gap-2 flex-wrap items-center">
+          {tradeFilterOptions.map(pill => {
+            const key = pill.key;
+            const isActive = activeTradeFilter === key;
+            let color: string | undefined;
+            if (key !== 'all') {
+              color = tradeFilterColorMap[key];
+            }
+
+            return (
+              <button
+                key={pill.key}
+                type="button"
+                onClick={() => setActiveTradeFilter(key)}
+                className={[
+                  'inline-flex items-center rounded-full px-3 py-1.5 text-xs font-medium border transition',
+                  isActive
+                    ? 'bg-blue-100 text-blue-700 border-blue-200'
+                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                ].join(' ')}
+              >
+                {color && (
+                  <span className={`w-2 h-2 rounded-full bg-${color}-500 mr-1.5`}></span>
+                )}
+                {pill.label}
+              </button>
+            );
+          })}
+          <span className="ml-1 text-[11px] text-gray-500">
+            {activeTradeFilter === 'all'
+              ? 'Showing all trades'
+              : `Showing ${activeTradeFilter.charAt(0).toUpperCase() + activeTradeFilter.slice(1)} only`}
+          </span>
         </div>
       </div>
 
@@ -356,7 +1186,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
           <div className="bg-gray-50 rounded-lg p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-semibold text-gray-900">Trade Distribution</h3>
-              <span className="text-sm text-gray-500">5 Major Trades</span>
+              <span className="text-sm text-gray-500">{tradeLegendLabel}</span>
             </div>
             
             {/* Donut Chart */}
@@ -365,7 +1195,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                 <svg width="200" height="200" viewBox="0 0 100 100" className="transform -rotate-90">
                   {(() => {
                     let currentAngle = 0;
-                    return trades.map((trade) => {
+                    return filteredTrades.map((trade) => {
                       const startAngle = currentAngle;
                       const endAngle = currentAngle + (trade.percent / 100) * 360;
                       currentAngle = endAngle;
@@ -400,7 +1230,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
             
             {/* Legend */}
             <div className="space-y-2">
-              {trades.map(trade => (
+              {filteredTrades.map(trade => (
                 <div key={trade.name} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className={`w-3 h-3 rounded-full bg-${trade.color}-500`}></div>
@@ -437,7 +1267,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
             
             {/* Gantt Chart */}
             <div className="space-y-2">
-              {phases.map((phase) => {
+              {phasesWithTrades.map((phase) => {
                 const colors = {
                   blue: 'bg-blue-500',
                   green: 'bg-green-500',
@@ -446,22 +1276,68 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                   pink: 'bg-pink-500',
                   teal: 'bg-teal-500'
                 };
+                const mixEntries = Object.entries(phase.tradeMix || {}).filter(
+                  ([, value]) => typeof value === 'number' && value > 0.01
+                );
+                const phaseTooltip = getPhaseTooltip(buildingTypeRaw, phase.id, phase.tradeMix);
                 
                 return (
-                  <div key={phase.id} className="flex items-center gap-2">
-                    <div className="w-20 text-xs text-gray-700 text-right truncate">{phase.label}</div>
-                    <div className="flex-1 relative h-7 bg-gray-200 rounded">
-                      <div 
-                        className={`absolute h-full ${colors[phase.color as keyof typeof colors] || 'bg-blue-500'} rounded flex items-center justify-center text-xs text-white font-medium`}
-                        style={{
-                          left: `${(phase.startMonth / totalMonths) * 100}%`,
-                          width: `${(phase.duration / totalMonths) * 100}%`
-                        }}
-                      >
-                        {phase.duration}m
+                  <div key={phase.id}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-20 text-xs text-gray-700 text-right truncate">
+                        <span
+                          className={`font-medium ${phaseTooltip ? 'cursor-help border-b border-dotted border-gray-300 pb-[1px]' : ''}`}
+                          title={phaseTooltip || ''}
+                        >
+                          {phase.label}
+                        </span>
                       </div>
+                      <div className="flex-1 relative h-4 bg-gray-200 rounded-full overflow-hidden">
+                        {totalMonths > 0 && phase.duration > 0 && (
+                          <div
+                            className="absolute h-full rounded-full"
+                            style={{
+                              left: `${(phase.startMonth / totalMonths) * 100}%`,
+                              width: `${(phase.duration / totalMonths) * 100}%`,
+                              backgroundColor: phase.color || '#3b82f6',
+                            }}
+                          />
+                        )}
+                      </div>
+                      <span className="text-xs text-gray-500 w-10 text-right">{phase.duration} mo</span>
                     </div>
-                    <span className="text-xs text-gray-500 w-10">{phase.duration} mo</span>
+                    {mixEntries.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1 ml-20">
+                        {mixEntries.map(([key, value]) => {
+                          const label = (() => {
+                            const k = key.toLowerCase();
+                            if (k === 'structural') return 'Structural';
+                            if (k === 'mechanical') return 'Mechanical';
+                            if (k === 'electrical') return 'Electrical';
+                            if (k === 'plumbing') return 'Plumbing';
+                            if (k === 'finishes') return 'Finishes';
+                            return key;
+                          })();
+                          const chipColorClass = (() => {
+                            const k = key.toLowerCase();
+                            if (k === 'structural') return 'bg-blue-100 text-blue-800 border-blue-200';
+                            if (k === 'mechanical') return 'bg-green-100 text-green-800 border-green-200';
+                            if (k === 'electrical') return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+                            if (k === 'plumbing') return 'bg-purple-100 text-purple-800 border-purple-200';
+                            if (k === 'finishes') return 'bg-pink-100 text-pink-800 border-pink-200';
+                            return 'bg-gray-100 text-gray-700 border-gray-200';
+                          })();
+                          return (
+                            <span
+                              key={key}
+                              className={`inline-flex items-center rounded-full border px-2 py-[2px] text-[10px] font-medium ${chipColorClass}`}
+                            >
+                              {label}&nbsp;{Math.round((value as number) * 100)}%
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -523,8 +1399,17 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
         </div>
         
         <div className="space-y-4">
-          {trades.map(trade => {
+          {filteredTrades.map(trade => {
             const Icon = trade.icon;
+            const scopeForTrade = scopeItemsByTrade.find(
+              item => item.tradeKey === trade.name.toLowerCase()
+            );
+            const hasScopeForTrade =
+              scopeForTrade && Array.isArray(scopeForTrade.systems) && scopeForTrade.systems.length > 0;
+            const split = getTradeCostSplit(buildingTypeRaw, trade.name);
+            const materialsCost = trade.amount * split.materials;
+            const laborCost = trade.amount * split.labor;
+            const equipmentCost = trade.amount * split.equipment;
             return (
               <div key={trade.name} className="border rounded-lg hover:shadow-md transition">
                 <div 
@@ -577,18 +1462,106 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                   <div className="px-4 pb-4">
                     <div className="pt-4 border-t grid grid-cols-3 gap-4 text-sm">
                       <div>
-                        <p className="text-gray-600">Materials</p>
-                        <p className="font-semibold">{formatCurrency(trade.amount * 0.4)}</p>
+                        <div className="text-[11px] text-gray-500">Materials</div>
+                        <div className="font-semibold text-gray-900">{formatCurrency(materialsCost)}</div>
+                        <div className="text-[11px] text-gray-500">
+                          {formatPercent(split.materials)} of {trade.percent}%
+                        </div>
                       </div>
                       <div>
-                        <p className="text-gray-600">Labor</p>
-                        <p className="font-semibold">{formatCurrency(trade.amount * 0.5)}</p>
+                        <div className="text-[11px] text-gray-500">Labor</div>
+                        <div className="font-semibold text-gray-900">{formatCurrency(laborCost)}</div>
+                        <div className="text-[11px] text-gray-500">
+                          {formatPercent(split.labor)} of {trade.percent}%
+                        </div>
                       </div>
                       <div>
-                        <p className="text-gray-600">Equipment</p>
-                        <p className="font-semibold">{formatCurrency(trade.amount * 0.1)}</p>
+                        <div className="text-[11px] text-gray-500">Equipment</div>
+                        <div className="font-semibold text-gray-900">{formatCurrency(equipmentCost)}</div>
+                        <div className="text-[11px] text-gray-500">
+                          {formatPercent(split.equipment)} of {trade.percent}%
+                        </div>
                       </div>
                     </div>
+
+                    {hasScopeForTrade && (
+                      <div className="mt-5">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-gray-900">
+                            Scope Items
+                          </span>
+                          <span className="text-[10px] text-gray-500">
+                            {scopeForTrade!.systems.length} system
+                            {scopeForTrade!.systems.length === 1 ? '' : 's'}
+                          </span>
+                        </div>
+
+                        <div className="overflow-x-auto rounded-lg border border-gray-100 bg-white">
+                          <table className="min-w-full text-[11px]">
+                            <thead className="bg-gray-50 text-gray-500 border-b border-gray-100">
+                              <tr>
+                                <th className="py-1.5 pl-3 pr-2 text-left text-[11px] font-medium tracking-wide">
+                                  Item
+                                </th>
+                                <th className="py-1.5 px-2 text-left text-[11px] font-medium tracking-wide">
+                                  Quantity
+                                </th>
+                                <th className="py-1.5 px-2 text-right text-[11px] font-medium tracking-wide">
+                                  Unit Cost
+                                </th>
+                                <th className="py-1.5 pr-3 pl-2 text-right text-[11px] font-medium tracking-wide">
+                                  Total Cost
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {scopeForTrade!.systems.map((sys, idx) => {
+                                const hint = getScopeHint(
+                                  buildingTypeRaw,
+                                  trade.name,
+                                  sys.name
+                                );
+
+                                return (
+                                  <tr
+                                    key={`${scopeForTrade!.tradeKey}-${idx}-${sys.name || 'sys'}`}
+                                    className="border-b border-gray-50 last:border-b-0"
+                                  >
+                                    <td className="py-1.5 pl-3 pr-2 text-[11px] text-gray-900">
+                                      {hint ? (
+                                        <span
+                                          title={hint}
+                                          className="inline-flex items-center gap-1 cursor-help"
+                                        >
+                                          <span className="border-b border-dotted border-gray-300 pb-[1px]">
+                                            {sys.name || 'Scope item'}
+                                          </span>
+                                        </span>
+                                      ) : (
+                                        sys.name || 'Scope item'
+                                      )}
+                                    </td>
+                                    <td className="py-1.5 px-2 text-left text-[11px] text-gray-700 whitespace-nowrap">
+                                      {formatQuantityWithUnit(sys.quantity, sys.unit)}
+                                    </td>
+                                    <td className="py-1.5 px-2 text-right text-[11px] text-gray-700">
+                                      {typeof sys.unit_cost === 'number'
+                                        ? formatCurrency2(sys.unit_cost)
+                                        : '—'}
+                                    </td>
+                                    <td className="py-1.5 pr-3 pl-2 text-right text-[11px] font-semibold text-gray-900">
+                                      {typeof sys.total_cost === 'number'
+                                        ? formatCurrency2(sys.total_cost)
+                                        : '—'}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -617,23 +1590,21 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
 
       {/* Cost Build-Up Analysis - Enhanced Design */}
       <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl shadow-lg p-8 border border-gray-100">
-        <div className="mb-8">
-          <h3 className="text-2xl font-bold text-gray-900 mb-2">Cost Build-Up Analysis</h3>
-          <p className="text-gray-600">Understanding how your price is calculated step by step</p>
-        </div>
-        {isDev && (
-          <div className="mb-4 text-xs font-mono text-slate-600">
-            <span className="font-semibold">DEV • Build-Up:</span>{' '}
-            <span>
-              {costBuildUpSequence.length > 0
-                ? costBuildUpSequence.join(' → ')
-                : 'cost_build_up payload missing'}
-            </span>
-            {!hasFinishStep && (
-              <span className="ml-2 font-semibold text-red-500">Finish step: MISSING</span>
-            )}
+        <div className="mb-8 flex items-start justify-between">
+          <div>
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">Cost Build-Up Analysis</h3>
+            <p className="text-gray-600">Understanding how your price is calculated step by step</p>
           </div>
-        )}
+          {calculationTrace.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowTraceModal(true)}
+              className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 underline underline-offset-2"
+            >
+              View Calculation Trace
+            </button>
+          )}
+        </div>
         
         {/* Main calculation flow */}
         <div className="space-y-8">
@@ -746,6 +1717,28 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                   </p>
                 </div>
               </div>
+              {equipmentBreakdown && (
+                <div className="mt-4 grid gap-3 text-[11px] text-blue-800 md:grid-cols-3">
+                  <div className="flex flex-col">
+                    <span className="font-semibold">Mechanical equipment</span>
+                    <span className="text-blue-700">
+                      {formatCurrency(equipmentBreakdown.mechanical)}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-semibold">Electrical gear</span>
+                    <span className="text-blue-700">
+                      {formatCurrency(equipmentBreakdown.electrical)}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-semibold">Dock &amp; material handling</span>
+                    <span className="text-blue-700">
+                      {formatCurrency(equipmentBreakdown.dock)}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           
@@ -814,6 +1807,65 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
         </div>
       </div>
 
+      {riskInsights.length > 0 && (
+        <div className="mt-10">
+          <div className="bg-white shadow-sm rounded-2xl border border-gray-100 p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Risk &amp; Exposure Notes
+                </h3>
+                <p className="text-xs text-gray-500">
+                  High-level factors that could move cost, schedule, or scope.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              {riskInsights.map((risk, idx) => (
+                <div
+                  key={`${risk.title}-${idx}`}
+                  className="border border-gray-100 rounded-lg p-3 bg-gray-50/60"
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-semibold text-gray-900">
+                      {risk.title}
+                    </span>
+                    {risk.level && (
+                      <span
+                        className={`
+                          inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium
+                          ${
+                            risk.level === 'high'
+                              ? 'bg-red-50 text-red-700 border border-red-100'
+                              : risk.level === 'moderate'
+                                ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                                : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                          }
+                        `}
+                      >
+                        {risk.level === 'high'
+                          ? 'Higher Risk'
+                          : risk.level === 'moderate'
+                            ? 'Moderate Risk'
+                            : 'Lower Risk'}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] leading-snug text-gray-700">
+                    {risk.note}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <p className="mt-3 text-[10px] text-gray-500">
+              These notes are directional only and do not replace a full risk and constructability review.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
       <div className="text-center py-6">
         <button 
@@ -830,14 +1882,84 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
         isOpen={showProvenanceModal}
         onClose={() => setShowProvenanceModal(false)}
         projectData={{
-          building_type: parsed_input?.building_type,
-          square_footage: squareFootage,
-          location: parsed_input?.location,
-          project_class: parsed_input?.project_classification || parsed_input?.project_class,
+          building_type: calculations?.project_info?.building_type || parsed_input?.building_type,
+          square_footage:
+            typeof calculations?.project_info?.square_footage === 'number'
+              ? calculations.project_info.square_footage
+              : squareFootage,
+          location: calculations?.project_info?.location || parsed_input?.location,
+          project_class:
+            calculations?.project_info?.project_class ||
+            parsed_input?.project_classification ||
+            parsed_input?.project_class,
           confidence_projects: 47
         }}
+        calculationData={calculations}
         calculationTrace={calculations?.calculation_trace || project.analysis?.calculation_trace}
+        displayData={displayData}
       />
-    </div>
+
+      {showTraceModal && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
+          <div className="max-h-[80vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-xl border border-gray-200">
+            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">
+                  Calculation Trace
+                </h2>
+                <p className="text-[11px] text-gray-500">
+                  Raw steps recorded by the SpecSharp engine while pricing this project.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTraceModal(false)}
+                className="text-xs font-medium text-gray-500 hover:text-gray-700"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="max-h-[70vh] overflow-y-auto px-4 py-3 bg-gray-50">
+              {calculationTrace.length === 0 ? (
+                <p className="text-[11px] text-gray-500">
+                  No calculation trace is available for this project.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {calculationTrace.map((entry, idx) => (
+                    <div
+                      key={`${entry.step}-${idx}`}
+                      className="rounded-lg border border-gray-200 bg-white px-3 py-2"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px] font-semibold text-gray-900">
+                          {idx + 1}. {entry.step}
+                        </span>
+                      </div>
+                      <pre className="max-h-40 overflow-auto rounded bg-gray-900/95 px-2 py-1 text-[10px] leading-snug text-gray-100">
+                        {JSON.stringify(entry.payload, null, 2)}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-gray-100 px-4 py-2">
+              <p className="text-[10px] text-gray-500">
+                This trace is intended for internal review and debugging. Values shown are intermediate engine states and may not be fully normalized for presentation.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      </div>
+      <ScenarioModal
+        open={isScenarioOpen}
+        onClose={() => setIsScenarioOpen(false)}
+        base={scenarioBase}
+      />
+    </>
   );
 };

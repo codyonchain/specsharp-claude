@@ -5,7 +5,9 @@ import { formatters, safeGet } from '../../utils/displayFormatters';
 import { formatPerSf } from '@/v2/utils/formatters';
 import { BackendDataMapper } from '../../utils/backendDataMapper';
 // Removed FinancialRequirementsCard - was only implemented for hospital
-import * as XLSX from 'xlsx';
+import { pdfService } from '@/services/api';
+import { generateExportFilename } from '@/utils/filenameGenerator';
+import { ScenarioModal } from '@/v2/components/ScenarioModal';
 import { 
   TrendingUp, DollarSign, Building, Clock, AlertCircle,
   Heart, Headphones, Cpu, MapPin, Calendar, ChevronRight,
@@ -198,6 +200,91 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       (typeof facilityUnitLabel === 'string' &&
         facilityUnitLabel.toLowerCase().includes('tenant suite'))
     );
+  // Scenario modal base metrics (v1 universal multipliers)
+  const scenarioProjectTitle =
+    (analysis?.parsed_input?.display_name as string) ||
+    (analysis?.parsed_input?.project_name as string) ||
+    (project as AnyRecord)?.project_name ||
+    project?.name ||
+    'Project';
+
+  const scenarioLocationLine = [
+    (analysis?.parsed_input?.location as string) || project?.location || '',
+    rawBuildingType || '',
+    (analysis?.parsed_input?.square_footage as AnyRecord)?.toString?.() ||
+      (project as AnyRecord)?.square_footage?.toString?.() ||
+      '',
+  ]
+    .filter(Boolean)
+    .join(' • ');
+
+  const scenarioCalc = (analysis as AnyRecord)?.calculations || (project as AnyRecord)?.calculation_data || {};
+  const scenarioReturn =
+    scenarioCalc?.ownership_analysis?.return_metrics ||
+    scenarioCalc?.ownershipAnalysis?.returnMetrics ||
+    {};
+  const scenarioDebtMetrics =
+    scenarioCalc?.ownership_analysis?.debt_metrics ||
+    scenarioCalc?.ownershipAnalysis?.debtMetrics ||
+    {};
+
+  const baseTotalInvestment =
+    (scenarioCalc?.totals?.total_investment_required ??
+      scenarioCalc?.totals?.totalInvestmentRequired ??
+      null) ??
+    (project as AnyRecord)?.total_cost ??
+    (project as AnyRecord)?.totalCost ??
+    null;
+
+  const baseCostPerSf =
+    (project as AnyRecord)?.cost_per_sqft ??
+    (project as AnyRecord)?.costPerSqft ??
+    null;
+
+  const baseNoi =
+    scenarioReturn?.estimated_annual_noi ??
+    scenarioReturn?.estimatedAnnualNoi ??
+    null;
+
+  const baseYieldPct =
+    scenarioReturn?.cash_on_cash_return ??
+    scenarioReturn?.cashOnCashReturn ??
+    null;
+
+  const baseDscr =
+    scenarioDebtMetrics?.calculated_dscr ??
+    scenarioDebtMetrics?.calculatedDscr ??
+    null;
+
+  const basePayback =
+    scenarioReturn?.payback_period ??
+    scenarioReturn?.paybackPeriod ??
+    null;
+
+  const scenarioBase = {
+    projectTitle: scenarioProjectTitle,
+    locationLine: scenarioLocationLine,
+    totalInvestment:
+      typeof baseTotalInvestment === 'number'
+        ? baseTotalInvestment
+        : Number(baseTotalInvestment) || null,
+    costPerSf:
+      typeof baseCostPerSf === 'number'
+        ? baseCostPerSf
+        : Number(baseCostPerSf) || null,
+    stabilizedNoi:
+      typeof baseNoi === 'number' ? baseNoi : Number(baseNoi) || null,
+    stabilizedYieldPct:
+      typeof baseYieldPct === 'number'
+        ? baseYieldPct
+        : Number(baseYieldPct) || null,
+    dscr:
+      typeof baseDscr === 'number' ? baseDscr : Number(baseDscr) || null,
+    paybackYears:
+      typeof basePayback === 'number'
+        ? basePayback
+        : Number(basePayback) || null,
+  };
   const isHealthcareSurgicalCenter =
     isSurgicalCenter ||
     (typeof facilityUnitLabel === 'string' &&
@@ -1627,155 +1714,35 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5);
 
-  // Export to Excel handler
-  const handleExportExcel = () => {
+  const handleExportPdf = async () => {
     try {
-      // Create workbook
-      const wb = XLSX.utils.book_new();
-      
-      // Sheet 1: Executive Summary
-      const summaryData = [
-        ['SPECSHARP PROJECT ANALYSIS'],
-        [''],
-        ['Project:', project?.name || `${formatters.squareFeet(squareFootage)} ${buildingSubtype.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`],
-        ['Location:', location],
-        ['Building Type:', `${buildingType} - ${buildingSubtype}`],
-        ['Square Footage:', formatters.squareFeet(squareFootage)],
-        ['Floors:', floors],
-        [''],
-        ['FINANCIAL SUMMARY'],
-        ['Total Investment Required', formatters.currency(totalProjectCost)],
-        ['Construction Cost', formatters.currency(constructionTotal)],
-        ['Soft Costs', formatters.currency(softCostsTotal)],
-        ['Cost per SF', formatters.costPerSF(totals.cost_per_sf)],
-        [''],
-        ['INVESTMENT METRICS'],
-        ['Expected ROI', `${(displayData.roi * 100).toFixed(1)}%`],
-        ['NPV (10-year)', formatters.currency(displayData.npv)],
-        ['Payback Period', `${displayData.paybackPeriod} years`],
-        ['IRR', `${(displayData.irr || 12).toFixed(1)}%`],
-        ['Annual Revenue', formatters.currency(annualRevenue)],
-        ['Annual NOI', formatters.currency(noi)],
-        [''],
-        ['DECISION', decisionStatusLabel],
-        ['Reason', decisionReasonText]
-      ];
-      
-      const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
-      XLSX.utils.book_append_sheet(wb, ws1, 'Executive Summary');
-      
-      // Sheet 2: Department Breakdown
-      if (displayData.departmentAllocations?.length > 0) {
-        const deptData = [
-          ['DEPARTMENT COST ALLOCATION'],
-          [''],
-          ['Department', 'Cost', 'Percentage', 'Cost/SF'],
-          ...displayData.departmentAllocations.map(dept => [
-            dept.name,
-            formatters.currency(dept.cost),
-            `${dept.percentage}%`,
-            formatters.costPerSF(dept.costPerSF)
-          ])
-        ];
-        const ws2 = XLSX.utils.aoa_to_sheet(deptData);
-        XLSX.utils.book_append_sheet(wb, ws2, 'Department Costs');
+      const projectId =
+        project?.project_id ||
+        project?.projectId ||
+        project?.id;
+
+      if (!projectId) {
+        alert('Unable to determine project ID for PDF export.');
+        return;
       }
-      
-      // Sheet 3: Trade Package Details
-      if (displayData.trades?.length > 0) {
-        const tradeData = [
-          ['TRADE PACKAGE BREAKDOWN'],
-          [''],
-          ['Trade', 'Cost', 'Percentage', 'Cost/SF'],
-          ...displayData.trades.map(trade => [
-            trade.name,
-            formatters.currency(trade.cost),
-            `${trade.percentage.toFixed(1)}%`,
-            formatters.costPerSF(trade.costPerSF)
-          ])
-        ];
-        const ws3 = XLSX.utils.aoa_to_sheet(tradeData);
-        XLSX.utils.book_append_sheet(wb, ws3, 'Trade Packages');
-      }
-      
-      // Sheet 4: Investment Criteria
-      const criteriaData = [
-        ['INVESTMENT CRITERIA ASSESSMENT'],
-        [''],
-        ['Metric', 'Current', 'Required', 'Status'],
-        ['ROI', `${(displayData.roi * 100).toFixed(1)}%`, '8%', displayData.roi >= 0.08 ? 'PASS' : 'FAIL'],
-        ['NPV (10-year)', formatters.currency(displayData.npv), '> $0', displayData.npv > 0 ? 'PASS' : 'FAIL'],
-        ['Payback Period', `${displayData.paybackPeriod} years`, '≤ 7 years', displayData.paybackPeriod <= 7 ? 'PASS' : 'FAIL'],
-        ['DSCR', (displayData.dscr || 1.4).toFixed(2) + 'x', '≥ 1.25x', (displayData.dscr || 1.4) >= 1.25 ? 'PASS' : 'FAIL']
-      ];
-      const ws4 = XLSX.utils.aoa_to_sheet(criteriaData);
-      XLSX.utils.book_append_sheet(wb, ws4, 'Investment Criteria');
-      
-      // Sheet 5: Improvement Recommendations
-      if (displayData.improvementsNeeded?.length > 0) {
-        const improvementData = [
-          ['PATHS TO FEASIBILITY'],
-          [''],
-          ['Priority', 'Action Required', 'Impact'],
-          ...displayData.improvementsNeeded.map((imp, idx) => [
-            idx + 1,
-            imp.metric || imp.action || imp.description || 'Action Required',
-            imp.suggestion || imp.impact || imp.recommendation || ''
-          ])
-        ];
-        const ws5 = XLSX.utils.aoa_to_sheet(improvementData);
-        XLSX.utils.book_append_sheet(wb, ws5, 'Improvements');
-      }
-      
-      // Sheet 6: Soft Costs Breakdown
-      if (softCostCategories.length > 0) {
-        const softCostData = [
-          ['SOFT COSTS BREAKDOWN'],
-          [''],
-          ['Category', 'Amount', 'Percentage of Soft Costs'],
-          ...softCostCategories.map(cat => [
-            cat.name,
-            formatters.currency(cat.amount),
-            `${cat.percent.toFixed(1)}%`
-          ])
-        ];
-        const ws6 = XLSX.utils.aoa_to_sheet(softCostData);
-        XLSX.utils.book_append_sheet(wb, ws6, 'Soft Costs');
-      }
-      
-      // Sheet 7: 10-Year Cash Flow Projection
-      const years = Array.from({length: 10}, (_, i) => i + 1);
-      const revenue = annualRevenue || 0;
-      const operatingExpenses = revenue * (1 - operatingMargin);
-      const debtService = 
-        calculations?.debt_metrics?.annual_debt_service ||
-        calculations?.ownership_analysis?.debt_metrics?.annual_debt_service ||
-        displayData.debtService || 
-        0;
-      
-      const cashFlowData = [
-        ['10-YEAR CASH FLOW PROJECTION'],
-        [''],
-        ['Year', ...years],
-        ['Revenue', ...years.map(y => formatters.currency(revenue * Math.pow(1.03, y-1)))],
-        ['Operating Expenses', ...years.map(y => formatters.currency(operatingExpenses * Math.pow(1.025, y-1)))],
-        ['NOI', ...years.map(y => formatters.currency(revenue * operatingMargin * Math.pow(1.03, y-1)))],
-        ['Debt Service', ...years.map(_ => formatters.currency(debtService))],
-        ['Cash Flow', ...years.map(y => formatters.currency((revenue * operatingMargin * Math.pow(1.03, y-1)) - debtService))]
-      ];
-      const ws7 = XLSX.utils.aoa_to_sheet(cashFlowData);
-      XLSX.utils.book_append_sheet(wb, ws7, 'Cash Flow');
-      
-      // Generate filename with date
-      const date = new Date().toISOString().split('T')[0];
-      const projectName = project?.name?.replace(/[^a-z0-9]/gi, '_') || 'Project';
-      const filename = `SpecSharp_${projectName}_${date}.xlsx`;
-      
-      // Download the file
-      XLSX.writeFile(wb, filename);
-    } catch (error) {
-      console.error('Export failed:', error);
-      alert('Failed to export Excel file. Please try again.');
+
+      const response = await pdfService.exportProject(String(projectId));
+      const blob = new Blob(
+        [response.data],
+        { type: response.headers?.['content-type'] || 'application/pdf' }
+      );
+
+      const filename = generateExportFilename(project, 'pdf', { includeDate: true });
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      alert('Failed to export PDF report. Please try again.');
     }
   };
 
@@ -1806,19 +1773,19 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             
             <div className="flex gap-3 mt-4">
               <button 
-                onClick={handleExportExcel}
+                onClick={handleExportPdf}
                 className="px-4 py-2 bg-white/10 backdrop-blur border border-white/20 text-white rounded-lg hover:bg-white/20 transition flex items-center gap-2"
               >
                 <Download className="h-4 w-4" />
-                Export Excel
+                Export PDF
               </button>
-              <button
-                onClick={() => setIsScenarioOpen(true)}
-                className="px-4 py-2 border border-white/30 text-white rounded-lg hover:bg-white/10 transition flex items-center gap-2"
-              >
-                <Target className="h-4 w-4" />
-                Scenario
-              </button>
+                <button
+                  onClick={() => setIsScenarioOpen(true)}
+                  className="px-4 py-2 border border-white/30 text-white rounded-lg hover:bg-white/10 transition flex items-center gap-2"
+                >
+                  <Target className="h-4 w-4" />
+                  Scenario
+                </button>
             </div>
           </div>
           
@@ -3938,7 +3905,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           <div className="w-full max-w-6xl rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl" onClick={event => event.stopPropagation()}>
             <div className="flex items-center justify-between gap-4 border-b border-slate-800 px-6 py-4">
               <div>
-                <p className="text-sm font-semibold text-white">Scenario Comparison – Current vs Target Yield</p>
+                <p className="text-sm font-semibold text-white">Scenario Comparison (legacy)</p>
                 <p className="text-xs text-slate-400">Shows the current case alongside the target yield requirements.</p>
               </div>
               <button
@@ -4094,6 +4061,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           </div>
         </div>
       )}
-    </>
-  );
-};
+        <ScenarioModal
+          open={isScenarioOpen}
+          onClose={() => setIsScenarioOpen(false)}
+          base={scenarioBase}
+        />
+      </>
+    );
+  };

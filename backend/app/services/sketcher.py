@@ -1,12 +1,18 @@
-try:
-    import matplotlib.pyplot as plt
-    import matplotlib.patches as patches
-    from matplotlib.patches import Rectangle
-    import numpy as np
-    HAS_MATPLOTLIB = True
-except ImportError:
+import os
+
+if os.getenv("DISABLE_FLOOR_PLAN_SKETCHER", "false").lower() == "true":
     HAS_MATPLOTLIB = False
     np = None
+else:
+    try:
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as patches
+        from matplotlib.patches import Rectangle
+        import numpy as np
+        HAS_MATPLOTLIB = True
+    except ImportError:
+        HAS_MATPLOTLIB = False
+        np = None
 from typing import List, Tuple, Dict, Optional
 import uuid
 import io

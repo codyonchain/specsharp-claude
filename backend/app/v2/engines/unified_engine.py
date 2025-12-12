@@ -146,6 +146,32 @@ def build_project_timeline(building_type: BuildingType, start_date: Optional[dat
     return timeline
 
 class UnifiedEngine:
+    def _normalize_project_class(self, value: Any) -> str:
+        """
+        Map various project_type/project_class inputs into the string values
+        expected by ProjectClass enums (e.g. 'ground_up').
+        """
+        raw = value
+        if isinstance(value, dict):
+            raw = (
+                value.get("project_type")
+                or value.get("projectType")
+                or value.get("project_class")
+                or value.get("projectClass")
+            )
+        if not raw:
+            return "ground_up"
+
+        s = str(raw).strip().lower().replace("-", "_").replace(" ", "_")
+        if s in ("groundup", "ground_up", "ground"):
+            return "ground_up"
+        if s in ("renovation", "reno", "remodel"):
+            return "renovation"
+        if s in ("addition", "add", "expansion"):
+            return "addition"
+        if s in ("tenant_improvement", "tenant", "ti"):
+            return "tenant_improvement"
+        return "ground_up"
     """
     One engine to rule them all.
     Single source of truth for all cost calculations.
@@ -188,6 +214,26 @@ class UnifiedEngine:
             Comprehensive cost breakdown dictionary
         """
         
+        # Normalize project class input if provided as a raw string
+        if isinstance(project_class, str):
+            normalized_class = self._normalize_project_class(project_class)
+            try:
+                project_class = ProjectClass(normalized_class)
+            except ValueError:
+                project_class = ProjectClass.GROUND_UP
+        self._log_trace("project_class_normalized", {
+            'project_class': project_class.value if isinstance(project_class, ProjectClass) else str(project_class),
+        })
+        try:
+            raw_project_type = None
+            if isinstance(special_features, dict):  # not likely, but guard
+                raw_project_type = special_features.get("project_type")
+            if raw_project_type is None:
+                raw_project_type = getattr(project_class, "value", project_class)
+            print("[SpecSharp][UnifiedEngine] project_class=", raw_project_type)
+        except Exception:
+            pass
+
         # Clear trace for new calculation
         self.calculation_trace = []
         self._log_trace("calculation_start", {
@@ -355,6 +401,14 @@ class UnifiedEngine:
         
         # Calculate soft costs
         soft_costs = self._calculate_soft_costs(construction_cost, building_config.soft_costs)
+        
+        # Build scope items (per trade) where supported
+        scope_items = self._build_scope_items(
+            building_type=building_type,
+            subtype=subtype,
+            trades=trades,
+            square_footage=square_footage
+        )
         
         # For healthcare facilities, equipment is a soft cost (medical equipment)
         # For other building types, it's part of hard costs
@@ -577,6 +631,7 @@ class UnifiedEngine:
             },
             'cost_dna': cost_dna,  # Add cost DNA for transparency
             'trade_breakdown': trades,
+            'scope_items': scope_items,
             'soft_costs': soft_costs,
             'totals': {
                 'hard_costs': total_hard_costs,
@@ -753,6 +808,278 @@ class UnifiedEngine:
         })
         
         return soft_costs
+
+    def _build_scope_items(
+        self,
+        building_type: BuildingType,
+        subtype: str,
+        trades: Dict[str, float],
+        square_footage: float
+    ) -> List[Dict[str, Any]]:
+        """
+        Build a simple, deterministic scope_items structure from the trade breakdown.
+        For now, we only generate rich scope for industrial warehouses.
+        """
+        scope_items: List[Dict[str, Any]] = []
+
+        if not trades or square_footage <= 0:
+            return scope_items
+
+        subtype_key = (subtype or "").lower().strip()
+
+        if building_type == BuildingType.INDUSTRIAL and subtype_key in {
+            "warehouse",
+            "distribution_warehouse",
+            "distribution_center",
+            "class_a_distribution_warehouse",
+            "class_a_distribution",
+        }:
+            sf = float(square_footage)
+
+            def _safe_unit_cost(total: float, qty: float) -> float:
+                if not qty:
+                    return 0.0
+                try:
+                    return float(total) / float(qty)
+                except (TypeError, ValueError, ZeroDivisionError):
+                    return 0.0
+
+            dock_count = max(4, int(round(sf / 10000.0)))
+            restroom_groups = max(1, int(round(sf / 25000.0)))
+            mezz_sf = sf * 0.10 if sf >= 120000 else 0.0
+
+            structural_total = float(trades.get("structural", 0.0) or 0.0)
+            if structural_total > 0:
+                slab_share = 0.45
+                shell_share = 0.25
+                foundations_share = 0.10
+                dock_share = 0.20
+
+                if mezz_sf > 0:
+                    mezz_share = 0.10
+                    base_total = slab_share + shell_share + foundations_share + dock_share
+                    scale = (1.0 - mezz_share) / base_total
+                    slab_share *= scale
+                    shell_share *= scale
+                    foundations_share *= scale
+                    dock_share *= scale
+                else:
+                    mezz_share = 0.0
+
+                slab_total = structural_total * slab_share
+                shell_total = structural_total * shell_share
+                foundations_total = structural_total * foundations_share
+                docks_total = structural_total * dock_share
+                mezz_total = structural_total * mezz_share
+
+                structural_systems = [
+                    {
+                        "name": 'Concrete slab on grade (6")',
+                        "quantity": sf,
+                        "unit": "SF",
+                        "unit_cost": _safe_unit_cost(slab_total, sf),
+                        "total_cost": slab_total,
+                    },
+                    {
+                        "name": "Tilt-wall panels / structural shell",
+                        "quantity": sf,
+                        "unit": "SF",
+                        "unit_cost": _safe_unit_cost(shell_total, sf),
+                        "total_cost": shell_total,
+                    },
+                    {
+                        "name": "Foundations, footings, and thickened slabs",
+                        "quantity": sf,
+                        "unit": "SF",
+                        "unit_cost": _safe_unit_cost(foundations_total, sf),
+                        "total_cost": foundations_total,
+                    },
+                    {
+                        "name": "Dock pits and loading aprons",
+                        "quantity": dock_count,
+                        "unit": "EA",
+                        "unit_cost": _safe_unit_cost(docks_total, dock_count),
+                        "total_cost": docks_total,
+                    },
+                ]
+
+                if mezz_sf > 0 and mezz_total > 0:
+                    structural_systems.append({
+                        "name": "Mezzanine structure (framing, deck, stairs)",
+                        "quantity": mezz_sf,
+                        "unit": "SF",
+                        "unit_cost": _safe_unit_cost(mezz_total, mezz_sf),
+                        "total_cost": mezz_total,
+                    })
+
+                scope_items.append({
+                    "trade": "Structural",
+                    "systems": structural_systems,
+                })
+
+            mechanical_total = float(trades.get("mechanical", 0.0) or 0.0)
+            if mechanical_total > 0:
+                rtu_count = max(1, int(round(sf / 15000.0)))
+                exhaust_fans = max(1, int(round(sf / 40000.0)))
+
+                rtu_share = 0.50
+                exhaust_share = 0.20
+                distribution_share = 0.30
+
+                rtu_total = mechanical_total * rtu_share
+                exhaust_total = mechanical_total * exhaust_share
+                distribution_total = mechanical_total * distribution_share
+
+                mechanical_systems = [
+                    {
+                        "name": "Rooftop units (RTUs) & primary heating/cooling equipment",
+                        "quantity": rtu_count,
+                        "unit": "EA",
+                        "unit_cost": _safe_unit_cost(rtu_total, rtu_count),
+                        "total_cost": rtu_total,
+                    },
+                    {
+                        "name": "Make-up air units and exhaust fans",
+                        "quantity": exhaust_fans,
+                        "unit": "EA",
+                        "unit_cost": _safe_unit_cost(exhaust_total, exhaust_fans),
+                        "total_cost": exhaust_total,
+                    },
+                    {
+                        "name": "Ductwork, distribution, and ventilation",
+                        "quantity": sf,
+                        "unit": "SF",
+                        "unit_cost": _safe_unit_cost(distribution_total, sf),
+                        "total_cost": distribution_total,
+                    },
+                ]
+
+                scope_items.append({
+                    "trade": "Mechanical",
+                    "systems": mechanical_systems,
+                })
+
+            electrical_total = float(trades.get("electrical", 0.0) or 0.0)
+            if electrical_total > 0:
+                lighting_share = 0.45
+                power_share = 0.35
+                service_share = 0.20
+
+                lighting_total = electrical_total * lighting_share
+                power_total = electrical_total * power_share
+                service_total = electrical_total * service_share
+
+                electrical_systems = [
+                    {
+                        "name": "High-bay lighting & controls",
+                        "quantity": sf,
+                        "unit": "SF",
+                        "unit_cost": _safe_unit_cost(lighting_total, sf),
+                        "total_cost": lighting_total,
+                    },
+                    {
+                        "name": "Power distribution, panels, and branch circuits",
+                        "quantity": sf,
+                        "unit": "SF",
+                        "unit_cost": _safe_unit_cost(power_total, sf),
+                        "total_cost": power_total,
+                    },
+                    {
+                        "name": "Main electrical service and switchgear",
+                        "quantity": 1,
+                        "unit": "LS",
+                        "unit_cost": _safe_unit_cost(service_total, 1),
+                        "total_cost": service_total,
+                    },
+                ]
+
+                scope_items.append({
+                    "trade": "Electrical",
+                    "systems": electrical_systems,
+                })
+
+            plumbing_total = float(trades.get("plumbing", 0.0) or 0.0)
+            if plumbing_total > 0:
+                restroom_share = 0.50
+                domestic_share = 0.20
+                esfr_share = 0.30
+
+                restroom_total = plumbing_total * restroom_share
+                domestic_total = plumbing_total * domestic_share
+                esfr_total = plumbing_total * esfr_share
+
+                plumbing_systems = [
+                    {
+                        "name": "Restroom groups (fixtures, waste, vent)",
+                        "quantity": restroom_groups,
+                        "unit": "EA",
+                        "unit_cost": _safe_unit_cost(restroom_total, restroom_groups),
+                        "total_cost": restroom_total,
+                    },
+                    {
+                        "name": "Domestic water, hose bibs, and roof drains",
+                        "quantity": sf,
+                        "unit": "SF",
+                        "unit_cost": _safe_unit_cost(domestic_total, sf),
+                        "total_cost": domestic_total,
+                    },
+                    {
+                        "name": "Fire protection – ESFR sprinkler system",
+                        "quantity": sf,
+                        "unit": "SF",
+                        "unit_cost": _safe_unit_cost(esfr_total, sf),
+                        "total_cost": esfr_total,
+                    },
+                ]
+
+                scope_items.append({
+                    "trade": "Plumbing",
+                    "systems": plumbing_systems,
+                })
+
+            finishes_total = float(trades.get("finishes", 0.0) or 0.0)
+            if finishes_total > 0:
+                office_sf = max(1500.0, sf * 0.05)
+                warehouse_sf = sf - office_sf if sf > office_sf else sf
+
+                office_share = 0.45
+                warehouse_finish_share = 0.40
+                misc_share = 0.15
+
+                office_total = finishes_total * office_share
+                warehouse_finish_total = finishes_total * warehouse_finish_share
+                misc_finishes_total = finishes_total * misc_share
+
+                finishes_systems = [
+                    {
+                        "name": "Office build-out (walls, ceilings, flooring)",
+                        "quantity": office_sf,
+                        "unit": "SF",
+                        "unit_cost": _safe_unit_cost(office_total, office_sf),
+                        "total_cost": office_total,
+                    },
+                    {
+                        "name": "Warehouse floor sealers, striping, and protection",
+                        "quantity": warehouse_sf,
+                        "unit": "SF",
+                        "unit_cost": _safe_unit_cost(warehouse_finish_total, warehouse_sf),
+                        "total_cost": warehouse_finish_total,
+                    },
+                    {
+                        "name": "Doors, hardware, and misc interior finishes",
+                        "quantity": sf,
+                        "unit": "SF",
+                        "unit_cost": _safe_unit_cost(misc_finishes_total, sf),
+                        "total_cost": misc_finishes_total,
+                    },
+                ]
+
+                scope_items.append({
+                    "trade": "Finishes",
+                    "systems": finishes_systems,
+                })
+
+        return scope_items
     
     def _calculate_ownership(
         self,

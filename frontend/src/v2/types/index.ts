@@ -193,6 +193,17 @@ export interface CalculationResult {
   };
   construction_costs: ConstructionCosts;
   trade_breakdown: Record<string, number>;
+  scope_items?: Array<{
+    trade: string;
+    systems: Array<{
+      name?: string;
+      description?: string;
+      quantity?: number;
+      unit?: string;
+      unit_cost?: number;
+      total_cost?: number;
+    }>;
+  }>;
   soft_costs: Record<string, number>;
   totals: ProjectTotals;
   ownership_analysis?: OwnershipAnalysis;

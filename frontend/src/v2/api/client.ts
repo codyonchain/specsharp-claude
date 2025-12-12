@@ -178,10 +178,15 @@ class V2APIClient {
     }
     if (projectClass) {
       payload.project_class = projectClass;
+      payload.project_classification = projectClass;
+      payload.projectClass = projectClass;
+      payload.projectClassification = projectClass;
     }
     if (special_features && special_features.length > 0) {
       payload.special_features = special_features;
     }
+    
+    console.log('[analyze payload]', payload);
     
     const result = await this.request<ProjectAnalysis>('/analyze', {
       method: 'POST',
@@ -444,7 +449,12 @@ class V2APIClient {
 
     if (params.projectClass) {
       payload.project_class = params.projectClass;
+      payload.project_classification = params.projectClass;
+      payload.projectClass = params.projectClass;
+      payload.projectClassification = params.projectClass;
     }
+    
+    console.log('[scope.generate payload]', payload);
 
     tracer.trace('API_CREATE_PROJECT_V2', 'Creating project via V2 endpoint', {
       has_location: !!payload.location,

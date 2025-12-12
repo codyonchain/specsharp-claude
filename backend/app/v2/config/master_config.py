@@ -5233,8 +5233,8 @@ _FINISH_FACTOR_PATTERN = re.compile(
 
 PROJECT_CLASS_MULTIPLIERS = {
     ProjectClass.GROUND_UP: 1.00,
-    ProjectClass.ADDITION: 1.15,
-    ProjectClass.RENOVATION: 1.35,
+    ProjectClass.ADDITION:  1.12,
+    ProjectClass.RENOVATION:  0.92,
     ProjectClass.TENANT_IMPROVEMENT: 0.65
 }
 

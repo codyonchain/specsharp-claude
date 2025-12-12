@@ -31,9 +31,15 @@ export const NewProject: React.FC = () => {
   
   // Project configuration state
   const [specialFeatures, setSpecialFeatures] = useState<string[]>([]);
-  const [finishLevel, setFinishLevel] = useState<'standard' | 'premium' | 'luxury'>('standard');
+  const [finishLevel, setFinishLevel] = useState<'standard' | 'premium'>('standard');
   const [finishLevelLocked, setFinishLevelLocked] = useState(false);
   const [projectComplexity, setProjectComplexity] = useState<'ground_up' | 'renovation' | 'addition'>('ground_up');
+  const [projectClassLocked, setProjectClassLocked] = useState(false);
+  // Finish level options (universal v1) – keep only one upgrade tier for underwriting comparisons
+  const FINISH_LEVELS = [
+    { label: 'Standard', value: 'standard', multiplierLabel: '1.0x' },
+    { label: 'Premium', value: 'premium', multiplierLabel: '1.2x' },
+  ] as const;
 
   // Live preview state
   const [previewData, setPreviewData] = useState<{
@@ -448,10 +454,16 @@ export const NewProject: React.FC = () => {
     if (lower.includes('cold storage')) detectedFeatures.push('cold_storage');
     if (lower.includes('food court')) detectedFeatures.push('food_court');
     
-    // Detect finish level
-    let detectedFinish: 'standard' | 'premium' | 'luxury' = 'standard';
-    if (lower.includes('luxury') || lower.includes('high-end')) detectedFinish = 'luxury';
-    else if (lower.includes('premium') || lower.includes('class a')) detectedFinish = 'premium';
+    // Detect finish level (luxury/high-end terms map into premium)
+    let detectedFinish: 'standard' | 'premium' = 'standard';
+    if (
+      lower.includes('luxury') ||
+      lower.includes('high-end') ||
+      lower.includes('premium') ||
+      lower.includes('class a')
+    ) {
+      detectedFinish = 'premium';
+    }
     
     // Detect project complexity
     let detectedComplexity: 'ground_up' | 'renovation' | 'addition' = 'ground_up';
@@ -485,7 +497,7 @@ export const NewProject: React.FC = () => {
   };
 
   const finishLevelForApi = (level: typeof finishLevel) =>
-    (level.charAt(0).toUpperCase() + level.slice(1)) as 'Standard' | 'Premium' | 'Luxury';
+    (level === 'premium' ? 'Premium' : 'Standard');
 
   const formatPreviewCurrency = (value?: number) => {
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -614,7 +626,7 @@ export const NewProject: React.FC = () => {
         previewAbortRef.current = null;
       }
     };
-  }, [description, squareFootageInput, locationInput, finishLevel, finishLevelLocked]);
+  }, [description, squareFootageInput, locationInput, finishLevel, finishLevelLocked, projectComplexity]);
   
   // Calculate total cost including features
   const handleExampleClick = (example: any) => {
@@ -626,6 +638,7 @@ export const NewProject: React.FC = () => {
     setFinishLevel('standard');
     setFinishLevelLocked(false);
     setProjectComplexity('ground_up');
+    setProjectClassLocked(false);
     // Auto-scroll to show the form is filled
     window.scrollTo({ top: 200, behavior: 'smooth' });
   };
@@ -651,14 +664,23 @@ export const NewProject: React.FC = () => {
       setSpecialFeatures(parsed.specialFeatures);
       if (!finishLevelLocked) {
         const engineFinish = analysis.calculations?.project_info?.finish_level;
-        const normalizedEngineFinish = typeof engineFinish === 'string' ? engineFinish.toLowerCase() as 'standard' | 'premium' | 'luxury' : undefined;
-        if (normalizedEngineFinish) {
-          setFinishLevel(normalizedEngineFinish);
+        const normalizedEngineFinish =
+          typeof engineFinish === 'string' ? engineFinish.toLowerCase() : undefined;
+        const sanitizedEngineFinish: 'standard' | 'premium' | undefined =
+          normalizedEngineFinish === 'standard'
+            ? 'standard'
+            : normalizedEngineFinish === 'premium' || normalizedEngineFinish === 'luxury'
+              ? 'premium'
+              : undefined;
+        if (sanitizedEngineFinish) {
+          setFinishLevel(sanitizedEngineFinish);
         } else if (parsed.finishLevel) {
           setFinishLevel(parsed.finishLevel);
         }
       }
-      setProjectComplexity(parsed.projectComplexity);
+      if (!projectClassLocked && parsed.projectComplexity) {
+        setProjectComplexity(parsed.projectComplexity);
+      }
       if (analysis.parsed_input?.square_footage) {
         setSquareFootageInput(formatNumber(analysis.parsed_input.square_footage));
       }
@@ -684,12 +706,11 @@ export const NewProject: React.FC = () => {
   
   const normalizeFinishLevel = (
     level?: string
-  ): 'Standard' | 'Premium' | 'Luxury' | undefined => {
+  ): 'Standard' | 'Premium' | undefined => {
     if (!level) return undefined;
     const lower = level.toLowerCase();
     if (lower === 'standard') return 'Standard';
-    if (lower === 'premium') return 'Premium';
-    if (lower === 'luxury') return 'Luxury';
+    if (lower === 'premium' || lower === 'luxury') return 'Premium';
     return undefined;
   };
 
@@ -700,6 +721,16 @@ export const NewProject: React.FC = () => {
     tracer.trace('SAVE_START', 'Saving project', result);
     
     try {
+      // ---- Project Class: UI selection must win on SAVE ----
+      const uiSelectedClass = projectComplexity;
+      const nlpDetectedClass =
+        result.parsed_input?.project_classification ??
+        result.parsed_input?.project_class ??
+        (result as any)?.project_classification ??
+        (result as any)?.projectClassification ??
+        'ground_up';
+      const finalProjectClass = (uiSelectedClass || nlpDetectedClass || 'ground_up') as 'ground_up' | 'renovation' | 'addition';
+
       const squareValueFromInput = parseSquareFootageValue(squareFootageInput);
       const parsedSquareFootage = Number(result.parsed_input?.square_footage) || 0;
       const derivedSquareFootage = parsedSquareFootage > 0 ? parsedSquareFootage : squareValueFromInput;
@@ -709,7 +740,6 @@ export const NewProject: React.FC = () => {
         : undefined;
       const uiFinish = normalizeFinishLevel(finishLevel);
       const derivedFinishLevel = uiFinish || normalizeFinishLevel(engineFinish) || 'Standard';
-      const derivedProjectClass = result.parsed_input?.project_class || projectComplexity;
       const derivedDescription = description.trim() || result.calculations?.project_info?.display_name || 'SpecSharp Project';
       const engineFeatures = (result.calculations?.project_info as any)?.special_features;
       const derivedSpecialFeatures = specialFeatures.length
@@ -718,12 +748,14 @@ export const NewProject: React.FC = () => {
           ? engineFeatures
           : [];
 
+      console.log('[SAVE] finalProjectClass =', finalProjectClass);
+
       const { id } = await createProject({
         description: derivedDescription,
         location: derivedLocation,
         squareFootage: derivedSquareFootage,
         finishLevel: derivedFinishLevel,
-        projectClass: derivedProjectClass,
+        projectClass: finalProjectClass,
         specialFeatures: derivedSpecialFeatures,
       });
 
@@ -748,6 +780,7 @@ export const NewProject: React.FC = () => {
     setFinishLevel('standard');
     setFinishLevelLocked(false);
     setProjectComplexity('ground_up');
+    setProjectClassLocked(false);
     setPreviewData(null);
     setPreviewStatus('idle');
     setPreviewError(null);
@@ -1182,7 +1215,10 @@ export const NewProject: React.FC = () => {
                       {(['ground_up', 'renovation', 'addition'] as const).map(type => (
                         <button
                           key={type}
-                          onClick={() => setProjectComplexity(type)}
+                          onClick={() => {
+                            setProjectComplexity(type);
+                            setProjectClassLocked(true);
+                          }}
                           className={`px-3 py-3 rounded-lg text-sm font-medium transition ${
                             projectComplexity === type
                               ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-500'
@@ -1195,8 +1231,8 @@ export const NewProject: React.FC = () => {
                             </div>
                             <div className="text-xs mt-1 opacity-75">
                               {type === 'ground_up' && '1.0x'}
-                              {type === 'addition' && '1.15x'}
-                              {type === 'renovation' && '1.35x'}
+                              {type === 'addition' && '1.12x'}
+                              {type === 'renovation' && '0.92x'}
                             </div>
                           </div>
                         </button>
@@ -1207,27 +1243,23 @@ export const NewProject: React.FC = () => {
                   {/* Finish Level */}
                   <div>
                     <p className="text-sm font-medium text-gray-700 mb-3">Finish Level</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {(['standard', 'premium', 'luxury'] as const).map(level => (
+                    <div className="grid grid-cols-2 gap-2">
+                      {FINISH_LEVELS.map(({ label, value, multiplierLabel }) => (
                         <button
-                          key={level}
+                          key={value}
                           onClick={() => {
-                            setFinishLevel(level);
+                            setFinishLevel(value);
                             setFinishLevelLocked(true);
                           }}
                           className={`px-3 py-3 rounded-lg text-sm font-medium transition ${
-                            finishLevel === level
+                            finishLevel === value
                               ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-500'
                               : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
                           }`}
                         >
                           <div className="text-center">
-                            <div className="font-semibold capitalize">{level}</div>
-                            <div className="text-xs mt-1 opacity-75">
-                              {level === 'standard' && '1.0x'}
-                              {level === 'premium' && '1.15x'}
-                              {level === 'luxury' && '1.35x'}
-                            </div>
+                            <div className="font-semibold">{label}</div>
+                            <div className="text-xs mt-1 opacity-75">{multiplierLabel}</div>
                           </div>
                         </button>
                       ))}

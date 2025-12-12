@@ -3,6 +3,7 @@ Clean API endpoint that uses the new system
 """
 
 from fastapi import APIRouter, HTTPException, Query, Depends, Header
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict, AliasChoices
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -24,11 +25,52 @@ from app.v2.config.master_config import (
 from app.core.building_taxonomy import normalize_building_type, validate_building_type
 from app.db.models import Project
 from app.db.database import get_db
+from app.services.pdf_export_service import pdf_export_service
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["v2"])
+
+
+def _project_class_from_payload(payload: Dict[str, Any]) -> ProjectClass:
+    """Normalize project class strings from UI/NLP into ProjectClass enums."""
+    raw_value = None
+    if isinstance(payload, dict):
+        # Accept BOTH legacy keys + NLP keys
+        raw_value = (
+            payload.get("project_classification")
+            or payload.get("projectClassification")
+            or payload.get("project_class")          # legacy
+            or payload.get("projectClass")           # legacy
+            or payload.get("project_type")
+            or payload.get("projectType")
+            or payload.get("project_classification".upper())  # defensive
+        )
+
+        # Also allow nested aliases if a caller passes full request dict
+        parsed = payload.get("parsed_input") or payload.get("parsedInput")
+        if not raw_value and isinstance(parsed, dict):
+            raw_value = (
+                parsed.get("project_classification")
+                or parsed.get("projectClassification")
+                or parsed.get("project_class")
+                or parsed.get("projectClass")
+            )
+
+    if not raw_value:
+        return ProjectClass.GROUND_UP
+
+    key = str(raw_value).strip().lower().replace("-", "_").replace(" ", "_")
+
+    if key in {"ground_up", "groundup", "ground", "greenfield", "new", "new_build", "newbuild"}:
+        return ProjectClass.GROUND_UP
+    if key in {"renovation", "reno", "remodel", "tenant_improvement", "tenantimprovement", "ti", "fitout", "fit_out"}:
+        return ProjectClass.RENOVATION
+    if key in {"addition", "add", "expansion"}:
+        return ProjectClass.ADDITION
+
+    return ProjectClass.GROUND_UP
 
 # ============================================================================
 # REQUEST/RESPONSE MODELS
@@ -52,6 +94,12 @@ class AnalyzeRequest(BaseModel):
         alias="finishLevel",
         validation_alias=AliasChoices("finishLevel", "finish_level"),
         description="Finish level selection (Standard, Premium, Luxury)"
+    )
+    project_class: Optional[str] = Field(
+        None,
+        alias="projectClass",
+        validation_alias=AliasChoices("project_class", "projectClass"),
+        description="Project class (ground_up, renovation, addition)"
     )
     special_features: List[str] = Field(
         default_factory=list,
@@ -101,6 +149,12 @@ async def analyze_project(request: AnalyzeRequest):
         "Build a 50,000 sf hospital with emergency department in Nashville"
     """
     try:
+        logger.info(
+            "[scope.analyze][REQ] project_class=%s project_classification=%s raw=%s",
+            getattr(request, "project_class", None),
+            getattr(request, "project_classification", None),
+            request.model_dump() if hasattr(request, "model_dump") else request.dict(),
+        )
         # Parse the description using phrase-first parser
         parsed = nlp_service.extract_project_details(request.description)
         parsed['special_features'] = request.special_features or []
@@ -137,6 +191,13 @@ async def analyze_project(request: AnalyzeRequest):
         if 'finish_level' not in parsed or not parsed['finish_level']:
             parsed['finish_level'] = 'standard'
 
+        # Respect explicit project class selection from client-side configuration
+        override_class = getattr(request, "project_class", None) or getattr(request, "project_classification", None)
+        if override_class:
+            parsed["project_class"] = override_class
+            parsed["project_classification"] = override_class
+            logger.info("[scope.analyze][OVERRIDE_APPLIED] override_class=%s", override_class)
+
         finish_level_value = parsed.get('finish_level', 'standard')
         finish_level_source = 'explicit' if finish_override else (
             'description' if parsed.get('finish_level') not in (None, '', 'standard') and not finish_override else 'default'
@@ -153,7 +214,20 @@ async def analyze_project(request: AnalyzeRequest):
         
         # Convert string values to enums
         building_type = BuildingType(parsed['building_type'])
-        project_class = ProjectClass(parsed.get('project_class', 'ground_up'))
+        logger.info(
+            "[scope.analyze][PRE_NORM] parsed.project_class=%s parsed.project_classification=%s",
+            parsed.get("project_class"),
+            parsed.get("project_classification"),
+        )
+        normalized_override = parsed.get("project_class") or parsed.get("project_classification")
+        if normalized_override:
+            project_class = _project_class_from_payload({
+                "project_class": normalized_override,
+                "project_classification": normalized_override,
+            })
+        else:
+            project_class = _project_class_from_payload(parsed)
+        logger.info("[scope.analyze][POST_NORM] project_class_enum=%s", project_class)
         ownership_type = OwnershipType(parsed.get('ownership_type', 'for_profit'))
         
         # Calculate everything
@@ -548,6 +622,26 @@ async def generate_scope(
         if 'finish_level' not in parsed or not parsed['finish_level']:
             parsed['finish_level'] = 'standard'
 
+        override_class = getattr(request, "project_class", None) or getattr(request, "project_classification", None)
+        if override_class:
+            parsed['project_class'] = override_class
+            parsed['project_classification'] = override_class
+            logger.info("[scope.generate] project_class override: %s", override_class)
+
+        # Normalize project class from any payload/NLP alias
+        if override_class:
+            project_class_enum = _project_class_from_payload({
+                "project_class": override_class,
+                "project_classification": override_class
+            })
+        else:
+            project_class_enum = _project_class_from_payload(parsed)
+        project_class_str = project_class_enum.value  # 'ground_up' / 'renovation' / 'addition'
+
+        # Keep both fields so older logic + newer logic both work
+        parsed["project_class"] = project_class_str
+        parsed["project_classification"] = project_class_str
+
         finish_level_value = parsed.get('finish_level', 'standard')
         finish_level_source = 'explicit' if finish_override else (
             'description' if parsed.get('finish_level') not in (None, '', 'standard') and not finish_override else 'default'
@@ -570,18 +664,49 @@ async def generate_scope(
         
         # Use unified engine for calculations
         building_type_enum = BuildingType(parsed.get('building_type', 'office'))
+        logger.info(
+            "[scope.generate] class_enum=%s class_str=%s parsed.project_class=%s parsed.project_classification=%s request.project_class=%s",
+            project_class_enum,
+            project_class_str,
+            parsed.get("project_class"),
+            parsed.get("project_classification"),
+            getattr(request, "project_class", None),
+        )
+
         result = unified_engine.calculate_project(
             building_type=building_type_enum,
             subtype=parsed.get('subtype'),
             square_footage=parsed.get('square_footage', 10000),
             location=parsed.get('location', 'Nashville, TN'),
-            project_class=ProjectClass(parsed.get('project_class', 'ground_up')),
+            project_class=project_class_enum,
             floors=parsed.get('floors', 1),
             ownership_type=OwnershipType(parsed.get('ownership_type', 'for_profit')),
             finish_level=finish_level_value,
             finish_level_source=finish_level_source,
             special_features=parsed.get('special_features', [])
         )
+
+        # Embed request metadata into stored result so downstream consumers can hydrate it
+        if isinstance(result, dict):
+            req_block = {
+                "project_classification": project_class_str,
+                "project_class": project_class_str,
+                "building_type": parsed.get("building_type"),
+                "subtype": parsed.get("subtype"),
+                "square_footage": parsed.get("square_footage"),
+                "location": parsed.get("location"),
+                "floors": parsed.get("floors", 1),
+                "finish_level": finish_level_value,
+                "finish_level_source": finish_level_source,
+                "special_features": parsed.get("special_features", []),
+            }
+
+            # Store both for compatibility
+            result.setdefault("request_data", req_block)
+            result.setdefault("parsed_input", parsed.copy())
+            result["parsed_input"]["project_classification"] = project_class_str
+            result["parsed_input"]["project_class"] = project_class_str
+            result["project_classification"] = project_class_str
         
         # Generate unique project ID
         project_id = f"proj_{int(datetime.utcnow().timestamp())}_{uuid.uuid4().hex[:8]}"
@@ -620,6 +745,7 @@ async def generate_scope(
             square_footage=parsed.get('square_footage', 10000),
             building_type=parsed.get('building_type', 'office'),
             occupancy_type=parsed.get('building_type', 'office'),  # Keep same as building_type for now
+            project_classification=project_class_str,
             
             # Cost fields
             total_cost=result.get('totals', {}).get('total_project_cost', 0),
@@ -710,6 +836,63 @@ async def get_owner_view(
     """Get owner-friendly view of project with ID in body"""
     project_id = request.get('project_id')
     return await _get_owner_view_impl(project_id, db)
+
+@router.get("/pdf/project/{project_id}/pdf")
+async def export_project_pdf(
+    project_id: str,
+    client_name: Optional[str] = Query(None, alias="client_name"),
+    db: Session = Depends(get_db)
+):
+    """Generate a PDF report for a project."""
+    project = db.query(Project).filter(Project.project_id == project_id).first()
+    if not project and project_id.isdigit():
+        project = db.query(Project).filter(Project.id == int(project_id)).first()
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project_payload = format_project_response(project)
+    calculation_data = project_payload.get('calculation_data') or {}
+
+    request_data = (
+        calculation_data.get('request_data') or
+        calculation_data.get('parsed_input') or
+        calculation_data.get('request_payload') or
+        {}
+    )
+    if not isinstance(request_data, dict):
+        request_data = {}
+
+    request_data.setdefault('square_footage', project_payload.get('square_footage') or project.square_footage or 0)
+    request_data.setdefault('location', project_payload.get('location') or project.location or 'Unknown')
+    request_data.setdefault('building_type', calculation_data.get('project_info', {}).get('building_type') or project_payload.get('building_type'))
+    request_data.setdefault(
+        'num_floors',
+        request_data.get('floors') or
+        calculation_data.get('project_info', {}).get('floors') or
+        project_payload.get('floors') or
+        1
+    )
+    project_payload['request_data'] = request_data
+
+    project_name = project_payload.get('project_name') or project_payload.get('name') or f"project_{project_id}"
+    project_payload['project_name'] = project_name
+
+    try:
+        pdf_buffer = pdf_export_service.generate_professional_pdf(project_payload, client_name)
+    except Exception as exc:
+        logger.error(f"Failed to generate PDF for project {project_id}: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to generate PDF report")
+
+    safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in project_name).strip() or "SpecSharp_Project"
+    filename = f"{safe_name.replace(' ', '_')}_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
+    pdf_bytes = pdf_buffer.getvalue()
+
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 # Process owner view data for a project
 async def _process_owner_view_data(project):
@@ -881,12 +1064,77 @@ def format_project_response(project: Project) -> dict:
                     'quantity': 1
                 }]
             })
+
+    # Derive simple scope_items from trade data if not already present
+    scope_items = calculation_data.get('scope_items')
+    if not scope_items:
+        derived_scope_items = []
+
+        if isinstance(trade_data, dict) and trade_data:
+            # V2 format – use trade_breakdown dict
+            for trade_name, amount in trade_data.items():
+                display_name = trade_name.replace('_', ' ').title()
+                derived_scope_items.append({
+                    'trade': display_name,
+                    'systems': [{
+                        'name': display_name,
+                        'quantity': 1,
+                        'unit': 'LUMP SUM',
+                        'unit_cost': amount,
+                        'total_cost': amount
+                    }]
+                })
+        elif categories:
+            # V1 fallback – use categories list
+            for category in categories:
+                if not isinstance(category, dict) or 'name' not in category:
+                    continue
+                display_name = category['name']
+                value = category.get('value', 0)
+                derived_scope_items.append({
+                    'trade': display_name,
+                    'systems': [{
+                        'name': display_name,
+                        'quantity': 1,
+                        'unit': 'LUMP SUM',
+                        'unit_cost': value,
+                        'total_cost': value
+                    }]
+                })
+
+        if derived_scope_items:
+            scope_items = derived_scope_items
+            calculation_data['scope_items'] = derived_scope_items
+    else:
+        # Ensure scope_items is at least a list
+        if not isinstance(scope_items, list):
+            scope_items = []
+            calculation_data['scope_items'] = scope_items
     
     # Extract subtype from calculation data
     subtype = calculation_data.get('project_info', {}).get('subtype', '')
     if not subtype and calculation_data.get('parsed_input'):
         subtype = calculation_data.get('parsed_input', {}).get('subtype', '')
     
+    # Stable project classification for all frontend consumers
+    calc_project_class = (calculation_data.get("project_info") or {}).get("project_class")
+    stored_req_class = (calculation_data.get("request_data") or {}).get("project_classification")
+    db_class = getattr(project, "project_classification", None)
+
+    project_classification = (
+        db_class
+        or stored_req_class
+        or calc_project_class
+        or "ground_up"
+    )
+    if hasattr(project_classification, "value"):
+        project_classification = project_classification.value
+    project_classification = str(project_classification)
+
+    request_data = calculation_data.get("request_data") or calculation_data.get("parsed_input") or {}
+    if not isinstance(request_data, dict):
+        request_data = {}
+
     return {
         # IDs - both formats
         'id': project.id,
@@ -913,12 +1161,18 @@ def format_project_response(project: Project) -> dict:
         'trade_packages': categories,
         'tradePackages': categories,
         
+        # Scope items derived from trades
+        'scope_items': calculation_data.get('scope_items', []),
+        
         # Building info
         'building_type': project.building_type,
         'buildingType': project.building_type,
         'occupancy_type': project.occupancy_type,
         'occupancyType': project.occupancy_type,
         'subtype': subtype,
+        # Project class (stable)
+        "project_classification": project_classification,
+        "projectClassification": project_classification,
         
         # Other project fields
         'square_footage': project.square_footage,
@@ -935,6 +1189,8 @@ def format_project_response(project: Project) -> dict:
         # Include full calculation data for components that need it
         'calculation_data': calculation_data,
         'scope_data': calculation_data,  # Legacy compatibility
+        # Request data hydration (for UI + PDF + legacy)
+        "request_data": request_data,
         
         # Success flag
         'success': True
