@@ -388,6 +388,11 @@ class ProfessionalPDFExportService:
                 decision = "NO-GO"
 
         decision_reason = feasibility_reco or (f"Feasibility: {feasibility_status}" if feasibility_status else "Decision sourced from ExecutiveView underwriting logic.")
+        decision_badge_class = "needs"
+        if decision == "GO":
+            decision_badge_class = "go"
+        elif decision == "NO-GO":
+            decision_badge_class = "nogo"
         generated = datetime.now().strftime("%B %d, %Y")
 
         return f"""<!doctype html>
@@ -396,38 +401,128 @@ class ProfessionalPDFExportService:
   <meta charset="utf-8" />
   <style>
     @page {{ size: Letter; margin: 0.6in; }}
-    body {{ font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', 'Roboto', Arial; color: #0f172a; }}
+    :root {{
+      --ink: #0f172a;          /* slate-900 */
+      --muted: #475569;        /* slate-600 */
+      --muted2: #64748b;       /* slate-500 */
+      --border: #e2e8f0;       /* slate-200 */
+      --panel: #ffffff;
+      --panel2: #f8fafc;       /* slate-50 */
+      --brand: #1d4ed8;        /* blue-700 */
+      --brand2: #0ea5e9;       /* sky-500 */
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+    }}
+    body {{
+      font-family: Inter, system-ui, -apple-system, 'Segoe UI', 'Roboto', Arial;
+      color: var(--ink);
+      background: #ffffff;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: geometricPrecision;
+    }}
+
+    .stack > * + * {{ margin-top: 12px; }}
+
     .top {{ display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }}
-    .h1 {{ font-size: 22px; font-weight: 800; margin: 0; }}
-    .meta {{ font-size: 11px; color:#475569; margin-top:6px; }}
-    .badge {{ display:inline-block; padding:6px 10px; border-radius:999px; background:#eef2ff; color:#3730a3; font-weight:700; font-size:11px; }}
-    .card {{ border:1px solid #e2e8f0; border-radius:14px; padding:14px; background:#ffffff; margin-top:12px; }}
-    .card h2 {{ margin:0 0 10px 0; font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:#334155; }}
-    .grid {{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }}
-    .kpi {{ border:1px solid #e2e8f0; border-radius:12px; padding:12px; background:#f8fafc; }}
-    .kpi .label {{ font-size:11px; color:#64748b; }}
-    .kpi .value {{ font-size:18px; font-weight:800; margin-top:4px; }}
-    table {{ width:100%; border-collapse:collapse; font-size:11px; }}
-    th, td {{ padding:8px; border-bottom:1px solid #e2e8f0; vertical-align:top; }}
-    th {{ text-align:left; color:#334155; font-size:11px; }}
+    .eyebrow {{ font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted2); }}
+    .h1 {{ font-size: 24px; font-weight: 900; margin: 2px 0 0 0; line-height: 1.1; }}
+    .meta {{ font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.35; }}
+
+    .badge {{ display:inline-block; padding:7px 12px; border-radius:999px; font-weight:900; font-size:11px; letter-spacing:.06em; }}
+    .badge.go {{ background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }}
+    .badge.needs {{ background:#fffbeb; color:#92400e; border:1px solid #fcd34d; }}
+    .badge.nogo {{ background:#fef2f2; color:#991b1b; border:1px solid #fecaca; }}
+    .banner {{
+      margin-top: 14px;
+      border-radius: 18px;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      box-shadow: var(--shadow);
+      display:flex; justify-content:space-between; gap:16px; align-items:flex-start;
+      position: relative;
+      overflow: hidden;
+    }}
+    .banner:before {{
+      content:"";
+      position:absolute; left:0; top:0; bottom:0; width:6px;
+      background: linear-gradient(180deg, var(--brand) 0%, var(--brand2) 100%);
+    }}
+    .banner .title {{ font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted2); margin:0; }}
+    .banner .why {{ font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.35; max-width: 520px; }}
+    .banner .right {{ text-align:right; min-width: 160px; }}
+    .card {{
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      margin-top: 12px;
+    }}
+    .card h2 {{
+      margin: 0 0 12px 0;
+      font-size: 10px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--muted2);
+    }}
+    .grid {{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; }}
+    .kpi {{
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 12px;
+      background: linear-gradient(180deg, var(--panel2) 0%, #ffffff 100%);
+    }}
+    .kpi .label {{ font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted2); }}
+    .kpi .value {{ font-size: 20px; font-weight: 900; margin-top: 6px; line-height: 1.05; }}
+    .kpi .sub {{ font-size: 11px; color: var(--muted); margin-top: 6px; }}
+    table {{ width:100%; border-collapse:separate; border-spacing: 0; font-size: 11px; }}
+    th, td {{ padding:10px 10px; border-bottom:1px solid var(--border); vertical-align:top; }}
+    thead th {{
+      position: sticky;
+      top: 0;
+      text-align:left;
+      color: var(--muted2);
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      background: #ffffff;
+    }}
+    tbody tr:last-child td {{ border-bottom: none; }}
     .r {{ text-align:right; }}
-    ul {{ margin: 0; padding-left: 18px; font-size:11px; color:#0f172a; }}
-    li {{ margin: 4px 0; }}
-    .muted {{ color:#64748b; }}
+    ul {{ margin: 0; padding-left: 18px; font-size: 12px; color: var(--ink); line-height: 1.35; }}
+    li {{ margin: 6px 0; }}
+    .muted {{ color: var(--muted2); }}
     .pagebreak {{ page-break-before: always; break-before: page; }}
-    .footer {{ margin-top: 10px; font-size:10px; color:#64748b; }}
+    .footer {{
+      margin-top: 14px;
+      font-size: 10px;
+      color: var(--muted2);
+      line-height: 1.35;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+    }}
   </style>
 </head>
 <body>
+  <!-- PAGE 1 -->
   <div class="top">
     <div>
+      <div class="eyebrow">SpecSharp Executive Overview</div>
       <div class="h1">{esc(title)}</div>
-      <div class="meta">{esc(location)} • {esc(building_type)} • {esc(size)} • Generated {esc(generated)}</div>
+      <div class="meta">{esc(location)} • {esc(building_type)} • {esc(size)}</div>
     </div>
     <div style="text-align:right">
-      <div class="badge">{esc(decision)}</div>
-      <div class="meta">{esc(decision_reason)}</div>
       {"<div class='meta'><b>Prepared for:</b> " + esc(client_name) + "</div>" if client_name else ""}
+    </div>
+  </div>
+  <div class="banner">
+    <div>
+      <p class="title">Investment Decision</p>
+      <div class="why">{esc(decision_reason)}</div>
+    </div>
+    <div class="right">
+      <div class="badge {decision_badge_class}">{esc(decision)}</div>
+      <div class="meta">Generated {esc(generated)}</div>
     </div>
   </div>
 
