@@ -5,7 +5,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, KeepTogether
 from reportlab.platypus import Image as RLImage
 from reportlab.graphics.shapes import Drawing, Rect, String
 from reportlab.graphics.charts.piecharts import Pie
@@ -32,6 +32,32 @@ class ProfessionalPDFExportService:
     
     def __init__(self):
         self._init_styles()
+    
+    def _hex(self, color: colors.Color) -> str:
+        """Convert ReportLab color to #RRGGBB string"""
+        hex_value = color.hexval()
+        if hex_value.startswith('0x'):
+            hex_value = hex_value[2:]
+        return f"#{hex_value}"
+
+    def _category_total(self, category: Dict) -> float:
+        """Return total cost for a category regardless of schema shape"""
+        subtotal = category.get('subtotal')
+        if subtotal is not None:
+            return subtotal
+        systems = category.get('systems', [])
+        return sum((system.get('total_cost') or 0) for system in systems)
+    
+    def _calculate_trade_percentage(self, category: Dict, subtotal: float, total: float) -> float:
+        """Resolve trade percentage, scaling fractional inputs when needed."""
+        raw_pct = category.get('percentage')
+        if isinstance(raw_pct, (int, float)):
+            if 0 <= raw_pct <= 1:
+                return raw_pct * 100.0
+            return raw_pct
+        if total > 0:
+            return (subtotal / total) * 100.0
+        return 0.0
     
     def _init_styles(self):
         """Initialize professional PDF styles"""
@@ -82,6 +108,23 @@ class ProfessionalPDFExportService:
             alignment=TA_CENTER,
             fontName='Helvetica-Bold'
         ))
+
+        # Simple centered text style for cover/footer notes
+        self.styles.add(ParagraphStyle(
+            name='CenteredText',
+            parent=self.styles['Normal'],
+            alignment=TA_CENTER,
+            textColor=colors.HexColor('#374151'),
+            fontSize=10
+        ))
+        
+        self.styles.add(ParagraphStyle(
+            name='SmallGrey',
+            parent=self.styles['Normal'],
+            alignment=TA_CENTER,
+            textColor=colors.HexColor('#6B7280'),
+            fontSize=9
+        ))
         
         # Professional body text
         self.styles.add(ParagraphStyle(
@@ -93,7 +136,37 @@ class ProfessionalPDFExportService:
             spaceAfter=12,
             leading=16
         ))
-    
+        
+        self.styles.add(ParagraphStyle(
+            name='BodyTextDark',
+            parent=self.styles['BodyText'],
+            fontSize=10,
+            leading=14,
+            textColor=self.BRAND_DARK
+        ))
+
+    def _brand_hex(self, c: colors.Color) -> str:
+        """Return ReportLab color as hex string without leading # for font tags."""
+        try:
+            hx = c.hexval()
+            if isinstance(hx, str) and hx.startswith('0x'):
+                hx = hx[2:]
+            return hx
+        except Exception:
+            return "111827"
+
+    def _safe_table_style(self, extra: Optional[List] = None) -> TableStyle:
+        base = [
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+        ]
+        if extra:
+            base.extend(extra)
+        return TableStyle(base)
+
     def generate_professional_pdf(self, project_data: Dict, client_name: str = None) -> io.BytesIO:
         """Generate a premium PDF report"""
         buffer = io.BytesIO()
@@ -112,7 +185,7 @@ class ProfessionalPDFExportService:
         )
         
         # Build content
-        story = []
+        story: List[Any] = []
         
         # Generate executive summary data
         executive_summary = executive_summary_service.generate_executive_summary(project_data)
@@ -127,6 +200,7 @@ class ProfessionalPDFExportService:
         story.extend(self._create_cost_breakdown_page(project_data))
         story.append(PageBreak())
         
+        # NOTE: ensure we call the instance method (Python has no 'this')
         story.extend(self._create_trade_analysis_page(project_data))
         story.append(PageBreak())
         
@@ -185,17 +259,16 @@ class ProfessionalPDFExportService:
         ]
         
         metrics_table = Table(metrics_data, colWidths=[2.5*inch, 2.5*inch])
-        metrics_table.setStyle(TableStyle([
+        metrics_table.setStyle(self._safe_table_style([
             ('BACKGROUND', (0, 0), (-1, -1), self.BRAND_PRIMARY),
             ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (0, -1), 10),
             ('FONTSIZE', (1, 0), (1, -1), 16),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 20),
-            ('TOPPADDING', (0, 0), (-1, -1), 20),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 18),
+            ('TOPPADDING', (0, 0), (-1, -1), 18),
             ('GRID', (0, 0), (-1, -1), 2, colors.white),
-            ('ROUNDEDCORNERS', [5, 5, 5, 5]),
         ]))
         
         elements.append(metrics_table)
@@ -205,12 +278,12 @@ class ProfessionalPDFExportService:
         # Client information
         if client_name:
             elements.append(Paragraph(
-                f"<font color='#{self.BRAND_DARK.hexval()[1:]}'>Prepared for:</font>",
-                self.styles['Normal']
+                f"<font color='{self._brand_hex(self.BRAND_DARK)}'>Prepared for:</font>",
+                self.styles['BodyTextDark']
             ))
             elements.append(Paragraph(
                 f"<font size='16'><b>{client_name}</b></font>",
-                self.styles['Normal']
+                self.styles['BodyTextDark']
             ))
         
         elements.append(Spacer(1, 0.5*inch))
@@ -218,22 +291,18 @@ class ProfessionalPDFExportService:
         # Date and validity
         elements.append(Paragraph(
             f"<font color='#6B7280'>Generated: {datetime.now().strftime('%B %d, %Y')}</font>",
-            self.styles['Normal']
+            self.styles['BodyTextDark']
         ))
         elements.append(Paragraph(
             f"<font color='#6B7280'>Valid for: 30 days</font>",
-            self.styles['Normal']
+            self.styles['BodyTextDark']
         ))
         
         # SpecSharp branding at bottom of cover
         elements.append(Spacer(1, 1*inch))
         elements.append(Paragraph(
-            f"<font color='#{self.BRAND_PRIMARY.hexval()[1:]}' size='12'><b>Powered by SpecSharp</b></font>",
-            self.styles['CenteredText']
-        ))
-        elements.append(Paragraph(
-            f"<font color='#6B7280' size='10'>This estimate was created in 90 seconds • specsharp.ai</font>",
-            self.styles['CenteredText']
+            "<font color='#6B7280'>Generated by SpecSharp • specsharp.ai</font>",
+            self.styles['SmallGrey']
         ))
         
         return elements
@@ -253,7 +322,7 @@ class ProfessionalPDFExportService:
             overview_data.append([key.replace('_', ' ').title() + ':', str(value)])
         
         overview_table = Table(overview_data, colWidths=[2*inch, 4*inch])
-        overview_table.setStyle(TableStyle([
+        overview_table.setStyle(self._safe_table_style([
             ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
             ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
             ('FONTSIZE', (0, 0), (-1, -1), 11),
@@ -263,7 +332,7 @@ class ProfessionalPDFExportService:
             ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
         ]))
         
-        elements.append(overview_table)
+        elements.append(KeepTogether([overview_table]))
         elements.append(Spacer(1, 0.3*inch))
         
         # Cost summary with visual emphasis
@@ -279,9 +348,14 @@ class ProfessionalPDFExportService:
         
         # Add data to pie chart
         categories = project_data.get('categories', [])
-        pie.data = [cat['subtotal'] for cat in categories]
-        pie.labels = [f"{cat['name']}\n({format_percentage(cat['subtotal']/project_data.get('total_cost', 1), 0)})" 
-                     for cat in categories]
+        category_totals = [(cat, self._category_total(cat)) for cat in categories]
+        non_zero_totals = [(cat, total) for cat, total in category_totals if total > 0]
+        pie_source = non_zero_totals if non_zero_totals else category_totals
+        pie.data = [total for _, total in pie_source] or [1]
+        pie.labels = [
+            f"{cat['name']}\n({format_percentage(total / max(project_data.get('total_cost', 1), 1), 0)})"
+            for cat, total in pie_source
+        ]
         
         # Professional colors for pie slices
         pie.slices.strokeWidth = 0.5
@@ -292,7 +366,7 @@ class ProfessionalPDFExportService:
             colors.HexColor('#8B5CF6'), colors.HexColor('#EC4899')
         ]
         
-        for i, cat in enumerate(categories):
+        for i, (cat, _) in enumerate(pie_source):
             pie.slices[i].fillColor = slice_colors[i % len(slice_colors)]
             pie.slices[i].labelRadius = 1.2
             pie.slices[i].fontName = 'Helvetica'
@@ -302,18 +376,26 @@ class ProfessionalPDFExportService:
         elements.append(drawing)
         
         # Trade breakdown table
+        total_construction = (
+            project_data.get('construction_total')
+            or project_data.get('total_cost')
+            or sum(total for _, total in category_totals)
+            or 0
+        )
+
         trade_data = [['Trade', 'Cost', 'Percentage']]
-        for cat in categories:
+        for cat, subtotal in category_totals:
+            pct_value = self._calculate_trade_percentage(cat, subtotal, total_construction)
             trade_data.append([
-                cat['name'],
-                format_currency(cat['subtotal']),
-                format_percentage(cat['subtotal']/project_data.get('total_cost', 1), 1)
+                cat.get('name', 'Trade'),
+                format_currency(subtotal),
+                f"{pct_value:.1f}%"
             ])
         
         trade_data.append([
             'TOTAL',
-            format_currency(project_data.get('total_cost', 0)),
-            '100.0%'
+            format_currency(total_construction),
+            '100.0%' if total_construction > 0 else '—'
         ])
         
         trade_table = Table(trade_data, colWidths=[2.5*inch, 2*inch, 1.5*inch])
@@ -400,21 +482,45 @@ class ProfessionalPDFExportService:
         
         # Create detailed breakdown by category
         for category in project_data.get('categories', []):
+            trade_name = category.get('name', 'Trade')
+            category_subtotal = self._category_total(category)
+            systems = category.get('systems') or []
+            placeholder_scope = False
+            if len(systems) == 1:
+                system = systems[0]
+                system_name = (system.get('name') or '').strip().lower()
+                quantity = system.get('quantity')
+                trade_normalized = (trade_name or '').strip().lower()
+                if (not system_name or system_name.startswith(trade_normalized)) and (quantity in (None, 1)):
+                    placeholder_scope = True
+            
+            if not systems or placeholder_scope:
+                elements.append(Paragraph(
+                    f"{trade_name}: {format_currency(category_subtotal)}",
+                    self.styles['BodyTextDark']
+                ))
+                elements.append(Spacer(1, 0.2*inch))
+                continue
+            
             elements.append(Paragraph(
-                f"{category['name']} Systems",
+                f"{trade_name} Systems",
                 self.styles['SubsectionHeader']
             ))
             
             # Systems table
             systems_data = [['System', 'Quantity', 'Unit', 'Unit Cost', 'Total Cost']]
             
-            for system in category.get('systems', []):
+            for system in systems:
+                quantity = system.get('quantity') or 0
+                unit = system.get('unit') or ''
+                unit_cost = system.get('unit_cost') or 0
+                total_cost = system.get('total_cost') or 0
                 systems_data.append([
-                    system['name'],
-                    f"{system['quantity']:,.0f}",
-                    system['unit'],
-                    f"${system['unit_cost']:,.2f}",
-                    format_currency(system['total_cost'])
+                    system.get('name', 'System'),
+                    f"{quantity:,.0f}" if isinstance(quantity, (int, float)) else str(quantity),
+                    unit,
+                    f"${unit_cost:,.2f}",
+                    format_currency(total_cost)
                 ])
             
             # Add subtotal
@@ -423,7 +529,7 @@ class ProfessionalPDFExportService:
                 '',
                 '',
                 '',
-                format_currency(category['subtotal'])
+                format_currency(category_subtotal)
             ])
             
             systems_table = Table(systems_data, colWidths=[2.5*inch, 1*inch, 0.7*inch, 1*inch, 1.3*inch])
@@ -472,12 +578,13 @@ class ProfessionalPDFExportService:
         bc.width = 400
         
         categories = project_data.get('categories', [])
-        bc.data = [[cat['subtotal'] for cat in categories]]
+        category_totals = [self._category_total(cat) for cat in categories]
+        bc.data = [category_totals]
         bc.categoryAxis.categoryNames = [cat['name'] for cat in categories]
         
         bc.bars[0].fillColor = self.BRAND_PRIMARY
         bc.valueAxis.valueMin = 0
-        bc.valueAxis.valueMax = max([cat['subtotal'] for cat in categories]) * 1.2
+        bc.valueAxis.valueMax = (max(category_totals) * 1.2) if category_totals else 0
         bc.valueAxis.labelTextFormat = '$%0.0f'
         bc.categoryAxis.labels.angle = 30
         bc.categoryAxis.labels.boxAnchor = 'ne'
@@ -491,9 +598,9 @@ class ProfessionalPDFExportService:
         trade_summaries = project_data.get('trade_summaries', {})
         for trade, summary in trade_summaries.items():
             elements.append(Paragraph(
-                f"<font color='#{self.BRAND_PRIMARY.hexval()[1:]}'><b>{trade.upper()}</b></font> - " + 
-                f"<font color='#{self.BRAND_ACCENT.hexval()[1:]}'>{format_currency(summary.get('total', 0))}</font>",
-                self.styles['Normal']
+                f"<font color='{self._hex(self.BRAND_PRIMARY)}'><b>{trade.upper()}</b></font> - " + 
+                f"<font color='{self._hex(self.BRAND_ACCENT)}'>{format_currency(summary.get('total', 0))}</font>",
+                self.styles['BodyTextDark']
             ))
             
             if 'description' in summary:
@@ -561,7 +668,7 @@ class ProfessionalPDFExportService:
     def _create_info_box(self, text: str, background_color=None, text_style=None) -> Table:
         """Create a styled info box"""
         if text_style is None:
-            text_style = self.styles['Normal']
+            text_style = self.styles['BodyTextDark']
         
         data = [[Paragraph(text, text_style)]]
         table = Table(data, colWidths=[6*inch])
@@ -601,12 +708,14 @@ class ProfessionalPDFExportService:
         canvas.line(doc.leftMargin, doc.height + doc.topMargin - 30,
                    doc.width + doc.leftMargin, doc.height + doc.topMargin - 30)
         
-        # Footer
-        # SpecSharp branding - centered
-        canvas.setFont('Helvetica-Bold', 9)
-        canvas.setFillColor(self.BRAND_PRIMARY)
-        canvas.drawCentredString(doc.width / 2 + doc.leftMargin, doc.bottomMargin - 10,
-                                "Powered by SpecSharp • specsharp.ai • Create your own estimates in 90 seconds")
+        # Footer branding
+        canvas.setFont('Helvetica', 9)
+        canvas.setFillColor(colors.HexColor('#6B7280'))
+        canvas.drawCentredString(
+            doc.width / 2 + doc.leftMargin,
+            doc.bottomMargin - 10,
+            "SpecSharp Professional Estimate • specsharp.ai"
+        )
         
         # Page number
         canvas.setFont('Helvetica', 8)
