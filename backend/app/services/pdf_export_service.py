@@ -447,6 +447,8 @@ class ProfessionalPDFExportService:
       --panel2: #f8fafc;       /* slate-50 */
       --brand: #1d4ed8;        /* blue-700 */
       --brand2: #0ea5e9;       /* sky-500 */
+      --spec-blue: #1d4ed8;    /* SpecSharp accent */
+      --spec-blue-light: #60a5fa;
       --shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
     }}
     body {{
@@ -459,8 +461,16 @@ class ProfessionalPDFExportService:
 
     .stack > * + * {{ margin-top: 12px; }}
 
+    .spec-accent {{
+      height: 2px;
+      width: 100%;
+      background: linear-gradient(90deg, rgba(29, 78, 216, 0.45), rgba(96, 165, 250, 0.35));
+      border-radius: 2px;
+      margin: 14px 0 18px 0;
+    }}
+
     .top {{ display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }}
-    .eyebrow {{ font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted2); }}
+    .eyebrow {{ font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--spec-blue); font-weight: 700; margin-bottom: 2px; }}
     .h1 {{ font-size: 24px; font-weight: 900; margin: 2px 0 0 0; line-height: 1.1; }}
     .meta {{ font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.35; }}
 
@@ -552,6 +562,7 @@ class ProfessionalPDFExportService:
       {"<div class='meta'><b>Prepared for:</b> " + esc(client_name) + "</div>" if client_name else ""}
     </div>
   </div>
+  <div class="spec-accent"></div>
   <div class="banner">
     <div>
       <p class="title">Investment Decision</p>
@@ -585,6 +596,7 @@ class ProfessionalPDFExportService:
   <div class="pagebreak"></div>
   <div class="h1">Construction Reality</div>
   <div class="meta">What moves cost, confidence, and diligence next steps.</div>
+  <div class="spec-accent"></div>
 
   <div class="card">
     <h2>Top Cost Drivers</h2>
@@ -613,6 +625,7 @@ class ProfessionalPDFExportService:
   <div class="pagebreak"></div>
   <div class="h1">Assumptions</div>
   <div class="meta">High-impact assumptions that materially change underwriting outcomes.</div>
+  <div class="spec-accent"></div>
 
   <div class="card">
     <h2>Key Assumptions</h2>
