@@ -1,6 +1,11 @@
 from typing import Dict, List, Optional, Any
 import io
 from datetime import datetime
+import logging
+import sys
+from pathlib import Path
+import threading
+import queue
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -18,6 +23,8 @@ from reportlab.pdfbase.ttfonts import TTFont
 from app.utils.building_type_display import get_display_building_type
 from app.utils.formatting import format_currency, format_percentage
 from app.services.executive_summary_service import executive_summary_service
+
+logger = logging.getLogger(__name__)
 
 
 class ProfessionalPDFExportService:
@@ -198,40 +205,272 @@ class ProfessionalPDFExportService:
         return block
 
     def generate_professional_pdf(self, project_data: Dict, client_name: str = None) -> io.BytesIO:
-        """Generate a premium PDF report"""
-        buffer = io.BytesIO()
-        
-        # Create PDF with custom page setup
-        doc = SimpleDocTemplate(
-            buffer,
-            pagesize=letter,
-            rightMargin=72,
-            leftMargin=72,
-            topMargin=72,
-            bottomMargin=72,
-            title=f"{project_data.get('project_name', 'Construction Project')} - Cost Estimate",
-            author="SpecSharp Professional",
-            subject="Construction Cost Estimate"
-        )
-        
-        # Build content
-        story: List[Any] = []
-        
-        # Generate executive summary data
+        """Generate premium PDF via Playwright-rendered HTML."""
         executive_summary = executive_summary_service.generate_executive_summary(project_data)
-        
-        # EXECUTIVE OVERVIEW REPORT (STRICT 3 PAGES)
-        story.extend(self._create_investment_decision_page(project_data, executive_summary))
-        story.append(PageBreak())
-        story.extend(self._create_construction_reality_page(project_data, executive_summary))
-        story.append(PageBreak())
-        story.extend(self._create_assumptions_next_steps_page(project_data, executive_summary))
-        
-        # Build PDF with custom canvas for headers/footers
-        doc.build(story, onFirstPage=self._add_header_footer, onLaterPages=self._add_header_footer)
-        
+        return self._render_chromium_pdf(project_data, executive_summary, client_name)
+
+    def _render_chromium_pdf(self, project_data: Dict, executive_summary: Dict, client_name: Optional[str]) -> io.BytesIO:
+        try:
+            from playwright.sync_api import sync_playwright  # type: ignore
+        except ImportError:
+            backend_dir = Path(__file__).resolve().parents[2]
+            candidate_paths = [
+                backend_dir / "venv" / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages",
+                backend_dir / "venv" / "lib" / "python3.9" / "site-packages",
+                backend_dir / "venv" / "lib" / "python3.10" / "site-packages",
+                backend_dir / "venv" / "lib" / "python3.11" / "site-packages",
+            ]
+            added = False
+            for site in candidate_paths:
+                if site.exists() and str(site) not in sys.path:
+                    sys.path.insert(0, str(site))
+                    added = True
+            if not added:
+                raise RuntimeError(
+                    "Playwright is not installed for the Python interpreter running the backend "
+                    f"({sys.executable}). Install it there with:\n"
+                    f"  {sys.executable} -m pip install playwright && {sys.executable} -m playwright install chromium"
+                )
+            try:
+                from playwright.sync_api import sync_playwright  # type: ignore
+            except ImportError as exc:
+                raise RuntimeError(
+                    "Playwright is not installed for the Python interpreter running the backend "
+                    f"({sys.executable}). Install it there with:\n"
+                    f"  {sys.executable} -m pip install playwright && {sys.executable} -m playwright install chromium"
+                ) from exc
+
+        html = self._render_executive_overview_html(project_data, executive_summary, client_name)
+
+        result_queue: "queue.Queue[bytes]" = queue.Queue(maxsize=1)
+        error_queue: "queue.Queue[BaseException]" = queue.Queue(maxsize=1)
+
+        def worker():
+            try:
+                with sync_playwright() as p:
+                    browser = p.chromium.launch()
+                    page = browser.new_page()
+                    page.set_content(html, wait_until="networkidle")
+                    pdf_bytes = page.pdf(
+                        format="Letter",
+                        print_background=True,
+                        margin={"top": "0.6in", "right": "0.6in", "bottom": "0.6in", "left": "0.6in"},
+                    )
+                    browser.close()
+                    result_queue.put(pdf_bytes)
+            except BaseException as exc:  # capture Playwright/system errors
+                error_queue.put(exc)
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        thread.join()
+
+        if not error_queue.empty():
+            raise error_queue.get()
+
+        pdf_bytes = result_queue.get_nowait()
+
+        buffer = io.BytesIO(pdf_bytes)
         buffer.seek(0)
         return buffer
+
+    # -----------------------------
+    # HTML → Chromium PDF Rendering
+    # -----------------------------
+
+    def _dig(self, obj: Any, path: str, default: Any = None) -> Any:
+        current = obj
+        for part in path.split('.'):
+            if not isinstance(current, dict) or part not in current:
+                return default
+            current = current[part]
+        return current
+
+    def _fmt_money_plain(self, value: Any) -> str:
+        if value is None:
+            return "—"
+        try:
+            return format_currency(float(value))
+        except Exception:
+            return str(value)
+
+    def _fmt_pct_smart(self, value: Any, digits: int = 1) -> str:
+        if value is None:
+            return "—"
+        try:
+            pct = float(value)
+            if abs(pct) <= 1.5:
+                pct *= 100.0
+            return f"{pct:.{digits}f}%"
+        except Exception:
+            return str(value)
+
+    def _fmt_num(self, value: Any, digits: int = 2) -> str:
+        if value is None:
+            return "—"
+        try:
+            return f"{float(value):.{digits}f}"
+        except Exception:
+            return str(value)
+
+    def _render_executive_overview_html(self, project_data: Dict, executive_summary: Dict, client_name: Optional[str]) -> str:
+        calc = (project_data or {}).get("calculation_data") or {}
+        noi = self._dig(calc, "return_metrics.estimated_annual_noi")
+        dscr = self._dig(calc, "ownership_analysis.debt_metrics.calculated_dscr")
+        irr = self._dig(calc, "return_metrics.irr")
+        coc = self._dig(calc, "return_metrics.cash_on_cash_return")
+        equity = self._dig(calc, "ownership_analysis.financing_sources.equity_amount")
+        value = self._dig(calc, "return_metrics.property_value")
+
+        overview = (executive_summary or {}).get("project_overview", {}) or {}
+        cost_summary = (executive_summary or {}).get("cost_summary", {}) or {}
+        major_systems = (executive_summary or {}).get("major_systems") or []
+        risks = (executive_summary or {}).get("risk_factors") or []
+        next_steps = (executive_summary or {}).get("next_steps") or []
+        assumptions = (executive_summary or {}).get("key_assumptions") or []
+        confidence = (executive_summary or {}).get("confidence_assessment", {}) or {}
+
+        title = overview.get("name") or project_data.get("project_name") or project_data.get("name") or "Project"
+        location = overview.get("location") or project_data.get("location") or "—"
+        building_type = overview.get("type") or project_data.get("building_type") or project_data.get("buildingType") or "—"
+        size = overview.get("size") or str(project_data.get("square_footage") or project_data.get("squareFootage") or "—")
+
+        total_cost = cost_summary.get("total_project_cost") or project_data.get("total_cost") or project_data.get("totalCost")
+        cost_psf = cost_summary.get("cost_per_sf") or project_data.get("cost_per_sqft") or project_data.get("costPerSqft")
+
+        def esc(value: Any) -> str:
+            if value is None:
+                return ""
+            return (
+                str(value)
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+            )
+
+        major_rows = "".join(
+            f"<tr><td>{esc(ms.get('system','—'))}</td><td class='r'>{esc(ms.get('cost','—'))}</td>"
+            f"<td class='r'>{esc(ms.get('percentage','—'))}</td></tr>"
+            for ms in major_systems[:6]
+            if isinstance(ms, dict)
+        ) or "<tr><td colspan='3' class='muted'>—</td></tr>"
+
+        risk_items = "".join(
+            f"<li><b>{esc(r.get('category','Risk'))}:</b> {esc(r.get('risk',''))}</li>"
+            for r in risks[:6]
+            if isinstance(r, dict)
+        ) or "<li class='muted'>—</li>"
+
+        next_items = "".join(f"<li>{esc(step)}</li>" for step in next_steps[:8]) or "<li class='muted'>—</li>"
+        assumption_items = "".join(f"<li>{esc(a)}</li>" for a in assumptions[:10]) or "<li class='muted'>—</li>"
+
+        decision = "EXECUTIVE OVERVIEW"
+        decision_reason = "Underwriting + construction snapshot (3-page executive brief)."
+        generated = datetime.now().strftime("%B %d, %Y")
+
+        return f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    @page {{ size: Letter; margin: 0.6in; }}
+    body {{ font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', 'Roboto', Arial; color: #0f172a; }}
+    .top {{ display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }}
+    .h1 {{ font-size: 22px; font-weight: 800; margin: 0; }}
+    .meta {{ font-size: 11px; color:#475569; margin-top:6px; }}
+    .badge {{ display:inline-block; padding:6px 10px; border-radius:999px; background:#eef2ff; color:#3730a3; font-weight:700; font-size:11px; }}
+    .card {{ border:1px solid #e2e8f0; border-radius:14px; padding:14px; background:#ffffff; margin-top:12px; }}
+    .card h2 {{ margin:0 0 10px 0; font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:#334155; }}
+    .grid {{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }}
+    .kpi {{ border:1px solid #e2e8f0; border-radius:12px; padding:12px; background:#f8fafc; }}
+    .kpi .label {{ font-size:11px; color:#64748b; }}
+    .kpi .value {{ font-size:18px; font-weight:800; margin-top:4px; }}
+    table {{ width:100%; border-collapse:collapse; font-size:11px; }}
+    th, td {{ padding:8px; border-bottom:1px solid #e2e8f0; vertical-align:top; }}
+    th {{ text-align:left; color:#334155; font-size:11px; }}
+    .r {{ text-align:right; }}
+    ul {{ margin: 0; padding-left: 18px; font-size:11px; color:#0f172a; }}
+    li {{ margin: 4px 0; }}
+    .muted {{ color:#64748b; }}
+    .pagebreak {{ page-break-before: always; break-before: page; }}
+    .footer {{ margin-top: 10px; font-size:10px; color:#64748b; }}
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div>
+      <div class="h1">{esc(title)}</div>
+      <div class="meta">{esc(location)} • {esc(building_type)} • {esc(size)} • Generated {esc(generated)}</div>
+    </div>
+    <div style="text-align:right">
+      <div class="badge">{esc(decision)}</div>
+      <div class="meta">{esc(decision_reason)}</div>
+      {"<div class='meta'><b>Prepared for:</b> " + esc(client_name) + "</div>" if client_name else ""}
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Key Investment Metrics</h2>
+    <div class="grid">
+      <div class="kpi"><div class="label">Total Project Cost</div><div class="value">{esc(total_cost) if total_cost is not None else "—"}</div></div>
+      <div class="kpi"><div class="label">Cost per SF</div><div class="value">{esc(cost_psf) if cost_psf is not None else "—"}</div></div>
+      <div class="kpi"><div class="label">Stabilized NOI (Annual)</div><div class="value">{esc(self._fmt_money_plain(noi))}</div></div>
+      <div class="kpi"><div class="label">DSCR</div><div class="value">{esc(self._fmt_num(dscr, 2))}</div></div>
+      <div class="kpi"><div class="label">IRR</div><div class="value">{esc(self._fmt_pct_smart(irr, 1))}</div></div>
+      <div class="kpi"><div class="label">Cash-on-Cash Return</div><div class="value">{esc(self._fmt_pct_smart(coc, 1))}</div></div>
+      <div class="kpi"><div class="label">Equity Required</div><div class="value">{esc(self._fmt_money_plain(equity))}</div></div>
+      <div class="kpi"><div class="label">Value @ Stabilization</div><div class="value">{esc(self._fmt_money_plain(value))}</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Top Risks</h2>
+    <ul>{risk_items}</ul>
+  </div>
+
+  <div class="pagebreak"></div>
+  <div class="h1">Construction Reality</div>
+  <div class="meta">What moves cost, confidence, and diligence next steps.</div>
+
+  <div class="card">
+    <h2>Top Cost Drivers</h2>
+    <table>
+      <thead><tr><th>System</th><th class="r">Cost</th><th class="r">Share</th></tr></thead>
+      <tbody>{major_rows}</tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Confidence</h2>
+    <table>
+      <tbody>
+        <tr><td>Overall Confidence</td><td class="r"><b>{esc(confidence.get('overall_confidence','—'))}</b></td></tr>
+        <tr><td>Confidence Level</td><td class="r"><b>{esc(confidence.get('confidence_level','—'))}</b></td></tr>
+        <tr><td>Data Quality</td><td class="r"><b>{esc(confidence.get('data_quality','—'))}</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Next Steps</h2>
+    <ul>{next_items}</ul>
+  </div>
+
+  <div class="pagebreak"></div>
+  <div class="h1">Assumptions</div>
+  <div class="meta">High-impact assumptions that materially change underwriting outcomes.</div>
+
+  <div class="card">
+    <h2>Key Assumptions</h2>
+    <ul>{assumption_items}</ul>
+  </div>
+
+  <div class="footer">
+    Note: This executive overview is generated from provided inputs and modeled assumptions. Use for preliminary feasibility only.
+    Validate pricing, schedule, and financing terms prior to investment decisions.
+  </div>
+</body>
+</html>"""
     
     def _create_cover_page(self, project_data: Dict, client_name: str) -> List:
         """Create professional cover page"""
