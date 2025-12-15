@@ -423,6 +423,31 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
       ? calculations.totals.hard_costs
       : 246900000;
 
+  const regionalInfo = calculations?.regional;
+  const fallbackLocationDisplay =
+    calculations?.project_info?.location ||
+    parsed_input?.location ||
+    (project as AnyRecord)?.location ||
+    'City, ST';
+  const locationDisplay =
+    regionalInfo?.location_display ||
+    (regionalInfo && regionalInfo.city
+      ? `${regionalInfo.city}${regionalInfo.state ? `, ${regionalInfo.state}` : ''}`
+      : fallbackLocationDisplay);
+  const regionalMultiplierValue =
+    typeof regionalInfo?.multiplier === 'number'
+      ? regionalInfo.multiplier
+      : typeof calculations?.construction_costs?.regional_multiplier === 'number'
+        ? calculations.construction_costs.regional_multiplier
+        : 1;
+  const regionalDeltaPct = Math.round(Math.abs((regionalMultiplierValue - 1) * 100));
+  const regionalComparisonCopy =
+    regionalMultiplierValue > 1
+      ? `${locationDisplay} is ${regionalDeltaPct}% above the national baseline.`
+      : regionalMultiplierValue < 1
+        ? `${locationDisplay} is ${regionalDeltaPct}% below the national baseline.`
+        : `${locationDisplay} aligns with the national baseline.`;
+
   // Scenario modal base metrics
   const projectRecord = project as AnyRecord;
   const analysisRecord = analysis as AnyRecord;
@@ -1095,7 +1120,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
             <div className="flex items-center gap-4 text-sm text-slate-300">
               <span className="flex items-center gap-1">
                 <MapPin className="h-3 w-3" />
-                {parsed_input.location || 'Nashville'}
+                {locationDisplay}
               </span>
               <span className="flex items-center gap-1">
                 <Building className="h-3 w-3" />
@@ -1633,7 +1658,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                   <p className="text-4xl font-bold text-gray-900">×{regionalMultiplier.toFixed(2)}</p>
                   <p className="text-lg text-gray-600">multiplier</p>
                 </div>
-                <p className="text-sm text-gray-500 mt-3">Nashville, TN Market</p>
+                <p className="text-sm text-gray-500 mt-3">{locationDisplay} Market</p>
               </div>
             </div>
             
@@ -1776,7 +1801,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
               className="w-full"
               disabled
             />
-            <p className="text-xs text-gray-500 mt-1">Nashville is 3% above national average</p>
+            <p className="text-xs text-gray-500 mt-1">{regionalComparisonCopy}</p>
           </div>
           
           <div>

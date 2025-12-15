@@ -18,6 +18,7 @@ from collections import defaultdict
 from enum import Enum
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Any, Callable
+from app.config.regional_multipliers import resolve_location_context
 
 # ============================================================================
 # ENUMS
@@ -5297,37 +5298,12 @@ def get_soft_costs(building_type: BuildingType, subtype: str) -> Optional[SoftCo
 
 def get_regional_multiplier(building_type: BuildingType, subtype: str, city: str,
                             warning_callback: Optional[Callable[[], None]] = None) -> float:
-    """Get regional cost multiplier for a city"""
-    config = get_building_config(building_type, subtype)
-    if config:
-        has_state = ',' in city if city else False
-        if not has_state:
-            if warning_callback:
-                warning_callback()
-            return 1.0
-
-        # Clean the city and state parts from "City, State"
-        city_part, state_part = [part.strip() for part in city.split(',', 1)]
-
-        # Try exact city match first (maintains historical behavior when state provided)
-        if city_part in config.regional_multipliers:
-            return config.regional_multipliers[city_part]
-
-        # Try case-insensitive city match
-        for key, value in config.regional_multipliers.items():
-            if key.lower() == city_part.lower():
-                return value
-
-        # Try matching on state code/name if provided in configuration
-        for key, value in config.regional_multipliers.items():
-            if key.lower() == state_part.lower():
-                return value
-
-        # Also try the raw location string
-        if city in config.regional_multipliers:
-            return config.regional_multipliers[city]
-
-    return 1.0  # Default baseline
+    """Get regional cost multiplier for a city."""
+    context = resolve_location_context(city or "")
+    state = context.get("state")
+    if not state and warning_callback:
+        warning_callback()
+    return float(context.get("multiplier", 1.0))
 
 def _clamp(value: float, lower: float, upper: float) -> float:
     return max(lower, min(upper, value))
@@ -5415,44 +5391,39 @@ def get_finish_revenue_factor(
 
 def get_market_factor(location: str, warning_callback: Optional[Callable[[], None]] = None) -> float:
     """
-    A revenue-oriented regional factor. Reuse get_regional_multiplier if no
-    revenue map exists; otherwise prefer revenue-specific entries if present.
-    Fall back to 1.0 on city-only, logging upstream warning via callback when provided.
+    Revenue-oriented regional factor that mirrors the global resolver
+    while still allowing explicit overrides.
     """
     if not location:
         return 1.0
 
     normalized = location.strip()
-    if not normalized:
-        return 1.0
-
-    has_state = ',' in normalized
-    if not has_state and warning_callback:
+    context = resolve_location_context(normalized)
+    state = context.get("state")
+    if not state and warning_callback:
         warning_callback()
 
     lower_market = {key.lower(): value for key, value in MARKET_OVERRIDES.items()}
     value: Optional[float] = None
 
-    if has_state:
-        city_part, state_part = [part.strip() for part in normalized.split(',', 1)]
+    if normalized:
         value = lower_market.get(normalized.lower())
-        if value is None:
-            value = lower_market.get(city_part.lower())
-        if value is None:
-            value = lower_market.get(state_part.lower())
-        if value is None:
-            value = lower_market.get(state_part.upper())
-    else:
-        value = lower_market.get(normalized.lower())
+    if value is None and context.get("city") and state:
+        city_state_key = f"{context['city']}, {state}".lower()
+        value = lower_market.get(city_state_key)
+    if value is None and state:
+        value = lower_market.get(state.lower()) or lower_market.get(state.upper())
 
     if value is None:
-        override = get_regional_override(normalized)
-        if override is None and has_state:
-            city_part = normalized.split(',', 1)[0].strip()
-            override = get_regional_override(city_part)
-        value = override if override is not None else 1.0
+        value = context.get("multiplier", 1.0)
 
-    return value
+    override = get_regional_override(normalized)
+    if override is None and context.get("city"):
+        override = get_regional_override(context["city"])
+    if override is not None:
+        value = override
+
+    return float(value)
 
 def get_target_roi(building_type: BuildingType) -> float:
     """

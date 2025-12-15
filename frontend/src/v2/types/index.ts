@@ -143,6 +143,14 @@ export interface ConstructionCosts {
   special_features_total: number;
 }
 
+export interface RegionalContext {
+  city?: string | null;
+  state?: string | null;
+  source?: string | null;
+  multiplier: number;
+  location_display?: string | null;
+}
+
 export interface ProjectTotals {
   hard_costs: number;
   soft_costs: number;
@@ -191,6 +199,8 @@ export interface CalculationResult {
     floors: number;
     typical_floors: number;
   };
+  regional?: RegionalContext;
+  regional_applied?: boolean;
   construction_costs: ConstructionCosts;
   trade_breakdown: Record<string, number>;
   scope_items?: Array<{

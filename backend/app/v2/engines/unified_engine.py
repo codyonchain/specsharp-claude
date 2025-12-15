@@ -5,6 +5,7 @@ clean_scope_engine.py, owner_view_engine.py, engine_selector.py
 """
 
 from datetime import datetime, date
+from app.config.regional_multipliers import resolve_location_context
 from app.v2.config.master_config import (
     MASTER_CONFIG,
     BuildingType,
@@ -367,6 +368,7 @@ class UnifiedEngine:
             regional_multiplier_effective = cost_factor
 
         cost_after_regional = cost_after_complexity * regional_multiplier_effective
+        regional_context = resolve_location_context(location)
         final_cost_per_sf = cost_after_regional * finish_cost_factor
         self._log_trace("modifiers_applied", {
             'finish_level': normalized_finish_level or 'standard',
@@ -592,6 +594,21 @@ class UnifiedEngine:
             # and a scenarios list. For other types it may be missing or None.
             sensitivity_analysis = ownership_analysis.get('sensitivity_analysis')
 
+        city_value = regional_context.get('city')
+        state_value = regional_context.get('state')
+        pretty_location = None
+        if city_value and state_value:
+            pretty_location = f"{city_value.title()}, {state_value}"
+        elif city_value:
+            pretty_location = city_value.title()
+        regional_payload = {
+            'city': city_value.title() if city_value else None,
+            'state': state_value,
+            'source': regional_context.get('source'),
+            'multiplier': regional_multiplier_effective,
+            'location_display': pretty_location or location
+        }
+
         # Build comprehensive response - FLATTENED structure to match frontend expectations
         result = {
             'project_info': {
@@ -614,6 +631,7 @@ class UnifiedEngine:
                 'target_dscr': profile.get('target_dscr'),
             },
             'modifiers': modifiers,
+            'regional': regional_payload,
             # Flatten calculations to top level to match frontend CalculationResult interface
             'construction_costs': {
                 'base_cost_per_sf': base_cost_per_sf,
@@ -657,6 +675,7 @@ class UnifiedEngine:
             'operational_metrics': ownership_analysis.get('operational_metrics', {}) if ownership_analysis else {},
             # Expose sensitivity analysis at the top level for the v2 frontend
             'sensitivity_analysis': sensitivity_analysis,
+            'regional_applied': True,
             'calculation_trace': self.calculation_trace,
             'timestamp': datetime.now().isoformat()
         }
@@ -2940,28 +2959,9 @@ class UnifiedEngine:
                         rate_type: str, default_rate: float) -> float:
         """
         Get market-specific rates based on location.
-        Eventually this should pull from a real market data API.
         """
-        # Location multipliers (simplified - should use real data)
-        location_multipliers = {
-            'Nashville, TN': 1.0,
-            'New York, NY': 1.8,
-            'San Francisco, CA': 1.7,
-            'Los Angeles, CA': 1.5,
-            'Chicago, IL': 1.2,
-            'Austin, TX': 1.15,
-            'Miami, FL': 1.3,
-            'Denver, CO': 1.1,
-            'Seattle, WA': 1.4,
-            'Boston, MA': 1.5,
-            'Dallas, TX': 1.05,
-            'Atlanta, GA': 1.0,
-            'Phoenix, AZ': 0.95,
-            'Las Vegas, NV': 0.9,
-            'Detroit, MI': 0.7
-        }
-        
-        multiplier = location_multipliers.get(location, 1.0)
+        context = resolve_location_context(location or "")
+        multiplier = context.get('multiplier', 1.0)
         
         # Apply multiplier to default rate
         adjusted_rate = default_rate * multiplier

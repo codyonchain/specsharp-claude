@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectAnalysis } from '../../hooks/useProjectAnalysis';
 import { api, createProject } from '../../api/client';
@@ -16,6 +16,33 @@ import {
   UtensilsCrossed, Briefcase, Hotel, Warehouse, ShoppingCart,
   Shield, Dumbbell, Car, Box
 } from 'lucide-react';
+
+const CITY_STATE_REGEX = /^.+,\s*[A-Za-z]{2}$/i;
+
+const detectCityStateInDescription = (description: string): string | null => {
+  if (!description) return null;
+
+  const cityStateRegex = /([A-Z][A-Za-z .'\-]+?),\s*([A-Za-z]{2})/g;
+  let match: RegExpExecArray | null = null;
+  let lastMatch: RegExpExecArray | null = null;
+
+  while ((match = cityStateRegex.exec(description)) !== null) {
+    lastMatch = match;
+  }
+
+  if (!lastMatch) {
+    return null;
+  }
+
+  const city = lastMatch[1]?.trim().replace(/\s+/g, ' ');
+  const state = lastMatch[2]?.trim().toUpperCase();
+
+  if (!city || !state) {
+    return null;
+  }
+
+  return `${city}, ${state}`;
+};
 
 export const NewProject: React.FC = () => {
   const navigate = useNavigate();
@@ -35,6 +62,9 @@ export const NewProject: React.FC = () => {
   const [finishLevelLocked, setFinishLevelLocked] = useState(false);
   const [projectComplexity, setProjectComplexity] = useState<'ground_up' | 'renovation' | 'addition'>('ground_up');
   const [projectClassLocked, setProjectClassLocked] = useState(false);
+  const [locationTouched, setLocationTouched] = useState(false);
+  const [locationAutoFilled, setLocationAutoFilled] = useState(false);
+  const [locationSubmitAttempted, setLocationSubmitAttempted] = useState(false);
   // Finish level options (universal v1) – keep only one upgrade tier for underwriting comparisons
   const FINISH_LEVELS = [
     { label: 'Standard', value: 'standard', multiplierLabel: '1.0x' },
@@ -53,6 +83,14 @@ export const NewProject: React.FC = () => {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const previewTimeoutRef = useRef<number | null>(null);
   const previewAbortRef = useRef<AbortController | null>(null);
+
+  const normalizedDescription = description.trim();
+  const normalizedLocationInput = locationInput.trim();
+  const isLocationFormatValid = CITY_STATE_REGEX.test(normalizedLocationInput);
+  const shouldShowLocationError =
+    (!isLocationFormatValid && (locationSubmitAttempted || normalizedLocationInput.length > 0));
+  const canAnalyze = Boolean(normalizedDescription) && isLocationFormatValid && !analyzing;
+  const liveDetectedLocation = useMemo(() => detectCityStateInDescription(description), [description]);
   
   // NLP detection state
   const [detectedFeatures, setDetectedFeatures] = useState({
@@ -64,13 +102,13 @@ export const NewProject: React.FC = () => {
   // Monitor input for NLP detection
   useEffect(() => {
     const input = description.toLowerCase();
+    const cityKeywordDetected = /(nashville|franklin|brentwood|murfreesboro|manchester|nashua|concord|bedford|salem)/i.test(input);
     setDetectedFeatures({
       size: /\d+[\s,]*(?:sf|square|feet|unit|key|bed|room)/i.test(description),
       type: /(apartment|office|hospital|school|retail|industrial|hotel|restaurant|warehouse|medical|clinic|surgery|emergency|distribution|strip\s*mall)/i.test(input),
-      location: /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,?\s*[A-Z]{2}\b/.test(description) || 
-                /(nashville|franklin|brentwood|murfreesboro|manchester|nashua|concord|bedford|salem)/i.test(input)
+      location: Boolean(liveDetectedLocation || cityKeywordDetected)
     });
-  }, [description]);
+  }, [description, liveDetectedLocation]);
   
   // Example prompts covering all 13 building types
   const examplePrompts = [
@@ -542,6 +580,30 @@ export const NewProject: React.FC = () => {
   };
 
   const parsedInput = result?.parsed_input;
+
+  useEffect(() => {
+    if (!liveDetectedLocation) return;
+    if (locationTouched) return;
+
+    const normalizedLocation = locationInput.trim();
+    const shouldAutofill = normalizedLocation.length === 0 || locationAutoFilled;
+
+    if (!shouldAutofill) return;
+    if (normalizedLocation === liveDetectedLocation) return;
+    if (!CITY_STATE_REGEX.test(liveDetectedLocation)) return;
+
+    if (process.env.NODE_ENV === 'development') {
+      console.debug('[NewProject] autofilling location from description', {
+        liveDetectedLocation,
+        autofillValue: liveDetectedLocation,
+        normalizedLocation,
+        locationAutoFilled
+      });
+    }
+
+    setLocationInput(liveDetectedLocation);
+    setLocationAutoFilled(true);
+  }, [liveDetectedLocation, locationTouched, locationInput, locationAutoFilled]);
   const currentSubtype = parsedInput?.subtype || parsedInput?.building_subtype;
   const availableSpecialFeatures = parsedInput ? getAvailableFeatures(parsedInput.building_type) : [];
   const applicableSpecialFeatures = availableSpecialFeatures.filter(feature => {
@@ -565,7 +627,7 @@ export const NewProject: React.FC = () => {
       previewAbortRef.current = null;
     }
 
-    if (!description.trim()) {
+    if (!normalizedDescription || !isLocationFormatValid) {
       setPreviewStatus('idle');
       setPreviewData(null);
       setPreviewError(null);
@@ -581,7 +643,7 @@ export const NewProject: React.FC = () => {
 
       try {
         const squareValue = parseSquareFootageValue(squareFootageInput);
-        const locationValue = locationInput.trim() || undefined;
+        const locationValue = normalizedLocationInput || undefined;
         const analysis = await api.analyzeProject(description, {
           square_footage: squareValue,
           location: locationValue,
@@ -626,13 +688,16 @@ export const NewProject: React.FC = () => {
         previewAbortRef.current = null;
       }
     };
-  }, [description, squareFootageInput, locationInput, finishLevel, finishLevelLocked, projectComplexity]);
+  }, [normalizedDescription, squareFootageInput, normalizedLocationInput, isLocationFormatValid, finishLevel, finishLevelLocked, projectComplexity]);
   
   // Calculate total cost including features
   const handleExampleClick = (example: any) => {
     setDescription(example.text);
     setSquareFootageInput(example.squareFootage ? formatNumber(example.squareFootage) : '');
     setLocationInput(example.location || '');
+    setLocationTouched(false);
+    setLocationAutoFilled(Boolean(example.location));
+    setLocationSubmitAttempted(false);
     // Reset configuration when using example
     setSpecialFeatures([]);
     setFinishLevel('standard');
@@ -644,7 +709,9 @@ export const NewProject: React.FC = () => {
   };
   
   const handleAnalyze = async () => {
-    if (!description.trim()) return;
+    if (!normalizedDescription) return;
+    setLocationSubmitAttempted(true);
+    if (!isLocationFormatValid) return;
     
     setActiveStep('analyzing');
     tracer.trace('ANALYZE_START', 'Starting analysis', { description });
@@ -652,7 +719,7 @@ export const NewProject: React.FC = () => {
     const squareValue = parseSquareFootageValue(squareFootageInput);
     const analysis = await analyzeDescription(description, {
       squareFootage: squareValue,
-      location: locationInput.trim() || undefined,
+      location: normalizedLocationInput,
       finishLevel,
       projectClass: projectComplexity,
       specialFeatures,
@@ -683,9 +750,6 @@ export const NewProject: React.FC = () => {
       }
       if (analysis.parsed_input?.square_footage) {
         setSquareFootageInput(formatNumber(analysis.parsed_input.square_footage));
-      }
-      if (analysis.parsed_input?.location) {
-        setLocationInput(analysis.parsed_input.location);
       }
       
       setActiveStep('results');
@@ -775,6 +839,8 @@ export const NewProject: React.FC = () => {
     setDescription('');
     setSquareFootageInput('');
     setLocationInput('');
+    setLocationTouched(false);
+    setLocationAutoFilled(false);
     setActiveStep('input');
     setSpecialFeatures([]);
     setFinishLevel('standard');
@@ -970,12 +1036,22 @@ export const NewProject: React.FC = () => {
               </label>
               <input
                 value={locationInput}
-                onChange={(e) => setLocationInput(e.target.value)}
-                placeholder="e.g. Nashville, TN"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
+                onChange={(e) => {
+                  setLocationTouched(true);
+                  setLocationAutoFilled(false);
+                  setLocationInput(e.target.value);
+                }}
+                placeholder="City, ST (e.g., Dallas, TX)"
+                className={`w-full px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm ${
+                  shouldShowLocationError ? 'border-red-400' : 'border-gray-200'
+                }`}
+                aria-invalid={shouldShowLocationError}
                 autoComplete="off"
                 disabled={analyzing}
               />
+              {shouldShowLocationError && (
+                <p className="mt-1 text-xs text-red-600">Enter location like Dallas, TX.</p>
+              )}
             </div>
           </div>
 
@@ -1091,10 +1167,10 @@ export const NewProject: React.FC = () => {
           <div className="mt-8 flex justify-center">
             <button
               onClick={handleAnalyze}
-              disabled={!description || analyzing}
+              disabled={!canAnalyze}
               className={`
                 px-8 py-3 rounded-lg font-medium flex items-center gap-3 transition transform
-                ${!description || analyzing 
+                ${!canAnalyze 
                   ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
                   : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg hover:shadow-xl hover:scale-105'
                 }

@@ -26,11 +26,21 @@ from app.core.building_taxonomy import normalize_building_type, validate_buildin
 from app.db.models import Project
 from app.db.database import get_db
 from app.services.pdf_export_service import pdf_export_service
+from app.config.regional_multipliers import _location_has_explicit_state
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["v2"])
+
+
+def _ensure_city_state_format(location: Optional[str]) -> None:
+    """Validate that location strings are provided in 'City, ST' format."""
+    if not location or not _location_has_explicit_state(location):
+        raise HTTPException(
+            status_code=400,
+            detail="Location must be provided as 'City, ST' (e.g., 'Dallas, TX')."
+        )
 
 
 def _project_class_from_payload(payload: Dict[str, Any]) -> ProjectClass:
@@ -80,7 +90,7 @@ class AnalyzeRequest(BaseModel):
     """Request for natural language analysis"""
     model_config = ConfigDict(populate_by_name=True)
     description: str = Field(..., description="Natural language project description")
-    default_location: Optional[str] = Field("Nashville", description="Default location if not detected")
+    default_location: Optional[str] = Field(None, description="Default location if not detected")
     default_square_footage: Optional[float] = Field(None, description="Default square footage if not detected")
     location: Optional[str] = Field(None, description="Explicit location override")
     square_footage: Optional[float] = Field(
@@ -112,7 +122,7 @@ class CalculateRequest(BaseModel):
     building_type: str = Field(..., description="Building type (e.g., 'healthcare', 'office')")
     subtype: str = Field(..., description="Building subtype (e.g., 'hospital', 'class_a')")
     square_footage: float = Field(..., gt=0, description="Total square footage")
-    location: str = Field("Nashville", description="Project location for regional multiplier")
+    location: str = Field(..., description="Project location for regional multiplier ('City, ST')")
     project_class: Optional[str] = Field("ground_up", description="Project class")
     floors: Optional[int] = Field(1, ge=1, description="Number of floors")
     ownership_type: Optional[str] = Field("for_profit", description="Ownership type")
@@ -181,7 +191,7 @@ async def analyze_project(request: AnalyzeRequest):
 
         if request.location:
             parsed['location'] = request.location
-        elif not parsed.get('location'):
+        elif not parsed.get('location') and request.default_location:
             parsed['location'] = request.default_location
 
         finish_override = (request.finish_level or "").strip().lower() if request.finish_level else None
@@ -231,11 +241,15 @@ async def analyze_project(request: AnalyzeRequest):
         ownership_type = OwnershipType(parsed.get('ownership_type', 'for_profit'))
         
         # Calculate everything
+        final_location = (parsed.get('location') or '').strip()
+        _ensure_city_state_format(final_location)
+        parsed['location'] = final_location
+
         result = unified_engine.calculate_project(
             building_type=building_type,
             subtype=parsed.get('subtype'),  # Use .get() to handle missing subtype
             square_footage=parsed['square_footage'],
-            location=parsed.get('location', 'Nashville, TN'),  # Use .get() with default
+            location=final_location,
             project_class=project_class,
             floors=parsed.get('floors', 1),
             ownership_type=ownership_type,
@@ -297,12 +311,15 @@ async def calculate_project(request: CalculateRequest):
         project_class = ProjectClass(request.project_class)
         ownership_type = OwnershipType(request.ownership_type)
         
+        location_value = request.location.strip()
+        _ensure_city_state_format(location_value)
+
         # Calculate
         result = unified_engine.calculate_project(
             building_type=building_type,
             subtype=request.subtype,
             square_footage=request.square_footage,
-            location=request.location,
+            location=location_value,
             project_class=project_class,
             floors=request.floors,
             ownership_type=ownership_type,
