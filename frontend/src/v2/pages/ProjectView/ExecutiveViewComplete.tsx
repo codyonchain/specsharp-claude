@@ -907,10 +907,19 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         ? finishSourceRaw
         : 'default';
 
+  const regionalContext = toRecord(
+    calculations?.regional ||
+    analysis?.regional ||
+    project?.analysis?.regional ||
+    displayData?.regional
+  );
   const costFactorFromDisplay = typeof displayData.costFactor === 'number' ? displayData.costFactor : undefined;
-  const revenueFactorFromDisplay = typeof displayData.revenueFactor === 'number' ? displayData.revenueFactor : undefined;
-  const costFactor = costFactorFromDisplay ?? (typeof modifiersTrace?.data?.cost_factor === 'number' ? modifiersTrace.data.cost_factor : undefined);
-  const revenueFactor = revenueFactorFromDisplay ?? (typeof modifiersTrace?.data?.revenue_factor === 'number' ? modifiersTrace.data.revenue_factor : undefined);
+  const costFactorFromRegional = typeof regionalContext.cost_factor === 'number' ? regionalContext.cost_factor : undefined;
+  const marketFactorFromRegional = typeof regionalContext.market_factor === 'number' ? regionalContext.market_factor : undefined;
+  const modifierCostFactor = typeof modifiersTrace?.data?.cost_factor === 'number' ? modifiersTrace.data.cost_factor : undefined;
+  const modifierMarketFactor = typeof modifiersTrace?.data?.market_factor === 'number' ? modifiersTrace.data.market_factor : undefined;
+  const costFactor = costFactorFromRegional ?? modifierCostFactor ?? costFactorFromDisplay ?? 1.0;
+  const marketFactor = marketFactorFromRegional ?? modifierMarketFactor ?? 1.0;
 
   const costPerSFValue = typeof displayData.costPerSF === 'number' && Number.isFinite(displayData.costPerSF)
     ? displayData.costPerSF
@@ -946,9 +955,15 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     }
     return value.toFixed(3).replace(/(?:\.0+|(\.\d+?)0+)$/, '$1');
   };
+  const formatChipMultiplier = (value?: number) => {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      return undefined;
+    }
+    return value.toFixed(2);
+  };
 
-  const costFactorText = formatMultiplier(costFactor);
-  const revenueFactorText = formatMultiplier(revenueFactor);
+  const costFactorText = formatChipMultiplier(costFactor);
+  const marketFactorText = formatChipMultiplier(marketFactor);
 
   const finishChipTooltip = finishSource === 'explicit'
     ? 'Source: Selected in form'
@@ -956,10 +971,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       ? 'Source: Inferred from description'
       : 'Source: Default (Standard)';
 
-  const hasFinishPayload = Boolean(finishLevel || costFactor || revenueFactor);
+  const hasFinishPayload = Boolean(finishLevel || costFactor || marketFactor);
   const finishChipDetail = hasFinishPayload
-    ? `Finish: ${finishLevel || 'Standard'} ${costFactorText && revenueFactorText
-      ? `(Cost ×${costFactorText} · Rev ×${revenueFactorText})`
+    ? `Finish: ${finishLevel || 'Standard'} ${costFactorText && marketFactorText
+      ? `(Cost ×${costFactorText} · Market ×${marketFactorText})`
       : '(applied)'}`.trim()
     : 'MISSING';
 
@@ -976,12 +991,12 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     console.log('[SpecSharp DEV] Finish chip payload', {
       finishLevel: finishLevel || 'Standard',
       costFactor,
-      revenueFactor,
+      marketFactor,
       modifiersTrace: modifiersTrace?.data || null,
       finishSource
     });
     finishDevLogRef.current = true;
-  }, [isDev, finishLevel, modifiersTrace, finishSource, costFactor, revenueFactor]);
+  }, [isDev, finishLevel, modifiersTrace, finishSource, costFactor, marketFactor]);
   
   // Basic project info
   const enrichedParsed: any = analysis?.parsed_input || {};

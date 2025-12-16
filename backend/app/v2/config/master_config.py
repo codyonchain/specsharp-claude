@@ -5403,19 +5403,22 @@ def get_market_factor(location: str, warning_callback: Optional[Callable[[], Non
     if not state and warning_callback:
         warning_callback()
 
-    lower_market = {key.lower(): value for key, value in MARKET_OVERRIDES.items()}
-    value: Optional[float] = None
+    base_market = float(context.get("market_factor", 1.0) or 1.0)
+    value: float = base_market
+
+    lower_market = {key.lower(): val for key, val in MARKET_OVERRIDES.items()}
+    override_lookup: Optional[float] = None
 
     if normalized:
-        value = lower_market.get(normalized.lower())
-    if value is None and context.get("city") and state:
+        override_lookup = lower_market.get(normalized.lower())
+    if override_lookup is None and context.get("city") and state:
         city_state_key = f"{context['city']}, {state}".lower()
-        value = lower_market.get(city_state_key)
-    if value is None and state:
-        value = lower_market.get(state.lower()) or lower_market.get(state.upper())
+        override_lookup = lower_market.get(city_state_key)
+    if override_lookup is None and state:
+        override_lookup = lower_market.get(state.lower()) or lower_market.get(state.upper())
 
-    if value is None:
-        value = context.get("multiplier", 1.0)
+    if override_lookup is not None:
+        value = override_lookup
 
     override = get_regional_override(normalized)
     if override is None and context.get("city"):
@@ -5487,7 +5490,7 @@ def get_effective_modifiers(
 
     finish_revenue_factor = get_finish_revenue_factor(finish_level, building_type, subtype)
     market_factor = get_market_factor(location, warning_callback=warning_callback)
-    raw_revenue_factor = finish_revenue_factor * market_factor
+    raw_revenue_factor = finish_revenue_factor
     revenue_factor = _clamp(raw_revenue_factor, 0.7, 1.6)
 
     return {

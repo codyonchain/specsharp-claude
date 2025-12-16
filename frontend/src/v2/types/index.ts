@@ -148,6 +148,8 @@ export interface RegionalContext {
   state?: string | null;
   source?: string | null;
   multiplier: number;
+  cost_factor?: number | null;
+  market_factor?: number | null;
   location_display?: string | null;
 }
 

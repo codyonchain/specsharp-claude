@@ -466,7 +466,9 @@ class UnifiedEngine:
                 'subtotal': construction_cost,  # Construction cost before contingency
                 'modifiers': modifiers,
                 'quality_factor': quality_factor,
-                'finish_level': normalized_finish_level
+                'finish_level': normalized_finish_level,
+                'regional_context': regional_context,
+                'location': location
             })
 
             # Get basic ownership metrics (prefer revenue-derived NOI when available)
@@ -601,12 +603,16 @@ class UnifiedEngine:
             pretty_location = f"{city_value.title()}, {state_value}"
         elif city_value:
             pretty_location = city_value.title()
+        regional_cost_factor = regional_context.get('cost_factor')
+        regional_market_factor = regional_context.get('market_factor', 1.0)
         regional_payload = {
             'city': city_value.title() if city_value else None,
             'state': state_value,
             'source': regional_context.get('source'),
             'multiplier': regional_multiplier_effective,
-            'location_display': pretty_location or location
+            'cost_factor': regional_cost_factor if regional_cost_factor is not None else regional_multiplier_effective,
+            'market_factor': regional_market_factor,
+            'location_display': pretty_location or regional_context.get('location_display') or location
         }
 
         # Build comprehensive response - FLATTENED structure to match frontend expectations
@@ -679,6 +685,14 @@ class UnifiedEngine:
             'calculation_trace': self.calculation_trace,
             'timestamp': datetime.now().isoformat()
         }
+
+        revenue_block = result.get('revenue_analysis')
+        if isinstance(revenue_block, dict):
+            revenue_block.setdefault('market_factor', regional_market_factor)
+        if ownership_analysis and isinstance(ownership_analysis, dict):
+            nested_revenue = ownership_analysis.get('revenue_analysis')
+            if isinstance(nested_revenue, dict):
+                nested_revenue.setdefault('market_factor', regional_market_factor)
 
         facility_metrics_payload = None
         if building_type == BuildingType.RESTAURANT:
@@ -1782,6 +1796,17 @@ class UnifiedEngine:
             finish_level_value = finish_level_value.strip().lower() or 'standard'
         else:
             finish_level_value = 'standard'
+        regional_ctx = context.get('regional_context') or {}
+        market_factor = regional_ctx.get('market_factor')
+        if not isinstance(market_factor, (int, float)):
+            modifiers_ctx = context.get('modifiers') or {}
+            market_factor = modifiers_ctx.get('market_factor', 1.0)
+        try:
+            market_factor = float(market_factor)
+        except (TypeError, ValueError):
+            market_factor = 1.0
+        if market_factor <= 0:
+            market_factor = 1.0
         
         # Healthcare - uses beds, visits, procedures, or scans
         if building_enum == BuildingType.HEALTHCARE:
@@ -1818,12 +1843,14 @@ class UnifiedEngine:
                         noi = 0.0
                 else:
                     noi = 0.0
+                adjusted_annual_revenue = annual_revenue * market_factor
+                adjusted_noi = (noi * market_factor) if noi is not None else 0.0
                 context['mob_revenue'] = {
-                    'annual_revenue': annual_revenue,
+                    'annual_revenue': adjusted_annual_revenue,
                     'operating_margin': operating_margin_base,
-                    'net_operating_income': noi
+                    'net_operating_income': adjusted_noi
                 }
-                return annual_revenue
+                return adjusted_annual_revenue
         
         # Multifamily - uses monthly rent per unit
         elif building_enum == BuildingType.MULTIFAMILY:
@@ -1945,7 +1972,7 @@ class UnifiedEngine:
 
         # Apply quality factor and occupancy
         # Ensure no None values
-        base_revenue = base_revenue or 0
+        base_revenue = (base_revenue or 0) * market_factor
         quality_factor = quality_factor or 1.0
         occupancy_rate = occupancy_rate or 0.85
         
@@ -2961,7 +2988,7 @@ class UnifiedEngine:
         Get market-specific rates based on location.
         """
         context = resolve_location_context(location or "")
-        multiplier = context.get('multiplier', 1.0)
+        multiplier = context.get('market_factor', context.get('multiplier', 1.0))
         
         # Apply multiplier to default rate
         adjusted_rate = default_rate * multiplier
