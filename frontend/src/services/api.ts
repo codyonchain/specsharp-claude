@@ -1,8 +1,8 @@
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL 
-  ? `${import.meta.env.VITE_API_URL}/api/v1`
-  : 'http://localhost:8001/api/v1';
+  ? `${import.meta.env.VITE_API_URL}/api/v2`
+  : 'http://localhost:8001/api/v2';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -54,7 +54,8 @@ export interface ScopeRequest {
   building_mix?: { [key: string]: number };
   service_level?: string;
   building_features?: string[];
-  finish_level?: 'basic' | 'standard' | 'premium';
+  finish_level?: 'basic' | 'standard' | 'premium' | 'luxury';
+  finishLevel?: 'standard' | 'premium' | 'luxury';
 }
 
 export const authService = {
@@ -88,7 +89,14 @@ export const authService = {
 
 export const scopeService = {
   generate: async (data: ScopeRequest) => {
-    const response = await api.post('/scope/generate', data);
+    const finishLevelSource = data.finishLevel || data.finish_level || 'standard';
+    const normalized = typeof finishLevelSource === 'string' ? finishLevelSource.toLowerCase() : 'standard';
+    const finishLevelForPayload = normalized.charAt(0).toUpperCase() + normalized.slice(1);
+    const payload = {
+      ...data,
+      finishLevel: finishLevelForPayload,
+    };
+    const response = await api.post('/scope/generate', payload);
     return response.data;
   },
 

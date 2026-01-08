@@ -9,8 +9,8 @@ from app.core.cost_engine import (
     REGIONAL_MULTIPLIERS,
     ScopeItem
 )
-from app.services.healthcare_cost_service import healthcare_cost_service
-from app.services.healthcare_classifier import HealthcareFacilityClassifier
+# from app.services.healthcare_cost_service import healthcare_cost_service  # Removed - using unified engine
+# from app.services.healthcare_classifier import HealthcareFacilityClassifier  # Removed - using unified engine
 
 
 class CostService:

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Clock, Zap, ArrowRight, CheckCircle, Sparkles } from 'lucide-react';
-import { scopeService } from '../services/api';
+import { createProject } from '@/v2/api/client';
 import { formatCurrency, formatCurrencyPerSF } from '../utils/formatters';
 import './OnboardingFlow.css';
 
@@ -116,7 +116,10 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, currentEsti
           location: parsed.location || 'United States',
           occupancy_type: parsed.occupancy_type || 'office',
           num_floors: parsed.num_floors || 1,
-          special_requirements: naturalLanguageInput
+          special_requirements: naturalLanguageInput,
+          finish_level: 'standard',
+          finishLevel: 'Standard',
+          project_classification: parsed.project_classification || 'ground_up'
         };
       } else {
         // Use prefilled data
@@ -127,11 +130,36 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, currentEsti
           location: currentExample.prefilledData.location,
           occupancy_type: currentExample.prefilledData.building_type,
           num_floors: currentExample.prefilledData.num_floors || 1,
-          special_requirements: currentExample.prefilledData.naturalLanguageInput
+          special_requirements: currentExample.prefilledData.naturalLanguageInput,
+          finish_level: 'standard',
+          finishLevel: 'Standard',
+          project_classification: 'ground_up'
         };
       }
 
-      const response = await scopeService.generate(requestData);
+      const derivedDescription = (
+        (isCustomStep ? naturalLanguageInput : currentExample.prefilledData.naturalLanguageInput) ||
+        requestData.special_requirements ||
+        requestData.project_name ||
+        ''
+      ).trim() || 'SpecSharp Project';
+      const derivedLocation = requestData.location?.trim() || undefined;
+      const derivedSquareFootage = typeof requestData.square_footage === 'number'
+        ? requestData.square_footage
+        : undefined;
+      const derivedFinishLevel = requestData.finishLevel;
+      const derivedProjectClass = requestData.project_classification;
+      const derivedSpecialFeatures = requestData.building_features || [];
+
+      const response = await createProject({
+        description: derivedDescription,
+        location: derivedLocation,
+        squareFootage: derivedSquareFootage,
+        finishLevel: derivedFinishLevel,
+        projectClass: derivedProjectClass,
+        specialFeatures: derivedSpecialFeatures,
+      });
+      console.debug('[TRACE save:legacy->server]', { source: 'OnboardingFlow.tsx:162', id: response.id });
       
       const endTime = Date.now();
       const timeInSeconds = (endTime - startTime) / 1000;
@@ -206,7 +234,10 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, currentEsti
 
   const handleViewProject = () => {
     if (lastGeneratedProject) {
-      navigate(`/project/${lastGeneratedProject.project_id}`);
+      const generatedId = lastGeneratedProject.id || lastGeneratedProject.project_id;
+      if (generatedId) {
+        navigate(`/project/${generatedId}`);
+      }
     }
   };
 

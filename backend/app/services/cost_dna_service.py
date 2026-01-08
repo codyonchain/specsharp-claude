@@ -106,9 +106,9 @@ class CostCalculationEngine:
             # Add project classification multiplier if applicable
             if project_classification != "ground_up":
                 if project_classification == "addition":
-                    class_mult = 1.25 if "hospital" in facility_type else 1.15
+                    class_mult = 1.25 if "hospital" in facility_type else 1.12
                 else:  # renovation
-                    class_mult = 1.35
+                    class_mult = 0.92
                 cost_dna["applied_multipliers"].append({
                     "factor": f"Healthcare {project_classification.title()} Complexity",
                     "value": f"{class_mult:.2f}x",
@@ -607,16 +607,16 @@ class CostCalculationEngine:
                 else:
                     return (1.20, "Medical addition - infection control, phased work, operational facility")
             else:
-                return (1.15, "Building addition - structural tie-ins, weather protection, limited access")
+                return (1.12, "Building addition - structural tie-ins, weather protection, limited access")
         
         elif project_classification == "renovation":
             # Check complexity based on occupancy type
             if occupancy_type == "healthcare":
                 return (1.40, "Healthcare renovation - infection control, phased work, unknown conditions")
             elif occupancy_type == "restaurant":
-                return (1.35, "Restaurant renovation - kitchen systems, code upgrades, limited hours")
+                return (0.92, "Restaurant renovation - kitchen systems, code upgrades, limited hours")
             else:
-                return (1.35, "Full renovation - demolition, unknowns, code compliance, phased work")
+                return (0.92, "Full renovation - demolition, unknowns, code compliance, phased work")
         
         else:
             return (1.0, "Standard project classification")

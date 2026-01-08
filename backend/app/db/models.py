@@ -53,10 +53,10 @@ class Project(Base):
     name = Column(String, nullable=False)
     scenario_name = Column(String, nullable=True)  # For scenario comparisons (e.g., "Conservative", "Aggressive")
     description = Column(Text, nullable=True)  # Original input description
-    project_type = Column(String, nullable=False)
+    project_type = Column(String, nullable=True)  # DEPRECATED - to be removed (was misused for building_type)
     project_classification = Column(String, nullable=False, default='ground_up')  # ground_up, addition, renovation
     building_type = Column(String, nullable=True)  # Specific building type (hospital, school, etc.)
-    occupancy_type = Column(String, nullable=True)  # Same as building_type for consistency
+    occupancy_type = Column(String, nullable=True)  # DEPRECATED - to be removed (redundant with building_type)
     square_footage = Column(Float, nullable=False)
     location = Column(String, nullable=False)
     climate_zone = Column(String, nullable=True)
@@ -72,6 +72,7 @@ class Project(Base):
     
     scope_data = Column(Text, nullable=False)  # Full scope response JSON
     cost_data = Column(Text, nullable=True)  # Detailed cost breakdown JSON
+    calculation_data = Column(Text, nullable=True)  # New unified calculation data storage
     
     # Legacy user association (for migration)
     user_id = Column(Integer, ForeignKey("users.id"))
@@ -89,6 +90,7 @@ class Project(Base):
     created_by = relationship("User", back_populates="created_projects", foreign_keys=[created_by_id])
     floor_plans = relationship("FloorPlan", back_populates="project")
     markup_overrides = relationship("ProjectMarkupOverrides", back_populates="project", uselist=False)
+    # scenarios = relationship("ProjectScenario", back_populates="project", cascade="all, delete-orphan")  # Commented out - ProjectScenario model removed
 
 
 class FloorPlan(Base):

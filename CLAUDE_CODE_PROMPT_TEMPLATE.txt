@@ -1,0 +1,36 @@
+Update the project cards in the Dashboard with better styling and polish. Don't add new data fields, just improve visual design.
+
+Improvements to make:
+1. Enhanced styling - modern, slick design with better visual hierarchy
+2. Add "last updated" timestamp using project.updated_at (format as "Updated 2 days ago" or "Updated Aug 19")
+3. Better typography hierarchy - clear distinction between title, labels, and values
+4. Add hover effects - subtle shadow elevation and slight scale on hover
+5. Improved spacing and padding for better readability
+6. Add subtle gradients or accent colors to make cards more visually appealing
+7. Better use of the existing building type icons
+8. Consistent border radius and card styling
+9. Improved color scheme for the price displays
+10. Subtle animations for hover states
+
+File to edit: frontend/src/v2/pages/Dashboard.tsx
+
+Use existing data:
+- project.name (title)
+- project.building_type (icon and type)
+- project.square_footage 
+- project.location
+- construction_cost
+- total_project_cost
+- project.updated_at (for "last updated" timestamp)
+
+For the timestamp, use formatters.relativeTime() or create display like:
+- "Updated 2 hours ago"
+- "Updated yesterday"
+- "Updated Aug 19"
+
+MUST FOLLOW PROJECT_CODING_STANDARDS.md:
+- Frontend displays only - no calculations
+- All data from backend via calculations.* or displayData.*
+- Use formatters for all numbers
+- Edit existing files only - no new files
+- No hardcoded values

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Inspect LocalStorage</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #f5f5f5; }
+        pre { background: white; padding: 15px; border-radius: 5px; overflow: auto; }
+        h3 { color: #333; }
+    </style>
+</head>
+<body>
+    <h1>LocalStorage Data Inspector</h1>
+    <div id="content"></div>
+    
+    <script>
+        // Check localStorage for SpecSharp projects
+        const content = document.getElementById('content');
+        
+        // Get all localStorage keys
+        const allKeys = Object.keys(localStorage);
+        content.innerHTML += `<h3>All LocalStorage Keys:</h3><pre>${JSON.stringify(allKeys, null, 2)}</pre>`;
+        
+        // Check for specsharp_projects
+        const projects = localStorage.getItem('specsharp_projects');
+        if (projects) {
+            const parsed = JSON.parse(projects);
+            content.innerHTML += `<h3>Projects Found (${parsed.length}):</h3>`;
+            
+            parsed.forEach((project, index) => {
+                content.innerHTML += `<h3>Project ${index + 1}: ${project.name || project.id}</h3>`;
+                
+                // Check for hard_costs in the project data
+                const hardCosts = project?.analysis?.calculations?.totals?.hard_costs;
+                const softCosts = project?.analysis?.calculations?.totals?.soft_costs;
+                const totalCost = project?.analysis?.calculations?.totals?.total_project_cost;
+                
+                content.innerHTML += `<pre>
+ID: ${project.id}
+Name: ${project.name}
+Has Analysis: ${!!project.analysis}
+Has Calculations: ${!!project.analysis?.calculations}
+Has Totals: ${!!project.analysis?.calculations?.totals}
+
+COST VALUES:
+- Hard Costs: ${hardCosts || 'MISSING'}
+- Soft Costs: ${softCosts || 'MISSING'}
+- Total Project Cost: ${totalCost || 'MISSING'}
+
+Full Totals Object:
+${JSON.stringify(project.analysis?.calculations?.totals, null, 2)}
+
+Full Calculations Path:
+${JSON.stringify(project.analysis?.calculations, null, 2).substring(0, 5000)}
+</pre>`;
+            });
+        } else {
+            content.innerHTML += '<h3>No projects found in localStorage</h3>';
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NPV/IRR Display Test</title>
+    <style>
+        body { font-family: system-ui; padding: 20px; }
+        .metric { margin: 10px; padding: 10px; border: 1px solid #ccc; }
+        .pass { background: #d4edda; }
+        .fail { background: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h1>NPV/IRR Display Test</h1>
+    <div id="results"></div>
+
+    <script type="module">
+        const projectId = 'proj_1757403765_e7c3df6b';
+        
+        async function testOwnerView() {
+            const results = document.getElementById('results');
+            
+            // Call owner-view endpoint
+            const response = await fetch('http://localhost:8001/api/v2/scope/owner-view', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ project_id: projectId })
+            });
+            
+            const data = await response.json();
+            console.log('Full response:', data);
+            
+            if (data.success && data.data) {
+                const ownerData = data.data;
+                
+                // Check for NPV and IRR
+                const npv = ownerData.ownership_analysis?.return_metrics?.npv;
+                const irr = ownerData.ownership_analysis?.return_metrics?.irr;
+                
+                results.innerHTML = `
+                    <div class="metric ${npv !== undefined ? 'pass' : 'fail'}">
+                        <h3>NPV Field</h3>
+                        <p>Value: ${npv !== undefined ? `$${npv.toLocaleString()}` : 'NOT FOUND'}</p>
+                        <p>Path: ownership_analysis.return_metrics.npv</p>
+                    </div>
+                    
+                    <div class="metric ${irr !== undefined ? 'pass' : 'fail'}">
+                        <h3>IRR Field</h3>
+                        <p>Value: ${irr !== undefined ? `${irr}%` : 'NOT FOUND'}</p>
+                        <p>Path: ownership_analysis.return_metrics.irr</p>
+                    </div>
+                    
+                    <div class="metric">
+                        <h3>Data Structure</h3>
+                        <pre>${JSON.stringify(ownerData.ownership_analysis?.return_metrics, null, 2)}</pre>
+                    </div>
+                `;
+                
+                // Now test with the backendDataMapper
+                testMapper(ownerData);
+            }
+        }
+        
+        async function testMapper(ownerData) {
+            // Import the mapper
+            const mapperModule = await import('./src/v2/utils/backendDataMapper.ts');
+            const { BackendDataMapper } = mapperModule;
+            
+            // Create analysis structure as expected by mapper
+            const analysis = {
+                calculations: ownerData
+            };
+            
+            const displayData = BackendDataMapper.mapToDisplay(analysis);
+            
+            const results = document.getElementById('results');
+            results.innerHTML += `
+                <div class="metric ${displayData.npv !== 0 ? 'pass' : 'fail'}">
+                    <h3>Mapper NPV Output</h3>
+                    <p>Value: $${displayData.npv.toLocaleString()}</p>
+                </div>
+                
+                <div class="metric ${displayData.irr !== 0 ? 'pass' : 'fail'}">
+                    <h3>Mapper IRR Output</h3>
+                    <p>Value: ${(displayData.irr * 100).toFixed(1)}%</p>
+                </div>
+            `;
+        }
+        
+        testOwnerView();
+    </script>
+</body>
+</html>

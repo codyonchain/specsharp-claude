@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { scopeService } from '../services/api';
+import { createProject } from '@/v2/api/client';
 import './ScopeGenerator.css';
 import { determineOccupancyType, getProjectTypeFromOccupancy } from '../utils/buildingTypeDetection';
 import ProjectTypeSelector from './ProjectTypeSelector';
@@ -26,7 +26,8 @@ interface ScopeRequest {
   building_mix?: { [key: string]: number };
   service_level?: string;
   building_features?: string[];
-  finish_level?: 'basic' | 'standard' | 'premium';
+  finish_level?: 'basic' | 'standard' | 'premium' | 'luxury';
+  finishLevel?: 'standard' | 'premium' | 'luxury';
 }
 
 function ScopeGenerator() {
@@ -702,7 +703,7 @@ function ScopeGenerator() {
       setParsedData(parsed);
       
       // Auto-populate form fields based on NLP parsing
-      let updatedFormData = { ...formData };
+      const updatedFormData = { ...formData };
       
       if (parsed.square_footage) {
         console.log('🔍 NLP parsed square footage:', parsed.square_footage);
@@ -867,13 +868,13 @@ function ScopeGenerator() {
     }
     
     // We're in form mode, proceed with submission
-    let submitData = formData;
+    const submitData = formData;
     
     setLoading(true);
     setError('');
 
     // Parse building mix from special requirements if it's a mixed_use project
-    let finalFormData = { ...submitData };
+    const finalFormData = { ...submitData };
     if (submitData.project_type === 'mixed_use' && submitData.special_requirements && !submitData.building_mix) {
       const parsedData = parseNaturalLanguage(submitData.special_requirements);
       if (parsedData.building_mix) {
@@ -887,32 +888,59 @@ function ScopeGenerator() {
       delete finalFormData.project_name;
     }
 
+    const finishSource = finalFormData.finishLevel || finalFormData.finish_level || 'standard';
+    const normalizedFinish = typeof finishSource === 'string' ? finishSource.toLowerCase() : 'standard';
+    finalFormData.finishLevel = normalizedFinish.charAt(0).toUpperCase() + normalizedFinish.slice(1);
+    finalFormData.finish_level = normalizedFinish as ScopeRequest['finish_level'];
+
     console.log('Submitting form data:', finalFormData);
     console.log('📏 Square footage being submitted:', finalFormData.square_footage);
 
     try {
-      const response = await scopeService.generate(finalFormData);
-      navigate(`/project/${response.project_id}`);
+      const derivedDescription = (
+        finalFormData.special_requirements ||
+        naturalLanguageInput ||
+        finalFormData.project_name ||
+        ''
+      ).trim() || 'SpecSharp Project';
+      const derivedLocation = finalFormData.location?.trim() || undefined;
+      const derivedSquareFootage = typeof finalFormData.square_footage === 'number'
+        ? finalFormData.square_footage
+        : undefined;
+      const derivedFinishLevel = (finalFormData.finishLevel || finalFormData.finish_level)
+        ? finalFormData.finishLevel
+        : undefined;
+      const derivedProjectClass = finalFormData.project_classification || undefined;
+      const derivedSpecialFeatures = finalFormData.building_features || [];
+
+      const { id } = await createProject({
+        description: derivedDescription,
+        location: derivedLocation,
+        squareFootage: derivedSquareFootage,
+        finishLevel: derivedFinishLevel,
+        projectClass: derivedProjectClass,
+        specialFeatures: derivedSpecialFeatures,
+      });
+
+      console.debug('[TRACE save:legacy->server]', { source: 'ScopeGenerator.tsx:925', id });
+      navigate(`/project/${id}`);
     } catch (err: any) {
       console.error('Scope generation error:', err);
-      console.error('Error response:', err.response);
       let errorMessage = 'Failed to generate scope';
-      
-      if (err.response?.data?.detail) {
-        if (Array.isArray(err.response.data.detail)) {
-          // Pydantic validation errors come as an array
-          errorMessage = err.response.data.detail.map((e: any) => 
-            `${e.loc.join(' → ')}: ${e.msg}`
-          ).join('\n');
+
+      const detail = err?.details || err?.response?.data;
+      if (detail?.detail) {
+        if (Array.isArray(detail.detail)) {
+          errorMessage = detail.detail.map((e: any) => `${e.loc?.join?.(' → ') || ''}: ${e.msg || e.message || ''}`).join('\n');
         } else {
-          errorMessage = err.response.data.detail;
+          errorMessage = detail.detail;
         }
-      } else if (err.response?.data) {
-        errorMessage = JSON.stringify(err.response.data);
-      } else if (err.message) {
+      } else if (typeof detail === 'string') {
+        errorMessage = detail;
+      } else if (err?.message) {
         errorMessage = err.message;
       }
-      
+
       setError(errorMessage);
     } finally {
       setLoading(false);

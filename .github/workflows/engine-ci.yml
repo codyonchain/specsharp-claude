@@ -1,0 +1,42 @@
+name: "Engine CI (stable subsets)"
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip wheel
+          python -m pip install -r requirements.txt pytest pytest-cov
+
+      - name: Run stable test subsets
+        working-directory: backend
+        run: |
+          source .venv/bin/activate
+          PYTHONPATH=. pytest -q tests/test_trace_flags.py tests/test_invariants.py tests/test_revenue_golden.py
+
+      - name: Verify engine contract checksum
+        if: always()
+        working-directory: backend
+        run: |
+          source .venv/bin/activate
+          OUTPUT=$(PYTHONPATH=. python scripts/engine_contract_check.py)
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -Ei "hash mismatch|different"; then
+            exit 1
+          fi

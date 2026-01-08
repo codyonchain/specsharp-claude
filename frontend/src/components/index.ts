@@ -1,7 +1,6 @@
 // Core components
 export * from './Dashboard';
 export * from './ProjectDetail';
-export * from './ProgressiveProjectDetail';
 export * from './ScopeGenerator';
 export * from './FloorPlanViewer';
 export * from './Login';

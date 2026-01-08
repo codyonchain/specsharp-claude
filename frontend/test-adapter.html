@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test V1 to V2 Adapter</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #f5f5f5; }
+        pre { background: white; padding: 15px; border-radius: 5px; overflow: auto; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>V1 to V2 Adapter Test</h1>
+    <div id="content"></div>
+    
+    <script type="module">
+        // Test the adapter directly
+        async function testAdapter() {
+            const content = document.getElementById('content');
+            
+            try {
+                // Fetch V1 project directly
+                const response = await fetch('http://localhost:8001/api/v2/scope/projects/0dbe9eb5', {
+                    headers: {
+                        'Authorization': 'Bearer dev'
+                    }
+                });
+                const v1Project = await response.json();
+                
+                content.innerHTML += '<h3>V1 Project Structure (from API):</h3>';
+                content.innerHTML += `<pre>
+Project ID: ${v1Project.project_id}
+Total Cost (root): ${v1Project.total_cost}
+Subtotal (root): ${v1Project.subtotal}
+Cost per SF (root): ${v1Project.cost_per_sqft}
+Has categories: ${!!v1Project.categories}
+Has analysis: ${!!v1Project.analysis}
+Has calculations: ${!!v1Project.calculations}
+</pre>`;
+
+                // Apply the adapter logic
+                const v2Project = {
+                    ...v1Project,
+                    id: v1Project.project_id || v1Project.id,
+                    analysis: {
+                        parsed_input: v1Project.request_data || {
+                            square_footage: v1Project.square_footage || 0,
+                            building_type: v1Project.building_type || '',
+                            location: v1Project.location || ''
+                        },
+                        calculations: {
+                            totals: {
+                                hard_costs: v1Project.total_cost || v1Project.subtotal || 0,
+                                soft_costs: v1Project.soft_costs || 0,
+                                total_project_cost: v1Project.total_cost || 0,
+                                cost_per_sf: v1Project.cost_per_sqft || 0
+                            },
+                            construction_costs: {
+                                total: v1Project.subtotal || v1Project.total_cost || 0
+                            },
+                            trade_breakdown: v1Project.categories || []
+                        }
+                    }
+                };
+                
+                content.innerHTML += '<h3>V2 Project Structure (after adapter):</h3>';
+                content.innerHTML += `<pre>
+Project ID: ${v2Project.id}
+Has analysis: ${!!v2Project.analysis}
+Has calculations: ${!!v2Project.analysis?.calculations}
+Has totals: ${!!v2Project.analysis?.calculations?.totals}
+
+COST VALUES IN V2 STRUCTURE:
+- Hard Costs: <span class="${v2Project.analysis?.calculations?.totals?.hard_costs ? 'success' : 'error'}">${v2Project.analysis?.calculations?.totals?.hard_costs || 'MISSING'}</span>
+- Soft Costs: ${v2Project.analysis?.calculations?.totals?.soft_costs || 'MISSING'}
+- Total Project Cost: <span class="${v2Project.analysis?.calculations?.totals?.total_project_cost ? 'success' : 'error'}">${v2Project.analysis?.calculations?.totals?.total_project_cost || 'MISSING'}</span>
+- Cost per SF: <span class="${v2Project.analysis?.calculations?.totals?.cost_per_sf ? 'success' : 'error'}">${v2Project.analysis?.calculations?.totals?.cost_per_sf || 'MISSING'}</span>
+</pre>`;
+
+                // Check what ExecutiveViewComplete would extract
+                const calculations = v2Project?.analysis?.calculations || {};
+                const totals = calculations?.totals || {};
+                const constructionTotal = totals.hard_costs || 0;
+                
+                content.innerHTML += '<h3>What ExecutiveViewComplete Would Display:</h3>';
+                content.innerHTML += `<pre>
+const calculations = project?.analysis?.calculations || {};
+const totals = calculations?.totals || {};
+const constructionTotal = totals.hard_costs || 0;
+
+Construction Total: <span class="${constructionTotal ? 'success' : 'error'}">$${constructionTotal.toLocaleString()}</span>
+</pre>`;
+                
+            } catch (error) {
+                content.innerHTML += `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+        
+        testAdapter();
+    </script>
+</body>
+</html>

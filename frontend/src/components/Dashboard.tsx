@@ -159,6 +159,8 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
   const [editingProjectName, setEditingProjectName] = useState<string>('');
   const navigate = useNavigate();
 
+  const resolveProjectId = (project: any): string | undefined => project?.id || project?.project_id;
+
   useEffect(() => {
     loadProjects();
     checkSubscriptionStatus();
@@ -353,49 +355,58 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
 
   return (
     <div className="dashboard">
-      <header className="dashboard-header">
-        <div className="header-content">
-          <h1>Projects</h1>
-          <div className="header-actions">
-            <button onClick={() => setShowTeamSettings(true)} className="header-btn secondary">
-              <Users size={18} />
-              <span>Team</span>
-            </button>
-            <button onClick={() => setShowMarkupSettings(true)} className="header-btn secondary">
-              <Settings size={18} />
-              <span>Settings</span>
-            </button>
-            <button onClick={handleLogout} className="header-btn danger">Logout</button>
+      {/* Executive Dashboard Header */}
+      <header className="bg-gradient-to-r from-gray-900 to-gray-800 shadow-xl">
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold text-white">Cost Estimates</h1>
+              <p className="text-gray-400 mt-1">Early-stage feasibility analysis and cost validation</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setShowTeamSettings(true)} className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-colors">
+                <Users size={18} />
+                <span>Team</span>
+              </button>
+              <button onClick={() => setShowMarkupSettings(true)} className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-colors">
+                <Settings size={18} />
+                <span>Settings</span>
+              </button>
+              <button onClick={handleLogout} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
       <div className="dashboard-content">
-        {/* Professional CTA Section */}
-        <div className="cta-section">
-          <div className="cta-card">
-            <div className="cta-card-content">
-              <div className="cta-text">
-                <h2 className="cta-title">Create New Cost Estimate</h2>
-                <p className="cta-subtitle">Professional cost analysis in 90 seconds</p>
-              </div>
-              <div className="cta-actions">
-                {projects.length >= 2 && (
-                  <button
-                    onClick={toggleComparisonMode}
-                    className={`btn-secondary ${isComparisonMode ? 'active' : ''}`}
-                  >
-                    <span>📊</span>
-                    <span>{isComparisonMode ? 'Exit Compare' : 'Compare Scenarios'}</span>
-                  </button>
-                )}
-                <button 
-                  onClick={() => navigate('/scope/new')}
-                  className="btn-primary"
+        <div className="max-w-7xl mx-auto px-6 py-6">
+
+          {/* Action Section */}
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">Recent Estimates</h2>
+            <div className="flex gap-3">
+              {projects.length >= 2 && (
+                <button
+                  onClick={toggleComparisonMode}
+                  className={`flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors ${isComparisonMode ? 'bg-blue-100 text-blue-700' : ''}`}
                 >
-                  + New Estimate
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  <span>{isComparisonMode ? 'Exit Compare' : 'Compare Scenarios'}</span>
                 </button>
-              </div>
+              )}
+              <button 
+                onClick={() => navigate('/scope/new')}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                New Estimate
+              </button>
             </div>
           </div>
         </div>
@@ -406,13 +417,7 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
           </div>
         )}
 
-        <div className="projects-section">
-          <div className="section-header">
-            <h2>Recent Projects</h2>
-            {projects.length > 0 && (
-              <span className="project-count">{projects.length} project{projects.length !== 1 ? 's' : ''}</span>
-            )}
-          </div>
+        <div className="projects-section max-w-7xl mx-auto px-6">
           {loading ? (
             <div className="loading-state">
               <div className="spinner"></div>
@@ -443,136 +448,139 @@ function Dashboard({ setIsAuthenticated }: DashboardProps) {
               )}
               <div className="projects-grid">
                 {projects.map((project) => {
-                  // Only show $/SF for contractor view (no per-unit metrics)
-                  const costPerSF = project.square_footage ? project.total_cost / project.square_footage : 0;
+                  const projectId = resolveProjectId(project);
+                  if (!projectId) {
+                    return null;
+                  }
+                  // Calculate total investment (including soft costs)
+                  const totalInvestment = project.total_cost * 1.46; // Assuming 46% soft costs average
+                  const constructionCost = project.total_cost;
+                  const costPerSF = project.square_footage ? totalInvestment / project.square_footage : 0;
                   
                   return (
                     <div 
-                      key={project.project_id} 
-                      className={`project-card ${isComparisonMode && selectedForComparison.includes(project.project_id) ? 'selected-for-comparison' : ''} ${isComparisonMode ? 'comparison-mode' : ''}`}
+                      key={projectId} 
+                      className={`bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden group cursor-pointer ${isComparisonMode && selectedForComparison.includes(projectId) ? 'ring-2 ring-blue-500' : ''}`}
                       onClick={() => {
                         if (isComparisonMode) {
-                          toggleComparisonSelection(project.project_id);
+                          toggleComparisonSelection(projectId);
                         } else {
-                          navigate(`/project/${project.project_id}`);
+                          navigate(`/project/${projectId}`);
                         }
                       }}
                     >
-                      {isComparisonMode && (
-                        <div className="comparison-indicator">
-                          {selectedForComparison.includes(project.project_id) ? (
-                            <span className="check-icon">✓</span>
-                          ) : (
-                            <span className="plus-icon">+</span>
-                          )}
+                      {/* Gradient Header Bar */}
+                      <div className="h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+                      
+                      <div className="p-6">
+                        {/* Header with Title and Actions */}
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="flex-1">
+                            {isComparisonMode && (
+                              <div className="mb-2">
+                                {selectedForComparison.includes(projectId) ? (
+                                  <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded">✓ Selected</span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded">Click to select</span>
+                                )}
+                              </div>
+                            )}
+                            <h3 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
+                              {project.name || project.description || `${formatNumber(project.square_footage)} SF ${getDisplayBuildingType(project.scope_data?.request_data || {})}`}
+                            </h3>
+                            <div className="flex items-center gap-3 mt-1">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                {getDisplayBuildingType(project.scope_data?.request_data || {
+                                  project_type: project.project_type,
+                                  occupancy_type: project.occupancy_type || project.building_type
+                                })}
+                              </span>
+                              <span className="text-xs text-gray-500">{project.location}</span>
+                              {project.project_classification === 'addition' && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">Addition</span>}
+                              {project.project_classification === 'renovation' && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">Renovation</span>}
+                            </div>
+                          </div>
+                          <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                            <button 
+                              className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
+                              onClick={(e) => handleDuplicateClick(e, projectId, project.name)}
+                              title="Duplicate project"
+                            >
+                              <Copy size={16} />
+                            </button>
+                            <button 
+                              className="p-1.5 text-gray-400 hover:text-red-600 transition-colors"
+                              onClick={(e) => handleDeleteClick(e, projectId, project.name)}
+                              title="Delete project"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </div>
-                      )}
-                      <div className="project-actions">
-                        <button
-                          className="duplicate-btn"
-                          onClick={(e) => handleDuplicateClick(e, project.project_id, project.name)}
-                          title="Create a copy of this project"
-                        >
-                          <Copy size={18} />
-                        </button>
-                        <button
-                          className="delete-btn"
-                          onClick={(e) => handleDeleteClick(e, project.project_id, project.name)}
-                          title="Delete project"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                        {/* Key Metrics Grid */}
+                        <div className="space-y-3">
+                          {/* Construction Cost */}
+                          <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                                <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                </svg>
+                              </div>
+                              <span className="text-sm text-gray-600">Construction</span>
+                            </div>
+                            <span className="text-lg font-bold text-gray-900">
+                              ${(constructionCost / 1000000).toFixed(1)}M
+                            </span>
+                          </div>
+
+                          {/* Total Investment */}
+                          <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              </div>
+                              <span className="text-sm text-gray-600">Total Investment</span>
+                            </div>
+                            <span className="text-lg font-bold text-blue-600">
+                              ${(totalInvestment / 1000000).toFixed(1)}M
+                            </span>
+                          </div>
+
+                          {/* Square Footage */}
+                          <div className="flex justify-between items-center py-2">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                                <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                </svg>
+                              </div>
+                              <span className="text-sm text-gray-600">Size</span>
+                            </div>
+                            <span className="text-sm font-medium text-gray-700">
+                              {(project.square_footage / 1000).toFixed(0)}K SF
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Footer with Date and Action */}
+                        <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-100">
+                          <span className="text-xs text-gray-500">
+                            Created {new Date(project.created_at).toLocaleDateString()}
+                          </span>
+                          <div 
+                            className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            View Details
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </div>
+                        </div>
                       </div>
-                  <div className="project-name-container">
-                    {editingProjectId === project.project_id ? (
-                      <div className="project-name-edit" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="text"
-                          value={editingProjectName}
-                          onChange={(e) => setEditingProjectName(e.target.value)}
-                          onKeyPress={(e) => {
-                            if (e.key === 'Enter') {
-                              handleSaveProjectName(project.project_id);
-                            }
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Escape') {
-                              handleCancelEdit();
-                            }
-                          }}
-                          autoFocus
-                          className="project-name-input"
-                        />
-                        <button
-                          className="save-btn"
-                          onClick={() => handleSaveProjectName(project.project_id)}
-                          title="Save"
-                        >
-                          <Check size={16} />
-                        </button>
-                        <button
-                          className="cancel-btn"
-                          onClick={handleCancelEdit}
-                          title="Cancel"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-                    ) : (
-                      <h3 className="project-name">
-                        {project.name}
-                        <button
-                          className="edit-name-btn"
-                          onClick={(e) => handleEditProjectName(e, project.project_id, project.name)}
-                          title="Edit project name"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                      </h3>
-                    )}
-                  </div>
-                  <div className="project-badges">
-                    <span className="project-type-badge">
-                      {getDisplayBuildingType(project.scope_data?.request_data || {
-                        project_type: project.project_type,
-                        occupancy_type: project.occupancy_type || project.building_type
-                      })}
-                    </span>
-                    {project.project_classification === 'addition' && <span className="classification-tag addition">Addition</span>}
-                    {project.project_classification === 'renovation' && <span className="classification-tag renovation">Renovation</span>}
-                  </div>
-                  
-                  <div className="project-details">
-                    <p className="project-location">{project.location}</p>
-                    <p className="project-size">{formatNumber(project.square_footage)} SF</p>
-                  </div>
-                  
-                  <div className="project-metrics">
-                    <div className="metric-primary">
-                      <span className="metric-label">COST PER SQ FT</span>
-                      <span className="metric-value">{formatCurrencyPerSF(costPerSF)}</span>
-                    </div>
-                    <div className="metric-total">
-                      <span className="metric-label">TOTAL PROJECT</span>
-                      <span className="metric-value">{formatCurrency(project.total_cost)}</span>
-                    </div>
-                  </div>
-                  <div className="project-footer">
-                    <p className="project-date">
-                      Created {new Date(project.created_at).toLocaleDateString()}
-                    </p>
-                    <div className="project-actions-footer">
-                      <button
-                        className="action-link"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/project/${project.project_id}`);
-                        }}
-                      >
-                        View Details →
-                      </button>
-                    </div>
-                  </div>
                     </div>
                   );
                 })}

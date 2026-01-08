@@ -203,18 +203,25 @@ def get_building_subtype(building_type: str, description: str) -> str:
             return 'general_manufacturing'
     
     elif building_type == 'hospitality':
-        if any(term in description_lower for term in ['luxury', 'five star', '5 star', 'resort']):
-            return 'luxury_hotel'
-        elif any(term in description_lower for term in ['boutique', 'design hotel']):
-            return 'boutique_hotel'
-        elif any(term in description_lower for term in ['extended stay', 'residence inn']):
-            return 'extended_stay'
-        elif any(term in description_lower for term in ['budget', 'economy', 'motel']):
-            return 'budget_hotel'
-        elif any(term in description_lower for term in ['conference', 'business']):
-            return 'business_hotel'
+        # Check for full service indicators (luxury, upscale, full amenities)
+        if any(term in description_lower for term in [
+            'luxury', 'five star', '5 star', 'resort', 'convention',
+            'full service', 'full-service', 'boutique', 'upscale',
+            'conference', 'business', 'design hotel'
+        ]):
+            return 'full_service_hotel'
+        
+        # Check for limited service indicators (budget, economy, basic)
+        elif any(term in description_lower for term in [
+            'limited service', 'limited-service', 'select service',
+            'budget', 'economy', 'motel', 'express', 'value',
+            'extended stay', 'residence inn'
+        ]):
+            return 'limited_service_hotel'
+        
+        # Default to limited service (more common type)
         else:
-            return 'standard_hotel'
+            return 'limited_service_hotel'
     
     elif building_type == 'retail':
         if any(term in description_lower for term in ['grocery', 'supermarket', 'food market']):

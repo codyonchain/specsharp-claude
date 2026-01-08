@@ -390,6 +390,64 @@ h1, h2, h3, h4, h5, h6 {
   background-color: #F9FAFB;
 }
 
+/* Persona Cards for Investment Decision-Makers */
+.who-uses-section {
+  padding: 80px 0;
+  background: white;
+}
+
+.persona-card {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  margin-bottom: 2rem;
+}
+
+.persona-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.persona-header {
+  padding: 2rem;
+  text-align: center;
+}
+
+.persona-content {
+  padding: 2rem;
+}
+
+.persona-card .quote {
+  padding: 1rem;
+  background: #f8f9fa;
+  border-left: 3px solid #3B60E4;
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+}
+
+.recent-win {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+.trust-logo-group {
+  display: flex;
+  gap: 3rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.logo-category {
+  padding: 1rem 2rem;
+  background: #f3f4f6;
+  border-radius: 8px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
 .trust-logos {
   display: flex;
   flex-wrap: wrap;

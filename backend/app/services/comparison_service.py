@@ -1,7 +1,7 @@
 from typing import Dict, List, Optional, Any, Tuple
 import copy
 from app.models.scope import ScopeRequest, ScopeResponse
-from app.core.engine import engine as scope_engine
+from app.v2.engines.unified_engine import unified_engine
 from app.services.floor_plan_service import floor_plan_service
 import json
 
@@ -69,18 +69,68 @@ class ComparisonService:
         except Exception as e:
             raise ValueError(f"Failed to create scope request: {str(e)} - Request data: {modified_request}")
         
-        # Generate new scope
-        scope_response = scope_engine.generate_scope(scope_request)
+        # Generate new scope using clean_engine_v2
+        # Convert ScopeRequest to dict for clean_engine_v2
+        request_dict = {
+            'building_type': scope_request.building_type,
+            'building_subtype': scope_request.building_subtype or scope_request.building_type,
+            'square_footage': scope_request.square_footage,
+            'location': scope_request.location,
+            'num_floors': scope_request.num_floors or 1,
+            'features': scope_request.building_features or [],
+            'finish_level': getattr(scope_request, 'finish_level', 'standard'),
+            'project_classification': str(getattr(scope_request, 'project_classification', 'ground_up')),
+            'project_name': scope_request.project_name or f"Scenario {index}"
+        }
+        
+        # Calculate scope using unified_engine (V2)
+        from app.v2.config.master_config import BuildingType, ProjectClass, OwnershipType
+        
+        # Convert to unified_engine format
+        building_type = BuildingType(request_dict.get('building_type', 'office'))
+        project_class = ProjectClass(request_dict.get('project_class', 'ground_up'))
+        ownership_type = OwnershipType(request_dict.get('ownership_type', 'for_profit'))
+        
+        calc_result = unified_engine.calculate_project(
+            building_type=building_type,
+            subtype=request_dict.get('subtype', 'class_b'),
+            square_footage=request_dict.get('square_footage', 100000),
+            location=request_dict.get('location', 'Nashville'),
+            project_class=project_class,
+            floors=request_dict.get('floors'),
+            ownership_type=ownership_type,
+            finish_level=request_dict.get('finish_level'),
+            special_features=request_dict.get('special_features', [])
+        )
+        
+        # Fix categories to have subtotal field (for compatibility)
+        categories = calc_result.get('categories', [])
+        for category in categories:
+            # Add subtotal field (clean_engine_v2 uses 'amount' instead)
+            if 'amount' in category and 'subtotal' not in category:
+                category['subtotal'] = category['amount']
+        
+        # Convert result to match expected format
+        scope_response = {
+            'project_id': calc_result.get('project_id'),
+            'project_name': calc_result.get('project_name'),
+            'categories': categories,
+            'total_cost': calc_result.get('total_cost'),
+            'cost_per_sqft': calc_result.get('cost_per_sqft'),
+            'subtotal': calc_result.get('subtotal'),
+            'contingency_percentage': calc_result.get('contingency_percentage', 10),
+            'request_data': scope_request.model_dump() if hasattr(scope_request, 'model_dump') else vars(scope_request)
+        }
         
         # Generate floor plan for the scenario
         floor_plan_data = floor_plan_service.generate_floor_plan(
             square_footage=scope_request.square_footage,
-            project_type=scope_request.project_type.value,
+            project_type=scope_request.building_type,
             building_mix=scope_request.building_mix
         )
         
         # Add scenario metadata
-        scenario_data = scope_response.model_dump()
+        scenario_data = scope_response if isinstance(scope_response, dict) else scope_response.model_dump()
         scenario_data['floor_plan'] = floor_plan_data
         scenario_data['scenario_id'] = f"scenario_{index + 1}"
         scenario_data['scenario_name'] = scenario_params.get('name', f"Scenario {index + 1}")

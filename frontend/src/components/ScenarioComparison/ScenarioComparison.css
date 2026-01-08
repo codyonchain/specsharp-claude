@@ -1,7 +1,7 @@
-/* Scenario Comparison Styles */
-.scenario-comparison {
+/* Building Types Section Styles */
+.building-types-section {
   padding: 80px 0;
-  background: white;
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
 }
 
 .scenario-selector {
@@ -244,5 +244,137 @@
   .primary-btn.large {
     padding: 16px 24px;
     font-size: 1rem;
+  }
+}
+
+/* Building Types Grid */
+.building-types-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  margin: 60px auto;
+  max-width: 1200px;
+}
+
+.building-type-card {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.building-type-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.type-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.type-icon {
+  font-size: 32px;
+}
+
+.type-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+}
+
+.type-metrics {
+  margin-bottom: 20px;
+}
+
+.cost-range {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.unit-metric {
+  font-size: 0.875rem;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.type-features {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  color: #4b5563;
+}
+
+.feature-check {
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.feature-text {
+  line-height: 1.4;
+}
+
+/* Accuracy Badge */
+.accuracy-badge {
+  text-align: center;
+  padding: 24px;
+  margin: 60px auto 40px;
+  max-width: 600px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border-radius: 16px;
+  color: white;
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.25);
+}
+
+.accuracy-icon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.accuracy-text {
+  font-size: 1.125rem;
+  margin: 0;
+}
+
+.accuracy-text strong {
+  font-weight: 700;
+  font-size: 1.25rem;
+}
+
+/* Mobile Responsive for Building Types */
+@media (max-width: 768px) {
+  .building-types-grid {
+    grid-template-columns: 1fr;
+    padding: 0 20px;
+  }
+  
+  .type-header {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .cost-range {
+    font-size: 1.25rem;
+    text-align: center;
+  }
+  
+  .unit-metric {
+    text-align: center;
   }
 }
