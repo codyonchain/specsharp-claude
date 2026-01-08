@@ -11,11 +11,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Load the canonical taxonomy - Updated for hotel subtypes
-TAXONOMY_PATH = Path(__file__).parent.parent.parent.parent / "shared" / "building_types.json"
-if not TAXONOMY_PATH.exists():
-    # Fallback for testing
-    TAXONOMY_PATH = Path(__file__).parent.parent.parent / "shared" / "building_types.json"
-
+_HERE = Path(__file__).resolve()
+_CANDIDATES = [
+    # Repo-root layout: <repo>/shared/building_types.json
+    _HERE.parents[4] / "shared" / "building_types.json",
+    # Railway backend-root layout (root dir = backend): <repo>/backend/shared/building_types.json
+    _HERE.parents[3] / "shared" / "building_types.json",
+    # Last-resort (older tests): <repo>/backend/app/shared/building_types.json
+    _HERE.parents[2] / "shared" / "building_types.json",
+]
+TAXONOMY_PATH = next((c for c in _CANDIDATES if c.exists()), _CANDIDATES[0])
 with open(TAXONOMY_PATH) as f:
     TAXONOMY = json.load(f)
 
