@@ -1880,40 +1880,40 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
 
   return (
     <>
-      <div className="space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-16 pb-[env(safe-area-inset-bottom)]">
         {/* Executive Investment Dashboard Header */}
-        <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 rounded-2xl p-8 text-white shadow-2xl">
-        <div className="flex justify-between items-start mb-8">
-          <div>
-            <h2 className="text-3xl font-bold mb-3">
+        <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 rounded-2xl p-6 sm:p-8 text-white shadow-2xl">
+        <div className="flex flex-col gap-6 lg:flex-row lg:justify-between">
+          <div className="space-y-4">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold break-words">
               {heroTitle}
             </h2>
-            <div className="flex items-center gap-6 text-sm text-blue-200">
-              <span className="flex items-center gap-1.5">
+            <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs sm:text-sm text-blue-200">
+              <span className="flex items-center gap-1.5 min-w-0">
                 <MapPin className="h-4 w-4" />
                 {location}
               </span>
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5 min-w-0">
                 <Building className="h-4 w-4" />
                 {floors} {floors === 1 ? 'Floor' : 'Floors'}
               </span>
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5 min-w-0">
                 <Calendar className="h-4 w-4" />
                 Ground-Up
               </span>
             </div>
             
-            <div className="flex gap-3 mt-4">
+            <div className="flex flex-col sm:flex-row gap-3 w-full">
               <button 
                 onClick={handleExportPdf}
-                className="px-4 py-2 bg-white/10 backdrop-blur border border-white/20 text-white rounded-lg hover:bg-white/20 transition flex items-center gap-2"
+                className="w-full sm:w-auto px-4 py-2 bg-white/10 backdrop-blur border border-white/20 text-white rounded-lg hover:bg-white/20 transition flex items-center justify-center gap-2"
               >
                 <Download className="h-4 w-4" />
                 Export PDF
               </button>
                 <button
                   onClick={() => setIsScenarioOpen(true)}
-                  className="px-4 py-2 border border-white/30 text-white rounded-lg hover:bg-white/10 transition flex items-center gap-2"
+                  className="w-full sm:w-auto px-4 py-2 border border-white/30 text-white rounded-lg hover:bg-white/10 transition flex items-center justify-center gap-2"
                 >
                   <Target className="h-4 w-4" />
                   Scenario
@@ -1921,11 +1921,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             </div>
           </div>
           
-          <div className="text-right">
-            <p className="text-xs text-blue-200 uppercase tracking-wider mb-2 font-medium">TOTAL INVESTMENT REQUIRED</p>
-            <p className="text-5xl font-bold">{formatters.currency(totalProjectCost)}</p>
-            <p className="text-lg text-blue-200">{formatters.costPerSF(totals.cost_per_sf)}</p>
-            <div className="mt-3 flex justify-end gap-2 flex-wrap">
+          <div className="text-left lg:text-right space-y-2 w-full lg:w-auto">
+            <p className="text-xs text-blue-200 uppercase tracking-wider font-medium">TOTAL INVESTMENT REQUIRED</p>
+            <p className="text-4xl sm:text-5xl font-bold break-words">{formatters.currency(totalProjectCost)}</p>
+            <p className="text-base sm:text-lg text-blue-200">{formatters.costPerSF(totals.cost_per_sf)}</p>
+            <div className="mt-3 flex flex-wrap gap-2 justify-start lg:justify-end">
               <span
                 className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${decisionStatus === 'GO'
                   ? 'bg-green-500/15 text-green-100 border-green-400/40'
@@ -1952,18 +1952,18 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           </div>
         </div>
         
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6 pt-6 mt-6 border-t border-white/20">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 pt-6 mt-6 border-t border-white/20">
           <div>
-            <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">CONSTRUCTION</p>
-            <p className="text-3xl font-bold">{formatters.currency(constructionTotal)}</p>
+            <p className="text-blue-200 text-xs uppercase tracking-wider mb-1 font-medium">CONSTRUCTION</p>
+            <p className="text-2xl sm:text-3xl font-bold">{formatters.currency(constructionTotal)}</p>
           </div>
           <div>
-            <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">SOFT COSTS</p>
-            <p className="text-3xl font-bold">{formatters.currency(softCostsTotal)}</p>
+            <p className="text-blue-200 text-xs uppercase tracking-wider mb-1 font-medium">SOFT COSTS</p>
+            <p className="text-2xl sm:text-3xl font-bold">{formatters.currency(softCostsTotal)}</p>
           </div>
           <div>
-            <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">STABILIZED YIELD (NOI / COST)</p>
-            <p className="text-3xl font-bold">
+            <p className="text-blue-200 text-xs uppercase tracking-wider mb-1 font-medium">STABILIZED YIELD (NOI / COST)</p>
+            <p className="text-2xl sm:text-3xl font-bold">
               {formatters.percentage(stabilizedYield)}
             </p>
             {typeof yieldOnCost === 'number' && typeof marketCapRateDisplay === 'number' && (
@@ -1977,7 +1977,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           </div>
           <div>
             <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">DSCR VS TARGET</p>
-            <p className="text-3xl font-bold">
+            <p className="text-2xl sm:text-3xl font-bold">
               {typeof dscr === 'number' ? `${dscr.toFixed(2)}×` : '—'}
             </p>
             <p className="text-xs text-blue-200 mt-1">
@@ -1989,7 +1989,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           </div>
           <div>
             <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">Simple Payback (yrs)</p>
-            <p className="text-3xl font-bold">{formatters.years(displayData.paybackPeriod)}</p>
+            <p className="text-2xl sm:text-3xl font-bold">{formatters.years(displayData.paybackPeriod)}</p>
           </div>
         </div>
       </div>
@@ -2104,36 +2104,60 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
               <h4 className="font-semibold text-gray-900">Investment Criteria Assessment</h4>
             </div>
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Metric</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Required</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {displayData.metricsTable.map((metric, idx) => (
-                  <tr key={idx}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{metric.metric}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{metric.current}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{metric.required}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {metric.status === 'pass' ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          <CheckCircle className="h-3 w-3 mr-1" /> Pass
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                          <XCircle className="h-3 w-3 mr-1" /> Fail
-                        </span>
-                      )}
-                    </td>
+            <div className="hidden md:block">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Metric</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Required</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {displayData.metricsTable.map((metric, idx) => (
+                    <tr key={idx}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{metric.metric}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{metric.current}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{metric.required}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {metric.status === 'pass' ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <CheckCircle className="h-3 w-3 mr-1" /> Pass
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            <XCircle className="h-3 w-3 mr-1" /> Fail
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="md:hidden p-4 space-y-4">
+              {displayData.metricsTable.map((metric, idx) => (
+                <div key={idx} className="border border-gray-200 rounded-lg p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-gray-900">{metric.metric}</span>
+                    {metric.status === 'pass' ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <CheckCircle className="h-3 w-3 mr-1" /> Pass
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        <XCircle className="h-3 w-3 mr-1" /> Fail
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm text-gray-700">
+                    <p className="flex justify-between"><span>Current:</span><span className="font-medium">{metric.current}</span></p>
+                    <p className="flex justify-between"><span>Required:</span><span className="font-medium text-gray-600">{metric.required}</span></p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
         
@@ -2241,7 +2265,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       </div>
 
       {/* Three Key Metrics Cards */}
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Revenue Projections */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
           <div className="h-1 bg-gradient-to-r from-green-500 to-green-600"></div>
@@ -2285,7 +2309,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               <h3 className="font-semibold text-gray-900">Facility Metrics</h3>
             </div>
             {showHotelFacilityMetrics ? (
-              <div className="grid gap-4 md:grid-cols-3 text-xs text-slate-700">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs text-slate-700">
                 <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                     Rooms
@@ -2343,7 +2367,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                 </div>
               </div>
             ) : showIndustrialFacilityMetrics ? (
-              <div className="grid gap-4 md:grid-cols-3 text-xs text-slate-700">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs text-slate-700">
                 <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                     Building Size
@@ -2391,7 +2415,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                 </div>
               </div>
             ) : showRestaurantFacilityMetrics ? (
-              <div className="grid gap-4 md:grid-cols-3 text-xs text-slate-700">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs text-slate-700">
                 {/* --- SALES PER SF --- */}
                 <div className="rounded-2xl border border-slate-100 bg-white/90 p-5 shadow-md shadow-slate-100/80 space-y-3">
                   <div className="flex items-center justify-between">
@@ -2447,7 +2471,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                 </div>
               </div>
             ) : isOfficeProject ? (
-              <div className="grid gap-4 md:grid-cols-3 text-xs text-slate-700">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs text-slate-700">
                 <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                     Building Size
@@ -2637,7 +2661,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       {displayData.departments.length > 0 && (
         <div>
           <h3 className="text-xl font-bold text-gray-900 mb-6">Department Cost Allocation</h3>
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {displayData.departments.map((dept, idx) => {
               const Icon = getDepartmentIcon(dept.name);
               const gradient = getDepartmentGradient(idx);
@@ -2754,7 +2778,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             </div>
           </div>
         ) : isRestaurantProject ? (
-          <div className="grid gap-6 md:gap-8 md:grid-cols-3 text-sm text-slate-700">
+          <div className="grid gap-6 md:gap-8 sm:grid-cols-2 lg:grid-cols-3 text-sm text-slate-700">
             <div className="space-y-1">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
                 Path 1 · Increase Sales per SF
@@ -2867,7 +2891,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             }
 
           return (
-              <div className="grid gap-6 md:gap-8 md:grid-cols-3 text-sm text-slate-700">
+              <div className="grid gap-6 md:gap-8 sm:grid-cols-2 lg:grid-cols-3 text-sm text-slate-700">
                 <div className="space-y-3">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-[0.2em]">Path 1 · Increase NOI</p>
                     <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2 shadow-md shadow-slate-100">
@@ -3200,7 +3224,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       {/* Key Financial Indicators */}
       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-8 text-white shadow-xl">
         <h3 className="text-2xl font-bold mb-6">Key Financial Indicators</h3>
-        <div className="grid grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
           <div>
             <p className="text-indigo-200 text-sm uppercase tracking-wider mb-2">BREAK-EVEN OCCUPANCY</p>
             <p className="text-4xl font-bold">{formatters.percentage(displayData.breakEvenOccupancy)}</p>
@@ -3224,7 +3248,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       </div>
 
       {/* Market Position & Quick Sensitivity */}
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Market Position */}
         <div className="bg-gradient-to-br from-white to-blue-50 rounded-xl shadow-lg border border-blue-100 overflow-hidden">
           <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3">
@@ -3522,7 +3546,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                           ADR &amp; Occupancy Sensitivity (Hotel)
                         </div>
-                        <div className="grid grid-cols-2 gap-3 text-xs text-slate-600">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-600">
                           <div className="rounded-xl bg-slate-50 p-3">
                             <div className="font-semibold">If ADR -$10</div>
                             <div className="mt-1">
@@ -3709,7 +3733,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       })()}
 
       {/* Financing Structure & Operational Efficiency */}
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Financing Structure */}
         <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl shadow-lg border border-green-100 overflow-hidden">
           <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4">
@@ -3775,7 +3799,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             <div className="p-6 space-y-6">
               <div>
                 <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Staffing Metrics</h4>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {[
                     {
                       label: 'Operatories',
@@ -3833,7 +3857,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
 
               <div>
                 <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Target KPIs</h4>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   {[
                     {
                       label: 'Production / Provider',
@@ -3876,7 +3900,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               {normalizedStaffingMetrics.length > 0 && (
                 <div className="mb-4">
                   <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Staffing Metrics</h4>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {normalizedStaffingMetrics.slice(0, 2).map((metric, idx) => {
                       const rawLabel =
                         typeof metric?.label === 'string' && metric.label.trim()
@@ -3951,7 +3975,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               {operationalKpis.length > 0 && (
                 <div>
                   <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Target KPIs</h4>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                     {operationalKpis.slice(0, 3).map((kpi, idx) => (
                       <div key={idx} className={`bg-gradient-to-br from-${kpi.color}-100 to-${kpi.color}-200 p-3 rounded-lg text-center`}>
                         <p className={`text-xl font-bold text-${kpi.color}-700`}>{kpi.value}</p>

@@ -1131,37 +1131,37 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
 
   return (
     <>
-      <div className="space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-16 pb-[env(safe-area-inset-bottom)]">
       {/* Header Section - Dark Blue */}
-      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-6 text-white">
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-2xl font-bold mb-2">
+      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-6 sm:p-8 text-white">
+        <div className="flex flex-col gap-6 lg:flex-row lg:justify-between">
+          <div className="space-y-4">
+            <h1 className="text-2xl sm:text-3xl font-bold">
               {formatNumber(squareFootage)} SF {calculations.project_info?.display_name || 'Building'}
             </h1>
-            <div className="flex items-center gap-4 text-sm text-slate-300">
-              <span className="flex items-center gap-1">
+            <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs sm:text-sm text-slate-300">
+              <span className="flex items-center gap-1 min-w-0">
                 <MapPin className="h-3 w-3" />
                 {locationDisplay}
               </span>
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1 min-w-0">
                 <Building className="h-3 w-3" />
                 {parsed_input.floors || calculations.project_info?.typical_floors || 4} Floors
               </span>
-              <span className="capitalize">{parsed_input.project_classification?.replace('_', '-') || 'Ground-Up'}</span>
+              <span className="capitalize min-w-0">{parsed_input.project_classification?.replace('_', '-') || 'Ground-Up'}</span>
             </div>
             
-            <div className="flex gap-3 mt-4">
+            <div className="flex flex-col sm:flex-row gap-3 w-full">
               <button
                 onClick={handleExportPdf}
-                className="flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur border border-white/20 text-white rounded-lg hover:bg-white/20 transition"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-white/10 backdrop-blur border border-white/20 text-white rounded-lg hover:bg-white/20 transition w-full sm:w-auto"
               >
                 <Download className="h-4 w-4" />
                 Export PDF
               </button>
               <button
                 onClick={() => setIsScenarioOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-white text-slate-800 rounded-lg hover:bg-slate-100 transition font-medium"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-white text-slate-800 rounded-lg hover:bg-slate-100 transition font-medium w-full sm:w-auto"
               >
                 <BarChart3 className="h-4 w-4" />
                 Compare Scenarios
@@ -1169,14 +1169,14 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
             </div>
           </div>
           
-          <div className="text-right">
-            <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">CONSTRUCTION COST</p>
-            <p className="text-4xl font-bold">{formatCurrency(constructionTotal)}</p>
-            <p className="text-lg text-slate-300">{formatCurrency(displayCostPerSF)} per SF</p>
+          <div className="text-left lg:text-right space-y-2">
+            <p className="text-xs text-slate-400 uppercase tracking-wider">CONSTRUCTION COST</p>
+            <p className="text-3xl sm:text-4xl font-bold">{formatCurrency(constructionTotal)}</p>
+            <p className="text-base sm:text-lg text-slate-300">{formatCurrency(displayCostPerSF)} per SF</p>
           </div>
         </div>
         
-        <div className="flex items-center gap-2 mt-6 text-sm text-slate-400">
+        <div className="flex flex-wrap items-center gap-2 mt-6 text-sm text-slate-400">
           <Calendar className="h-4 w-4" />
           <span>{timelineMonthsLabel}</span>
           <span className="mx-2">•</span>
@@ -1228,7 +1228,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
         <h2 className="text-xl font-bold text-gray-900 mb-2">Project Cost Analysis</h2>
         <p className="text-gray-600 mb-6">Comprehensive breakdown of construction costs by trade</p>
         
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           {/* Trade Distribution */}
           <div className="bg-gray-50 rounded-lg p-6">
             <div className="flex justify-between items-center mb-4">
@@ -1302,69 +1302,38 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
               </span>
             </div>
             <p className="text-sm text-gray-600 mb-4">Phased timeline with trade overlap optimization</p>
-            
-            {/* Timeline Labels */}
-            <div className="flex text-xs text-gray-400 mb-3 ml-24">
-              {timelineMarkers.map((marker, index) => (
-                <span key={`${marker}-${index}`} className="flex-1">
-                  {marker}
-                </span>
-              ))}
-            </div>
-            
-            {/* Gantt Chart */}
-            <div className="space-y-2">
+            {/* Mobile Timeline */}
+            <div className="md:hidden space-y-4">
               {phasesWithTrades.map((phase) => {
-                const colors = {
-                  blue: 'bg-blue-500',
-                  green: 'bg-green-500',
-                  orange: 'bg-orange-500',
-                  purple: 'bg-purple-500',
-                  pink: 'bg-pink-500',
-                  teal: 'bg-teal-500'
-                };
                 const mixEntries = Object.entries(phase.tradeMix || {}).filter(
                   ([, value]) => typeof value === 'number' && value > 0.01
                 );
                 const phaseTooltip = getPhaseTooltip(buildingTypeRaw, phase.id, phase.tradeMix);
-                
                 return (
-                  <div key={phase.id}>
-                    <div className="flex items-center gap-2">
-                      <div className="w-20 text-xs text-gray-700 text-right truncate">
-                        <span
-                          className={`font-medium ${phaseTooltip ? 'cursor-help border-b border-dotted border-gray-300 pb-[1px]' : ''}`}
-                          title={phaseTooltip || ''}
-                        >
-                          {phase.label}
-                        </span>
-                      </div>
-                      <div className="flex-1 relative h-4 bg-gray-200 rounded-full overflow-hidden">
-                        {totalMonths > 0 && phase.duration > 0 && (
-                          <div
-                            className="absolute h-full rounded-full"
-                            style={{
-                              left: `${(phase.startMonth / totalMonths) * 100}%`,
-                              width: `${(phase.duration / totalMonths) * 100}%`,
-                              backgroundColor: phase.color || '#3b82f6',
-                            }}
-                          />
-                        )}
-                      </div>
-                      <span className="text-xs text-gray-500 w-10 text-right">{phase.duration} mo</span>
+                  <div key={`${phase.id}-mobile`} className="p-3 bg-white rounded-lg border border-gray-200 space-y-2">
+                    <div className="flex justify-between gap-4">
+                      <span
+                        className={`text-sm font-semibold text-gray-900 ${phaseTooltip ? 'cursor-help border-b border-dotted border-gray-300 pb-[1px]' : ''}`}
+                        title={phaseTooltip || ''}
+                      >
+                        {phase.label}
+                      </span>
+                      <span className="text-xs text-gray-500 whitespace-nowrap">{phase.duration} mo</span>
+                    </div>
+                    <div className="relative h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+                      {totalMonths > 0 && phase.duration > 0 && (
+                        <div
+                          className="absolute h-full rounded-full bg-blue-500"
+                          style={{
+                            width: `${(phase.duration / totalMonths) * 100}%`,
+                          }}
+                        />
+                      )}
                     </div>
                     {mixEntries.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1 ml-20">
+                      <div className="flex flex-wrap gap-1">
                         {mixEntries.map(([key, value]) => {
-                          const label = (() => {
-                            const k = key.toLowerCase();
-                            if (k === 'structural') return 'Structural';
-                            if (k === 'mechanical') return 'Mechanical';
-                            if (k === 'electrical') return 'Electrical';
-                            if (k === 'plumbing') return 'Plumbing';
-                            if (k === 'finishes') return 'Finishes';
-                            return key;
-                          })();
+                          const label = key.charAt(0).toUpperCase() + key.slice(1);
                           const chipColorClass = (() => {
                             const k = key.toLowerCase();
                             if (k === 'structural') return 'bg-blue-100 text-blue-800 border-blue-200';
@@ -1376,7 +1345,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                           })();
                           return (
                             <span
-                              key={key}
+                              key={`${phase.id}-${key}-mobile`}
                               className={`inline-flex items-center rounded-full border px-2 py-[2px] text-[10px] font-medium ${chipColorClass}`}
                             >
                               {label}&nbsp;{Math.round((value as number) * 100)}%
@@ -1388,6 +1357,85 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                   </div>
                 );
               })}
+            </div>
+
+            {/* Desktop Timeline */}
+            <div className="hidden md:block">
+              <div className="flex text-xs text-gray-400 mb-3 ml-24">
+                {timelineMarkers.map((marker, index) => (
+                  <span key={`${marker}-${index}`} className="flex-1">
+                    {marker}
+                  </span>
+                ))}
+              </div>
+              
+              <div className="space-y-2">
+                {phasesWithTrades.map((phase) => {
+                  const mixEntries = Object.entries(phase.tradeMix || {}).filter(
+                    ([, value]) => typeof value === 'number' && value > 0.01
+                  );
+                  const phaseTooltip = getPhaseTooltip(buildingTypeRaw, phase.id, phase.tradeMix);
+                  return (
+                    <div key={phase.id}>
+                      <div className="flex items-center gap-2">
+                        <div className="w-20 text-xs text-gray-700 text-right truncate">
+                          <span
+                            className={`font-medium ${phaseTooltip ? 'cursor-help border-b border-dotted border-gray-300 pb-[1px]' : ''}`}
+                            title={phaseTooltip || ''}
+                          >
+                            {phase.label}
+                          </span>
+                        </div>
+                        <div className="flex-1 relative h-4 bg-gray-200 rounded-full overflow-hidden">
+                          {totalMonths > 0 && phase.duration > 0 && (
+                            <div
+                              className="absolute h-full rounded-full"
+                              style={{
+                                left: `${(phase.startMonth / totalMonths) * 100}%`,
+                                width: `${(phase.duration / totalMonths) * 100}%`,
+                                backgroundColor: phase.color || '#3b82f6',
+                              }}
+                            />
+                          )}
+                        </div>
+                        <span className="text-xs text-gray-500 w-10 text-right">{phase.duration} mo</span>
+                      </div>
+                      {mixEntries.length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1 ml-20">
+                          {mixEntries.map(([key, value]) => {
+                            const label = (() => {
+                              const k = key.toLowerCase();
+                              if (k === 'structural') return 'Structural';
+                              if (k === 'mechanical') return 'Mechanical';
+                              if (k === 'electrical') return 'Electrical';
+                              if (k === 'plumbing') return 'Plumbing';
+                              if (k === 'finishes') return 'Finishes';
+                              return key;
+                            })();
+                            const chipColorClass = (() => {
+                              const k = key.toLowerCase();
+                              if (k === 'structural') return 'bg-blue-100 text-blue-800 border-blue-200';
+                              if (k === 'mechanical') return 'bg-green-100 text-green-800 border-green-200';
+                              if (k === 'electrical') return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+                              if (k === 'plumbing') return 'bg-purple-100 text-purple-800 border-purple-200';
+                              if (k === 'finishes') return 'bg-pink-100 text-pink-800 border-pink-200';
+                              return 'bg-gray-100 text-gray-700 border-gray-200';
+                            })();
+                            return (
+                              <span
+                                key={`${phase.id}-${key}`}
+                                className={`inline-flex items-center rounded-full border px-2 py-[2px] text-[10px] font-medium ${chipColorClass}`}
+                              >
+                                {label}&nbsp;{Math.round((value as number) * 100)}%
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Key Milestones */}
@@ -1483,7 +1531,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-6">
+                    <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6 mt-4 sm:mt-0">
                       <div className="text-right">
                         <p className="text-2xl font-bold">{formatCurrency(trade.amount)}</p>
                         <p className="text-sm text-gray-500">{formatCurrency(trade.costPerSF)}/SF</p>
@@ -1508,7 +1556,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                 {/* Expanded Details */}
                 {expandedTrade === trade.name && (
                   <div className="px-4 pb-4">
-                    <div className="pt-4 border-t grid grid-cols-3 gap-4 text-sm">
+                    <div className="pt-4 border-t grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
                       <div>
                         <div className="text-[11px] text-gray-500">Materials</div>
                         <div className="font-semibold text-gray-900">{formatCurrency(materialsCost)}</div>
@@ -1703,7 +1751,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
           </div>
           
           {/* Row 2: Base total */}
-          <div className="flex items-center gap-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
             <div className="flex-1">
               <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200">
                 <p className="text-sm text-gray-600 uppercase tracking-wider mb-3 font-medium">Base Construction</p>
@@ -1756,7 +1804,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                     </p>
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="text-left lg:text-right mt-4 lg:mt-0">
                   <p className="text-lg font-bold text-gray-900">
                     +${Math.round(equipmentTotal / safeSquareFootage)}/SF
                   </p>
@@ -1766,7 +1814,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                 </div>
               </div>
               {equipmentBreakdown && (
-                <div className="mt-4 grid gap-3 text-[11px] text-blue-800 md:grid-cols-3">
+                <div className="mt-4 grid gap-3 text-[11px] text-blue-800 sm:grid-cols-2 lg:grid-cols-3">
                   <div className="flex flex-col">
                     <span className="font-semibold">Mechanical equipment</span>
                     <span className="text-blue-700">
@@ -1791,13 +1839,13 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
           )}
           
           {/* Row 3: Final total */}
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-8 text-white shadow-xl">
-            <div className="flex justify-between items-center">
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-6 sm:p-8 text-white shadow-xl">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-sm uppercase tracking-wider mb-2 opacity-90">Final Construction Cost</p>
-                <p className="text-5xl font-bold">{formatCurrency(constructionTotal)}</p>
+                <p className="text-4xl sm:text-5xl font-bold break-words">{formatCurrency(constructionTotal)}</p>
               </div>
-              <div className="text-right">
+              <div className="text-left lg:text-right">
                 <p className="text-2xl font-semibold">${formatNumber(Math.round(constructionTotal / safeSquareFootage))}/SF</p>
                 <p className="text-sm opacity-90 mt-1">All-in cost per square foot</p>
               </div>
@@ -1810,7 +1858,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
       <div className="bg-white rounded-lg shadow-sm p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-6">Sensitivity Analysis</h3>
         
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <div>
             <div className="flex justify-between items-center mb-2">
               <span className="text-sm text-gray-600">Regional Multiplier</span>
@@ -1869,7 +1917,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2">
               {riskInsights.map((risk, idx) => (
                 <div
                   key={`${risk.title}-${idx}`}
