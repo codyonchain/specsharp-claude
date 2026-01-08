@@ -161,7 +161,12 @@
       "subtypes": {
         "warehouse": {
           "display_name": "Warehouse",
-          "keywords": ["warehouse", "distribution", "storage", "fulfillment"],
+          "keywords": ["warehouse", "storage", "fulfillment"],
+          "base_cost_per_sf": 150
+        },
+        "distribution_center": {
+          "display_name": "Distribution Center",
+          "keywords": ["distribution center", "fulfillment center", "logistics center", "cross dock", "cross-dock", "sorting facility", "hub", "dc"],
           "base_cost_per_sf": 150
         },
         "manufacturing": {
@@ -177,7 +182,7 @@
         "cold_storage": {
           "display_name": "Cold Storage",
           "keywords": ["cold storage", "refrigerated", "freezer"],
-          "base_cost_per_sf": 275
+          "base_cost_per_sf": 175
         },
         "data_center": {
           "display_name": "Data Center",

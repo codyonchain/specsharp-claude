@@ -81,6 +81,14 @@ interface Props {
   project: Project;
 }
 
+const conceptualLabelByTrade: Record<string, string> = {
+  structural: 'Structural systems (pre-design)',
+  mechanical: 'Mechanical systems (conceptual)',
+  electrical: 'Electrical distribution & power systems (conceptual)',
+  plumbing: 'Plumbing & process utilities (conceptual)',
+  finishes: 'Interior finishes & fit-out (conceptual)',
+};
+
 const formatCurrency2 = (value: number): string => {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—';
   return new Intl.NumberFormat('en-US', {
@@ -91,9 +99,23 @@ const formatCurrency2 = (value: number): string => {
   }).format(value);
 };
 
-const formatQuantityWithUnit = (quantity?: number, unitRaw?: string): string => {
+const formatQuantityWithUnit = (
+  quantity?: number,
+  unitRaw?: string,
+  tradeKeyRaw?: string
+): string => {
   const hasQty = typeof quantity === 'number' && !Number.isNaN(quantity);
   const unit = (unitRaw || '').trim().toUpperCase();
+  const normalizedUnit = unit.replace(/\s+/g, '_');
+  const isLumpSumUnit =
+    normalizedUnit === 'LUMP_SUM' ||
+    normalizedUnit === 'LUMPSUM' ||
+    normalizedUnit === 'LS';
+
+  if (hasQty && quantity === 1 && isLumpSumUnit) {
+    const tradeKey = (tradeKeyRaw || '').toLowerCase().trim();
+    return conceptualLabelByTrade[tradeKey] || 'Conceptual system allowance';
+  }
 
   if (hasQty && unit) {
     return `${formatNumber(quantity as number)} ${unit}`;
@@ -102,7 +124,7 @@ const formatQuantityWithUnit = (quantity?: number, unitRaw?: string): string => 
     return formatNumber(quantity as number);
   }
   if (unit) {
-    return unit === 'LUMP SUM' ? '1 LS' : unit;
+    return isLumpSumUnit ? '1 LS' : unit;
   }
   return '—';
 };
@@ -1435,6 +1457,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
             const materialsCost = trade.amount * split.materials;
             const laborCost = trade.amount * split.labor;
             const equipmentCost = trade.amount * split.equipment;
+            const progressWidth = Math.max(0, Math.min(100, trade.percent));
             return (
               <div key={trade.name} className="border rounded-lg hover:shadow-md transition">
                 <div 
@@ -1473,10 +1496,10 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                   
                   {/* Progress Bar */}
                   <div className="mt-4">
-                    <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                       <div 
                         className={`bg-${trade.color}-500 h-2 rounded-full transition-all`}
-                        style={{ width: `${trade.percent * 2.5}%` }}
+                        style={{ width: `${progressWidth}%` }}
                       />
                     </div>
                   </div>
@@ -1567,7 +1590,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                                       )}
                                     </td>
                                     <td className="py-1.5 px-2 text-left text-[11px] text-gray-700 whitespace-nowrap">
-                                      {formatQuantityWithUnit(sys.quantity, sys.unit)}
+                                      {formatQuantityWithUnit(sys.quantity, sys.unit, trade.name)}
                                     </td>
                                     <td className="py-1.5 px-2 text-right text-[11px] text-gray-700">
                                       {typeof sys.unit_cost === 'number'

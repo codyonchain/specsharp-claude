@@ -52,9 +52,16 @@ export const ProjectGrid: React.FC<Props> = ({ projects, onProjectClick, onProje
 
   // Helper function to format relative time
   const formatRelativeTime = (dateString: string) => {
-    const date = new Date(dateString);
+    const hasTimezone = /Z$|[+-]\d{2}:\d{2}$/;
+    const normalizedDate = hasTimezone.test(dateString) ? dateString : `${dateString}Z`;
+    const date = new Date(normalizedDate);
     const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
+    const diffMs = Math.max(now.getTime() - date.getTime(), 0);
+
+    if (diffMs < 60_000) {
+      return 'Updated just now';
+    }
+
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     const diffMinutes = Math.floor(diffMs / (1000 * 60));

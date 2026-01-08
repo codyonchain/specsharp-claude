@@ -22,6 +22,7 @@ from app.v2.config.master_config import (
     OwnershipType,
     MASTER_CONFIG
 )
+from app.v2.services.industrial_override_extractor import extract_industrial_overrides
 from app.core.building_taxonomy import normalize_building_type, validate_building_type
 from app.db.models import Project
 from app.db.database import get_db
@@ -168,6 +169,22 @@ async def analyze_project(request: AnalyzeRequest):
         # Parse the description using phrase-first parser
         parsed = nlp_service.extract_project_details(request.description)
         parsed['special_features'] = request.special_features or []
+        overrides = extract_industrial_overrides(request.description)
+        if overrides:
+            parsed.update(overrides)
+        override_keys = [
+            "dock_doors", "dock_count",
+            "office_sf", "office_percent", "office_pct",
+            "mezzanine_sf", "mezzanine_percent",
+            "clear_height", "clear_height_ft",
+            "finish_level", "finish_level_source",
+        ]
+        sf_list = parsed.get('special_features') or []
+        if not isinstance(sf_list, list):
+            sf_list = list(sf_list) if sf_list else []
+        parsed_overrides = {k: parsed.get(k) for k in override_keys if k in parsed}
+        sf_list.append({"__parsed_input__": parsed_overrides})
+        parsed['special_features'] = sf_list
         
         # Normalize building type using taxonomy
         if parsed.get('building_type'):
@@ -245,6 +262,14 @@ async def analyze_project(request: AnalyzeRequest):
         _ensure_city_state_format(final_location)
         parsed['location'] = final_location
 
+        logger.info(
+            "[SUBTYPE_TRACE][scope_api] building_type=%s subtype=%s building_subtype=%s location=%s raw_prompt=%s",
+            parsed.get('building_type'),
+            parsed.get('subtype'),
+            parsed.get('building_subtype'),
+            parsed.get('location'),
+            request.description,
+        )
         result = unified_engine.calculate_project(
             building_type=building_type,
             subtype=parsed.get('subtype'),  # Use .get() to handle missing subtype
@@ -255,7 +280,8 @@ async def analyze_project(request: AnalyzeRequest):
             ownership_type=ownership_type,
             finish_level=finish_level_value,
             finish_level_source=finish_level_source,
-            special_features=parsed.get('special_features', [])
+            special_features=parsed.get('special_features', []),
+            parsed_input_overrides=parsed
         )
         
         # Add building_subtype for frontend compatibility
@@ -620,6 +646,21 @@ async def generate_scope(
         # Parse the description using NLP
         parsed = nlp_service.extract_project_details(request.description)
         parsed['special_features'] = request.special_features or []
+        overrides = extract_industrial_overrides(request.description)
+        if overrides:
+            parsed.update(overrides)
+        sf_list = parsed.get('special_features') or []
+        if not isinstance(sf_list, list):
+            sf_list = list(sf_list) if sf_list else []
+        override_keys = [
+            "dock_doors", "dock_count",
+            "office_sf", "office_percent", "office_pct",
+            "mezzanine_sf", "mezzanine_percent",
+            "finish_level", "finish_level_source",
+        ]
+        parsed_overrides = {k: parsed.get(k) for k in override_keys if k in parsed}
+        sf_list.append({"__parsed_input__": parsed_overrides})
+        parsed['special_features'] = sf_list
         
         # Add any missing fields from request
         if request.location:
@@ -700,7 +741,8 @@ async def generate_scope(
             ownership_type=OwnershipType(parsed.get('ownership_type', 'for_profit')),
             finish_level=finish_level_value,
             finish_level_source=finish_level_source,
-            special_features=parsed.get('special_features', [])
+            special_features=parsed.get('special_features', []),
+            parsed_input_overrides=parsed
         )
 
         # Embed request metadata into stored result so downstream consumers can hydrate it

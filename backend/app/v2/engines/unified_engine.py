@@ -29,7 +29,7 @@ from app.v2.config.construction_schedule import (
 )
 # from app.v2.services.financial_analyzer import FinancialAnalyzer  # TODO: Implement this
 from typing import Optional, Dict, Any, List, Tuple
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import logging
 
 logger = logging.getLogger(__name__)
@@ -194,7 +194,8 @@ class UnifiedEngine:
                          ownership_type: OwnershipType = OwnershipType.FOR_PROFIT,
                          finish_level: Optional[str] = None,
                          special_features: List[str] = None,
-                         finish_level_source: Optional[str] = None) -> Dict[str, Any]:
+                         finish_level_source: Optional[str] = None,
+                         parsed_input_overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         The master calculation method.
         Everything goes through here.
@@ -210,6 +211,7 @@ class UnifiedEngine:
             finish_level: Optional finish quality override
             special_features: List of special features to add
             finish_level_source: Trace provenance for finish level selection
+            parsed_input_overrides: Optional parsed input dict for scope overrides
             
         Returns:
             Comprehensive cost breakdown dictionary
@@ -282,6 +284,19 @@ class UnifiedEngine:
                 city_only_warning_logged = True
         
         # Get configuration
+        if isinstance(subtype, dict):
+            subtype = (
+                subtype.get("id")
+                or subtype.get("key")
+                or subtype.get("value")
+                or subtype.get("subtype")
+            )
+        logger.info(
+            "[SUBTYPE_TRACE][engine_entry] building_type=%s subtype_raw=%s subtype_normalized=%s",
+            getattr(building_type, "value", building_type),
+            subtype,
+            (subtype.lower().strip() if isinstance(subtype, str) else subtype),
+        )
         building_config = get_building_config(building_type, subtype)
         if not building_config:
             raise ValueError(f"No configuration found for {building_type.value}/{subtype}")
@@ -389,6 +404,8 @@ class UnifiedEngine:
         special_features_cost = 0
         if special_features and building_config.special_features:
             for feature in special_features:
+                if isinstance(feature, dict):
+                    continue
                 if feature in building_config.special_features:
                     feature_cost = building_config.special_features[feature] * square_footage
                     special_features_cost += feature_cost
@@ -401,16 +418,61 @@ class UnifiedEngine:
         # Calculate trade breakdown
         trades = self._calculate_trades(construction_cost, building_config.trades)
         
-        # Calculate soft costs
-        soft_costs = self._calculate_soft_costs(construction_cost, building_config.soft_costs)
-        
         # Build scope items (per trade) where supported
+        scope_context = self._resolve_scope_context(special_features)
+        def _extract_scenario_key(source: Optional[Dict[str, Any]]) -> Optional[str]:
+            if not isinstance(source, dict):
+                return None
+            for key in ("scenario", "scenario_key", "scenarioName", "scenarioKey"):
+                value = source.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip().lower()
+            nested = source.get('__parsed_input__')
+            if isinstance(nested, dict):
+                nested_value = _extract_scenario_key(nested)
+                if nested_value:
+                    return nested_value
+            parsed_nested = source.get('parsed_input') or source.get('parsedInput')
+            if isinstance(parsed_nested, dict):
+                nested_value = _extract_scenario_key(parsed_nested)
+                if nested_value:
+                    return nested_value
+            return None
+        scenario_key = None
+        for candidate in (parsed_input_overrides, scope_context):
+            scenario_key = _extract_scenario_key(candidate)
+            if scenario_key:
+                break
+        scenario_key_normalized = (scenario_key or '').strip().lower() if scenario_key else None
+        if isinstance(parsed_input_overrides, dict):
+            # Merge parsed_input so explicit overrides (e.g. dock_doors) are honored downstream
+            scope_context = {**(scope_context or {}), **parsed_input_overrides}
         scope_items = self._build_scope_items(
             building_type=building_type,
             subtype=subtype,
             trades=trades,
-            square_footage=square_footage
+            square_footage=square_footage,
+            scope_context=scope_context
         )
+
+        # Apply flex-specific finishes delta to rollups so office uplift affects totals
+        if building_type == BuildingType.INDUSTRIAL:
+            subtype_value = subtype.value if hasattr(subtype, "value") else subtype
+            subtype_key = (subtype_value or "").lower().strip() if isinstance(subtype_value, str) else str(subtype_value or "").lower().strip()
+            if subtype_key == "flex_space":
+                finishes_item = next((item for item in scope_items if item.get("trade") == "Finishes"), None)
+                systems = finishes_item.get("systems", []) if isinstance(finishes_item, dict) else []
+                finishes_total_effective = sum(float(system.get("total_cost", 0.0) or 0.0) for system in systems)
+                baseline_finishes = float(trades.get("finishes", 0.0) or 0.0)
+                if finishes_total_effective > 0 and finishes_total_effective != baseline_finishes:
+                    delta = finishes_total_effective - baseline_finishes
+                    trades["finishes"] = finishes_total_effective
+                    construction_cost += delta
+                    if square_footage > 0:
+                        final_cost_per_sf = construction_cost / square_footage
+
+        # Calculate soft costs (after any flex adjustments)
+        soft_costs = self._calculate_soft_costs(construction_cost, building_config.soft_costs)
         
         # For healthcare facilities, equipment is a soft cost (medical equipment)
         # For other building types, it's part of hard costs
@@ -456,6 +518,7 @@ class UnifiedEngine:
         # Calculate ownership/financing analysis with enhanced financial metrics
         ownership_analysis = None
         revenue_data = None
+        flex_revenue_per_sf = None
         if ownership_type in building_config.ownership_types:
             # Calculate comprehensive revenue analysis using master_config
             revenue_data = self.calculate_ownership_analysis({
@@ -468,11 +531,16 @@ class UnifiedEngine:
                 'quality_factor': quality_factor,
                 'finish_level': normalized_finish_level,
                 'regional_context': regional_context,
-                'location': location
+                'location': location,
+                'scenario': scenario_key,
             })
 
             # Get basic ownership metrics (prefer revenue-derived NOI when available)
             revenue_analysis_for_financing = revenue_data.get('revenue_analysis') if revenue_data else None
+            if revenue_data:
+                flex_metric = revenue_data.get('flex_revenue_per_sf')
+                if isinstance(flex_metric, (int, float)):
+                    flex_revenue_per_sf = flex_metric
             ownership_analysis = self._calculate_ownership(
                 total_project_cost,
                 building_config.ownership_types[ownership_type],
@@ -616,6 +684,25 @@ class UnifiedEngine:
         }
 
         # Build comprehensive response - FLATTENED structure to match frontend expectations
+        totals_payload = {
+            'hard_costs': total_hard_costs,
+            'soft_costs': total_soft_costs,
+            'total_project_cost': total_project_cost,
+            'cost_per_sf': total_project_cost / square_footage if square_footage > 0 else 0
+        }
+        if scenario_key:
+            totals_payload['scenario_key'] = scenario_key
+
+        if (
+            flex_revenue_per_sf is not None
+            and building_type == BuildingType.INDUSTRIAL
+            and isinstance(subtype, str)
+            and subtype.strip().lower() == 'flex_space'
+            and square_footage > 0
+        ):
+            totals_payload['revenue_per_sf'] = flex_revenue_per_sf
+            totals_payload['annual_revenue'] = flex_revenue_per_sf * float(square_footage)
+
         result = {
             'project_info': {
                 'building_type': building_type.value,
@@ -657,12 +744,7 @@ class UnifiedEngine:
             'trade_breakdown': trades,
             'scope_items': scope_items,
             'soft_costs': soft_costs,
-            'totals': {
-                'hard_costs': total_hard_costs,
-                'soft_costs': total_soft_costs,
-                'total_project_cost': total_project_cost,
-                'cost_per_sf': total_project_cost / square_footage if square_footage > 0 else 0
-            },
+            'totals': totals_payload,
             'ownership_analysis': ownership_analysis,
             # Add revenue_analysis at top level for easy access
             'revenue_analysis': ownership_analysis.get('revenue_analysis', {}) if ownership_analysis else {},
@@ -841,13 +923,36 @@ class UnifiedEngine:
         })
         
         return soft_costs
+    
+    def _resolve_scope_context(self, special_features: Optional[Any]) -> Optional[Dict[str, Any]]:
+        """
+        Attempt to derive a context dictionary for scope generation overrides.
+        Accepts dict-like special_features or any embedded dicts within the list.
+        """
+        context: Dict[str, Any] = {}
+        
+        if isinstance(special_features, dict):
+            context.update(special_features)
+            nested = special_features.get("__parsed_input__")
+            if isinstance(nested, dict):
+                context.update(nested)
+        elif isinstance(special_features, list):
+            for feature in special_features:
+                if isinstance(feature, dict):
+                    context.update(feature)
+                    nested = feature.get("__parsed_input__")
+                    if isinstance(nested, dict):
+                        context.update(nested)
+        
+        return context or None
 
     def _build_scope_items(
         self,
         building_type: BuildingType,
         subtype: str,
         trades: Dict[str, float],
-        square_footage: float
+        square_footage: float,
+        scope_context: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """
         Build a simple, deterministic scope_items structure from the trade breakdown.
@@ -860,14 +965,20 @@ class UnifiedEngine:
 
         subtype_key = (subtype or "").lower().strip()
 
-        if building_type == BuildingType.INDUSTRIAL and subtype_key in {
+        industrial_shell_subtypes = {
             "warehouse",
             "distribution_warehouse",
             "distribution_center",
             "class_a_distribution_warehouse",
             "class_a_distribution",
-        }:
+            "flex_space",
+            "cold_storage",
+        }
+
+        if building_type == BuildingType.INDUSTRIAL and subtype_key in industrial_shell_subtypes:
             sf = float(square_footage)
+            is_flex = subtype_key == "flex_space"
+            is_cold_storage = subtype_key == "cold_storage"
 
             def _safe_unit_cost(total: float, qty: float) -> float:
                 if not qty:
@@ -876,160 +987,449 @@ class UnifiedEngine:
                     return float(total) / float(qty)
                 except (TypeError, ValueError, ZeroDivisionError):
                     return 0.0
+            
+            override_sources: List[Dict[str, Any]] = []
+            if isinstance(scope_context, dict):
+                override_sources.append(scope_context)
+                potential_nested_keys = [
+                    "parsed_input",
+                    "parsedInput",
+                    "request_data",
+                    "requestData",
+                    "input_overrides",
+                    "overrides",
+                    "scope_overrides",
+                    "context",
+                ]
+                for key in potential_nested_keys:
+                    nested_value = scope_context.get(key)
+                    if isinstance(nested_value, dict):
+                        override_sources.append(nested_value)
+                calculations_ctx = scope_context.get("calculations") if isinstance(scope_context, dict) else None
+                if isinstance(calculations_ctx, dict):
+                    for calc_key in ("parsed_input", "parsedInput", "request_data", "requestData"):
+                        calc_nested = calculations_ctx.get(calc_key)
+                        if isinstance(calc_nested, dict):
+                            override_sources.append(calc_nested)
 
-            dock_count = max(4, int(round(sf / 10000.0)))
+            def _scope_has_keyword(value: Any, keyword_parts: List[str]) -> bool:
+                if not value:
+                    return False
+                if isinstance(value, str):
+                    lowered = value.lower()
+                    return all(part in lowered for part in keyword_parts)
+                if isinstance(value, list):
+                    return any(_scope_has_keyword(item, keyword_parts) for item in value)
+                if isinstance(value, dict):
+                    return any(_scope_has_keyword(item, keyword_parts) for item in value.values())
+                return False
+
+            has_blast_freezer_feature = _scope_has_keyword(scope_context, ["blast", "freezer"])
+
+            office_sf = 0.0
+            warehouse_sf_for_flex = None
+
+            def _coerce_number(value: Any) -> Optional[float]:
+                if value is None:
+                    return None
+                if isinstance(value, bool):
+                    return float(value)
+                if isinstance(value, (int, float)):
+                    return float(value)
+                if isinstance(value, str):
+                    stripped = value.strip()
+                    if not stripped:
+                        return None
+                    cleaned = stripped.replace('%', '').replace(',', '')
+                    try:
+                        return float(cleaned)
+                    except ValueError:
+                        return None
+                return None
+
+            def _get_override(keys: List[str]) -> Optional[float]:
+                for source in override_sources:
+                    for key in keys:
+                        if key in source:
+                            number = _coerce_number(source.get(key))
+                            if number is not None:
+                                return number
+                return None
+
+            def _get_percent_override(keys: List[str]) -> Optional[float]:
+                value = _get_override(keys)
+                if value is None:
+                    return None
+                percent = float(value)
+                if percent > 1.0:
+                    percent = percent / 100.0
+                return max(percent, 0.0)
+
+            if is_flex:
+                office_share_override = _get_percent_override([
+                    "office_share",
+                    "officeShare",
+                    "office_split",
+                    "officeSplit",
+                ])
+                if office_share_override is None:
+                    office_share_value = 0.0
+                else:
+                    office_share_value = float(office_share_override)
+                office_share_value = max(0.0, min(1.0, office_share_value))
+                total_sf = float(sf)
+                office_sf = round(total_sf * office_share_value, 2)
+                warehouse_sf_for_flex = round(total_sf - office_sf, 2)
+            else:
+                office_sf_override = _get_override([
+                    "office_sf",
+                    "officeSquareFeet",
+                    "office_space_sf",
+                ])
+                if office_sf_override is not None:
+                    office_sf = max(0.0, float(office_sf_override))
+                else:
+                    office_pct_override = _get_percent_override([
+                        "office_percent",
+                        "office_pct",
+                        "officePercent",
+                        "officePct",
+                    ])
+                    if office_pct_override is not None:
+                        office_sf = max(0.0, sf * office_pct_override)
+                    else:
+                        office_sf = max(1500.0, sf * 0.05)
+
+            mezz_sf_override = _get_override([
+                "mezzanine_sf",
+                "mezz_sf",
+                "mezzanineSquareFeet",
+            ])
+            if mezz_sf_override is not None:
+                mezz_sf = max(0.0, float(mezz_sf_override))
+            else:
+                mezz_pct_override = _get_percent_override([
+                    "mezzanine_percent",
+                    "mezzanine_pct",
+                    "mezzaninePercent",
+                    "mezzaninePct",
+                ])
+                if mezz_pct_override is not None:
+                    mezz_sf = max(0.0, sf * mezz_pct_override)
+                else:
+                    mezz_sf = 0.0
+
+            dock_override = _get_override([
+                "dock_doors",
+                "dock_count",
+                "dockDoors",
+                "dockCount",
+            ])
+            if is_flex:
+                dock_count = None
+                if dock_override is not None:
+                    dock_count = max(0, int(round(dock_override)))
+            else:
+                print(
+                    "[SPECSHARP DEBUG][WAREHOUSE DOCKS]",
+                    {
+                        "ctx_dock_doors": scope_context.get("dock_doors") if scope_context else None,
+                        "ctx_dock_count": scope_context.get("dock_count") if scope_context else None,
+                        "sf": sf,
+                    }
+                )
+                if dock_override is not None:
+                    dock_count = max(0, int(round(dock_override)))
+                else:
+                    dock_count = max(4, int(round(sf / 10000.0)))
+                print(
+                    "[SPECSHARP DEBUG][WAREHOUSE DOCKS FINAL]",
+                    {
+                        "final_dock_count": dock_count
+                    }
+                )
+
             restroom_groups = max(1, int(round(sf / 25000.0)))
-            mezz_sf = sf * 0.10 if sf >= 120000 else 0.0
 
             structural_total = float(trades.get("structural", 0.0) or 0.0)
             if structural_total > 0:
-                slab_share = 0.45
-                shell_share = 0.25
-                foundations_share = 0.10
-                dock_share = 0.20
+                if is_flex:
+                    include_docks = bool(dock_count and dock_count > 0)
+                    slab_share = 0.45
+                    shell_share = 0.25
+                    foundations_share = 0.10
+                    dock_share = 0.20 if include_docks else 0.0
 
-                if mezz_sf > 0:
-                    mezz_share = 0.10
-                    base_total = slab_share + shell_share + foundations_share + dock_share
-                    scale = (1.0 - mezz_share) / base_total
-                    slab_share *= scale
-                    shell_share *= scale
-                    foundations_share *= scale
-                    dock_share *= scale
-                else:
+                    if not include_docks:
+                        base_total = slab_share + shell_share + foundations_share
+                        if base_total > 0:
+                            scale = 1.0 / base_total
+                            slab_share *= scale
+                            shell_share *= scale
+                            foundations_share *= scale
                     mezz_share = 0.0
 
-                slab_total = structural_total * slab_share
-                shell_total = structural_total * shell_share
-                foundations_total = structural_total * foundations_share
-                docks_total = structural_total * dock_share
-                mezz_total = structural_total * mezz_share
+                    slab_total = structural_total * slab_share
+                    shell_total = structural_total * shell_share
+                    foundations_total = structural_total * foundations_share
+                    docks_total = structural_total * dock_share if include_docks else 0.0
 
-                structural_systems = [
-                    {
-                        "name": 'Concrete slab on grade (6")',
-                        "quantity": sf,
-                        "unit": "SF",
-                        "unit_cost": _safe_unit_cost(slab_total, sf),
-                        "total_cost": slab_total,
-                    },
-                    {
-                        "name": "Tilt-wall panels / structural shell",
-                        "quantity": sf,
-                        "unit": "SF",
-                        "unit_cost": _safe_unit_cost(shell_total, sf),
-                        "total_cost": shell_total,
-                    },
-                    {
-                        "name": "Foundations, footings, and thickened slabs",
-                        "quantity": sf,
-                        "unit": "SF",
-                        "unit_cost": _safe_unit_cost(foundations_total, sf),
-                        "total_cost": foundations_total,
-                    },
-                    {
-                        "name": "Dock pits and loading aprons",
-                        "quantity": dock_count,
-                        "unit": "EA",
-                        "unit_cost": _safe_unit_cost(docks_total, dock_count),
-                        "total_cost": docks_total,
-                    },
-                ]
+                    structural_systems = [
+                        {
+                            "name": 'Concrete slab on grade (6")',
+                            "quantity": sf,
+                            "unit": "SF",
+                            "unit_cost": _safe_unit_cost(slab_total, sf),
+                            "total_cost": slab_total,
+                        },
+                        {
+                            "name": "Tilt-wall panels / structural shell",
+                            "quantity": sf,
+                            "unit": "SF",
+                            "unit_cost": _safe_unit_cost(shell_total, sf),
+                            "total_cost": shell_total,
+                        },
+                        {
+                            "name": "Foundations, footings, and thickened slabs",
+                            "quantity": sf,
+                            "unit": "SF",
+                            "unit_cost": _safe_unit_cost(foundations_total, sf),
+                            "total_cost": foundations_total,
+                        },
+                    ]
 
-                if mezz_sf > 0 and mezz_total > 0:
-                    structural_systems.append({
-                        "name": "Mezzanine structure (framing, deck, stairs)",
-                        "quantity": mezz_sf,
-                        "unit": "SF",
-                        "unit_cost": _safe_unit_cost(mezz_total, mezz_sf),
-                        "total_cost": mezz_total,
+                    if include_docks and dock_count:
+                        structural_systems.append({
+                            "name": "Dock pits and loading aprons",
+                            "quantity": dock_count,
+                            "unit": "EA",
+                            "unit_cost": _safe_unit_cost(docks_total, dock_count),
+                            "total_cost": docks_total,
+                        })
+
+                    scope_items.append({
+                        "trade": "Structural",
+                        "systems": structural_systems,
                     })
+                elif is_cold_storage:
+                    structural_entries = [
+                        ('Concrete slab on grade (conceptual)', 0.4),
+                        ('Foundations & thickened slabs (conceptual)', 0.3),
+                        ('Structural shell (conceptual)', 0.3),
+                    ]
+                    structural_systems = []
+                    total_share = sum(entry[1] for entry in structural_entries)
+                    for name, share in structural_entries:
+                        portion = structural_total * (share / total_share if total_share else 0)
+                        structural_systems.append({
+                            "name": name,
+                            "quantity": sf,
+                            "unit": "SF",
+                            "unit_cost": _safe_unit_cost(portion, sf),
+                            "total_cost": portion,
+                            "notes": "Conceptual / pre-design"
+                        })
 
-                scope_items.append({
-                    "trade": "Structural",
-                    "systems": structural_systems,
-                })
+                    scope_items.append({
+                        "trade": "Structural",
+                        "systems": structural_systems,
+                    })
+                else:
+                    slab_share = 0.45
+                    shell_share = 0.25
+                    foundations_share = 0.10
+                    dock_share = 0.20
+
+                    if mezz_sf > 0:
+                        mezz_share = 0.10
+                        base_total = slab_share + shell_share + foundations_share + dock_share
+                        scale = (1.0 - mezz_share) / base_total
+                        slab_share *= scale
+                        shell_share *= scale
+                        foundations_share *= scale
+                        dock_share *= scale
+                    else:
+                        mezz_share = 0.0
+
+                    slab_total = structural_total * slab_share
+                    shell_total = structural_total * shell_share
+                    foundations_total = structural_total * foundations_share
+                    docks_total = structural_total * dock_share
+                    mezz_total = structural_total * mezz_share
+
+                    structural_systems = [
+                        {
+                            "name": 'Concrete slab on grade (6")',
+                            "quantity": sf,
+                            "unit": "SF",
+                            "unit_cost": _safe_unit_cost(slab_total, sf),
+                            "total_cost": slab_total,
+                        },
+                        {
+                            "name": "Tilt-wall panels / structural shell",
+                            "quantity": sf,
+                            "unit": "SF",
+                            "unit_cost": _safe_unit_cost(shell_total, sf),
+                            "total_cost": shell_total,
+                        },
+                        {
+                            "name": "Foundations, footings, and thickened slabs",
+                            "quantity": sf,
+                            "unit": "SF",
+                            "unit_cost": _safe_unit_cost(foundations_total, sf),
+                            "total_cost": foundations_total,
+                        },
+                        {
+                            "name": "Dock pits and loading aprons",
+                            "quantity": dock_count,
+                            "unit": "EA",
+                            "unit_cost": _safe_unit_cost(docks_total, dock_count),
+                            "total_cost": docks_total,
+                        },
+                    ]
+
+                    if mezz_sf > 0 and mezz_total > 0:
+                        structural_systems.append({
+                            "name": "Mezzanine structure (framing, deck, stairs)",
+                            "quantity": mezz_sf,
+                            "unit": "SF",
+                            "unit_cost": _safe_unit_cost(mezz_total, mezz_sf),
+                            "total_cost": mezz_total,
+                        })
+
+                    scope_items.append({
+                        "trade": "Structural",
+                        "systems": structural_systems,
+                    })
 
             mechanical_total = float(trades.get("mechanical", 0.0) or 0.0)
             if mechanical_total > 0:
-                rtu_count = max(1, int(round(sf / 15000.0)))
-                exhaust_fans = max(1, int(round(sf / 40000.0)))
+                if is_cold_storage:
+                    mechanical_entries: List[Tuple[str, float]] = [
+                        ("Industrial refrigeration system (conceptual)", 0.45),
+                        ("Evaporators & condensers (conceptual)", 0.30),
+                        ("Temperature zone controls (conceptual)", 0.25),
+                    ]
+                    if has_blast_freezer_feature:
+                        mechanical_entries.append(("Blast freezer systems (conceptual)", 0.20))
+                    total_share = sum(entry[1] for entry in mechanical_entries)
+                    mechanical_systems = []
+                    for name, share in mechanical_entries:
+                        portion = mechanical_total * (share / total_share if total_share else 0)
+                        mechanical_systems.append({
+                            "name": name,
+                            "quantity": 1,
+                            "unit": "LS",
+                            "unit_cost": _safe_unit_cost(portion, 1),
+                            "total_cost": portion,
+                            "notes": "Conceptual / pre-design"
+                        })
+                    scope_items.append({
+                        "trade": "Mechanical",
+                        "systems": mechanical_systems,
+                    })
+                else:
+                    rtu_count = max(1, int(round(sf / 15000.0)))
+                    exhaust_fans = max(1, int(round(sf / 40000.0)))
 
-                rtu_share = 0.50
-                exhaust_share = 0.20
-                distribution_share = 0.30
+                    rtu_share = 0.50
+                    exhaust_share = 0.20
+                    distribution_share = 0.30
 
-                rtu_total = mechanical_total * rtu_share
-                exhaust_total = mechanical_total * exhaust_share
-                distribution_total = mechanical_total * distribution_share
+                    rtu_total = mechanical_total * rtu_share
+                    exhaust_total = mechanical_total * exhaust_share
+                    distribution_total = mechanical_total * distribution_share
 
-                mechanical_systems = [
-                    {
-                        "name": "Rooftop units (RTUs) & primary heating/cooling equipment",
-                        "quantity": rtu_count,
-                        "unit": "EA",
-                        "unit_cost": _safe_unit_cost(rtu_total, rtu_count),
-                        "total_cost": rtu_total,
-                    },
-                    {
-                        "name": "Make-up air units and exhaust fans",
-                        "quantity": exhaust_fans,
-                        "unit": "EA",
-                        "unit_cost": _safe_unit_cost(exhaust_total, exhaust_fans),
-                        "total_cost": exhaust_total,
-                    },
-                    {
-                        "name": "Ductwork, distribution, and ventilation",
-                        "quantity": sf,
-                        "unit": "SF",
-                        "unit_cost": _safe_unit_cost(distribution_total, sf),
-                        "total_cost": distribution_total,
-                    },
-                ]
+                    mechanical_systems = [
+                        {
+                            "name": "Rooftop units (RTUs) & primary heating/cooling equipment",
+                            "quantity": rtu_count,
+                            "unit": "EA",
+                            "unit_cost": _safe_unit_cost(rtu_total, rtu_count),
+                            "total_cost": rtu_total,
+                        },
+                        {
+                            "name": "Make-up air units and exhaust fans",
+                            "quantity": exhaust_fans,
+                            "unit": "EA",
+                            "unit_cost": _safe_unit_cost(exhaust_total, exhaust_fans),
+                            "total_cost": exhaust_total,
+                        },
+                        {
+                            "name": "Ductwork, distribution, and ventilation",
+                            "quantity": sf,
+                            "unit": "SF",
+                            "unit_cost": _safe_unit_cost(distribution_total, sf),
+                            "total_cost": distribution_total,
+                        },
+                    ]
 
-                scope_items.append({
-                    "trade": "Mechanical",
-                    "systems": mechanical_systems,
-                })
+                    scope_items.append({
+                        "trade": "Mechanical",
+                        "systems": mechanical_systems,
+                    })
 
             electrical_total = float(trades.get("electrical", 0.0) or 0.0)
             if electrical_total > 0:
-                lighting_share = 0.45
-                power_share = 0.35
-                service_share = 0.20
+                if is_cold_storage:
+                    electrical_entries = [
+                        ("High-capacity power distribution (conceptual)", 0.45),
+                        ("Controls & monitoring systems (conceptual)", 0.30),
+                        ("Backup power allowance (conceptual)", 0.25),
+                    ]
+                    total_share = sum(share for _, share in electrical_entries)
+                    electrical_systems = []
+                    for name, share in electrical_entries:
+                        portion = electrical_total * (share / total_share if total_share else 0)
+                        electrical_systems.append({
+                            "name": name,
+                            "quantity": 1,
+                            "unit": "LS",
+                            "unit_cost": _safe_unit_cost(portion, 1),
+                            "total_cost": portion,
+                            "notes": "Conceptual / pre-design"
+                        })
+                    scope_items.append({
+                        "trade": "Electrical",
+                        "systems": electrical_systems,
+                    })
+                else:
+                    lighting_share = 0.45
+                    power_share = 0.35
+                    service_share = 0.20
 
-                lighting_total = electrical_total * lighting_share
-                power_total = electrical_total * power_share
-                service_total = electrical_total * service_share
+                    lighting_total = electrical_total * lighting_share
+                    power_total = electrical_total * power_share
+                    service_total = electrical_total * service_share
 
-                electrical_systems = [
-                    {
-                        "name": "High-bay lighting & controls",
-                        "quantity": sf,
-                        "unit": "SF",
-                        "unit_cost": _safe_unit_cost(lighting_total, sf),
-                        "total_cost": lighting_total,
-                    },
-                    {
-                        "name": "Power distribution, panels, and branch circuits",
-                        "quantity": sf,
-                        "unit": "SF",
-                        "unit_cost": _safe_unit_cost(power_total, sf),
-                        "total_cost": power_total,
-                    },
-                    {
-                        "name": "Main electrical service and switchgear",
-                        "quantity": 1,
-                        "unit": "LS",
-                        "unit_cost": _safe_unit_cost(service_total, 1),
-                        "total_cost": service_total,
-                    },
-                ]
+                    electrical_systems = [
+                        {
+                            "name": "High-bay lighting & controls",
+                            "quantity": sf,
+                            "unit": "SF",
+                            "unit_cost": _safe_unit_cost(lighting_total, sf),
+                            "total_cost": lighting_total,
+                        },
+                        {
+                            "name": "Power distribution, panels, and branch circuits",
+                            "quantity": sf,
+                            "unit": "SF",
+                            "unit_cost": _safe_unit_cost(power_total, sf),
+                            "total_cost": power_total,
+                        },
+                        {
+                            "name": "Main electrical service and switchgear",
+                            "quantity": 1,
+                            "unit": "LS",
+                            "unit_cost": _safe_unit_cost(service_total, 1),
+                            "total_cost": service_total,
+                        },
+                    ]
 
-                scope_items.append({
-                    "trade": "Electrical",
-                    "systems": electrical_systems,
-                })
+                    scope_items.append({
+                        "trade": "Electrical",
+                        "systems": electrical_systems,
+                    })
 
             plumbing_total = float(trades.get("plumbing", 0.0) or 0.0)
             if plumbing_total > 0:
@@ -1072,45 +1472,99 @@ class UnifiedEngine:
 
             finishes_total = float(trades.get("finishes", 0.0) or 0.0)
             if finishes_total > 0:
-                office_sf = max(1500.0, sf * 0.05)
-                warehouse_sf = sf - office_sf if sf > office_sf else sf
+                if is_flex:
+                    OFFICE_FINISHES_UPLIFT = 1.6
+                    total_sf_value = float(sf)
+                    office_area = office_sf
+                    warehouse_area = warehouse_sf_for_flex if warehouse_sf_for_flex is not None else max(0.0, round(total_sf_value - office_area, 2))
+                    finishes_systems: List[Dict[str, Any]] = []
+                    base_unit_cost = _safe_unit_cost(finishes_total, total_sf_value) if total_sf_value > 0 else 0.0
+                    office_unit_cost = base_unit_cost * OFFICE_FINISHES_UPLIFT if office_area > 0 else 0.0
+                    warehouse_unit_cost = base_unit_cost
 
-                office_share = 0.45
-                warehouse_finish_share = 0.40
-                misc_share = 0.15
+                    if office_area > 0:
+                        office_total = office_unit_cost * office_area
+                        finishes_systems.append({
+                            "name": "Office/showroom interior buildout allowance (conceptual)",
+                            "quantity": office_area,
+                            "unit": "SF",
+                            "unit_cost": office_unit_cost,
+                            "total_cost": office_total,
+                        })
+                    if warehouse_area > 0:
+                        warehouse_total = warehouse_unit_cost * warehouse_area
+                        finishes_systems.append({
+                            "name": "Warehouse interior fit-out allowance (conceptual)",
+                            "quantity": warehouse_area,
+                            "unit": "SF",
+                            "unit_cost": warehouse_unit_cost,
+                            "total_cost": warehouse_total,
+                        })
+                    if finishes_systems:
+                        scope_items.append({
+                            "trade": "Finishes",
+                            "systems": finishes_systems,
+                        })
+                elif is_cold_storage:
+                    finishes_entries = [
+                        ("Insulated panel walls & ceilings (conceptual)", 0.6),
+                        ("Sanitary / food-grade finishes (conceptual)", 0.4),
+                    ]
+                    total_share = sum(entry[1] for entry in finishes_entries)
+                    finishes_systems = []
+                    for name, share in finishes_entries:
+                        portion = finishes_total * (share / total_share if total_share else 0)
+                        finishes_systems.append({
+                            "name": name,
+                            "quantity": sf,
+                            "unit": "SF",
+                            "unit_cost": _safe_unit_cost(portion, sf),
+                            "total_cost": portion,
+                            "notes": "Conceptual / pre-design"
+                        })
+                    scope_items.append({
+                        "trade": "Finishes",
+                        "systems": finishes_systems,
+                    })
+                else:
+                    warehouse_sf = sf - office_sf if sf > office_sf else sf
 
-                office_total = finishes_total * office_share
-                warehouse_finish_total = finishes_total * warehouse_finish_share
-                misc_finishes_total = finishes_total * misc_share
+                    office_share = 0.45
+                    warehouse_finish_share = 0.40
+                    misc_share = 0.15
 
-                finishes_systems = [
-                    {
-                        "name": "Office build-out (walls, ceilings, flooring)",
-                        "quantity": office_sf,
-                        "unit": "SF",
-                        "unit_cost": _safe_unit_cost(office_total, office_sf),
-                        "total_cost": office_total,
-                    },
-                    {
-                        "name": "Warehouse floor sealers, striping, and protection",
-                        "quantity": warehouse_sf,
-                        "unit": "SF",
-                        "unit_cost": _safe_unit_cost(warehouse_finish_total, warehouse_sf),
-                        "total_cost": warehouse_finish_total,
-                    },
-                    {
-                        "name": "Doors, hardware, and misc interior finishes",
-                        "quantity": sf,
-                        "unit": "SF",
-                        "unit_cost": _safe_unit_cost(misc_finishes_total, sf),
-                        "total_cost": misc_finishes_total,
-                    },
-                ]
+                    office_total = finishes_total * office_share
+                    warehouse_finish_total = finishes_total * warehouse_finish_share
+                    misc_finishes_total = finishes_total * misc_share
 
-                scope_items.append({
-                    "trade": "Finishes",
-                    "systems": finishes_systems,
-                })
+                    finishes_systems = [
+                        {
+                            "name": "Office build-out (walls, ceilings, flooring)",
+                            "quantity": office_sf,
+                            "unit": "SF",
+                            "unit_cost": _safe_unit_cost(office_total, office_sf),
+                            "total_cost": office_total,
+                        },
+                        {
+                            "name": "Warehouse floor sealers, striping, and protection",
+                            "quantity": warehouse_sf,
+                            "unit": "SF",
+                            "unit_cost": _safe_unit_cost(warehouse_finish_total, warehouse_sf),
+                            "total_cost": warehouse_finish_total,
+                        },
+                        {
+                            "name": "Doors, hardware, and misc interior finishes",
+                            "quantity": sf,
+                            "unit": "SF",
+                            "unit_cost": _safe_unit_cost(misc_finishes_total, sf),
+                            "total_cost": misc_finishes_total,
+                        },
+                    ]
+
+                    scope_items.append({
+                        "trade": "Finishes",
+                        "systems": finishes_systems,
+                    })
 
         return scope_items
     
@@ -1273,6 +1727,17 @@ class UnifiedEngine:
         if not subtype_config:
             return self._empty_ownership_analysis()
         
+        scenario_value = (
+            calculations.get('scenario')
+            or calculations.get('scenario_key')
+            or calculations.get('scenarioName')
+            or calculations.get('scenarioKey')
+        )
+        scenario_key_normalized = (
+            scenario_value.strip().lower()
+            if isinstance(scenario_value, str) and scenario_value.strip()
+            else None
+        )
         provided_quality_factor = calculations.get('quality_factor')
         finish_level = calculations.get('finish_level')
         normalized_finish_level = finish_level.lower() if isinstance(finish_level, str) else None
@@ -1358,6 +1823,15 @@ class UnifiedEngine:
             industrial_margin = getattr(subtype_config, "operating_margin_base", None)
             if isinstance(industrial_margin, (int, float)) and industrial_margin > 0:
                 margin_pct = float(industrial_margin)
+        utility_ratio = float(getattr(subtype_config, 'utility_cost_ratio', 0.0) or 0.0)
+        tenant_paid_utilities = (
+            building_enum == BuildingType.INDUSTRIAL
+            and isinstance(subtype, str)
+            and subtype.strip().lower() == 'cold_storage'
+            and scenario_key_normalized in {'tenant_paid_utilities', 'nnn_utilities', 'cold_storage_nnn'}
+        )
+        if tenant_paid_utilities and utility_ratio > 0:
+            margin_pct = min(0.995, margin_pct + utility_ratio)
         self._log_trace("margin_normalized", {
             'building_type': building_enum.value,
             'subtype': subtype,
@@ -1445,9 +1919,16 @@ class UnifiedEngine:
             property_mgmt_staff_cost = round(total_expenses * prop_pct, 2)
             maintenance_staff_cost = round(total_expenses * maint_pct, 2)
 
+        efficiency_config = subtype_config
+        if tenant_paid_utilities and utility_ratio > 0:
+            try:
+                efficiency_config = replace(subtype_config, utility_cost_ratio=0.0)
+            except TypeError:
+                efficiency_config = subtype_config
+
         operational_efficiency = self.calculate_operational_efficiency(
             revenue=annual_revenue,
-            config=subtype_config,
+            config=efficiency_config,
             subtype=subtype,
             margin_pct=margin_pct,
             total_expenses_override=total_expenses
@@ -1782,6 +2263,7 @@ class UnifiedEngine:
             'project_timeline': project_timeline,
             'construction_schedule': construction_schedule,
             'hospitality_financials': calculations.get('hospitality_financials'),
+            'flex_revenue_per_sf': calculations.get('flex_revenue_per_sf'),
         }
 
     def _calculate_revenue_by_type(self, building_enum, config, square_footage, quality_factor, occupancy_rate, calculation_context: Optional[Dict[str, Any]] = None):
@@ -1940,6 +2422,41 @@ class UnifiedEngine:
                 if base_psf is None:
                     # Fallback if config missing: assume ~$12/SF EGI at 95% occ.
                     base_psf = 11.5
+
+                if subtype_key == 'flex_space':
+                    OFFICE_RENT_UPLIFT = 1.35
+
+                    office_share_value = None
+                    parsed_input_candidates: List[Dict[str, Any]] = []
+
+                    parsed_input_direct = context.get('parsed_input') or context.get('parsedInput')
+                    if isinstance(parsed_input_direct, dict):
+                        parsed_input_candidates.append(parsed_input_direct)
+
+                    request_payload = context.get('request_payload') or context.get('requestPayload')
+                    if isinstance(request_payload, dict):
+                        nested_parsed = request_payload.get('parsed_input') or request_payload.get('parsedInput')
+                        if isinstance(nested_parsed, dict):
+                            parsed_input_candidates.append(nested_parsed)
+
+                    for candidate in parsed_input_candidates:
+                        if 'office_share' in candidate:
+                            office_share_value = candidate.get('office_share')
+                            break
+
+                    flex_office_share = None
+                    if office_share_value is not None:
+                        try:
+                            flex_office_share = float(office_share_value)
+                        except (TypeError, ValueError):
+                            flex_office_share = None
+                    if flex_office_share is not None:
+                        flex_office_share = max(0.0, min(1.0, flex_office_share))
+                        office_psf = base_psf * OFFICE_RENT_UPLIFT
+                        blended_psf = ((1.0 - flex_office_share) * base_psf) + (flex_office_share * office_psf)
+                        base_psf = blended_psf
+                        context['flex_revenue_per_sf'] = blended_psf
+
                 base_revenue = square_footage * base_psf
             else:
                 base_revenue = square_footage * config.base_revenue_per_sf_annual

@@ -157,14 +157,22 @@ class BuildingTaxonomy:
         if subtype_lower in valid_subtypes:
             return subtype_lower
         
-        # Check keywords
+        # Check keywords (pick best match by keyword specificity)
         subtypes_dict = TAXONOMY['building_types'][canonical_type].get('subtypes', {})
+        best_match = None
+        best_score = (-1, -1)  # (length, word_count)
         for valid_sub, config in subtypes_dict.items():
             keywords = config.get('keywords', [])
             for keyword in keywords:
-                if keyword.lower() in subtype_lower or subtype_lower in keyword.lower():
-                    logger.debug(f"Normalized subtype '{subtype}' to '{valid_sub}' via keyword")
-                    return valid_sub
+                keyword_lower = keyword.lower()
+                if keyword_lower in subtype_lower or subtype_lower in keyword_lower:
+                    score = (len(keyword_lower), keyword_lower.count(' '))
+                    if score > best_score:
+                        best_score = score
+                        best_match = valid_sub
+        if best_match:
+            logger.debug(f"Normalized subtype '{subtype}' to '{best_match}' via keyword")
+            return best_match
         
         # Partial match
         for valid_sub in valid_subtypes:

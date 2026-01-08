@@ -17,6 +17,48 @@ import {
 } from '../types';
 import { tracer } from '../utils/traceSystem';
 
+const DEBUG_API =
+  typeof window !== 'undefined' &&
+  (window as any).__SPECSHARP_DEBUG_FLAGS__?.includes('api') === true;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const summarizeProject = (project: any) => {
+  if (!project || typeof project !== 'object') {
+    return project;
+  }
+  const totalsSource =
+    project?.calculation_data?.totals ||
+    project?.calculationData?.totals ||
+    project?.analysis?.calculations?.totals;
+  const totalsSummary = totalsSource
+    ? {
+        cost_per_sf: totalsSource?.cost_per_sf ?? totalsSource?.costPerSf,
+        total_project_cost:
+          totalsSource?.total_project_cost ?? totalsSource?.totalProjectCost,
+      }
+    : undefined;
+  return {
+    id: project?.id,
+    project_id: project?.project_id ?? project?.projectId,
+    name: project?.name ?? project?.project_name,
+    building_type:
+      project?.building_type ??
+      project?.buildingType ??
+      project?.calculation_data?.project_classification?.building_type ??
+      project?.calculationData?.project_classification?.building_type,
+    subtype:
+      project?.subtype ??
+      project?.calculation_data?.project_classification?.subtype ??
+      project?.calculationData?.project_classification?.subtype,
+    has_calculation_data: !!(
+      project?.calculation_data ||
+      project?.calculationData ||
+      project?.analysis?.calculations
+    ),
+    totals: totalsSummary,
+  };
+};
+
 export interface CreateProjectParams {
   description: string;
   location?: string;
@@ -641,18 +683,24 @@ class V2APIClient {
    * Get single project
    */
   async getProject(id: string): Promise<Project | null> {
-    console.log('🔍 DEBUG: getProject called with ID:', id);
+    if (DEBUG_API) {
+      console.log('🔍 DEBUG: getProject called with ID:', id);
+    }
     tracer.trace('API_GET_PROJECT', 'Fetching project by ID from backend', { id });
     
     try {
-      console.log('📡 Making API call to V2 backend for project:', id);
+      if (DEBUG_API) {
+        console.log('📡 Making API call to V2 backend for project:', id);
+      }
       const v2Project = await this.request<any>(`/scope/projects/${id}`, {}, 'v2');
       
       // Handle V2 response structure
       const projectData = v2Project.data || v2Project;
       
-      console.log('✅ Received V2 project from backend:', v2Project);
-      console.log('📊 Project data structure:', projectData);
+      if (DEBUG_API) {
+        console.log('✅ Received V2 project from backend:', summarizeProject(v2Project));
+        console.log('📊 Project data structure:', summarizeProject(projectData));
+      }
       tracer.trace('API_PROJECT_RETRIEVED', 'Project retrieved from V2 backend', {
         found: !!projectData,
         id: projectData?.id,
@@ -675,60 +723,66 @@ class V2APIClient {
         revenue_analysis: projectData.calculation_data?.revenue_analysis
       };
       
-      console.log('🔧 Mapped V2 project structure:', mappedProject);
+      if (DEBUG_API) {
+        console.log('🔧 Mapped V2 project structure:', summarizeProject(mappedProject));
+      }
       return mappedProject;
     } catch (error) {
       console.error('❌ Failed to fetch project from backend:', error);
       
       // Fallback to localStorage if API fails
-      console.log('⚠️ Falling back to localStorage...');
+      if (DEBUG_API) {
+        console.log('⚠️ Falling back to localStorage...');
+      }
       const projects = this.getStoredProjects();
       const v1Project = projects.find(p => p.id === id) || null;
       
       if (v1Project) {
-        console.log('📦 Found project in localStorage');
-        
-        // Debug: Show full structure of localStorage project
-        console.log('=== FULL PROJECT STRUCTURE ===');
-        console.log('Full project:', JSON.stringify(v1Project, null, 2));
-        
-        // Debug: Find all cost-related values in the structure
-        console.log('=== SEARCHING FOR COST VALUES ===');
-        const findCosts = (obj: any, path = '') => {
-          for (const key in obj) {
-            if (obj[key] && typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
-              findCosts(obj[key], path ? `${path}.${key}` : key);
-            } else if (typeof obj[key] === 'number' && obj[key] > 1000) {
-              console.log(`Found large number at ${path ? path + '.' : ''}${key}:`, obj[key]);
+        if (DEBUG_API) {
+          console.log('📦 Found project in localStorage');
+          console.log('Stored project summary:', summarizeProject(v1Project));
+          console.log('=== SEARCHING FOR COST VALUES ===');
+          const findCosts = (obj: any, path = '') => {
+            for (const key in obj) {
+              if (obj[key] && typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
+                findCosts(obj[key], path ? `${path}.${key}` : key);
+              } else if (typeof obj[key] === 'number' && obj[key] > 1000) {
+                console.log(`Found large number at ${path ? path + '.' : ''}${key}:`, obj[key]);
+              }
+              if (
+                key.toLowerCase().includes('cost') ||
+                key.toLowerCase().includes('total') ||
+                key.toLowerCase().includes('subtotal')
+              ) {
+                console.log(`Found cost-related field at ${path ? path + '.' : ''}${key}:`, obj[key]);
+              }
             }
-            // Also look for any key containing 'cost', 'total', or 'subtotal'
-            if (key.toLowerCase().includes('cost') || 
-                key.toLowerCase().includes('total') || 
-                key.toLowerCase().includes('subtotal')) {
-              console.log(`Found cost-related field at ${path ? path + '.' : ''}${key}:`, obj[key]);
-            }
-          }
-        };
-        findCosts(v1Project);
-        console.log('=== END COST SEARCH ===');
+          };
+          findCosts(v1Project);
+          console.log('=== END COST SEARCH ===');
+        }
         
         // Transform V1 structure to V2 if needed
         const v2Project = this.adaptV1ToV2Structure(v1Project);
         
-        console.log('=== LOCALSTORAGE PROJECT DATA TRACE ===');
-        console.log('1. Original V1 project:', v1Project);
-        console.log('2. Transformed V2 project:', v2Project);
-        console.log('3. Has analysis?', !!v2Project?.analysis);
-        console.log('4. Has calculations?', !!v2Project?.analysis?.calculations);
-        console.log('5. Has totals?', !!v2Project?.analysis?.calculations?.totals);
-        console.log('6. Hard costs value:', v2Project?.analysis?.calculations?.totals?.hard_costs);
-        console.log('7. Soft costs value:', v2Project?.analysis?.calculations?.totals?.soft_costs);
-        console.log('8. Total project cost:', v2Project?.analysis?.calculations?.totals?.total_project_cost);
-        console.log('=== END LOCALSTORAGE TRACE ===');
+        if (DEBUG_API) {
+          console.log('=== LOCALSTORAGE PROJECT DATA TRACE ===');
+          console.log('1. Original V1 summary:', summarizeProject(v1Project));
+          console.log('2. Transformed V2 summary:', summarizeProject(v2Project));
+          console.log('3. Has analysis?', !!v2Project?.analysis);
+          console.log('4. Has calculations?', !!v2Project?.analysis?.calculations);
+          console.log('5. Has totals?', !!v2Project?.analysis?.calculations?.totals);
+          console.log('6. Hard costs value:', v2Project?.analysis?.calculations?.totals?.hard_costs);
+          console.log('7. Soft costs value:', v2Project?.analysis?.calculations?.totals?.soft_costs);
+          console.log('8. Total project cost:', v2Project?.analysis?.calculations?.totals?.total_project_cost);
+          console.log('=== END LOCALSTORAGE TRACE ===');
+        }
         
         return v2Project;
       } else {
-        console.log('❌ Project not found in localStorage either');
+        if (DEBUG_API) {
+          console.log('❌ Project not found in localStorage either');
+        }
         return null;
       }
     }

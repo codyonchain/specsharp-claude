@@ -5,6 +5,10 @@
 
 import { safeGet } from './displayFormatters';
 
+const DEBUG_MAPPER =
+  typeof window !== 'undefined' &&
+  (window as any).__SPECSHARP_DEBUG_FLAGS__?.includes('mapper') === true;
+
 // Shared modifiers fallback so downstream access remains safe even when an
 // analysis payload omits modifier metadata.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -209,65 +213,67 @@ export class BackendDataMapper {
       (calculations as any)?.calculations?.modifiers ||
       {};
     
-    // Add comprehensive tracing for ROI and financial metrics
-    console.log('=== ROI & FINANCIAL METRICS TRACE ===');
-    console.log('Full analysis object:', analysis);
-    console.log('Full calculations object:', calculations);
-    
-    // Check both possible paths due to double-nested structure
-    const path1_roi = calculations?.ownership_analysis?.return_metrics?.estimated_roi;
-    const path2_roi = calculations?.calculations?.ownership_analysis?.return_metrics?.estimated_roi;
-    
-    console.log('1. ROI at calculations.ownership_analysis:', path1_roi);
-    console.log('2. ROI at calculations.calculations.ownership_analysis:', path2_roi);
-    
-    // Check where other metrics are - backend uses 'npv' not 'ten_year_npv'
-    const path1_npv = calculations?.ownership_analysis?.return_metrics?.npv;
-    const path2_npv = calculations?.calculations?.ownership_analysis?.return_metrics?.npv;
-    
-    console.log('3. NPV at path1:', path1_npv);
-    console.log('4. NPV at path2:', path2_npv);
-    
-    // Check payback period
-    const path1_payback = calculations?.ownership_analysis?.return_metrics?.payback_period;
-    const path2_payback = calculations?.calculations?.ownership_analysis?.return_metrics?.payback_period;
-    
-    console.log('5. Payback at path1:', path1_payback);
-    console.log('6. Payback at path2:', path2_payback);
-    
-    // Check IRR
-    const path1_irr = calculations?.ownership_analysis?.return_metrics?.irr;
-    const path2_irr = calculations?.calculations?.ownership_analysis?.return_metrics?.irr;
-    
-    console.log('7. IRR at path1:', path1_irr);
-    console.log('8. IRR at path2:', path2_irr);
-    
-    // Check DSCR
-    const path1_dscr = calculations?.ownership_analysis?.debt_metrics?.calculated_dscr;
-    const path2_dscr = calculations?.calculations?.ownership_analysis?.debt_metrics?.calculated_dscr;
-    
-    console.log('9. DSCR at path1:', path1_dscr);
-    console.log('10. DSCR at path2:', path2_dscr);
-    
-    // Show actual vs expected structure
-    console.log('11. Full ownership_analysis at level 1:', calculations?.ownership_analysis);
-    console.log('12. Full ownership_analysis at level 2:', calculations?.calculations?.ownership_analysis);
-    
-    // Check for annual revenue
-    const path1_revenue = calculations?.ownership_analysis?.annual_revenue;
-    const path2_revenue = calculations?.calculations?.ownership_analysis?.annual_revenue;
-    
-    console.log('13. Annual revenue at path1:', path1_revenue);
-    console.log('14. Annual revenue at path2:', path2_revenue);
-    
-    // Check NOI
-    const path1_noi = calculations?.ownership_analysis?.return_metrics?.estimated_annual_noi;
-    const path2_noi = calculations?.calculations?.ownership_analysis?.return_metrics?.estimated_annual_noi;
-    
-    console.log('15. NOI at path1:', path1_noi);
-    console.log('16. NOI at path2:', path2_noi);
-    
-    console.log('=== END ROI & FINANCIAL METRICS TRACE ===');
+    if (DEBUG_MAPPER) {
+      // Add comprehensive tracing for ROI and financial metrics
+      console.log('=== ROI & FINANCIAL METRICS TRACE ===');
+      console.log('Full analysis object:', analysis);
+      console.log('Full calculations object:', calculations);
+      
+      // Check both possible paths due to double-nested structure
+      const path1_roi = calculations?.ownership_analysis?.return_metrics?.estimated_roi;
+      const path2_roi = calculations?.calculations?.ownership_analysis?.return_metrics?.estimated_roi;
+      
+      console.log('1. ROI at calculations.ownership_analysis:', path1_roi);
+      console.log('2. ROI at calculations.calculations.ownership_analysis:', path2_roi);
+      
+      // Check where other metrics are - backend uses 'npv' not 'ten_year_npv'
+      const path1_npv = calculations?.ownership_analysis?.return_metrics?.npv;
+      const path2_npv = calculations?.calculations?.ownership_analysis?.return_metrics?.npv;
+      
+      console.log('3. NPV at path1:', path1_npv);
+      console.log('4. NPV at path2:', path2_npv);
+      
+      // Check payback period
+      const path1_payback = calculations?.ownership_analysis?.return_metrics?.payback_period;
+      const path2_payback = calculations?.calculations?.ownership_analysis?.return_metrics?.payback_period;
+      
+      console.log('5. Payback at path1:', path1_payback);
+      console.log('6. Payback at path2:', path2_payback);
+      
+      // Check IRR
+      const path1_irr = calculations?.ownership_analysis?.return_metrics?.irr;
+      const path2_irr = calculations?.calculations?.ownership_analysis?.return_metrics?.irr;
+      
+      console.log('7. IRR at path1:', path1_irr);
+      console.log('8. IRR at path2:', path2_irr);
+      
+      // Check DSCR
+      const path1_dscr = calculations?.ownership_analysis?.debt_metrics?.calculated_dscr;
+      const path2_dscr = calculations?.calculations?.ownership_analysis?.debt_metrics?.calculated_dscr;
+      
+      console.log('9. DSCR at path1:', path1_dscr);
+      console.log('10. DSCR at path2:', path2_dscr);
+      
+      // Show actual vs expected structure
+      console.log('11. Full ownership_analysis at level 1:', calculations?.ownership_analysis);
+      console.log('12. Full ownership_analysis at level 2:', calculations?.calculations?.ownership_analysis);
+      
+      // Check for annual revenue
+      const path1_revenue = calculations?.ownership_analysis?.annual_revenue;
+      const path2_revenue = calculations?.calculations?.ownership_analysis?.annual_revenue;
+      
+      console.log('13. Annual revenue at path1:', path1_revenue);
+      console.log('14. Annual revenue at path2:', path2_revenue);
+      
+      // Check NOI
+      const path1_noi = calculations?.ownership_analysis?.return_metrics?.estimated_annual_noi;
+      const path2_noi = calculations?.calculations?.ownership_analysis?.return_metrics?.estimated_annual_noi;
+      
+      console.log('15. NOI at path1:', path1_noi);
+      console.log('16. NOI at path2:', path2_noi);
+      
+      console.log('=== END ROI & FINANCIAL METRICS TRACE ===');
+    }
     
     // Now extract with proper fallback to both paths
     const ownership = calculations?.ownership_analysis || calculations?.calculations?.ownership_analysis || {};
@@ -394,15 +400,19 @@ export class BackendDataMapper {
     const costFactor = costFactorFromTrace ?? fallbackCostFactor;
     const revenueFactor = revenueFactorFromTrace ?? fallbackRevenueFactor;
     
-    // TRACE DATA MAPPING
-    console.log('=== BACKEND DATA MAPPER TRACE ===');
-    console.log('Mapper input analysis:', analysis);
-    console.log('Calculations extracted:', calculations);
-    console.log('Totals object:', totals);
-    console.log('Looking for hard_costs at totals.hard_costs:', totals?.hard_costs);
-    console.log('Looking for soft_costs at totals.soft_costs:', totals?.soft_costs);
-    console.log('Looking for total_project_cost at totals.total_project_cost:', totals?.total_project_cost);
-    console.log('=== END MAPPER TRACE ===');
+    if (DEBUG_MAPPER) {
+      console.log('=== BACKEND DATA MAPPER TRACE ===');
+      console.log('project_id:', analysis?.project_id);
+      console.log('location:', analysis?.location);
+      console.log('costFactor:', costFactor);
+      console.log('revenueFactor:', revenueFactor);
+      console.log('totals:', {
+        hard_costs: totals?.hard_costs,
+        soft_costs: totals?.soft_costs,
+        total_project_cost: totals?.total_project_cost,
+      });
+      console.log('=== END MAPPER TRACE ===');
+    }
     
     // Extract financial metrics with proper paths - backend uses 'npv' not 'ten_year_npv'
     const roi = this.extractROI(returnMetrics);
@@ -1078,12 +1088,14 @@ export class BackendDataMapper {
     const financialMetrics = roiAnalysis?.financial_metrics || {};
     const ownership = calculations?.ownership_analysis || {};
     
-    console.log('=== EXTRACT ANNUAL REVENUE DEBUG ===');
-    console.log('calculations passed:', calculations);
-    console.log('roi_analysis found:', !!roiAnalysis);
-    console.log('financial_metrics found:', !!financialMetrics);
-    console.log('annual_revenue in financial_metrics:', financialMetrics?.annual_revenue);
-    console.log('=== END EXTRACT DEBUG ===');
+    if (DEBUG_MAPPER) {
+      console.log('=== EXTRACT ANNUAL REVENUE DEBUG ===');
+      console.log('calculations passed:', calculations);
+      console.log('roi_analysis found:', !!roiAnalysis);
+      console.log('financial_metrics found:', !!financialMetrics);
+      console.log('annual_revenue in financial_metrics:', financialMetrics?.annual_revenue);
+      console.log('=== END EXTRACT DEBUG ===');
+    }
     
     return financialMetrics?.annual_revenue ||
            safeGet(ownership, 'annual_revenue', 0) ||

@@ -353,6 +353,39 @@ class NLPService:
 
         # Detect classification first
         classification = self.detect_project_classification(text)
+        distribution_pattern = re.compile(
+            r"\b(distribution\s+cent(?:er|re)|fulfil?lment\s+cent(?:er|re)|logistics\s+cent(?:er|re))\b",
+            re.IGNORECASE
+        )
+        if distribution_pattern.search(text):
+            return 'industrial', 'distribution_center', classification
+
+        cold_storage_phrases = [
+            'cold storage',
+            'refrigerated',
+            'refrigeration',
+            'freezer',
+            'blast freezer',
+            'temperature-controlled',
+            'temperature controlled',
+            'temp controlled',
+        ]
+        if any(phrase in text_lower for phrase in cold_storage_phrases):
+            # Avoid misclassifying explicit self storage / mini storage
+            if 'self storage' not in text_lower and 'self-storage' not in text_lower:
+                return 'industrial', 'cold_storage', classification
+
+        # Check for flex industrial before defaulting to warehouse
+        flex_phrases = [
+            'flex industrial',
+            'industrial flex',
+            'flex space',
+            'warehouse office',
+            'office warehouse',
+            'showroom warehouse',
+        ]
+        if any(phrase in text_lower for phrase in flex_phrases) or re.search(r'\bflex\b', text_lower):
+            return 'industrial', 'flex_space', classification
 
         dental_phrases = [
             'dental office',
@@ -497,6 +530,11 @@ class NLPService:
             'has_drive_thru': self._has_drive_thru(text)
         }
 
+        if building_type == 'industrial' and building_subtype == 'flex_space':
+            office_share = self._extract_flex_office_share(text)
+            if office_share is not None:
+                extracted['office_share'] = office_share
+
         # Log for debugging
         print(f"[NLP] Parsed: type='{building_type}', subtype='{building_subtype}', SF={square_footage}, floors={floors}, location='{location}'")
 
@@ -522,6 +560,27 @@ class NLPService:
                     return int(sf_str)
                 except ValueError:
                     continue
+        return None
+
+    def _extract_flex_office_share(self, text: str) -> Optional[float]:
+        """Extract explicit office percentage splits for industrial flex projects."""
+        patterns = [
+            r'(\d{1,3}(?:\.\d+)?)\s*%\s*office',
+            r'office\s*(\d{1,3}(?:\.\d+)?)\s*%',
+            r'(\d{1,3}(?:\.\d+)?)\s*(?:percent)\s*office',
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                try:
+                    pct_value = float(match.group(1))
+                except (TypeError, ValueError):
+                    continue
+                if pct_value > 100:
+                    continue
+                return max(0.0, min(1.0, pct_value / 100.0))
+
         return None
 
     def _extract_floors(self, text: str, building_type: str = None) -> int:

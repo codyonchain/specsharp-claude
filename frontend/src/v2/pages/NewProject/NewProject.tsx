@@ -19,30 +19,44 @@ import {
 
 const CITY_STATE_REGEX = /^.+,\s*[A-Za-z]{2}$/i;
 
-const detectCityStateInDescription = (description: string): string | null => {
-  if (!description) return null;
+const detectCityStateInDescription = (text: string): string | null => {
+  if (!text) return null;
 
-  const cityStateRegex = /([A-Z][A-Za-z .'\-]+?),\s*([A-Za-z]{2})/g;
-  let match: RegExpExecArray | null = null;
-  let lastMatch: RegExpExecArray | null = null;
+  // Strictly extract canonical "City, ST" (use the LAST match in the string).
+  // City rules:
+  // - 1 to 4 tokens
+  // - each token letters/periods/hyphens only (no digits)
+  const pattern =
+    /(?:^|[\s(])([A-Z][a-zA-Z.\-]*(?:\s+[A-Z][a-zA-Z.\-]*){0,3}),\s*([A-Z]{2})(?:\b|[\s).,;:!?\"'])/g;
 
-  while ((match = cityStateRegex.exec(description)) !== null) {
-    lastMatch = match;
+  const forbiddenTokens = new Set([
+    "SF", "SQ", "SQFT", "FT",
+    "OFFICE", "WAREHOUSE", "DISTRIBUTION", "CENTER",
+    "CLINIC", "HOSPITAL", "HOTEL", "RESTAURANT", "SCHOOL",
+    "APARTMENT", "INDUSTRIAL", "CLASS", "BUILDING",
+    "NEW", "REMODEL", "RENOVATION", "IN",
+  ]);
+
+  let match: RegExpExecArray | null;
+  let lastValid: { city: string; state: string } | null = null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    const cityRaw = (match[1] || "").trim();
+    const stateRaw = (match[2] || "").trim().toUpperCase();
+    if (!cityRaw || !stateRaw) continue;
+    if (cityRaw.length > 40) continue;
+    if (/\d/.test(cityRaw)) continue;
+
+    const tokens = cityRaw.toUpperCase().split(/\s+/).filter(Boolean);
+    if (tokens.some(token => forbiddenTokens.has(token))) continue;
+
+    lastValid = { city: cityRaw, state: stateRaw };
   }
 
-  if (!lastMatch) {
-    return null;
-  }
-
-  const city = lastMatch[1]?.trim().replace(/\s+/g, ' ');
-  const state = lastMatch[2]?.trim().toUpperCase();
-
-  if (!city || !state) {
-    return null;
-  }
-
-  return `${city}, ${state}`;
+  return lastValid ? `${lastValid.city}, ${lastValid.state}` : null;
 };
+
+
 
 export const NewProject: React.FC = () => {
   const navigate = useNavigate();

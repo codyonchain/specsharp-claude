@@ -2369,11 +2369,11 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
             typical_floors=1,
             
             trades=TradeBreakdown(
-                structural=0.35,  # Large clear spans
-                mechanical=0.15,  # Minimal HVAC
-                electrical=0.12,
-                plumbing=0.08,   # Minimal plumbing
-                finishes=0.30
+                structural=0.48,  # Large clear spans
+                mechanical=0.11,  # Minimal HVAC
+                electrical=0.15,
+                plumbing=0.05,   # Minimal plumbing
+                finishes=0.21
             ),
             
             soft_costs=SoftCosts(
@@ -2435,19 +2435,20 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
             # Total operating ratio: ~15% (very efficient operations)
         ),
         
-        'distribution_center': BuildingConfig(
-            display_name='Distribution Center',
-            base_cost_per_sf=95,
-            cost_range=(80, 110),
-            equipment_cost_per_sf=8,
-            typical_floors=1,
+  'distribution_center': BuildingConfig(
+  display_name='Distribution Center',
+  base_cost_per_sf=115,
+  # Keep range consistent with base_cost_per_sf (avoid clamp/logic bugs)
+  cost_range=(105, 135),
+  equipment_cost_per_sf=8,
+  typical_floors=1,
             
             trades=TradeBreakdown(
-                structural=0.33,
-                mechanical=0.17,  # More HVAC than warehouse
-                electrical=0.13,
-                plumbing=0.09,
-                finishes=0.28
+                structural=0.50,
+                mechanical=0.09,
+                electrical=0.20,
+                plumbing=0.04,
+                finishes=0.17
             ),
             
             soft_costs=SoftCosts(
@@ -2478,21 +2479,18 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
                 incompatible_classes=[]
             ),
             
-            regional_multipliers={
-                'Nashville': 1.03,
-                'Franklin': 1.03,
-                'Manchester': 0.93,
-                'Memphis': 0.91,  # Memphis is distribution hub
-                'New York': 1.28,
-                'San Francisco': 1.32,
-                'Chicago': 1.12,
-                'Miami': 1.06
-            },
+              # NOTE: Regional multipliers are now resolved globally via
+              # resolve_location_context() in the unified regional system.
+              # Keep this empty to avoid double-counting/misleading provenance.
+              regional_multipliers={},
             
             special_features={
                 'automated_sorting': 25,
                 'refrigerated_area': 35,
-                'loading_docks': 15
+                'loading_docks': 15,
+                'extra_loading_docks': 20,
+                'office_buildout': 18,
+                'cold_storage': 40
             },
 
             # Revenue metrics
@@ -2505,17 +2503,18 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
         
         'manufacturing': BuildingConfig(
             display_name='Manufacturing Facility',
-            base_cost_per_sf=125,
+            base_cost_per_sf=120,
             cost_range=(100, 150),
-            equipment_cost_per_sf=35,  # Process equipment
+            # General manufacturing allowance (fixtures, light process interfaces)
+            equipment_cost_per_sf=20,
             typical_floors=1,
             
             trades=TradeBreakdown(
-                structural=0.28,
-                mechanical=0.25,  # Heavy mechanical
-                electrical=0.18,  # Heavy power
-                plumbing=0.12,
-                finishes=0.17
+                structural=0.30,
+                mechanical=0.22,
+                electrical=0.18,
+                plumbing=0.10,
+                finishes=0.20
             ),
             
             soft_costs=SoftCosts(
@@ -2570,6 +2569,7 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
             },
             
             special_features={
+                # Specialized manufacturing features (opt-in only)
                 'clean_room': 75,
                 'heavy_power': 40,
                 'crane_bays': 30,
@@ -2577,7 +2577,8 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
             },
 
             # Revenue metrics
-            base_revenue_per_sf_annual=12,
+            # Slight premium to DC, but not enough to offset added risk by default
+            base_revenue_per_sf_annual=11,
             occupancy_rate_base=0.92,
             occupancy_rate_premium=0.95,
             operating_margin_base=0.65,
@@ -2597,20 +2598,22 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
         ),
         
         'flex_space': BuildingConfig(
-            display_name='Flex Space',
-            base_cost_per_sf=110,
-            cost_range=(95, 125),
+            display_name='Flex Industrial',
+            # Hybrid: warehouse/light industrial shell + meaningful office/showroom.
+            # Should feel more finished than bulk warehouse, but not “Office”.
+            base_cost_per_sf=115,
+            cost_range=(100, 135),
             equipment_cost_per_sf=10,
             typical_floors=1,
-            
+
             trades=TradeBreakdown(
-                structural=0.30,
-                mechanical=0.20,
-                electrical=0.15,
-                plumbing=0.10,
-                finishes=0.25  # Better finishes for office portion
+                structural=0.31,
+                mechanical=0.19,   # more HVAC than warehouse (office/showroom), less than manufacturing
+                electrical=0.14,   # more lighting + branch power than warehouse
+                plumbing=0.08,
+                finishes=0.28      # higher interior finish load vs warehouse
             ),
-            
+
             soft_costs=SoftCosts(
                 design_fees=0.05,
                 permits=0.02,
@@ -2621,7 +2624,7 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
                 construction_management=0.025,
                 startup=0.008
             ),
-            
+
             ownership_types={
                 OwnershipType.FOR_PROFIT: FinancingTerms(
                     debt_ratio=0.72,
@@ -2631,14 +2634,18 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
                     target_roi=0.10,
                 )
             },
-            
+
             nlp=NLPConfig(
-                keywords=['flex space', 'flex', 'warehouse office', 'light industrial',
-                         'r&d space', 'tech space'],
+                keywords=[
+                    'flex industrial', 'flex space', 'flex',
+                    'warehouse office', 'showroom',
+                    'light industrial', 'r&d space', 'tech space'
+                ],
                 priority=17,
                 incompatible_classes=[]
             ),
-            
+
+            # Keep existing multipliers unchanged to avoid shifting regional behavior in this patch cycle.
             regional_multipliers={
                 'Nashville': 1.03,
                 'Franklin': 1.03,
@@ -2650,24 +2657,33 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
                 'Miami': 1.07
             },
 
-            # Revenue metrics
-            base_revenue_per_sf_annual=15,
-            occupancy_rate_base=0.88,
-            occupancy_rate_premium=0.92,
-            operating_margin_base=0.60,
-            operating_margin_premium=0.65,
-            
-            # Add these expense ratios for operational efficiency calculations
-            utility_cost_ratio=0.05,         # 5% - mixed use, some office HVAC
-            property_tax_ratio=0.09,         # 9% - higher value than pure warehouse
-            insurance_cost_ratio=0.02,       # 2% - standard coverage
-            maintenance_cost_ratio=0.04,     # 4% - office and warehouse systems
-            management_fee_ratio=0.03,       # 3% - more complex management
-            janitorial_ratio=0.02,           # 2% - office areas need cleaning
-            security_ratio=0.01,             # 1% - access control
-            reserves_ratio=0.02,             # 2% - capital reserves
-            labor_cost_ratio=0.03            # 3% - facility staff
-            # Total operating ratio: ~20% (between warehouse and office)
+            # Revenue metrics — Flex typically rents higher than bulk warehouse (often still NNN-ish).
+            base_revenue_per_sf_annual=14.5,
+            occupancy_rate_base=0.93,
+            occupancy_rate_premium=0.95,
+            operating_margin_base=0.84,
+            operating_margin_premium=0.87,
+
+            # Op-ex ratios (leaner than Office; slightly higher than bulk warehouse due to office/showroom)
+            utility_cost_ratio=0.04,
+            property_tax_ratio=0.09,
+            insurance_cost_ratio=0.02,
+            maintenance_cost_ratio=0.03,
+            management_fee_ratio=0.03,
+            janitorial_ratio=0.01,
+            security_ratio=0.01,
+            reserves_ratio=0.02,
+
+            # Specialization should be opt-in (explicit adders)
+            special_features={
+                'enhanced_office_showroom_finish': 18,
+                'two_story_office_mezzanine': 12,
+                'heavy_power': 20,
+                'clean_room': 60,
+                'crane_bays': 28,
+                'compressed_air': 10,
+                'lab_buildout': 35
+            }
         ),
         
         'cold_storage': BuildingConfig(
@@ -2727,24 +2743,26 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
             special_features={
                 'blast_freezer': 50,
                 'multiple_temp_zones': 30,
-                'automated_retrieval': 40
+                'automated_retrieval': 40,
+                'under_slab_heating_protection': 18,
+                'high_r_value_panel_upgrade': 12
             },
 
             # Revenue metrics
-            base_revenue_per_sf_annual=18,
-            occupancy_rate_base=0.95,
-            occupancy_rate_premium=0.98,
-            operating_margin_base=0.55,
-            operating_margin_premium=0.60,
+            base_revenue_per_sf_annual=18.5,
+            occupancy_rate_base=0.90,
+            occupancy_rate_premium=0.94,
+            operating_margin_base=0.72,
+            operating_margin_premium=0.75,
             
             # Add these expense ratios for operational efficiency calculations
-            utility_cost_ratio=0.15,         # 15% - massive refrigeration costs
+            utility_cost_ratio=0.08,
             property_tax_ratio=0.07,         # 7% - specialized facility
             insurance_cost_ratio=0.03,       # 3% - higher due to product liability
-            maintenance_cost_ratio=0.08,     # 8% - refrigeration equipment critical
+            maintenance_cost_ratio=0.03,
             management_fee_ratio=0.03,       # 3% - specialized management
-            security_ratio=0.02,             # 2% - temperature monitoring, security
-            reserves_ratio=0.04,             # 4% - refrigeration equipment reserves
+            security_ratio=0.01,
+            reserves_ratio=0.02,
             labor_cost_ratio=0.05,           # 5% - specialized operators
             monitoring_cost_ratio=0.03       # 3% - 24/7 temperature monitoring
             # Total operating ratio: ~30% (high due to refrigeration)
