@@ -80,8 +80,9 @@ class EnvironmentChecker {
   }
 
   static shouldUseAuthBypass(): boolean {
-    // Only allow auth bypass in development with testing mode
-    return this.getEnvironment() === 'development' && this.isTestingMode();
+    // Controlled bypass flag (for demos/emergencies
+    // Enabled explicitly via env var
+    return import.meta.env.VITE_AUTH_BYPASS === "true";
   }
 }
 

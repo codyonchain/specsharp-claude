@@ -10,36 +10,20 @@ function Login({ setIsAuthenticated }: LoginProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleGoogleLogin = () => {
+  const handleGoogleLogin = async () => {
     setLoading(true);
     setError('');
-    
-    // Debug logging for OAuth flow
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8001';
-    const oauthEndpoint = '/api/v2/oauth/login/google';
-    const fullOAuthUrl = `${apiUrl}${oauthEndpoint}`;
-    
-    console.log('=== OAuth Debug Information ===');
-    console.log('Environment:', import.meta.env.MODE);
-    console.log('API URL from env:', import.meta.env.VITE_API_URL);
-    console.log('Fallback API URL:', 'http://localhost:8001');
-    console.log('Final API URL being used:', apiUrl);
-    console.log('OAuth endpoint:', oauthEndpoint);
-    console.log('Full OAuth URL:', fullOAuthUrl);
-    console.log('Window location before redirect:', window.location.href);
-    console.log('==============================');
-    
-    // Store debug info in sessionStorage for later retrieval
-    sessionStorage.setItem('oauth_debug', JSON.stringify({
-      timestamp: new Date().toISOString(),
-      apiUrl,
-      fullOAuthUrl,
-      env: import.meta.env.MODE,
-      origin: window.location.origin
-    }));
-    
-    // Redirect to backend OAuth endpoint
-    window.location.href = fullOAuthUrl;
+
+    try {
+      const { default: authService } = await import('../services/authService');
+      await authService.login();
+      // authService.login() may redirect; if it does not, we still mark auth true
+      setIsAuthenticated(true);
+    } catch (err: any) {
+      console.error('Login error:', err);
+      setError(err?.message || 'Login failed');
+      setLoading(false);
+    }
   };
 
   return (
