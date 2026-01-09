@@ -1877,6 +1877,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       alert('Failed to export PDF report. Please try again.');
     }
   };
+  const sectionShell = 'rounded-2xl border border-slate-200 bg-white shadow-sm';
+  const sectionPadding = 'p-4 sm:p-6';
+  const sectionCardClasses = `${sectionShell} ${sectionPadding}`;
 
   return (
     <>
@@ -1996,7 +1999,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
 
       {/* Investment Decision Section with Enhanced Feedback */}
       {/* Patch 12F: legacy static NO-GO banner removed; the dynamic 3-state component below now owns all decision copy. */}
-      <div className="space-y-4">
+      <section className={`${sectionCardClasses} space-y-4`}>
         {/* Decision Header */}
         <div
           className={`${decisionStatus === 'GO'
@@ -2248,7 +2251,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               </div>
             )}
             
-            <div className="flex items-center gap-6 mt-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6 mt-3">
               <span className="flex items-center gap-2">
                 <span className={`w-2 h-2 ${displayData.roi >= 0.08 ? 'bg-green-500' : 'bg-red-500'} rounded-full`}></span>
                 <span className="text-sm">ROI: <strong>{formatters.percentage(displayData.roi)}</strong></span>
@@ -2262,10 +2265,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                 <span className="text-sm">Payback: <strong>{formatters.years(displayData.paybackPeriod)}</strong></span>
               </span>
             </div>
-      </div>
+      </section>
 
       {/* Three Key Metrics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <section className={sectionCardClasses}>
+        <div className="grid grid-cols-1 gap-6">
         {/* Revenue Projections */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
           <div className="h-1 bg-gradient-to-r from-green-500 to-green-600"></div>
@@ -2656,10 +2660,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
 
         {/* Investment Mix */}
       </div>
+      </section>
 
       {/* Department Cost Allocation */}
       {displayData.departments.length > 0 && (
-        <div>
+        <section className={`${sectionCardClasses} space-y-6`}>
           <h3 className="text-xl font-bold text-gray-900 mb-6">Department Cost Allocation</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {displayData.departments.map((dept, idx) => {
@@ -2694,19 +2699,19 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               );
             })}
           </div>
-        </div>
+        </section>
       )}
 
       {/* Target Yield Prescription */}
-      <div className="bg-white rounded-xl border border-slate-200/70 shadow-lg shadow-slate-200/50 mb-8">
-        <div className="px-6 py-5 border-b border-slate-100">
+      <section className={`${sectionShell} shadow-lg shadow-slate-200/50`}>
+        <div className="px-4 py-4 sm:px-6 sm:py-5 border-b border-slate-100">
           <div className="inline-flex items-center text-[11px] font-semibold uppercase mb-4 px-3 py-1 rounded-full bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-700 tracking-wide shadow-sm border border-indigo-200/50">
             Prescriptive Playbook
           </div>
           <h3 className="text-xl font-semibold text-slate-900">What It Would Take to Hit Target Yield</h3>
           <p className="text-sm text-slate-500 mt-1">See how much NOI or cost needs to move for this project to hit its underwriting hurdle.</p>
         </div>
-        <div className="p-6 md:p-8">
+        <div className="p-4 sm:p-6 md:p-8">
         {isOffice ? (
           <div className="space-y-3 text-sm text-slate-700">
             <p className="text-xs uppercase tracking-wide text-slate-400">
@@ -2962,12 +2967,12 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         })()
         )}
         </div>
-      </div>
+      </section>
 
       {/* Revenue Requirements Card */}
       {revenueReq && (
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-          <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4">
+        <section className={`${sectionShell} overflow-hidden`}>
+          <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-4 sm:px-6">
             <h3 className="text-lg font-bold text-white">Revenue Required to Hit Target Yield</h3>
             <p className="text-sm text-emerald-100">
               {isHospitalityProject
@@ -2977,7 +2982,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                   : 'Compare required NOI and revenue per SF against current performance.'}
             </p>
           </div>
-          <div className="p-6 space-y-5">
+          <div className="p-4 sm:p-6 space-y-5">
             {isHospitalityProject ? (
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="p-4 bg-gray-50 rounded-lg">
@@ -3157,19 +3162,19 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               )}
             </div>
             
-            <div className="flex justify-between items-center pt-4 border-t">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pt-4 border-t">
               <span className="text-sm text-gray-600">Simple Payback (yrs)</span>
               <span className="text-lg font-bold">{formatters.years(displayData.paybackPeriod)}</span>
             </div>
           </div>
-        </div>
+        </section>
       )}
 
       {/* Financial Requirements removed - was only implemented for hospital */}
 
       {/* Major Soft Cost Categories */}
       {softCostCategories.length > 0 && (
-        <div className="bg-white rounded-xl shadow-lg p-6">
+        <section className={sectionCardClasses}>
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-xl font-bold text-gray-900">Major Soft Cost Categories</h3>
             <div className="text-sm text-gray-500">
@@ -3218,46 +3223,49 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               </div>
             </div>
           </div>
-        </div>
+        </section>
       )}
 
       {/* Key Financial Indicators */}
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-8 text-white shadow-xl">
-        <h3 className="text-2xl font-bold mb-6">Key Financial Indicators</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-          <div>
-            <p className="text-indigo-200 text-sm uppercase tracking-wider mb-2">BREAK-EVEN OCCUPANCY</p>
-            <p className="text-4xl font-bold">{formatters.percentage(displayData.breakEvenOccupancy)}</p>
-          </div>
-          <div>
-            <p className="text-indigo-200 text-sm uppercase tracking-wider mb-2">10-YEAR NPV</p>
-            <p className="text-4xl font-bold">{formatters.currency(displayData.npv)}</p>
-          </div>
-          <div className="mt-6">
-            <p className="text-indigo-200 text-sm uppercase tracking-wider mb-2">{irrDisplayLabel}</p>
-            <p className="text-3xl font-bold">{irrDisplayValue}</p>
-            {irrHelperText ? (
-              <p className="text-sm text-indigo-100 mt-1">{irrHelperText}</p>
-            ) : null}
-          </div>
-          <div className="mt-6">
-            <p className="text-indigo-200 text-sm uppercase tracking-wider mb-2">PAYBACK PERIOD</p>
-            <p className="text-3xl font-bold">{formatters.years(displayData.paybackPeriod)}</p>
+      <section className="rounded-2xl shadow-xl overflow-hidden">
+        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-5 sm:p-8 text-white space-y-6">
+          <h3 className="text-2xl font-bold">Key Financial Indicators</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+            <div>
+              <p className="text-indigo-200 text-sm uppercase tracking-wider mb-2">BREAK-EVEN OCCUPANCY</p>
+              <p className="text-4xl font-bold">{formatters.percentage(displayData.breakEvenOccupancy)}</p>
+            </div>
+            <div>
+              <p className="text-indigo-200 text-sm uppercase tracking-wider mb-2">10-YEAR NPV</p>
+              <p className="text-4xl font-bold">{formatters.currency(displayData.npv)}</p>
+            </div>
+            <div className="mt-6">
+              <p className="text-indigo-200 text-sm uppercase tracking-wider mb-2">{irrDisplayLabel}</p>
+              <p className="text-3xl font-bold">{irrDisplayValue}</p>
+              {irrHelperText ? (
+                <p className="text-sm text-indigo-100 mt-1">{irrHelperText}</p>
+              ) : null}
+            </div>
+            <div className="mt-6">
+              <p className="text-indigo-200 text-sm uppercase tracking-wider mb-2">PAYBACK PERIOD</p>
+              <p className="text-3xl font-bold">{formatters.years(displayData.paybackPeriod)}</p>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Market Position & Quick Sensitivity */}
+      <section className={`${sectionCardClasses} border-0 bg-transparent shadow-none p-0`}>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Market Position */}
         <div className="bg-gradient-to-br from-white to-blue-50 rounded-xl shadow-lg border border-blue-100 overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3">
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 sm:px-6">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <TrendingUp className="h-5 w-5" />
               Market Position
             </h3>
           </div>
-          <div className="p-6 space-y-4 text-sm">
+          <div className="p-4 sm:p-6 space-y-4 text-sm">
             {(() => {
               const formatCost = (value?: number) =>
                 typeof value === 'number' && Number.isFinite(value)
@@ -3345,13 +3353,13 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
 
         {/* Quick Sensitivity */}
         <div className="bg-gradient-to-br from-white to-purple-50 rounded-xl shadow-lg border border-purple-100 overflow-hidden">
-          <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-3">
+          <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-3 sm:px-6">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
               Quick Sensitivity
             </h3>
           </div>
-          <div className="p-6 space-y-4">
+          <div className="p-4 sm:p-6 space-y-4">
             {isRestaurantProject && restaurantSensitivityScenarios ? (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -3593,6 +3601,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           </div>
         </div>
       </div>
+      </section>
 
       {(() => {
         type SchedulePhase = {
@@ -3733,16 +3742,17 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       })()}
 
       {/* Financing Structure & Operational Efficiency */}
+      <section className={`${sectionCardClasses} border-0 bg-transparent shadow-none p-0`}>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Financing Structure */}
         <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl shadow-lg border border-green-100 overflow-hidden">
-          <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4">
+          <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-4 py-4 sm:px-6">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <DollarSign className="h-5 w-5" />
               Financing Structure
             </h3>
           </div>
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             <div className="space-y-4">
               {[
                 { name: 'Senior Debt', percent: 0.65, color: 'blue' },
@@ -3790,13 +3800,13 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         {/* Operational Efficiency */}
         {isDentalOffice ? (
           <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl shadow-lg border border-purple-100 overflow-hidden">
-            <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4">
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-4 sm:px-6">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
                 <Activity className="h-5 w-5" />
                 Operational Efficiency
               </h3>
             </div>
-            <div className="p-6 space-y-6">
+            <div className="p-4 sm:p-6 space-y-6">
               <div>
                 <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Staffing Metrics</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -3989,9 +3999,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           </div>
         )}
       </div>
+      </section>
 
       {/* Executive Decision Points */}
-      <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-l-4 border-amber-500 rounded-xl shadow-lg p-6">
+      <section className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-l-4 border-amber-500 rounded-xl shadow-lg p-4 sm:p-6">
         <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-3">
           <div className="p-2 bg-amber-100 rounded-lg">
             <Lightbulb className="h-6 w-6 text-amber-600" />
@@ -4036,10 +4047,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             <p className="text-sm text-gray-700">Cost, yield, and soft cost metrics are loading.</p>
           )}
         </div>
-      </div>
+      </section>
 
       {/* Executive Financial Summary Footer */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 rounded-xl p-8 shadow-2xl">
+      <section className="rounded-2xl overflow-hidden shadow-2xl">
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 p-5 sm:p-8">
           <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
             <div className="text-center">
               <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">TOTAL CAPITAL REQUIRED</p>
@@ -4098,6 +4110,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           })()}
           </div>
         </div>
+      </section>
+
       </div>
 
       {/* Scenario Comparison Modal */}

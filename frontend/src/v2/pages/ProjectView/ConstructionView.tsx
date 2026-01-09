@@ -1228,7 +1228,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
         <h2 className="text-xl font-bold text-gray-900 mb-2">Project Cost Analysis</h2>
         <p className="text-gray-600 mb-6">Comprehensive breakdown of construction costs by trade</p>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Trade Distribution */}
           <div className="bg-gray-50 rounded-lg p-6">
             <div className="flex justify-between items-center mb-4">
@@ -1705,8 +1705,9 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
         {/* Main calculation flow */}
         <div className="space-y-8">
           {/* Row 1: Base calculation */}
-          <div className="flex items-center justify-between gap-6">
-            <div className="flex-1">
+          <div className="-mx-4 sm:mx-0 overflow-x-auto pb-4">
+            <div className="flex items-center justify-between gap-6 min-w-[720px] sm:min-w-0 px-4 sm:px-0">
+              <div className="flex-1 min-w-[220px]">
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
                 <p className="text-sm text-gray-500 uppercase tracking-wider mb-3 font-medium">Step 1: Base Cost</p>
                 <div className="flex items-baseline gap-2">
@@ -1717,12 +1718,12 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
               </div>
             </div>
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <div className="w-12 h-0.5 bg-gray-300"></div>
               <ChevronRight className="h-6 w-6 text-gray-400" />
             </div>
             
-            <div className="flex-1">
+            <div className="flex-1 min-w-[220px]">
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
                 <p className="text-sm text-gray-500 uppercase tracking-wider mb-3 font-medium">Step 2: Regional Adjustment</p>
                 <div className="flex items-baseline gap-2">
@@ -1733,12 +1734,12 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
               </div>
             </div>
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <div className="w-12 h-0.5 bg-gray-300"></div>
               <ChevronRight className="h-6 w-6 text-gray-400" />
             </div>
             
-            <div className="flex-1">
+            <div className="flex-1 min-w-[220px]">
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
                 <p className="text-sm text-gray-500 uppercase tracking-wider mb-3 font-medium">Step 3: Complexity</p>
                 <div className="flex items-baseline gap-2">
@@ -1748,6 +1749,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                 <p className="text-sm text-gray-500 mt-3">Ground-Up Construction</p>
               </div>
             </div>
+          </div>
           </div>
           
           {/* Row 2: Base total */}
