@@ -2,6 +2,7 @@
 Clean API endpoint that uses the new system
 """
 
+import os
 from fastapi import APIRouter, HTTPException, Query, Depends, Header
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict, AliasChoices
@@ -33,6 +34,164 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["v2"])
+DEBUG_TRACE_ENABLED = os.getenv("SPECSHARP_DEBUG_TRACE", "0").lower() in {"1", "true", "yes", "on"}
+
+
+def _infer_revenue_driver(building_type: Optional[str]) -> str:
+    mapping = {
+        "restaurant": "sales_per_sf",
+        "hospitality": "adr_x_occupancy",
+        "multifamily": "rent_per_unit",
+        "healthcare": "per_bed_or_procedure",
+        "office": "rent_profile_sf",
+        "industrial": "flex_mix_sf",
+        "retail": "sales_per_sf",
+    }
+    normalized = (building_type or "").strip().lower()
+    return mapping.get(normalized, "per_sf")
+
+
+def _collect_trace_assertions(calculation_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    assertions: List[Dict[str, Any]] = []
+    totals = calculation_data.get("totals") or {}
+    for key in ("hard_costs", "soft_costs", "total_project_cost"):
+        value = totals.get(key)
+        if isinstance(value, (int, float)):
+            assertions.append({
+                "check": f"{key}_non_negative",
+                "value": value,
+                "status": "pass" if value >= 0 else "fail"
+            })
+    trades = calculation_data.get("trade_breakdown")
+    construction_total = (calculation_data.get("construction_costs") or {}).get("construction_total")
+    if isinstance(trades, dict) and isinstance(construction_total, (int, float)):
+        trade_sum = sum(float(v or 0) for v in trades.values())
+        variance = abs(trade_sum - construction_total)
+        status = "pass"
+        if construction_total:
+            ratio = variance / max(abs(construction_total), 1.0)
+            status = "pass" if ratio <= 0.02 else "warn"
+        assertions.append({
+            "check": "trade_breakdown_matches_construction_total",
+            "value": {"trade_sum": trade_sum, "construction_total": construction_total},
+            "status": status
+        })
+    departments = calculation_data.get("department_allocation")
+    if isinstance(departments, list) and departments:
+        total_pct = sum(float(item.get("percent") or 0) for item in departments if isinstance(item, dict))
+        assertions.append({
+            "check": "department_allocation_sum",
+            "value": total_pct,
+            "status": "pass" if 0.95 <= total_pct <= 1.05 else "warn"
+        })
+    scope_items = calculation_data.get("scope_items")
+    if isinstance(scope_items, list) and scope_items:
+        seen = set()
+        duplicates = []
+        for item in scope_items:
+            trade_name = item.get("trade") if isinstance(item, dict) else None
+            systems = item.get("systems") if isinstance(item, dict) else None
+            if not isinstance(trade_name, str) or not isinstance(systems, list):
+                continue
+            for system in systems:
+                system_name = system.get("name") if isinstance(system, dict) else None
+                if not isinstance(system_name, str):
+                    continue
+                key = (trade_name.strip().lower(), system_name.strip().lower())
+                if key in seen:
+                    duplicates.append({"trade": trade_name, "system": system_name})
+                else:
+                    seen.add(key)
+        assertions.append({
+            "check": "scope_item_duplicates",
+            "value": duplicates,
+            "status": "pass" if not duplicates else "warn"
+        })
+    return assertions
+
+
+def _build_debug_trace_payload(payload: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not DEBUG_TRACE_ENABLED or not isinstance(payload, dict):
+        return None
+
+    calculations = payload.get("calculation_data")
+    if isinstance(calculations, dict):
+        calc_context = calculations
+    else:
+        calc_context = payload
+
+    project_info = calc_context.get("project_info")
+    if not isinstance(project_info, dict):
+        return None
+
+    modifiers = calc_context.get("modifiers") or {}
+    revenue_block = (
+        calc_context.get("revenue_analysis")
+        or (calc_context.get("ownership_analysis") or {}).get("revenue_analysis")
+        or {}
+    )
+    return_metrics = (
+        calc_context.get("return_metrics")
+        or (calc_context.get("ownership_analysis") or {}).get("return_metrics")
+        or {}
+    )
+    profile = calc_context.get("profile") or {}
+    construction_costs = calc_context.get("construction_costs") or {}
+    trace_entries = calc_context.get("calculation_trace") or []
+
+    fallback_entries: List[Dict[str, Any]] = []
+    for entry in trace_entries:
+        if not isinstance(entry, dict):
+            continue
+        step = entry.get("step")
+        if not isinstance(step, str):
+            continue
+        lowered = step.lower()
+        if any(keyword in lowered for keyword in ("warning", "fallback", "clamp", "adjusted")):
+            fallback_entries.append({
+                "step": step,
+                "data": entry.get("data")
+            })
+
+    debug_trace = {
+        "engine_used": "unified_engine.calculate_project",
+        "config": {
+            "building_type": project_info.get("building_type"),
+            "subtype": project_info.get("subtype"),
+            "project_class": project_info.get("project_class"),
+            "square_footage": project_info.get("square_footage"),
+            "finish_level": project_info.get("finish_level"),
+            "finish_level_source": project_info.get("finish_level_source"),
+            "floors": project_info.get("floors"),
+        },
+        "multipliers": {
+            "cost_factor": modifiers.get("cost_factor"),
+            "finish_cost_factor": modifiers.get("finish_cost_factor"),
+            "cost_region_factor": modifiers.get("regional_cost_factor"),
+            "revenue_factor": modifiers.get("revenue_factor"),
+            "finish_revenue_factor": modifiers.get("finish_revenue_factor"),
+            "revenue_region_factor": modifiers.get("market_factor"),
+            "quality_factor": construction_costs.get("quality_factor"),
+        },
+        "revenue_model": {
+            "driver": _infer_revenue_driver(project_info.get("building_type")),
+            "annual_revenue": revenue_block.get("annual_revenue"),
+            "revenue_per_sf": revenue_block.get("revenue_per_sf"),
+            "operating_margin": revenue_block.get("operating_margin"),
+            "occupancy_rate": revenue_block.get("occupancy_rate"),
+            "market_factor": modifiers.get("market_factor"),
+        },
+        "valuation_model": {
+            "method": "cap_rate" if return_metrics.get("property_value") else "yield_on_cost",
+            "property_value": return_metrics.get("property_value"),
+            "market_cap_rate": return_metrics.get("market_cap_rate") or profile.get("market_cap_rate"),
+            "target_yield": profile.get("target_yield"),
+            "yield_on_cost": calc_context.get("yield_on_cost"),
+        },
+        "fallbacks_used": fallback_entries,
+        "assertions": _collect_trace_assertions(calc_context),
+    }
+    return debug_trace
 
 
 def _ensure_city_state_format(location: Optional[str]) -> None:
@@ -145,6 +304,7 @@ class ProjectResponse(BaseModel):
     data: Dict[str, Any]
     errors: Optional[List[str]] = None
     warnings: Optional[List[str]] = None
+    debug_trace: Optional[Dict[str, Any]] = None
 
 # ============================================================================
 # ENDPOINTS
@@ -290,20 +450,20 @@ async def analyze_project(request: AnalyzeRequest):
         parsed_with_compat['finish_level'] = parsed.get('finish_level', 'standard')
         parsed_with_compat['finish_level_source'] = finish_level_source
         
-        # Return comprehensive result
-        # Wrap the flattened result as 'calculations' to match frontend expectations
+        response_data = {
+            'parsed_input': parsed_with_compat,
+            'calculations': result,  # Now properly structured without double nesting
+            'confidence': parsed.get('confidence', 0),
+            'debug': {
+                'engine_version': 'unified_v2',
+                'config_version': '2.0',
+                'trace_count': len(result.get('calculation_trace', []))
+            }
+        }
         return ProjectResponse(
             success=True,
-            data={
-                'parsed_input': parsed_with_compat,
-                'calculations': result,  # Now properly structured without double nesting
-                'confidence': parsed.get('confidence', 0),
-                'debug': {
-                    'engine_version': 'unified_v2',
-                    'config_version': '2.0',
-                    'trace_count': len(result.get('calculation_trace', []))
-                }
-            }
+            data=response_data,
+            debug_trace=_build_debug_trace_payload(result)
         )
         
     except Exception as e:
@@ -356,7 +516,8 @@ async def calculate_project(request: CalculateRequest):
         
         return ProjectResponse(
             success=True,
-            data=result
+            data=result,
+            debug_trace=_build_debug_trace_payload(result)
         )
         
     except ValueError as e:
@@ -609,9 +770,11 @@ async def get_single_project(
             errors=["Project not found"]
         )
     
+    formatted = format_project_response(project)
     return ProjectResponse(
         success=True,
-        data=format_project_response(project)
+        data=formatted,
+        debug_trace=_build_debug_trace_payload(formatted)
     )
 
 @router.delete("/scope/projects/{project_id}")
@@ -837,9 +1000,11 @@ async def generate_scope(
         db.refresh(project)
         
         # Return formatted response
+        formatted = format_project_response(project)
         return ProjectResponse(
             success=True,
-            data=format_project_response(project)
+            data=formatted,
+            debug_trace=_build_debug_trace_payload(formatted)
         )
         
     except Exception as e:
