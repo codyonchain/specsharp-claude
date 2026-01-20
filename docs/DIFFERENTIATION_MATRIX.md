@@ -99,3 +99,21 @@ Document building-type coverage so backend/ frontend configs stay in sync and we
 - Margin/expenses model → margin_pct from modifiers or get_margin_pct (~1747–1826) with subtype overrides like operating_expense_per_sf/cam/staffing (office ~1753–1759) and hospitality expense pct (~1808–1865).
 - NOI selection for financing consistency → prefers noi_from_revenue else fallback method (~1577–1601).
 - Valuation/returns backend-owned → get_exit_cap_and_discount_rate (~2741–2769), terminal value net_income/exit_cap_rate (~1961–1967), NPV/IRR via calculate_npv/calculate_irr (~1974–1992, ~2810–2873), payback total_cost/net_income (~2003–2004).
+
+## Family-Level Differentiation (Evidence-Based)
+
+| building_type | subtype_count | revenue_knobs_present | margin/expense_knobs_present | valuation_knobs_present | cost_knobs_present | region/quality_knobs_present | notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| healthcare | 10 | per_sf, per_bed, per_visit | margin_base/premium, labor_ratio, equipment_lease | ownership, dscr, yield_on_cost | base_cost, equipment_cost, soft_costs, special_features, contingency/TI | regional, basis_risk | Healthcare stores per-bed/visit revenue plus layered labor + leasing expense ratios. |
+| multifamily | 3 | per_sf, per_unit | margin_base/premium, property_tax, reserves | cap_rate, ownership | base_cost, equipment_cost, soft_costs, special_features | regional | Multifamily relies on per-unit rents with property_tax/reserve expense toggles. |
+| office | 2 | per_sf | margin_base/premium, opex_per_sf, cam, staffing_pct | cap_rate, ownership | base_cost, equipment_cost, soft_costs, special_features | regional | Office keeps per-sf rents with explicit CAM/opex and staffing percentages. |
+| retail | 2 | per_sf, sales_per_sf | margin_base/premium | ownership | base_cost, equipment_cost, soft_costs, special_features | regional | Retail captures per-sf + sales_per_sf revenue with simple margin bands. |
+| restaurant | 5 | per_sf | margin_base/premium, food/beverage, franchise_ratio | ownership | base_cost, equipment_cost, soft_costs, special_features | regional | Restaurant entries mix per-sf revenue with food/beverage/franchise expense ratios. |
+| industrial | 5 | per_sf | margin_base/premium, labor_ratio, property_tax, monitoring | ownership | base_cost, equipment_cost, soft_costs, special_features | regional | Industrial keeps per-sf revenue plus labor/property_tax/monitoring expense overrides. |
+| hospitality | 2 | ADR, per_room, per_sf | margin_base/premium, expense_percentages, franchise_ratio | ownership, dscr, yield_on_cost, cap_rate_defaults | base_cost, equipment_cost, soft_costs, special_features | regional, ADR, occupancy, finish_costs | Hospitality carries ADR/occupancy tables with expense_pct mixes and underwriting hurdles. |
+| educational | 5 | per_sf, per_student | margin_base/premium | ownership | base_cost, equipment_cost, soft_costs, special_features | regional | Educational subtypes expose per-student density revenue with basic margin knobs. |
+| mixed_use | 5 | per_sf | margin_base/premium | ownership | base_cost, equipment_cost, soft_costs, special_features | regional | Mixed_use configs only flag per-sf revenue with standard ownership + cost knobs. |
+| specialty | 5 | per_sf | margin_base/premium, labor_ratio, connectivity | ownership | base_cost, equipment_cost, soft_costs, special_features | regional | Specialty stack retains per-sf revenue plus niche expense knobs (labor/connectivity). |
+| civic | 5 | per_sf | margin_base/premium | ownership | base_cost, equipment_cost, soft_costs, special_features | regional | Civic entries store per-sf cost focus with only basic margin toggles. |
+| recreation | 5 | per_sf, per_seat | margin_base/premium | ownership | base_cost, equipment_cost, soft_costs, special_features | regional | Recreation mixes per-sf and per-seat density controls with simple margin bands. |
+| parking | 4 | per_sf, per_space | margin_base/premium | ownership | base_cost, equipment_cost, soft_costs, special_features | regional | Parking explicitly sets per-space revenue and standard ownership/cost knobs. |
