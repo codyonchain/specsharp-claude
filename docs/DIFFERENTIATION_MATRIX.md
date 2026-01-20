@@ -83,3 +83,19 @@ Document building-type coverage so backend/ frontend configs stay in sync and we
 | civic | 5 | none/per_sf (public) | yield_on_cost/break-even | Partial | cost | Y | Government/civic projects focus on cost + minimal revenue, rely on grants |
 | recreation | 5 | per_sf/per_visit | cap_rate/yield_on_cost | Partial | cost+rev | Y | Stadiums, gyms, arenas mix ticket/visit revenue with lifestyle expense ratios |
 | parking | 3 | per_unit (spaces) | cap_rate/yield_on_cost | Partial | cost+rev | Y | Parking relies on spaces_per_sf + revenue per space; limited opex detail |
+
+## Engine Consumption Proof (UnifiedEngine)
+
+- Master config binding → unified_engine.py: sets self.config = MASTER_CONFIG (~183) and later pulls subtype_config = MASTER_CONFIG[building_enum].get(subtype) (~1712–1727).
+- Subtype normalization/routing → normalizes subtype from dict/enums at entry (~287–298, ~460–462).
+- Config lookup + validation → building_config = get_building_config(building_type, subtype) (~300–306) and validate_project_class(building_type, subtype, project_class) (~306).
+- Finish level inference + quality factor → resolve_quality_factor(normalized_finish_level, building_type, subtype) (~249–273).
+- Regional context + cost/revenue separation → resolve_location_context(location) (~386); cost uses cost_factor/regional_multiplier_effective (~379–387); revenue uses revenue_factor/market_factor (~1746–1794, ~2281–2293).
+- Construction cost pipeline → base_cost_per_sf from building_config.base_cost_per_sf (~315) → complexity/project class multipliers (~341–345) → regional + finish multipliers (~376–387) → construction_cost (~397).
+- Equipment cost (subtype-configured) → equipment_cost_per_sf * finish_cost_factor * sf (~399–401).
+- Special feature adders → building_config.special_features[feature] influences cost (~414).
+- Revenue driver selection by type → _calculate_revenue_by_type branches and uses subtype_config fields (healthcare per bed/visit/procedure/scan/SF ~2295–2339; multifamily per unit ~2339–2343; hospitality ADR×occ×rooms ~2352–2360, ~2569–2679; office financial profile ~2365–2390, ~2523–2566; educational per student ~2392–2397; parking per space ~2399–2403; restaurant per seat or per SF ~2407–2411; industrial/default per SF + flex blending ~2419–2462).
+- Finish-level revenue adjustments (selective) → full-service restaurant finish maps (~2464–2488).
+- Margin/expenses model → margin_pct from modifiers or get_margin_pct (~1747–1826) with subtype overrides like operating_expense_per_sf/cam/staffing (office ~1753–1759) and hospitality expense pct (~1808–1865).
+- NOI selection for financing consistency → prefers noi_from_revenue else fallback method (~1577–1601).
+- Valuation/returns backend-owned → get_exit_cap_and_discount_rate (~2741–2769), terminal value net_income/exit_cap_rate (~1961–1967), NPV/IRR via calculate_npv/calculate_irr (~1974–1992, ~2810–2873), payback total_cost/net_income (~2003–2004).
