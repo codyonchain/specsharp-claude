@@ -58,6 +58,18 @@ Current Architecture (High Level)
 
 SpecSharp deliberately separates construction logic from presentation, so all views consume the same underlying calculations.
 
+Configuration Source of Truth
+------------------------------
+
+SpecSharp uses a single authoritative configuration source:
+
+- `backend/app/v2/config/master_config.py`
+
+Any taxonomy or subtype changes must be reflected here and kept in sync with:
+
+- `shared/building_types.json`
+- `backend/shared/building_types.json`
+
 Running Locally
 ---------------
 
