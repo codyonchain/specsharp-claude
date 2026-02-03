@@ -1,0 +1,88 @@
+from app.v2.config.master_config import (
+    BuildingType,
+    BuildingConfig,
+    TradeBreakdown,
+    SoftCosts,
+    FinancingTerms,
+    OwnershipType,
+    NLPConfig,
+)
+
+
+CONFIG = (
+    BuildingType.OFFICE,
+    "class_b",
+    BuildingConfig(
+        display_name="Class B Office",
+        base_cost_per_sf=175,
+        cost_range=(150, 200),
+        equipment_cost_per_sf=10,
+        typical_floors=5,
+        trades=TradeBreakdown(
+            structural=0.28,
+            mechanical=0.22,
+            electrical=0.14,
+            plumbing=0.11,
+            finishes=0.25,
+        ),
+        soft_costs=SoftCosts(
+            design_fees=0.05,
+            permits=0.02,
+            legal=0.012,
+            financing=0.025,
+            contingency=0.07,
+            testing=0.008,
+            construction_management=0.025,
+            startup=0.008,
+        ),
+        ownership_types={
+            OwnershipType.FOR_PROFIT: FinancingTerms(
+                debt_ratio=0.72,
+                debt_rate=0.062,
+                equity_ratio=0.28,
+                target_dscr=1.20,
+                target_roi=0.09,
+            )
+        },
+        nlp=NLPConfig(
+            keywords=[
+                "office",
+                "office building",
+                "class b",
+                "commercial office",
+                "professional building",
+            ],
+            priority=9,
+            incompatible_classes=[],
+        ),
+        regional_multipliers={
+            "Nashville": 1.03,
+            "Franklin": 1.03,
+            "Manchester": 0.94,
+            "Memphis": 0.90,
+            "New York": 1.40,
+            "San Francisco": 1.45,
+        },
+        special_features={
+            "fitness_center": 30,
+            "cafeteria": 25,
+            "conference_room": 20,
+            "surface_parking": 15,
+            "storage_space": 10,
+            "security_desk": 15,
+        },
+        base_revenue_per_sf_annual=28,
+        occupancy_rate_base=0.85,
+        occupancy_rate_premium=0.88,
+        operating_margin_base=0.60,
+        operating_margin_premium=0.65,
+        utility_cost_ratio=0.10,
+        property_tax_ratio=0.14,
+        insurance_cost_ratio=0.02,
+        maintenance_cost_ratio=0.08,
+        management_fee_ratio=0.04,
+        janitorial_ratio=0.03,
+        security_ratio=0.01,
+        reserves_ratio=0.03,
+    ),
+)

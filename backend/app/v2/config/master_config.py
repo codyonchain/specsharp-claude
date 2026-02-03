@@ -214,6 +214,33 @@ class BuildingConfig:
     exclude_from_facility_opex: List[str] = field(default_factory=list)
 
 
+# Class A office profile for strong urban markets (e.g., downtown Nashville).
+# Assumes full-service gross rent around $38/SF, 92% stabilized occupancy,
+# 6% vacancy/credit loss, 40% OpEx load, and amortized TI/LC over lease term.
+OFFICE_UNDERWRITING_CONFIG: Dict[str, Dict[str, float]] = {
+    "class_a": {
+        # Rent & occupancy
+        "base_rent_per_sf": 38.0,                # $/RSF/year, gross baseline
+        "stabilized_occupancy": 0.92,            # 92% occupied once stabilized
+        "vacancy_and_credit_loss_pct": 0.06,     # 6% of PGI
+
+        # Operating expenses (non-reimbursed share of EGI)
+        "opex_pct_of_egi": 0.40,
+
+        # Leasing costs (amortized over average lease term)
+        "ti_per_sf": 70.0,
+        "ti_amort_years": 10,
+        "lc_pct_of_lease_value": 0.06,
+        "lc_amort_years": 10,
+
+        # Capitalization / hurdle assumptions
+        "exit_cap_rate": 0.0675,                 # 6.75% stabilized exit cap
+        "yield_on_cost_hurdle": 0.09,            # 9.0% development hurdle
+        "discount_rate": 0.0825,                 # midpoint of 8.0–8.5%
+    }
+}
+
+
 # Imported after config types to avoid circular import during module initialization.
 from app.v2.config.subtypes.industrial import (
     warehouse as industrial_warehouse,
@@ -256,6 +283,10 @@ from app.v2.config.subtypes.multifamily import (
     affordable_housing as multifamily_affordable_housing,
     luxury_apartments as multifamily_luxury_apartments,
     market_rate_apartments as multifamily_market_rate_apartments,
+)
+from app.v2.config.subtypes.office import (
+    class_a as office_class_a,
+    class_b as office_class_b,
 )
 
 # ============================================================================
@@ -458,32 +489,6 @@ BUILDING_PROFILES: Dict[BuildingType, Dict[str, float]] = {
     },
 }
 
-# Class A office profile for strong urban markets (e.g., downtown Nashville).
-# Assumes full-service gross rent around $38/SF, 92% stabilized occupancy,
-# 6% vacancy/credit loss, 40% OpEx load, and amortized TI/LC over lease term.
-OFFICE_UNDERWRITING_CONFIG: Dict[str, Dict[str, float]] = {
-    "class_a": {
-        # Rent & occupancy
-        "base_rent_per_sf": 38.0,                # $/RSF/year, gross baseline
-        "stabilized_occupancy": 0.92,            # 92% occupied once stabilized
-        "vacancy_and_credit_loss_pct": 0.06,     # 6% of PGI
-
-        # Operating expenses (non-reimbursed share of EGI)
-        "opex_pct_of_egi": 0.40,
-
-        # Leasing costs (amortized over average lease term)
-        "ti_per_sf": 70.0,
-        "ti_amort_years": 10,
-        "lc_pct_of_lease_value": 0.06,
-        "lc_amort_years": 10,
-
-        # Capitalization / hurdle assumptions
-        "exit_cap_rate": 0.0675,                 # 6.75% stabilized exit cap
-        "yield_on_cost_hurdle": 0.09,            # 9.0% development hurdle
-        "discount_rate": 0.0825,                 # midpoint of 8.0–8.5%
-    }
-}
-
 MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
     # ------------------------------------------------------------------------
     # HEALTHCARE
@@ -522,174 +527,12 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
     # OFFICE
     # ------------------------------------------------------------------------
     BuildingType.OFFICE: {
-        'class_a': BuildingConfig(
-            display_name='Class A Office',
-            base_cost_per_sf=475,
-            cost_range=(440, 510),
-            equipment_cost_per_sf=15,
-            typical_floors=10,
-            
-            trades=TradeBreakdown(
-                structural=0.25,
-                mechanical=0.25,
-                electrical=0.15,
-                plumbing=0.10,
-                finishes=0.25
-            ),
-            
-            # Target ~24% owner soft costs for premium Class A delivery
-            soft_costs=SoftCosts(
-                design_fees=0.05,
-                permits=0.02,
-                legal=0.012,
-                financing=0.03,
-                contingency=0.075,
-                testing=0.008,
-                construction_management=0.035,
-                startup=0.01
-            ),
-            
-            ownership_types={
-                OwnershipType.FOR_PROFIT: FinancingTerms(
-                    debt_ratio=0.75,
-                    debt_rate=0.06,
-                    equity_ratio=0.25,
-                    target_dscr=1.25,
-                    target_roi=0.08,
-                )
-            },
-            
-            nlp=NLPConfig(
-                keywords=['class a office', 'corporate headquarters', 'tower',
-                         'high-rise office', 'premium office'],
-                priority=8,
-                incompatible_classes=[]
-            ),
-            
-            regional_multipliers={
-                'Nashville': 1.03,
-                'Franklin': 1.03,
-                'Manchester': 0.95,
-                'Memphis': 0.92,
-                'New York': 1.45,
-                'San Francisco': 1.50,
-                'Chicago': 1.25
-            },
-            
-            special_features={
-                'fitness_center': 35,       # On-site gym
-                'cafeteria': 30,            # Food service area
-                'conference_center': 40,    # Large meeting facilities
-                'structured_parking': 45,   # Parking garage
-                'green_roof': 35,           # Rooftop garden
-                'outdoor_terrace': 25,      # Outdoor work/break area
-                'executive_floor': 45,      # C-suite buildout
-                'data_center': 55,          # On-site server room
-                'concierge': 20,            # Lobby concierge desk
-            },
-
-            # Revenue metrics (Nashville Class A calibration)
-            base_revenue_per_sf_annual=41.0,  # realistic effective rent
-            occupancy_rate_base=0.92,
-            occupancy_rate_premium=0.95,
-            operating_margin_base=0.48,
-            operating_margin_premium=0.52,
-            operating_expense_per_sf=11.0,
-            cam_charges_per_sf=7.0,
-            staffing_pct_property_mgmt=0.06,
-            staffing_pct_maintenance=0.12,
-            market_cap_rate=0.06,
-            financial_metrics=OFFICE_UNDERWRITING_CONFIG["class_a"],
-            
-            # Expense ratios for operational efficiency calculations
-            utility_cost_ratio=0.08,         # 8% - HVAC, electric, water for premium space
-            property_tax_ratio=0.12,         # 12% - higher value = higher tax
-            insurance_cost_ratio=0.02,       # 2% - property and liability
-            maintenance_cost_ratio=0.06,     # 6% - elevators, HVAC, common areas
-            management_fee_ratio=0.03,       # 3% - professional property management
-            janitorial_ratio=0.04,          # 4% - daily cleaning services
-            security_ratio=0.02,            # 2% - 24/7 security and access control
-            reserves_ratio=0.02             # 2% - capital improvements
-        ),
-        
-        'class_b': BuildingConfig(
-            display_name='Class B Office',
-            base_cost_per_sf=175,
-            cost_range=(150, 200),
-            equipment_cost_per_sf=10,
-            typical_floors=5,
-            
-            trades=TradeBreakdown(
-                structural=0.28,
-                mechanical=0.22,
-                electrical=0.14,
-                plumbing=0.11,
-                finishes=0.25
-            ),
-            
-            soft_costs=SoftCosts(
-                design_fees=0.05,
-                permits=0.02,
-                legal=0.012,
-                financing=0.025,
-                contingency=0.07,
-                testing=0.008,
-                construction_management=0.025,
-                startup=0.008
-            ),
-            
-            ownership_types={
-                OwnershipType.FOR_PROFIT: FinancingTerms(
-                    debt_ratio=0.72,
-                    debt_rate=0.062,
-                    equity_ratio=0.28,
-                    target_dscr=1.20,
-                    target_roi=0.09,
-                )
-            },
-            
-            nlp=NLPConfig(
-                keywords=['office', 'office building', 'class b',
-                         'commercial office', 'professional building'],
-                priority=9,
-                incompatible_classes=[]
-            ),
-            
-            regional_multipliers={
-                'Nashville': 1.03,
-                'Franklin': 1.03,
-                'Manchester': 0.94,
-                'Memphis': 0.90,
-                'New York': 1.40,
-                'San Francisco': 1.45
-            },
-            
-            special_features={
-                'fitness_center': 30,       # Basic gym
-                'cafeteria': 25,            # Break room/kitchen
-                'conference_room': 20,      # Meeting rooms
-                'surface_parking': 15,      # Additional parking
-                'storage_space': 10,        # Extra storage
-                'security_desk': 15,        # Lobby security
-            },
-
-            # Revenue metrics
-            base_revenue_per_sf_annual=28,
-            occupancy_rate_base=0.85,
-            occupancy_rate_premium=0.88,
-            operating_margin_base=0.60,
-            operating_margin_premium=0.65,
-            
-            # Expense ratios for operational efficiency calculations
-            utility_cost_ratio=0.10,         # 10% - less efficient systems
-            property_tax_ratio=0.14,         # 14% - moderate value properties
-            insurance_cost_ratio=0.02,       # 2% - standard coverage
-            maintenance_cost_ratio=0.08,     # 8% - older systems need more maintenance
-            management_fee_ratio=0.04,       # 4% - property management
-            janitorial_ratio=0.03,          # 3% - standard cleaning
-            security_ratio=0.01,            # 1% - basic security
-            reserves_ratio=0.03             # 3% - higher reserves for older buildings
+        subtype_key: config
+        for _building_type, subtype_key, config in (
+            office_class_a.CONFIG,
+            office_class_b.CONFIG,
         )
+        if _building_type == BuildingType.OFFICE
     },
     
     # ------------------------------------------------------------------------
