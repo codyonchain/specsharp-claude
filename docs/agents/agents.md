@@ -9,6 +9,7 @@ SpecSharp is deterministic underwriting + construction logic. No AI guessing in 
 3) Traceability required: any override/clamp/assumption must add a calculation_trace entry.
 4) Surgical changes only. Minimal diff. No speculative refactors.
 5) Scope boundaries are hard: only change allowed files listed in Build.md.
+6) Type defines contract; subtype defines behavior. Multi-model types require subtype-declared model_class (see decision_models.md).
 
 ## Output Requirements (every agent response)
 - Summary (≤5 bullets)
