@@ -1,0 +1,106 @@
+from app.v2.config.master_config import (
+    BuildingType,
+    BuildingConfig,
+    TradeBreakdown,
+    SoftCosts,
+    FinancingTerms,
+    OwnershipType,
+    NLPConfig,
+)
+
+
+CONFIG = (
+    BuildingType.HEALTHCARE,
+    "dental_office",
+    BuildingConfig(
+        display_name="Dental Office",
+        base_cost_per_sf=340,
+        cost_range=(360, 440),
+        equipment_cost_per_sf=110,
+        typical_floors=1,
+        ti_allowance_per_sf=35,
+        trades=TradeBreakdown(
+            structural=0.18,
+            mechanical=0.24,
+            electrical=0.20,  # Heavy imaging and chair loads
+            plumbing=0.18,  # Wet columns, vac, suction, med gas
+            finishes=0.20,
+        ),
+        soft_costs=SoftCosts(
+            design_fees=0.07,
+            permits=0.02,
+            legal=0.015,
+            financing=0.02,
+            contingency=0.07,
+            testing=0.005,
+            construction_management=0.02,
+            startup=0.01,
+        ),
+        soft_costs_pct_of_hard=0.22,
+        contingency_pct_of_hard=0.07,
+        ownership_types={
+            OwnershipType.FOR_PROFIT: FinancingTerms(
+                debt_ratio=0.70,
+                debt_rate=0.065,
+                equity_ratio=0.30,
+                target_dscr=1.45,
+                target_roi=0.12,
+            )
+        },
+        nlp=NLPConfig(
+            keywords=[
+                "dental office",
+                "dentist",
+                "dental practice",
+                "dental clinic",
+                "orthodontist",
+                "oral surgery",
+                "dental",
+            ],
+            priority=6,
+            incompatible_classes=[],
+        ),
+        regional_multipliers={
+            "Nashville": 1.03,
+            "Franklin": 1.03,
+            "Manchester": 0.95,
+            "Memphis": 0.93,
+            "New York": 1.28,
+            "San Francisco": 1.32,
+            "Chicago": 1.10,
+            "Miami": 1.05,
+        },
+        special_features={
+            "operatory": 15,  # Per dental chair
+            "sterilization": 10,
+            "x_ray": 12,
+            "lab": 15,
+            "hc_dental_pano_ceph": 45,
+            "hc_dental_sedation_suite": 60,
+            "hc_dental_sterilization_upgrade": 25,
+            "hc_dental_ortho_bay_expansion": 35,
+        },
+        financial_metrics={
+            "primary_unit": "operatories",
+            "units_per_sf": 1.0 / 350.0,
+            "revenue_per_unit_annual": 550000,
+            "display_name": "Per Operatory Performance",
+        },
+        base_revenue_per_sf_annual=430,
+        occupancy_rate_base=0.96,
+        occupancy_rate_premium=0.98,
+        operating_margin_base=0.62,
+        operating_margin_premium=0.68,
+        units_per_sf=1.0 / 350.0,
+        yield_on_cost_hurdle=0.10,
+        dscr_target=1.45,
+        basis_risk_tolerance_pct=0.10,
+        labor_cost_ratio=0.24,
+        supply_cost_ratio=0.09,
+        management_fee_ratio=0.06,
+        insurance_cost_ratio=0.02,
+        utility_cost_ratio=0.03,
+        maintenance_cost_ratio=0.04,
+        equipment_lease_ratio=0.05,
+    ),
+)
