@@ -248,6 +248,10 @@ from app.v2.config.subtypes.specialty import (
     laboratory as specialty_laboratory,
     self_storage as specialty_self_storage,
 )
+from app.v2.config.subtypes.hospitality import (
+    full_service_hotel as hospitality_full_service_hotel,
+    limited_service_hotel as hospitality_limited_service_hotel,
+)
 
 # ============================================================================
 # MASTER CONFIGURATION
@@ -1101,203 +1105,12 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
     # HOSPITALITY
     # ------------------------------------------------------------------------
     BuildingType.HOSPITALITY: {
-        'full_service_hotel': BuildingConfig(
-            display_name='Full Service Hotel',
-            base_cost_per_sf=325,
-            cost_range=(275, 375),
-            equipment_cost_per_sf=45,  # FF&E
-            typical_floors=8,
-            
-            trades=TradeBreakdown(
-                structural=0.24,
-                mechanical=0.26,
-                electrical=0.14,
-                plumbing=0.16,
-                finishes=0.20
-            ),
-            
-            soft_costs=SoftCosts(
-                design_fees=0.07,
-                permits=0.025,
-                legal=0.02,
-                financing=0.035,
-                contingency=0.09,
-                testing=0.01,
-                construction_management=0.035,
-                startup=0.02
-            ),
-            
-            ownership_types={
-                OwnershipType.FOR_PROFIT: FinancingTerms(
-                    debt_ratio=0.65,
-                    debt_rate=0.065,
-                    equity_ratio=0.35,
-                    target_dscr=1.30,
-                    target_roi=0.11,
-                )
-            },
-            
-            nlp=NLPConfig(
-                keywords=['hotel', 'full service hotel', 'convention hotel',
-                         'resort hotel', 'luxury hotel'],
-                priority=19,
-                incompatible_classes=[ProjectClass.TENANT_IMPROVEMENT]
-            ),
-            
-            regional_multipliers={
-                'Nashville': 1.03,
-                'Franklin': 1.03,
-                'Manchester': 0.95,
-                'Memphis': 0.93,
-                'New York': 1.45,
-                'San Francisco': 1.50,
-                'Chicago': 1.25,
-                'Miami': 1.20
-            },
-            
-            special_features={
-                'ballroom': 50,
-                'restaurant': 75,
-                'spa': 60,
-                'conference_center': 45,
-                'rooftop_bar': 55
-            },
-
-            # Revenue metrics
-            base_revenue_per_sf_annual=80,
-            base_revenue_per_room_annual=120000,
-            rooms_per_sf=0.002,
-            occupancy_rate_base=0.75,
-            occupancy_rate_premium=0.82,
-            operating_margin_base=0.30,
-            operating_margin_premium=0.38,
-            
-            # Standard expense ratios for operational efficiency calculations
-            labor_cost_ratio=0.37,           # 37% - 12% rooms ops + 25% F&B ops = total labor
-            food_cost_ratio=0.10,            # 10% - Food purchases for restaurants/catering
-            management_fee_ratio=0.03,       # 3% - Hotel management company
-            utility_cost_ratio=0.06,         # 6% - 24/7 operations, pools, kitchens
-            maintenance_cost_ratio=0.04,     # 4% - Constant wear from guests
-            insurance_cost_ratio=0.02,       # 2% - Property and liability
-            property_tax_ratio=0.10,         # 10% - Valuable real estate
-            marketing_ratio=0.08,            # 8% - Sales & marketing (higher than other types)
-            reserves_ratio=0.04,             # 4% - FF&E replacement
-            franchise_fee_ratio=0.06         # 6% - Franchise fees, misc expenses
-        ),
-        
-        # Adjusted select-service hotel profile for realistic underwriting.
-        # Target: NOI margin 33–36% with yield-on-cost 9–10% for downtown Nashville.
-        'limited_service_hotel': BuildingConfig(
-            display_name='Select Service Hotel',
-            base_cost_per_sf=205,
-            cost_range=(190, 230),
-            equipment_cost_per_sf=28,
-            typical_floors=5,
-            
-            trades=TradeBreakdown(
-                structural=0.26,
-                mechanical=0.24,
-                electrical=0.13,
-                plumbing=0.17,
-                finishes=0.20
-            ),
-            
-            soft_costs=SoftCosts(
-                design_fees=0.05,
-                permits=0.02,
-                legal=0.015,
-                financing=0.03,
-                contingency=0.07,
-                testing=0.008,
-                construction_management=0.025,
-                startup=0.015
-            ),
-            
-            ownership_types={
-                OwnershipType.FOR_PROFIT: FinancingTerms(
-                    debt_ratio=0.70,
-                    debt_rate=0.062,
-                    equity_ratio=0.30,
-                    target_dscr=1.25,
-                    target_roi=0.12,
-                )
-            },
-            
-            nlp=NLPConfig(
-                keywords=['limited service', 'select service', 'express hotel',
-                         'budget hotel', 'economy hotel'],
-                priority=20,
-                incompatible_classes=[ProjectClass.TENANT_IMPROVEMENT]
-            ),
-            
-            regional_multipliers={
-                'Nashville': 1.03,
-                'Franklin': 1.03,
-                'Manchester': 0.93,
-                'Memphis': 0.91,
-                'New York': 1.40,
-                'San Francisco': 1.45,
-                'Chicago': 1.20,
-                'Miami': 1.15
-            },
-            
-            special_features={
-                'breakfast_area': 20,
-                'fitness_center': 15,
-                'business_center': 10,
-                'pool': 25
-            },
-
-            # Revenue metrics (rooms-driven)
-            base_revenue_per_sf_annual=52,
-            base_revenue_per_room_annual=50000,
-            rooms_per_sf=1.0 / 600.0,
-            occupancy_rate_base=0.72,
-            occupancy_rate_premium=0.80,
-            operating_margin_base=0.37,
-            operating_margin_premium=0.42,
-            base_adr_by_market={
-                'primary': 195.0,
-                'secondary': 180.0,
-                'tertiary': 165.0,
-            },
-            base_occupancy_by_market={
-                'primary': 0.72,
-                'secondary': 0.68,
-                'tertiary': 0.64,
-            },
-            expense_percentages={
-                'staffing_pct': 0.30,
-                'utilities_ops_pct': 0.14,
-                'sales_marketing_gna_pct': 0.09,
-                'management_fee_pct': 0.03,
-                'franchise_fee_pct': 0.07,
-                'ffe_reserve_pct': 0.04,
-            },
-            development_cost_per_sf_by_finish={
-                'standard': 190.0,
-                'premium': 220.0,
-            },
-            cap_rate_defaults={
-                'low': 0.070,
-                'base': 0.075,
-                'high': 0.085,
-            },
-            yield_on_cost_hurdle=0.095,
-            dscr_target=1.38,
-            
-            # Standard expense ratios for operational efficiency calculations
-            labor_cost_ratio=0.24,           # Staffing + departmental labor
-            food_cost_ratio=0.03,            # Continental breakfast supplies
-            management_fee_ratio=0.03,       # Operator fee
-            utility_cost_ratio=0.12,         # Utilities + ops
-            maintenance_cost_ratio=0.05,     # PPE / ongoing capex
-            insurance_cost_ratio=0.02,       # Property & liability
-            property_tax_ratio=0.10,         # Typical metro rate
-            marketing_ratio=0.08,            # OTA commissions, sales & marketing
-            reserves_ratio=0.05,             # FF&E reserves
-            franchise_fee_ratio=0.05         # Franchise & system fees
+        subtype_key: config
+        for _building_type, subtype_key, config in (
+            hospitality_full_service_hotel.CONFIG,
+            hospitality_limited_service_hotel.CONFIG,
         )
+        if _building_type == BuildingType.HOSPITALITY
     },
     
     # ------------------------------------------------------------------------
