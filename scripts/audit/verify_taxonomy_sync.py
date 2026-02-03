@@ -44,6 +44,31 @@ def main() -> int:
 
     expected_data, expected_type_count, expected_subtype_count = build_taxonomy_from_master_config()
 
+    required_metadata = {
+        "generated_from": expected_data.get("generated_from"),
+        "generated_at": None,
+        "type_count": expected_type_count,
+        "subtype_count": expected_subtype_count,
+        "canonical_keys_only": True,
+        "schema_version": 1,
+    }
+
+    for label, data in (("shared", shared_data), ("backend", backend_data)):
+        for field, expected_value in required_metadata.items():
+            if field not in data:
+                print(f"ERROR: {label} taxonomy missing metadata field '{field}'")
+                return 1
+            if expected_value is not None and data.get(field) != expected_value:
+                print(f"ERROR: {label} taxonomy metadata mismatch for '{field}'")
+                print(f"  Expected: {expected_value}")
+                print(f"  Found: {data.get(field)}")
+                return 1
+
+        generated_at = data.get("generated_at")
+        if not isinstance(generated_at, str) or not generated_at:
+            print(f"ERROR: {label} taxonomy generated_at must be a non-empty string")
+            return 1
+
     shared_types, shared_subtypes = _extract_keys(shared_data)
     expected_types, expected_subtypes = _extract_keys(expected_data)
 

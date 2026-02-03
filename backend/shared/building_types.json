@@ -848,9 +848,11 @@
       }
     }
   },
+  "canonical_keys_only": true,
   "description": "Single source of truth for all building types in SpecSharp",
-  "generated_at": "2026-02-03T14:57:59",
+  "generated_at": "2026-02-03T15:07:36",
   "generated_from": "backend/app/v2/config/master_config.py",
+  "schema_version": 1,
   "subtype_count": 58,
   "type_count": 13,
   "version": "1.0.0"

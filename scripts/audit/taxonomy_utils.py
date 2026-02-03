@@ -17,6 +17,10 @@ def _ensure_backend_on_path() -> Path:
     return root
 
 
+def ensure_backend_on_path() -> Path:
+    return _ensure_backend_on_path()
+
+
 def _title_from_key(key: str) -> str:
     return " ".join(part.capitalize() for part in key.split("_"))
 
@@ -81,6 +85,8 @@ def build_taxonomy_from_master_config() -> Tuple[Dict[str, Any], int, int]:
         "generated_at": datetime.now().replace(microsecond=0).isoformat(),
         "type_count": type_count,
         "subtype_count": subtype_count,
+        "canonical_keys_only": True,
+        "schema_version": 1,
         "version": "1.0.0",
         "description": "Single source of truth for all building types in SpecSharp",
         "building_types": building_types,
