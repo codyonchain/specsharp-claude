@@ -16,7 +16,7 @@ restaurant assumptions untouched.
 import re
 from collections import defaultdict
 from enum import Enum
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Any, Callable
 from app.config.regional_multipliers import resolve_location_context
 
@@ -204,6 +204,14 @@ class BuildingConfig:
     
     # Financial metrics configuration
     financial_metrics: Optional[Dict[str, Any]] = None
+
+    # Config-driven behavior selectors (safe defaults)
+    scope_profile: Optional[str] = None
+    scope_defaults: Dict[str, Any] = field(default_factory=dict)
+    cost_clamp: Dict[str, Any] = field(default_factory=dict)
+    finish_level_multipliers: Dict[str, Any] = field(default_factory=dict)
+    facility_metrics_profile: Optional[str] = None
+    exclude_from_facility_opex: List[str] = field(default_factory=list)
 
 # ============================================================================
 # MASTER CONFIGURATION
