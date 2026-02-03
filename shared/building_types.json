@@ -1,376 +1,857 @@
 {
-  "version": "1.0.0",
-  "description": "Single source of truth for all building types in SpecSharp",
   "building_types": {
-    "multifamily": {
-      "display_name": "Multifamily",
-      "aliases": ["residential", "multi_family", "multi_family_residential", "apartments", "apartment"],
+    "civic": {
+      "aliases": [
+        "government",
+        "municipal",
+        "public"
+      ],
+      "display_name": "Civic",
       "subtypes": {
-        "luxury_apartments": {
-          "display_name": "Luxury Apartments",
-          "keywords": ["luxury", "high-end", "class a", "premium", "upscale"],
-          "base_cost_per_sf": 425
-        },
-        "market_rate_apartments": {
-          "display_name": "Market Rate Apartments",
-          "keywords": ["apartments", "standard", "market rate"],
-          "base_cost_per_sf": 375
-        },
-        "affordable_housing": {
-          "display_name": "Affordable Housing",
-          "keywords": ["affordable", "workforce", "low-income", "subsidized"],
-          "base_cost_per_sf": 325
-        },
-        "student_housing": {
-          "display_name": "Student Housing",
-          "keywords": ["student", "dormitory", "dorm", "campus housing"],
-          "base_cost_per_sf": 350
-        },
-        "senior_living": {
-          "display_name": "Senior Living",
-          "keywords": ["senior", "retirement", "assisted living", "elderly", "55+"],
-          "base_cost_per_sf": 400
-        }
-      }
-    },
-    "healthcare": {
-      "display_name": "Healthcare",
-      "aliases": ["medical", "health"],
-      "subtypes": {
-        "hospital": {
-          "display_name": "Hospital",
-          "keywords": ["hospital", "medical center", "emergency", "trauma center"],
-          "base_cost_per_sf": 1150
-        },
-        "medical_office": {
-          "display_name": "Medical Office Building",
+        "community_center": {
+          "base_cost_per_sf": 245,
+          "display_name": "Community Center",
           "keywords": [
-            "medical office building",
-            "mob",
-            "multi-tenant medical office",
-            "multi tenant medical office",
-            "medical office tower",
-            "physician office building",
-            "physician office suites",
-            "medical office suites",
-            "doctor office building",
-            "doctors office building"
-          ],
-          "base_cost_per_sf": 450
+            "activity center",
+            "civic center",
+            "community center",
+            "cultural center",
+            "rec center",
+            "senior center",
+            "youth center"
+          ]
         },
-        "urgent_care": {
-          "display_name": "Urgent Care",
-          "keywords": ["urgent care", "walk-in", "immediate care"],
-          "base_cost_per_sf": 475
-        },
-        "surgical_center": {
-          "display_name": "Surgical Center",
-          "keywords": ["surgical", "surgery center", "ASC", "ambulatory surgery"],
-          "base_cost_per_sf": 750
-        },
-        "outpatient_clinic": {
-          "display_name": "Specialty Clinic",
+        "courthouse": {
+          "base_cost_per_sf": 325,
+          "display_name": "Courthouse",
           "keywords": [
-            "outpatient clinic",
-            "outpatient primary care clinic",
-            "primary care clinic",
-            "primary care",
-            "family medicine clinic",
-            "family practice clinic",
-            "internal medicine clinic",
-            "community health clinic",
-            "community health center",
-            "health clinic",
-            "ambulatory clinic",
-            "ambulatory care clinic",
-            "multispecialty clinic",
-            "multi-specialty clinic",
-            "group practice clinic",
-            "exam room",
-            "exam rooms"
-          ],
-          "base_cost_per_sf": 550
+            "court building",
+            "court house",
+            "courthouse",
+            "district court",
+            "federal court",
+            "judicial center",
+            "justice center"
+          ]
+        },
+        "government_building": {
+          "base_cost_per_sf": 265,
+          "display_name": "Government Building",
+          "keywords": [
+            "administration",
+            "capitol",
+            "city hall",
+            "courthouse",
+            "federal building",
+            "government center",
+            "municipal building",
+            "state building"
+          ]
+        },
+        "library": {
+          "base_cost_per_sf": 275,
+          "display_name": "Public Library",
+          "keywords": [
+            "branch library",
+            "learning center",
+            "library",
+            "main library",
+            "media center",
+            "public library"
+          ]
+        },
+        "public_safety": {
+          "base_cost_per_sf": 285,
+          "display_name": "Public Safety Facility",
+          "keywords": [
+            "911 center",
+            "EOC",
+            "dispatch center",
+            "emergency services",
+            "fire station",
+            "police station",
+            "public safety",
+            "sheriff"
+          ]
         }
       }
     },
     "educational": {
+      "aliases": [
+        "academic",
+        "education",
+        "school"
+      ],
       "display_name": "Educational",
-      "aliases": ["education", "school", "academic"],
       "subtypes": {
-        "elementary_school": {
-          "display_name": "Elementary School",
-          "keywords": ["elementary", "primary", "grade school", "K-5", "K-6"],
-          "base_cost_per_sf": 285
+        "community_college": {
+          "base_cost_per_sf": 295,
+          "display_name": "Community College",
+          "keywords": [
+            "community college",
+            "junior college",
+            "technical college",
+            "trade school",
+            "vocational school"
+          ]
         },
-        "middle_school": {
-          "display_name": "Middle School",
-          "keywords": ["middle school", "junior high", "intermediate", "6-8"],
-          "base_cost_per_sf": 295
+        "elementary_school": {
+          "base_cost_per_sf": 285,
+          "display_name": "Elementary School",
+          "keywords": [
+            "K-5",
+            "K-6",
+            "elementary",
+            "elementary school",
+            "grade school",
+            "primary school"
+          ]
         },
         "high_school": {
+          "base_cost_per_sf": 315,
           "display_name": "High School",
-          "keywords": ["high school", "secondary", "9-12", "preparatory"],
-          "base_cost_per_sf": 310
+          "keywords": [
+            "grades 9-12",
+            "high school",
+            "preparatory school",
+            "secondary school",
+            "senior high"
+          ]
+        },
+        "middle_school": {
+          "base_cost_per_sf": 295,
+          "display_name": "Middle School",
+          "keywords": [
+            "grades 6-8",
+            "grades 7-9",
+            "intermediate school",
+            "junior high",
+            "middle school"
+          ]
         },
         "university": {
-          "display_name": "University/College",
-          "keywords": ["university", "college", "higher education", "campus"],
-          "base_cost_per_sf": 425
-        },
-        "vocational": {
-          "display_name": "Vocational School",
-          "keywords": ["vocational", "technical", "trade school", "career"],
-          "base_cost_per_sf": 275
+          "base_cost_per_sf": 375,
+          "display_name": "University Building",
+          "keywords": [
+            "academic building",
+            "campus",
+            "classroom building",
+            "college",
+            "higher education",
+            "lecture hall",
+            "university"
+          ]
         }
       }
     },
-    "office": {
-      "display_name": "Office",
-      "aliases": ["commercial", "business"],
+    "healthcare": {
+      "aliases": [
+        "health",
+        "medical"
+      ],
+      "display_name": "Healthcare",
       "subtypes": {
-        "class_a": {
-          "display_name": "Class A Office",
-          "keywords": ["class a", "premium office", "grade a", "trophy"],
-          "base_cost_per_sf": 450
+        "dental_office": {
+          "base_cost_per_sf": 340,
+          "display_name": "Dental Office",
+          "keywords": [
+            "dental",
+            "dental clinic",
+            "dental office",
+            "dental practice",
+            "dentist",
+            "oral surgery",
+            "orthodontist"
+          ]
         },
-        "class_b": {
-          "display_name": "Class B Office",
-          "keywords": ["class b", "standard office", "grade b"],
-          "base_cost_per_sf": 350
+        "hospital": {
+          "base_cost_per_sf": 850,
+          "display_name": "Hospital (Full Service)",
+          "keywords": [
+            "ER",
+            "ICU",
+            "OR",
+            "acute care",
+            "beds",
+            "emergency",
+            "emergency department",
+            "hospital",
+            "inpatient",
+            "medical center",
+            "operating room",
+            "surgical",
+            "trauma"
+          ]
         },
-        "class_c": {
-          "display_name": "Class C Office",
-          "keywords": ["class c", "economy office", "grade c"],
-          "base_cost_per_sf": 275
+        "imaging_center": {
+          "base_cost_per_sf": 420,
+          "display_name": "Diagnostic Imaging Center",
+          "keywords": [
+            "CT scan",
+            "MRI",
+            "diagnostic center",
+            "diagnostic imaging",
+            "imaging center",
+            "medical imaging",
+            "radiology",
+            "x-ray"
+          ]
         },
-        "corporate_campus": {
-          "display_name": "Corporate Campus",
-          "keywords": ["campus", "headquarters", "corporate"],
-          "base_cost_per_sf": 500
+        "medical_center": {
+          "base_cost_per_sf": 750,
+          "display_name": "Medical Center",
+          "keywords": [
+            "comprehensive care",
+            "health center",
+            "healthcare center",
+            "medical center",
+            "medical complex"
+          ]
         },
-        "coworking": {
-          "display_name": "Coworking Space",
-          "keywords": ["coworking", "shared office", "flexible workspace"],
-          "base_cost_per_sf": 385
-        }
-      }
-    },
-    "industrial": {
-      "display_name": "Industrial",
-      "aliases": ["warehouse", "manufacturing", "logistics"],
-      "subtypes": {
-        "warehouse": {
-          "display_name": "Warehouse",
-          "keywords": ["warehouse", "storage", "fulfillment"],
-          "base_cost_per_sf": 150
+        "medical_office": {
+          "base_cost_per_sf": 270,
+          "display_name": "Medical Office Building",
+          "keywords": [
+            "doctor office building",
+            "medical office building",
+            "medical office complex",
+            "medical office landlord",
+            "medical office suites",
+            "medical office tower",
+            "mob",
+            "physician office"
+          ]
         },
-        "distribution_center": {
-          "display_name": "Distribution Center",
-          "keywords": ["distribution center", "fulfillment center", "logistics center", "cross dock", "cross-dock", "sorting facility", "hub", "dc"],
-          "base_cost_per_sf": 150
+        "nursing_home": {
+          "base_cost_per_sf": 275,
+          "display_name": "Senior Care Facility",
+          "keywords": [
+            "assisted living",
+            "elder care",
+            "long term care",
+            "nursing home",
+            "senior care",
+            "senior living",
+            "skilled nursing"
+          ]
         },
-        "manufacturing": {
-          "display_name": "Manufacturing",
-          "keywords": ["manufacturing", "factory", "plant", "production"],
-          "base_cost_per_sf": 225
+        "outpatient_clinic": {
+          "base_cost_per_sf": 380,
+          "display_name": "Outpatient Clinic",
+          "keywords": [
+            "ambulatory care",
+            "exam room",
+            "exam rooms",
+            "family medicine clinic",
+            "family practice clinic",
+            "health clinic",
+            "internal medicine clinic",
+            "outpatient clinic",
+            "outpatient facility",
+            "primary care",
+            "primary care clinic"
+          ]
         },
-        "flex_space": {
-          "display_name": "Flex Space",
-          "keywords": ["flex", "light industrial", "R&D", "tech"],
-          "base_cost_per_sf": 185
+        "rehabilitation": {
+          "base_cost_per_sf": 325,
+          "display_name": "Rehabilitation Center",
+          "keywords": [
+            "occupational therapy",
+            "physical therapy",
+            "rehab center",
+            "rehabilitation",
+            "speech therapy",
+            "therapy center"
+          ]
         },
-        "cold_storage": {
-          "display_name": "Cold Storage",
-          "keywords": ["cold storage", "refrigerated", "freezer"],
-          "base_cost_per_sf": 175
+        "surgical_center": {
+          "base_cost_per_sf": 480,
+          "display_name": "Ambulatory Surgical Center",
+          "keywords": [
+            "ASC",
+            "ambulatory surgery",
+            "day surgery",
+            "outpatient surgery",
+            "same day surgery",
+            "surgery center",
+            "surgical center"
+          ]
         },
-        "data_center": {
-          "display_name": "Data Center",
-          "keywords": ["data center", "server farm", "colocation"],
-          "base_cost_per_sf": 850
-        }
-      }
-    },
-    "retail": {
-      "display_name": "Retail",
-      "aliases": ["shopping", "store", "shop"],
-      "subtypes": {
-        "shopping_center": {
-          "display_name": "Shopping Center",
-          "keywords": ["shopping center", "mall", "regional mall"],
-          "base_cost_per_sf": 350
-        },
-        "strip_mall": {
-          "display_name": "Strip Mall",
-          "keywords": ["strip mall", "strip center", "neighborhood center"],
-          "base_cost_per_sf": 225
-        },
-        "big_box": {
-          "display_name": "Big Box Retail",
-          "keywords": ["big box", "anchor", "department store"],
-          "base_cost_per_sf": 175
-        },
-        "standalone": {
-          "display_name": "Standalone Retail",
-          "keywords": ["standalone", "single tenant", "pad site"],
-          "base_cost_per_sf": 275
-        },
-        "grocery": {
-          "display_name": "Grocery Store",
-          "keywords": ["grocery", "supermarket", "food market"],
-          "base_cost_per_sf": 225
+        "urgent_care": {
+          "base_cost_per_sf": 350,
+          "display_name": "Urgent Care Center",
+          "keywords": [
+            "express care",
+            "immediate care",
+            "quick care",
+            "urgent care",
+            "walk in",
+            "walk-in clinic"
+          ]
         }
       }
     },
     "hospitality": {
+      "aliases": [
+        "accommodation",
+        "hotel",
+        "lodging"
+      ],
       "display_name": "Hospitality",
-      "aliases": ["hotel", "lodging", "accommodation"],
       "subtypes": {
-        "luxury_hotel": {
-          "display_name": "Luxury Hotel",
-          "keywords": ["luxury hotel", "5 star", "resort", "boutique"],
-          "base_cost_per_sf": 650
-        },
         "full_service_hotel": {
+          "base_cost_per_sf": 325,
           "display_name": "Full Service Hotel",
-          "keywords": ["full service", "full-service", "business hotel", "conference", "airport hotel"],
-          "base_cost_per_sf": 425
+          "keywords": [
+            "convention hotel",
+            "full service hotel",
+            "hotel",
+            "luxury hotel",
+            "resort hotel"
+          ]
         },
         "limited_service_hotel": {
-          "display_name": "Limited Service Hotel",
-          "keywords": ["limited service", "select service", "economy", "budget", "express"],
-          "base_cost_per_sf": 325
-        },
-        "extended_stay": {
-          "display_name": "Extended Stay",
-          "keywords": ["extended stay", "residence inn", "long term"],
-          "base_cost_per_sf": 375
-        },
-        "motel": {
-          "display_name": "Motel",
-          "keywords": ["motel", "motor lodge", "roadside"],
-          "base_cost_per_sf": 225
+          "base_cost_per_sf": 205,
+          "display_name": "Select Service Hotel",
+          "keywords": [
+            "budget hotel",
+            "economy hotel",
+            "express hotel",
+            "limited service",
+            "select service"
+          ]
         }
       }
     },
-    "restaurant": {
-      "display_name": "Restaurant",
-      "aliases": ["dining", "food service", "eatery"],
+    "industrial": {
+      "aliases": [
+        "logistics",
+        "manufacturing",
+        "warehouse"
+      ],
+      "display_name": "Industrial",
       "subtypes": {
-        "quick_service": {
-          "display_name": "Quick Service",
-          "keywords": ["quick service", "QSR", "fast food", "fast casual"],
-          "base_cost_per_sf": 300
+        "cold_storage": {
+          "base_cost_per_sf": 175,
+          "display_name": "Cold Storage Facility",
+          "keywords": [
+            "cold chain",
+            "cold storage",
+            "cooler",
+            "freezer",
+            "frozen storage",
+            "refrigerated"
+          ]
         },
-        "full_service": {
-          "display_name": "Full Service Restaurant",
-          "keywords": ["full service", "full-service", "sit-down", "table service"],
-          "base_cost_per_sf": 425
+        "distribution_center": {
+          "base_cost_per_sf": 115,
+          "display_name": "Distribution Center",
+          "keywords": [
+            "DC",
+            "cross-dock",
+            "distribution",
+            "distribution center",
+            "hub",
+            "sorting facility"
+          ]
         },
-        "casual_dining": {
-          "display_name": "Casual Dining",
-          "keywords": ["casual dining", "family restaurant"],
-          "base_cost_per_sf": 375
+        "flex_space": {
+          "base_cost_per_sf": 115,
+          "display_name": "Flex Industrial",
+          "keywords": [
+            "flex",
+            "flex industrial",
+            "flex space",
+            "light industrial",
+            "r&d space",
+            "showroom",
+            "tech space",
+            "warehouse office"
+          ]
         },
-        "fine_dining": {
-          "display_name": "Fine Dining",
-          "keywords": ["fine dining", "upscale", "white tablecloth", "gourmet"],
-          "base_cost_per_sf": 550
+        "manufacturing": {
+          "base_cost_per_sf": 120,
+          "display_name": "Manufacturing Facility",
+          "keywords": [
+            "assembly",
+            "fabrication",
+            "factory",
+            "manufacturing",
+            "plant",
+            "processing",
+            "production"
+          ]
         },
-        "bar_tavern": {
-          "display_name": "Bar/Tavern",
-          "keywords": ["bar", "tavern", "pub", "brewpub", "sports bar"],
-          "base_cost_per_sf": 425
-        },
-        "cafe": {
-          "display_name": "Cafe/Coffee Shop",
-          "keywords": ["cafe", "coffee shop", "coffee house", "bakery cafe"],
-          "base_cost_per_sf": 175
-        },
-        "cafeteria": {
-          "display_name": "Cafeteria",
-          "keywords": ["cafeteria", "food court", "dining hall"],
-          "base_cost_per_sf": 250
+        "warehouse": {
+          "base_cost_per_sf": 105,
+          "display_name": "Class A Distribution Warehouse",
+          "keywords": [
+            "bulk storage",
+            "distribution",
+            "fulfillment center",
+            "logistics",
+            "storage",
+            "warehouse"
+          ]
         }
       }
     },
-    "civic": {
-      "display_name": "Civic",
-      "aliases": ["government", "municipal", "public"],
+    "mixed_use": {
+      "aliases": [],
+      "display_name": "Mixed Use",
       "subtypes": {
-        "courthouse": {
-          "display_name": "Courthouse",
-          "keywords": ["courthouse", "justice center", "court"],
-          "base_cost_per_sf": 525
+        "hotel_retail": {
+          "base_cost_per_sf": 295,
+          "display_name": "Hotel with Retail",
+          "keywords": [
+            "hospitality mixed use",
+            "hotel complex",
+            "hotel retail",
+            "hotel with shops",
+            "resort retail"
+          ]
         },
-        "library": {
-          "display_name": "Library",
-          "keywords": ["library", "media center"],
-          "base_cost_per_sf": 375
+        "office_residential": {
+          "base_cost_per_sf": 245,
+          "display_name": "Office with Residential",
+          "keywords": [
+            "commercial residential",
+            "mixed use tower",
+            "office residential",
+            "office with housing",
+            "work live"
+          ]
         },
-        "fire_station": {
-          "display_name": "Fire Station",
-          "keywords": ["fire station", "firehouse"],
-          "base_cost_per_sf": 425
+        "retail_residential": {
+          "base_cost_per_sf": 225,
+          "display_name": "Retail with Residential Above",
+          "keywords": [
+            "ground floor retail",
+            "live work",
+            "mixed use",
+            "retail residential",
+            "shops with apartments"
+          ]
         },
-        "police_station": {
-          "display_name": "Police Station",
-          "keywords": ["police station", "law enforcement"],
-          "base_cost_per_sf": 450
+        "transit_oriented": {
+          "base_cost_per_sf": 275,
+          "display_name": "Transit-Oriented Development",
+          "keywords": [
+            "TOD",
+            "metro development",
+            "station area",
+            "transit development",
+            "transit oriented",
+            "transit village"
+          ]
         },
-        "community_center": {
-          "display_name": "Community Center",
-          "keywords": ["community center", "rec center", "public center"],
-          "base_cost_per_sf": 325
+        "urban_mixed": {
+          "base_cost_per_sf": 265,
+          "display_name": "Urban Mixed Use",
+          "keywords": [
+            "live work play",
+            "mixed use development",
+            "multi-use",
+            "urban mixed",
+            "vertical mixed"
+          ]
         }
       }
     },
-    "recreation": {
-      "display_name": "Recreation",
-      "aliases": ["sports", "fitness", "entertainment"],
+    "multifamily": {
+      "aliases": [
+        "apartment",
+        "apartments",
+        "multi_family",
+        "multi_family_residential",
+        "residential"
+      ],
+      "display_name": "Multifamily",
       "subtypes": {
-        "gym": {
-          "display_name": "Gym/Fitness Center",
-          "keywords": ["gym", "fitness", "health club", "workout"],
-          "base_cost_per_sf": 225
+        "affordable_housing": {
+          "base_cost_per_sf": 120,
+          "display_name": "Affordable Housing",
+          "keywords": [
+            "LIHTC",
+            "affordable housing",
+            "low income",
+            "section 8",
+            "subsidized housing",
+            "workforce housing"
+          ]
         },
-        "sports_complex": {
-          "display_name": "Sports Complex",
-          "keywords": ["sports complex", "arena", "stadium", "fieldhouse"],
-          "base_cost_per_sf": 425
+        "luxury_apartments": {
+          "base_cost_per_sf": 185,
+          "display_name": "Class A / Luxury Apartments",
+          "keywords": [
+            "class a",
+            "high-end apartment",
+            "luxury apartment",
+            "luxury multifamily",
+            "premium apartment",
+            "upscale apartment"
+          ]
         },
-        "theater": {
-          "display_name": "Theater",
-          "keywords": ["theater", "cinema", "movie", "performing arts"],
-          "base_cost_per_sf": 375
+        "market_rate_apartments": {
+          "base_cost_per_sf": 145,
+          "display_name": "Class B / Market Rate Apartments",
+          "keywords": [
+            "apartment",
+            "apartment complex",
+            "class b",
+            "market rate",
+            "multifamily",
+            "rental housing"
+          ]
+        }
+      }
+    },
+    "office": {
+      "aliases": [
+        "business",
+        "commercial"
+      ],
+      "display_name": "Office",
+      "subtypes": {
+        "class_a": {
+          "base_cost_per_sf": 475,
+          "display_name": "Class A Office",
+          "keywords": [
+            "class a office",
+            "corporate headquarters",
+            "high-rise office",
+            "premium office",
+            "tower"
+          ]
         },
-        "recreation_center": {
-          "display_name": "Recreation Center",
-          "keywords": ["recreation", "activity center", "youth center"],
-          "base_cost_per_sf": 285
+        "class_b": {
+          "base_cost_per_sf": 175,
+          "display_name": "Class B Office",
+          "keywords": [
+            "class b",
+            "commercial office",
+            "office",
+            "office building",
+            "professional building"
+          ]
         }
       }
     },
     "parking": {
+      "aliases": [
+        "garage",
+        "parking structure"
+      ],
       "display_name": "Parking",
-      "aliases": ["garage", "parking structure"],
       "subtypes": {
-        "surface_lot": {
-          "display_name": "Surface Parking Lot",
-          "keywords": ["surface", "lot", "asphalt"],
-          "base_cost_per_sf": 15
+        "automated_parking": {
+          "base_cost_per_sf": 185,
+          "display_name": "Automated Parking System",
+          "keywords": [
+            "automated parking",
+            "mechanical parking",
+            "puzzle parking",
+            "robotic parking",
+            "stack parking",
+            "tower parking"
+          ]
         },
         "parking_garage": {
+          "base_cost_per_sf": 65,
           "display_name": "Parking Garage",
-          "keywords": ["garage", "deck", "structure", "ramp"],
-          "base_cost_per_sf": 65
+          "keywords": [
+            "multi-level parking",
+            "parkade",
+            "parking deck",
+            "parking garage",
+            "parking ramp",
+            "parking structure"
+          ]
         },
-        "underground": {
+        "surface_parking": {
+          "base_cost_per_sf": 18,
+          "display_name": "Surface Parking Lot",
+          "keywords": [
+            "park and ride",
+            "parking",
+            "parking area",
+            "parking lot",
+            "surface lot",
+            "surface parking"
+          ]
+        },
+        "underground_parking": {
+          "base_cost_per_sf": 125,
           "display_name": "Underground Parking",
-          "keywords": ["underground", "subterranean", "below grade"],
-          "base_cost_per_sf": 125
+          "keywords": [
+            "basement parking",
+            "below grade parking",
+            "subterranean parking",
+            "underground garage",
+            "underground parking"
+          ]
+        }
+      }
+    },
+    "recreation": {
+      "aliases": [
+        "entertainment",
+        "fitness",
+        "sports"
+      ],
+      "display_name": "Recreation",
+      "subtypes": {
+        "aquatic_center": {
+          "base_cost_per_sf": 325,
+          "display_name": "Aquatic Center",
+          "keywords": [
+            "aquatic center",
+            "aquatics",
+            "natatorium",
+            "pool",
+            "swim center",
+            "swimming pool",
+            "water park"
+          ]
+        },
+        "fitness_center": {
+          "base_cost_per_sf": 185,
+          "display_name": "Fitness Center / Gym",
+          "keywords": [
+            "YMCA",
+            "athletic club",
+            "crossfit",
+            "fitness center",
+            "gym",
+            "health club",
+            "wellness center",
+            "workout"
+          ]
+        },
+        "recreation_center": {
+          "base_cost_per_sf": 215,
+          "display_name": "Recreation Center",
+          "keywords": [
+            "activity center",
+            "community recreation",
+            "leisure center",
+            "parks and rec",
+            "rec center",
+            "recreation center"
+          ]
+        },
+        "sports_complex": {
+          "base_cost_per_sf": 225,
+          "display_name": "Sports Complex",
+          "keywords": [
+            "athletic complex",
+            "field house",
+            "recreation complex",
+            "sports center",
+            "sports complex",
+            "sportsplex"
+          ]
+        },
+        "stadium": {
+          "base_cost_per_sf": 425,
+          "display_name": "Stadium / Arena",
+          "keywords": [
+            "arena",
+            "ballpark",
+            "baseball stadium",
+            "coliseum",
+            "football stadium",
+            "soccer stadium",
+            "sports venue",
+            "stadium"
+          ]
+        }
+      }
+    },
+    "restaurant": {
+      "aliases": [
+        "dining",
+        "eatery",
+        "food service"
+      ],
+      "display_name": "Restaurant",
+      "subtypes": {
+        "bar_tavern": {
+          "base_cost_per_sf": 350,
+          "display_name": "Bar/Tavern",
+          "keywords": [
+            "bar",
+            "brewpub",
+            "cocktail bar",
+            "lounge",
+            "nightclub",
+            "pub",
+            "sports bar",
+            "tavern"
+          ]
+        },
+        "cafe": {
+          "base_cost_per_sf": 300,
+          "display_name": "Cafe/Coffee Shop",
+          "keywords": [
+            "bakery cafe",
+            "cafe",
+            "coffee bar",
+            "coffee house",
+            "coffee shop",
+            "espresso bar",
+            "tea shop"
+          ]
+        },
+        "fine_dining": {
+          "base_cost_per_sf": 550,
+          "display_name": "Fine Dining Restaurant",
+          "keywords": [
+            "fine dining",
+            "gourmet",
+            "haute cuisine",
+            "michelin",
+            "tasting menu",
+            "upscale",
+            "white tablecloth"
+          ]
+        },
+        "full_service": {
+          "base_cost_per_sf": 385,
+          "display_name": "Full Service Restaurant",
+          "keywords": [
+            "casual dining",
+            "dining",
+            "family restaurant",
+            "full service",
+            "restaurant",
+            "sit-down"
+          ]
+        },
+        "quick_service": {
+          "base_cost_per_sf": 360,
+          "display_name": "Quick Service Restaurant",
+          "keywords": [
+            "QSR",
+            "drive through",
+            "fast casual",
+            "fast food",
+            "quick service",
+            "takeout"
+          ]
+        }
+      }
+    },
+    "retail": {
+      "aliases": [
+        "shop",
+        "shopping",
+        "store"
+      ],
+      "display_name": "Retail",
+      "subtypes": {
+        "big_box": {
+          "base_cost_per_sf": 125,
+          "display_name": "Big Box Retail",
+          "keywords": [
+            "anchor tenant",
+            "big box",
+            "department store",
+            "superstore",
+            "warehouse retail"
+          ]
+        },
+        "shopping_center": {
+          "base_cost_per_sf": 150,
+          "display_name": "Shopping Center",
+          "keywords": [
+            "plaza",
+            "retail center",
+            "shopping center",
+            "shopping plaza",
+            "strip center",
+            "strip mall"
+          ]
+        }
+      }
+    },
+    "specialty": {
+      "aliases": [],
+      "display_name": "Specialty",
+      "subtypes": {
+        "broadcast_facility": {
+          "base_cost_per_sf": 325,
+          "display_name": "Broadcast / Studio Facility",
+          "keywords": [
+            "broadcast",
+            "production facility",
+            "radio station",
+            "recording studio",
+            "soundstage",
+            "studio",
+            "television station"
+          ]
+        },
+        "car_dealership": {
+          "base_cost_per_sf": 185,
+          "display_name": "Car Dealership",
+          "keywords": [
+            "auto dealership",
+            "auto mall",
+            "car dealership",
+            "car showroom",
+            "dealership",
+            "vehicle showroom"
+          ]
+        },
+        "data_center": {
+          "base_cost_per_sf": 1200,
+          "display_name": "Data Center",
+          "keywords": [
+            "cloud facility",
+            "colo",
+            "colocation",
+            "computing center",
+            "data center",
+            "server farm",
+            "tier 3",
+            "tier 4"
+          ]
+        },
+        "laboratory": {
+          "base_cost_per_sf": 450,
+          "display_name": "Laboratory / Research Facility",
+          "keywords": [
+            "R&D",
+            "biotech",
+            "clean room",
+            "lab",
+            "laboratory",
+            "research center",
+            "research facility",
+            "testing facility"
+          ]
+        },
+        "self_storage": {
+          "base_cost_per_sf": 65,
+          "display_name": "Self Storage Facility",
+          "keywords": [
+            "RV storage",
+            "boat storage",
+            "mini storage",
+            "public storage",
+            "self storage",
+            "storage facility",
+            "storage units"
+          ]
         }
       }
     }
-  }
+  },
+  "description": "Single source of truth for all building types in SpecSharp",
+  "generated_at": "2026-02-03T14:57:59",
+  "generated_from": "backend/app/v2/config/master_config.py",
+  "subtype_count": 58,
+  "type_count": 13,
+  "version": "1.0.0"
 }
