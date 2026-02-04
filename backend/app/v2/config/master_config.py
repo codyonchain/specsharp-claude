@@ -288,6 +288,10 @@ from app.v2.config.subtypes.office import (
     class_a as office_class_a,
     class_b as office_class_b,
 )
+from app.v2.config.subtypes.retail import (
+    big_box as retail_big_box,
+    shopping_center as retail_shopping_center,
+)
 
 # ============================================================================
 # MASTER CONFIGURATION
@@ -539,146 +543,12 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
     # RETAIL
     # ------------------------------------------------------------------------
     BuildingType.RETAIL: {
-        'shopping_center': BuildingConfig(
-            display_name='Shopping Center',
-            base_cost_per_sf=150,
-            cost_range=(125, 175),
-            equipment_cost_per_sf=5,
-            typical_floors=1,
-            
-            trades=TradeBreakdown(
-                structural=0.30,
-                mechanical=0.20,
-                electrical=0.15,
-                plumbing=0.10,
-                finishes=0.25
-            ),
-            
-            soft_costs=SoftCosts(
-                design_fees=0.05,
-                permits=0.02,
-                legal=0.015,
-                financing=0.025,
-                contingency=0.07,
-                testing=0.005,
-                construction_management=0.025,
-                startup=0.01
-            ),
-            
-            ownership_types={
-                OwnershipType.FOR_PROFIT: FinancingTerms(
-                    debt_ratio=0.70,
-                    debt_rate=0.058,
-                    equity_ratio=0.30,
-                    target_dscr=1.25,
-                    target_roi=0.10,
-                )
-            },
-            
-            nlp=NLPConfig(
-                keywords=['shopping center', 'retail center', 'strip mall',
-                         'strip center', 'plaza', 'shopping plaza'],
-                priority=10,
-                incompatible_classes=[]
-            ),
-            
-            regional_multipliers={
-                'Nashville': 1.03,
-                'Franklin': 1.03,
-                'Manchester': 0.92,
-                'Memphis': 0.90,
-                'New York': 1.35,
-                'San Francisco': 1.40
-            },
-            
-            special_features={
-                'covered_walkway': 20,      # Covered storefronts
-                'loading_dock': 25,         # Shared loading area
-                'monument_signage': 15,     # Main sign structure
-                'outdoor_seating': 20,      # Common area seating
-                'drive_thru': 40,           # For end-cap tenants
-                'storage_units': 15,        # Back storage areas
-            },
-
-            # Revenue metrics
-            base_revenue_per_sf_annual=35,
-            base_sales_per_sf_annual=350,
-            occupancy_rate_base=0.92,
-            occupancy_rate_premium=0.95,
-            operating_margin_base=0.65,
-            operating_margin_premium=0.70
-        ),
-        
-        'big_box': BuildingConfig(
-            display_name='Big Box Retail',
-            base_cost_per_sf=125,
-            cost_range=(100, 150),
-            equipment_cost_per_sf=3,
-            typical_floors=1,
-            
-            trades=TradeBreakdown(
-                structural=0.35,
-                mechanical=0.18,
-                electrical=0.14,
-                plumbing=0.08,
-                finishes=0.25
-            ),
-            
-            soft_costs=SoftCosts(
-                design_fees=0.04,
-                permits=0.02,
-                legal=0.012,
-                financing=0.025,
-                contingency=0.06,
-                testing=0.005,
-                construction_management=0.02,
-                startup=0.008
-            ),
-            
-            ownership_types={
-                OwnershipType.FOR_PROFIT: FinancingTerms(
-                    debt_ratio=0.72,
-                    debt_rate=0.06,
-                    equity_ratio=0.28,
-                    target_dscr=1.20,
-                    target_roi=0.09,
-                )
-            },
-            
-            nlp=NLPConfig(
-                keywords=['big box', 'anchor tenant', 'department store',
-                         'superstore', 'warehouse retail'],
-                priority=11,
-                incompatible_classes=[]
-            ),
-            
-            regional_multipliers={
-                'Nashville': 1.03,
-                'Franklin': 1.03,
-                'Manchester': 0.90,
-                'Memphis': 0.88,
-                'New York': 1.30,
-                'San Francisco': 1.35
-            },
-            
-            special_features={
-                'loading_dock': 20,         # Multiple dock doors
-                'mezzanine': 25,            # Upper level storage
-                'auto_center': 45,          # Auto service bays
-                'garden_center': 30,        # Outdoor sales area
-                'warehouse_racking': 15,    # High-bay storage
-                'refrigerated_storage': 35, # Cold storage areas
-                'curbside_pickup': 20,      # Dedicated pickup area
-            },
-
-            # Revenue metrics
-            base_revenue_per_sf_annual=25,
-            base_sales_per_sf_annual=200,
-            occupancy_rate_base=0.95,
-            occupancy_rate_premium=0.98,
-            operating_margin_base=0.60,
-            operating_margin_premium=0.65
+        subtype_key: config
+        for _building_type, subtype_key, config in (
+            retail_shopping_center.CONFIG,
+            retail_big_box.CONFIG,
         )
+        if _building_type == BuildingType.RETAIL
     },
     
     # ------------------------------------------------------------------------
