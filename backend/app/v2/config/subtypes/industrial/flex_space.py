@@ -18,6 +18,7 @@ CONFIG = (
         # Should feel more finished than bulk warehouse, but not “Office”.
         base_cost_per_sf=115,
         cost_range=(100, 135),
+        scope_profile="industrial_flex",
         equipment_cost_per_sf=10,
         typical_floors=1,
         trades=TradeBreakdown(

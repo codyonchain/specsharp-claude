@@ -129,21 +129,21 @@ logger = logging.getLogger(__name__)
 # - id: industrial_scope_items_shell_subtypes
 #   location: UnifiedEngine._build_scope_items
 #   selector_type: subtype_list
-#   keys: building_type=INDUSTRIAL; subtype in warehouse/distribution/flex_space/cold_storage variants
+#   keys: building_type=INDUSTRIAL; scope_profile in industrial_shell/industrial_flex/industrial_cold_storage
 #   current_behavior: Enables industrial scope item generation only for shell subtypes.
 #   move_to_config: scope_profile
 #   parity_fixture_hint: industrial_scope_shell
 # - id: industrial_scope_flex_space_split
 #   location: UnifiedEngine._build_scope_items
 #   selector_type: conditional_branch
-#   keys: building_type=INDUSTRIAL; subtype=flex_space
+#   keys: building_type=INDUSTRIAL; scope_profile=industrial_flex
 #   current_behavior: Splits office vs warehouse areas and applies flex-specific finishes uplift/systems.
 #   move_to_config: scope_profile
 #   parity_fixture_hint: industrial_scope_flex
 # - id: industrial_scope_cold_storage_conceptual
 #   location: UnifiedEngine._build_scope_items
 #   selector_type: conditional_branch
-#   keys: building_type=INDUSTRIAL; subtype=cold_storage
+#   keys: building_type=INDUSTRIAL; scope_profile=industrial_cold_storage
 #   current_behavior: Uses conceptual cold-storage systems with blast freezer detection.
 #   move_to_config: scope_profile
 #   parity_fixture_hint: industrial_scope_cold_storage
@@ -1307,20 +1307,19 @@ class UnifiedEngine:
 
         subtype_key = (subtype or "").lower().strip()
 
-        industrial_shell_subtypes = {
-            "warehouse",
-            "distribution_warehouse",
-            "distribution_center",
-            "class_a_distribution_warehouse",
-            "class_a_distribution",
-            "flex_space",
-            "cold_storage",
-        }
+        scope_profile = None
+        if building_type == BuildingType.INDUSTRIAL:
+            scope_config = get_building_config(building_type, subtype_key)
+            if scope_config:
+                scope_profile = getattr(scope_config, "scope_profile", None)
 
-        if building_type == BuildingType.INDUSTRIAL and subtype_key in industrial_shell_subtypes:
+        if (
+            building_type == BuildingType.INDUSTRIAL
+            and scope_profile in ("industrial_shell", "industrial_flex", "industrial_cold_storage")
+        ):
             sf = float(square_footage)
-            is_flex = subtype_key == "flex_space"
-            is_cold_storage = subtype_key == "cold_storage"
+            is_flex = scope_profile == "industrial_flex"
+            is_cold_storage = scope_profile == "industrial_cold_storage"
 
             def _safe_unit_cost(total: float, qty: float) -> float:
                 if not qty:

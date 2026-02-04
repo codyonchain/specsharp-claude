@@ -17,6 +17,7 @@ CONFIG = (
         display_name="Cold Storage Facility",
         base_cost_per_sf=175,
         cost_range=(150, 200),
+        scope_profile="industrial_cold_storage",
         equipment_cost_per_sf=45,  # Refrigeration equipment
         typical_floors=1,
         trades=TradeBreakdown(

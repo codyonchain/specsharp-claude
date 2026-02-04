@@ -17,6 +17,7 @@ CONFIG = (
         # Core & shell cost for bulk distribution (tilt-up / precast) in 2025.
         base_cost_per_sf=105,
         cost_range=(95, 125),
+        scope_profile="industrial_shell",
         equipment_cost_per_sf=5,  # Dock equipment, minimal FFE
         typical_floors=1,
         trades=TradeBreakdown(
