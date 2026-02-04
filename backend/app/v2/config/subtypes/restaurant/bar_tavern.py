@@ -16,6 +16,7 @@ CONFIG = (
         display_name="Bar/Tavern",
         base_cost_per_sf=350,  # Adjusted to industry standard
         cost_range=(325, 375),
+        cost_clamp={"min_cost_per_sf": 250, "max_cost_per_sf": 700},
         equipment_cost_per_sf=25,  # Bar equipment included in base cost
         typical_floors=1,
         trades=TradeBreakdown(

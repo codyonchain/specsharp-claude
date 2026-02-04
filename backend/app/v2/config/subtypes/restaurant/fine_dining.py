@@ -16,6 +16,7 @@ CONFIG = (
         display_name="Fine Dining Restaurant",
         base_cost_per_sf=550,  # Premium construction and finishes
         cost_range=(500, 650),
+        cost_clamp={"min_cost_per_sf": 250},
         equipment_cost_per_sf=50,  # High-end kitchen equipment
         typical_floors=1,
         trades=TradeBreakdown(

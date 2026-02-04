@@ -16,6 +16,7 @@ CONFIG = (
         display_name="Full Service Restaurant",
         base_cost_per_sf=385,  # Optimized for industry standards ($450-500/SF total)
         cost_range=(350, 425),
+        cost_clamp={"min_cost_per_sf": 250, "max_cost_per_sf": 700},
         equipment_cost_per_sf=25,  # Optimized - kitchen equipment mostly in base cost
         typical_floors=1,
         trades=TradeBreakdown(

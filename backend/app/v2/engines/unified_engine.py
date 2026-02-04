@@ -827,10 +827,11 @@ class UnifiedEngine:
         # Validate restaurant costs are within reasonable ranges
         if building_type == BuildingType.RESTAURANT:
             cost_per_sf = total_project_cost / square_footage
-            min_cost = 250  # Minimum reasonable restaurant cost
-            max_cost = 700  # Maximum reasonable restaurant cost (except fine dining)
+            cost_clamp = getattr(building_config, "cost_clamp", None) or {}
+            min_cost = cost_clamp.get("min_cost_per_sf", 250)
+            max_cost = cost_clamp.get("max_cost_per_sf", 700)
             
-            if cost_per_sf < min_cost:
+            if isinstance(min_cost, (int, float)) and cost_per_sf < min_cost:
                 self._log_trace("restaurant_cost_clamp", {
                     'mode': 'minimum',
                     'original_cost_per_sf': cost_per_sf,
@@ -841,7 +842,7 @@ class UnifiedEngine:
                 total_hard_costs *= adjustment_factor
                 total_soft_costs *= adjustment_factor
                 total_project_cost = min_cost * square_footage
-            elif cost_per_sf > max_cost and subtype != 'fine_dining':
+            elif isinstance(max_cost, (int, float)) and cost_per_sf > max_cost:
                 self._log_trace("restaurant_cost_clamp", {
                     'mode': 'maximum',
                     'original_cost_per_sf': cost_per_sf,

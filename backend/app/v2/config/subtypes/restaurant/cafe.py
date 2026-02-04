@@ -16,6 +16,7 @@ CONFIG = (
         display_name="Cafe/Coffee Shop",
         base_cost_per_sf=300,  # Adjusted to industry standard
         cost_range=(275, 325),
+        cost_clamp={"min_cost_per_sf": 250, "max_cost_per_sf": 700},
         equipment_cost_per_sf=20,  # Coffee equipment mostly in base cost
         typical_floors=1,
         trades=TradeBreakdown(
