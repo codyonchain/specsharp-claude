@@ -34,6 +34,344 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# SELECTOR_REGISTRY (Phase 4)
+# - id: construction_schedule_by_building_type
+#   location: build_construction_schedule (top)
+#   selector_type: routing
+#   keys: building_type -> CONSTRUCTION_SCHEDULES; fallback via CONSTRUCTION_SCHEDULE_FALLBACKS; default OFFICE
+#   current_behavior: Selects a construction schedule by building type with fallback to OFFICE when missing.
+#   move_to_config: other
+#   parity_fixture_hint: schedule_office_fallback
+# - id: project_timeline_by_building_type
+#   location: build_project_timeline (top)
+#   selector_type: routing
+#   keys: building_type -> PROJECT_TIMELINES; defaults to hardcoded milestones when missing
+#   current_behavior: Routes timeline milestones per building type or uses default milestones.
+#   move_to_config: other
+#   parity_fixture_hint: timeline_default_milestones
+# - id: project_class_normalization
+#   location: UnifiedEngine._normalize_project_class
+#   selector_type: routing
+#   keys: project_class string variants -> ProjectClass enum values
+#   current_behavior: Normalizes raw project class inputs to canonical ProjectClass values.
+#   move_to_config: other
+#   parity_fixture_hint: project_class_string_aliases
+# - id: project_class_multiplier_map
+#   location: UnifiedEngine.calculate_project (project class multiplier)
+#   selector_type: routing
+#   keys: project_class -> PROJECT_CLASS_MULTIPLIERS
+#   current_behavior: Applies a project-class complexity multiplier to base cost.
+#   move_to_config: other
+#   parity_fixture_hint: project_class_multiplier_ground_up
+# - id: office_height_premium
+#   location: UnifiedEngine.calculate_project (height premium)
+#   selector_type: conditional_branch
+#   keys: building_type=OFFICE; floor_count thresholds (>4, >8)
+#   current_behavior: Adds capped height premium multipliers for taller office buildings.
+#   move_to_config: other
+#   parity_fixture_hint: office_height_premium_10_floors
+# - id: healthcare_medical_office_margin_override
+#   location: UnifiedEngine.calculate_project (modifiers override)
+#   selector_type: conditional_branch
+#   keys: building_type=HEALTHCARE; subtype=medical_office
+#   current_behavior: Forces margin_pct override from config when medical office has operating margin configured.
+#   move_to_config: other
+#   parity_fixture_hint: healthcare_medical_office_margin
+# - id: industrial_flex_scope_finishes_delta
+#   location: UnifiedEngine.calculate_project (scope rollup)
+#   selector_type: conditional_branch
+#   keys: building_type=INDUSTRIAL; subtype=flex_space
+#   current_behavior: Reconciles finishes totals from scope items into construction costs for flex space.
+#   move_to_config: scope_profile
+#   parity_fixture_hint: industrial_flex_finishes_delta
+# - id: healthcare_equipment_soft_cost
+#   location: UnifiedEngine.calculate_project (soft cost split)
+#   selector_type: conditional_branch
+#   keys: building_type=HEALTHCARE
+#   current_behavior: Treats equipment as a soft cost for healthcare instead of hard cost.
+#   move_to_config: scope_defaults
+#   parity_fixture_hint: healthcare_equipment_soft_cost
+# - id: restaurant_cost_clamp
+#   location: UnifiedEngine.calculate_project (restaurant clamp)
+#   selector_type: clamp
+#   keys: building_type=RESTAURANT; subtype!=fine_dining
+#   current_behavior: Clamps restaurant total cost per SF to 250-700, with fine dining exempt from max.
+#   move_to_config: cost_clamp
+#   parity_fixture_hint: restaurant_cost_clamp_standard
+# - id: industrial_flex_revenue_per_sf_totals
+#   location: UnifiedEngine.calculate_project (totals payload)
+#   selector_type: conditional_branch
+#   keys: building_type=INDUSTRIAL; subtype=flex_space
+#   current_behavior: Adds revenue_per_sf and annual_revenue to totals for industrial flex space.
+#   move_to_config: other
+#   parity_fixture_hint: industrial_flex_revenue_per_sf
+# - id: facility_metrics_restaurant
+#   location: UnifiedEngine.calculate_project (facility metrics)
+#   selector_type: routing
+#   keys: building_type=RESTAURANT
+#   current_behavior: Builds restaurant facility metrics payload (sales/noi/cost per SF).
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: facility_metrics_restaurant
+# - id: facility_metrics_healthcare_outpatient
+#   location: UnifiedEngine.calculate_project (facility metrics)
+#   selector_type: subtype_list
+#   keys: building_type=HEALTHCARE; subtype in outpatient_clinic/urgent_care/imaging_center/surgical_center/medical_office/dental_office
+#   current_behavior: Builds outpatient healthcare facility metrics (units, cost per unit, revenue per unit).
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: facility_metrics_healthcare_outpatient
+# - id: hospitality_metrics_passthrough
+#   location: UnifiedEngine.calculate_project (hospitality passthrough)
+#   selector_type: conditional_branch
+#   keys: building_type name contains HOSPITALITY or HOTEL
+#   current_behavior: Copies hospitality financial metrics into top-level response fields.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: hospitality_metrics_passthrough
+# - id: industrial_scope_items_shell_subtypes
+#   location: UnifiedEngine._build_scope_items
+#   selector_type: subtype_list
+#   keys: building_type=INDUSTRIAL; subtype in warehouse/distribution/flex_space/cold_storage variants
+#   current_behavior: Enables industrial scope item generation only for shell subtypes.
+#   move_to_config: scope_profile
+#   parity_fixture_hint: industrial_scope_shell
+# - id: industrial_scope_flex_space_split
+#   location: UnifiedEngine._build_scope_items
+#   selector_type: conditional_branch
+#   keys: building_type=INDUSTRIAL; subtype=flex_space
+#   current_behavior: Splits office vs warehouse areas and applies flex-specific finishes uplift/systems.
+#   move_to_config: scope_profile
+#   parity_fixture_hint: industrial_scope_flex
+# - id: industrial_scope_cold_storage_conceptual
+#   location: UnifiedEngine._build_scope_items
+#   selector_type: conditional_branch
+#   keys: building_type=INDUSTRIAL; subtype=cold_storage
+#   current_behavior: Uses conceptual cold-storage systems with blast freezer detection.
+#   move_to_config: scope_profile
+#   parity_fixture_hint: industrial_scope_cold_storage
+# - id: office_operating_expense_overrides
+#   location: UnifiedEngine.calculate_ownership_analysis
+#   selector_type: conditional_branch
+#   keys: building_type=OFFICE
+#   current_behavior: Applies office-specific operating expense, CAM, and staffing overrides.
+#   move_to_config: other
+#   parity_fixture_hint: office_operating_expense_overrides
+# - id: industrial_occupancy_rate_selection
+#   location: UnifiedEngine.calculate_ownership_analysis
+#   selector_type: conditional_branch
+#   keys: building_type=INDUSTRIAL
+#   current_behavior: Selects occupancy rate from base/premium industrial config with 0.95 fallback.
+#   move_to_config: other
+#   parity_fixture_hint: industrial_occupancy_rate
+# - id: restaurant_full_service_finish_overrides
+#   location: UnifiedEngine.calculate_ownership_analysis
+#   selector_type: conditional_branch
+#   keys: building_type=RESTAURANT; subtype=full_service
+#   current_behavior: Overrides occupancy and margin from finish-level overrides for full-service restaurants.
+#   move_to_config: finish_level_multipliers
+#   parity_fixture_hint: restaurant_full_service_finish_overrides
+# - id: hospitality_financials_overrides
+#   location: UnifiedEngine.calculate_ownership_analysis
+#   selector_type: conditional_branch
+#   keys: building_type=HOSPITALITY
+#   current_behavior: Applies hospitality financial overrides to occupancy/margin when provided.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: hospitality_financials_overrides
+# - id: industrial_operating_margin_override
+#   location: UnifiedEngine.calculate_ownership_analysis
+#   selector_type: conditional_branch
+#   keys: building_type=INDUSTRIAL
+#   current_behavior: Forces industrial margin to configured operating_margin_base when present.
+#   move_to_config: other
+#   parity_fixture_hint: industrial_operating_margin_override
+# - id: industrial_cold_storage_tenant_utilities
+#   location: UnifiedEngine.calculate_ownership_analysis
+#   selector_type: conditional_branch
+#   keys: building_type=INDUSTRIAL; subtype=cold_storage; scenario in tenant_paid_utilities/nnn_utilities/cold_storage_nnn
+#   current_behavior: Adjusts margin for tenant-paid utilities and suppresses utility ratio in efficiency config.
+#   move_to_config: other
+#   parity_fixture_hint: industrial_cold_storage_nnn
+# - id: office_staffing_costs_from_expenses
+#   location: UnifiedEngine.calculate_ownership_analysis
+#   selector_type: conditional_branch
+#   keys: building_type=OFFICE
+#   current_behavior: Derives property management and maintenance staffing costs from office expenses.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: office_staffing_costs
+# - id: unit_derivation_multifamily
+#   location: UnifiedEngine.calculate_ownership_analysis
+#   selector_type: conditional_branch
+#   keys: building_type=MULTIFAMILY
+#   current_behavior: Estimates units from units_per_sf when not provided.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: multifamily_unit_estimate
+# - id: unit_derivation_healthcare_outpatient
+#   location: UnifiedEngine.calculate_ownership_analysis
+#   selector_type: subtype_list
+#   keys: building_type=HEALTHCARE; subtype in outpatient_clinic/urgent_care/imaging_center/surgical_center/medical_office/dental_office
+#   current_behavior: Derives outpatient units and per-unit cost/revenue when financial_metrics present.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: healthcare_unit_estimate
+# - id: healthcare_outpatient_sensitivity_tiles
+#   location: UnifiedEngine.calculate_ownership_analysis
+#   selector_type: subtype_list
+#   keys: building_type=HEALTHCARE; subtype in outpatient_clinic/urgent_care/surgical_center
+#   current_behavior: Builds outpatient-specific sensitivity tiles instead of generic NOI adjustments.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: healthcare_outpatient_sensitivity
+# - id: revenue_by_type_healthcare
+#   location: UnifiedEngine._calculate_revenue_by_type
+#   selector_type: conditional_branch
+#   keys: building_type=HEALTHCARE; subtype=medical_office for MOB revenue path
+#   current_behavior: Computes revenue via beds/visits/procedures/scans or per-SF, with MOB override.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: revenue_healthcare_medical_office
+# - id: revenue_by_type_multifamily
+#   location: UnifiedEngine._calculate_revenue_by_type
+#   selector_type: conditional_branch
+#   keys: building_type=MULTIFAMILY
+#   current_behavior: Calculates revenue from units per SF and monthly rent.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: revenue_multifamily_units
+# - id: revenue_by_type_hospitality
+#   location: UnifiedEngine._calculate_revenue_by_type
+#   selector_type: conditional_branch
+#   keys: building_type=HOSPITALITY
+#   current_behavior: Uses hospitality financials (ADR/occupancy/rooms) or room-based fallback.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: revenue_hospitality
+# - id: revenue_by_type_office
+#   location: UnifiedEngine._calculate_revenue_by_type
+#   selector_type: conditional_branch
+#   keys: building_type=OFFICE
+#   current_behavior: Builds office financials from profile inputs and uses EGI as revenue.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: revenue_office_profile
+# - id: revenue_by_type_educational
+#   location: UnifiedEngine._calculate_revenue_by_type
+#   selector_type: conditional_branch
+#   keys: building_type=EDUCATIONAL
+#   current_behavior: Calculates revenue per student.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: revenue_educational
+# - id: revenue_by_type_parking
+#   location: UnifiedEngine._calculate_revenue_by_type
+#   selector_type: conditional_branch
+#   keys: building_type=PARKING
+#   current_behavior: Calculates revenue per space with monthly rate if available.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: revenue_parking
+# - id: revenue_by_type_recreation
+#   location: UnifiedEngine._calculate_revenue_by_type
+#   selector_type: conditional_branch
+#   keys: building_type=RECREATION
+#   current_behavior: Uses revenue per seat when configured, else per-SF revenue.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: revenue_recreation
+# - id: revenue_by_type_civic
+#   location: UnifiedEngine._calculate_revenue_by_type
+#   selector_type: conditional_branch
+#   keys: building_type=CIVIC
+#   current_behavior: Returns zero revenue for civic projects.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: revenue_civic_zero
+# - id: revenue_by_type_industrial_default
+#   location: UnifiedEngine._calculate_revenue_by_type
+#   selector_type: conditional_branch
+#   keys: building_type=INDUSTRIAL; subtype=flex_space for office rent uplift
+#   current_behavior: Calculates industrial revenue per SF with flex-space rent blending.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: revenue_industrial_flex
+# - id: revenue_by_type_default_other
+#   location: UnifiedEngine._calculate_revenue_by_type
+#   selector_type: conditional_branch
+#   keys: building_type=other (retail/restaurant/mixed_use/etc.)
+#   current_behavior: Defaults to base_revenue_per_sf_annual for remaining types.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: revenue_default_per_sf
+# - id: restaurant_full_service_finish_multipliers
+#   location: UnifiedEngine._calculate_revenue_by_type
+#   selector_type: subtype_map
+#   keys: building_type=RESTAURANT; subtype=full_service; finish_level in standard/premium/luxury
+#   current_behavior: Applies finish-level revenue, occupancy, and margin adjustments for full service.
+#   move_to_config: finish_level_multipliers
+#   parity_fixture_hint: restaurant_full_service_finish_levels
+# - id: operational_metrics_restaurant
+#   location: UnifiedEngine.calculate_operational_metrics_for_display
+#   selector_type: conditional_branch
+#   keys: building_type=restaurant
+#   current_behavior: Formats restaurant-specific staffing, revenue ratios, and KPIs.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: operational_metrics_restaurant
+# - id: operational_metrics_healthcare_outpatient
+#   location: UnifiedEngine.calculate_operational_metrics_for_display
+#   selector_type: subtype_list
+#   keys: building_type=healthcare; subtype in outpatient_clinic/urgent_care
+#   current_behavior: Builds outpatient clinic staffing/revenue KPIs based on visits and rooms.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: operational_metrics_healthcare_outpatient
+# - id: operational_metrics_healthcare_inpatient
+#   location: UnifiedEngine.calculate_operational_metrics_for_display
+#   selector_type: conditional_branch
+#   keys: building_type=healthcare; subtype=other
+#   current_behavior: Uses inpatient-style staffing and KPI defaults for healthcare non-outpatient.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: operational_metrics_healthcare_inpatient
+# - id: operational_metrics_multifamily
+#   location: UnifiedEngine.calculate_operational_metrics_for_display
+#   selector_type: conditional_branch
+#   keys: building_type=multifamily
+#   current_behavior: Formats multifamily staffing, revenue, and NOI KPIs.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: operational_metrics_multifamily
+# - id: operational_metrics_office
+#   location: UnifiedEngine.calculate_operational_metrics_for_display
+#   selector_type: conditional_branch
+#   keys: building_type=office
+#   current_behavior: Formats office staffing, revenue per SF, and efficiency KPIs.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: operational_metrics_office
+# - id: operational_metrics_generic_other
+#   location: UnifiedEngine.calculate_operational_metrics_for_display
+#   selector_type: conditional_branch
+#   keys: building_type=other
+#   current_behavior: Uses generic staffing/revenue/KPI formatting for non-specific types.
+#   move_to_config: facility_metrics_profile
+#   parity_fixture_hint: operational_metrics_generic
+# - id: manufacturing_exclude_from_facility_opex
+#   location: UnifiedEngine.calculate_operational_efficiency
+#   selector_type: conditional_branch
+#   keys: subtype=manufacturing
+#   current_behavior: Excludes labor/materials ratios from facility opex for manufacturing.
+#   move_to_config: exclude_from_facility_opex
+#   parity_fixture_hint: manufacturing_exclude_opex
+# - id: building_type_string_map
+#   location: UnifiedEngine._get_building_enum
+#   selector_type: routing
+#   keys: building_type string -> BuildingType enum
+#   current_behavior: Maps string building types to enum values for ownership analysis.
+#   move_to_config: other
+#   parity_fixture_hint: building_type_string_map
+# - id: exit_cap_discount_by_type_name
+#   location: UnifiedEngine.get_exit_cap_and_discount_rate
+#   selector_type: conditional_branch
+#   keys: building_type name contains MULTIFAMILY/INDUSTRIAL/WAREHOUSE/OFFICE/HOSPITALITY/HOTEL
+#   current_behavior: Picks exit cap and discount rates by building type name; defaults otherwise.
+#   move_to_config: other
+#   parity_fixture_hint: exit_cap_discount_defaults
+# - id: project_class_keyword_inference
+#   location: UnifiedEngine.estimate_from_description
+#   selector_type: conditional_branch
+#   keys: description keywords -> project_class (renovation/addition/tenant_improvement/ground_up)
+#   current_behavior: Infers project class from description keywords.
+#   move_to_config: other
+#   parity_fixture_hint: project_class_description_keywords
+# - id: market_rate_subtype_quality_adjustment
+#   location: UnifiedEngine.get_market_rate
+#   selector_type: conditional_branch
+#   keys: subtype contains luxury/class_a vs affordable/class_c
+#   current_behavior: Adjusts market rate up or down based on subtype quality keywords.
+#   move_to_config: other
+#   parity_fixture_hint: market_rate_quality_adjustment
+
 
 def _add_months(base_date: date, months: int) -> date:
     """Add months to a date without relying on external libs."""
