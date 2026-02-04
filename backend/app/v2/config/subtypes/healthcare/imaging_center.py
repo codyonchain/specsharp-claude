@@ -16,6 +16,7 @@ CONFIG = (
         display_name="Diagnostic Imaging Center",
         base_cost_per_sf=420,
         cost_range=(420, 560),
+        facility_metrics_profile="healthcare_outpatient",
         equipment_cost_per_sf=120,
         typical_floors=1,
         ti_allowance_per_sf=0,

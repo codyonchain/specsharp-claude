@@ -16,6 +16,7 @@ CONFIG = (
         display_name="Urgent Care Center",
         base_cost_per_sf=350,
         cost_range=(400, 475),
+        facility_metrics_profile="healthcare_outpatient",
         equipment_cost_per_sf=75,
         typical_floors=1,
         trades=TradeBreakdown(

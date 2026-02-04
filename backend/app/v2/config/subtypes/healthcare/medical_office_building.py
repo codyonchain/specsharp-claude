@@ -16,6 +16,7 @@ CONFIG = (
         display_name="Medical Office Building",
         base_cost_per_sf=270,
         cost_range=(260, 320),
+        facility_metrics_profile="healthcare_outpatient",
         equipment_cost_per_sf=0,
         typical_floors=3,
         ti_allowance_per_sf=40,

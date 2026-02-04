@@ -17,6 +17,7 @@ CONFIG = (
         display_name="Ambulatory Surgical Center",
         base_cost_per_sf=480,
         cost_range=(600, 780),
+        facility_metrics_profile="healthcare_outpatient",
         equipment_cost_per_sf=180,
         typical_floors=1,
         ti_allowance_per_sf=0,

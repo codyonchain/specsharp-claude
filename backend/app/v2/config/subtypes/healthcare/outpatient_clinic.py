@@ -16,6 +16,7 @@ CONFIG = (
         display_name="Outpatient Clinic",
         base_cost_per_sf=380,
         cost_range=(400, 480),
+        facility_metrics_profile="healthcare_outpatient",
         equipment_cost_per_sf=50,
         typical_floors=1,
         trades=TradeBreakdown(

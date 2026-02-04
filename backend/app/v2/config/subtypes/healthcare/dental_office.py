@@ -16,6 +16,7 @@ CONFIG = (
         display_name="Dental Office",
         base_cost_per_sf=340,
         cost_range=(360, 440),
+        facility_metrics_profile="healthcare_outpatient",
         equipment_cost_per_sf=110,
         typical_floors=1,
         ti_allowance_per_sf=35,

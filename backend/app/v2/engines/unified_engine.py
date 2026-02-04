@@ -73,7 +73,7 @@ logger = logging.getLogger(__name__)
 # - id: healthcare_medical_office_margin_override
 #   location: UnifiedEngine.calculate_project (modifiers override)
 #   selector_type: conditional_branch
-#   keys: building_type=HEALTHCARE; subtype=medical_office
+#   keys: building_type=HEALTHCARE; subtype=medical_office_building
 #   current_behavior: Forces margin_pct override from config when medical office has operating margin configured.
 #   move_to_config: other
 #   parity_fixture_hint: healthcare_medical_office_margin
@@ -114,8 +114,8 @@ logger = logging.getLogger(__name__)
 #   parity_fixture_hint: facility_metrics_restaurant
 # - id: facility_metrics_healthcare_outpatient
 #   location: UnifiedEngine.calculate_project (facility metrics)
-#   selector_type: subtype_list
-#   keys: building_type=HEALTHCARE; subtype in outpatient_clinic/urgent_care/imaging_center/surgical_center/medical_office/dental_office
+#   selector_type: conditional_branch
+#   keys: building_type=HEALTHCARE; facility_metrics_profile=healthcare_outpatient
 #   current_behavior: Builds outpatient healthcare facility metrics (units, cost per unit, revenue per unit).
 #   move_to_config: facility_metrics_profile
 #   parity_fixture_hint: facility_metrics_healthcare_outpatient
@@ -205,22 +205,22 @@ logger = logging.getLogger(__name__)
 #   parity_fixture_hint: multifamily_unit_estimate
 # - id: unit_derivation_healthcare_outpatient
 #   location: UnifiedEngine.calculate_ownership_analysis
-#   selector_type: subtype_list
-#   keys: building_type=HEALTHCARE; subtype in outpatient_clinic/urgent_care/imaging_center/surgical_center/medical_office/dental_office
+#   selector_type: conditional_branch
+#   keys: building_type=HEALTHCARE; facility_metrics_profile=healthcare_outpatient
 #   current_behavior: Derives outpatient units and per-unit cost/revenue when financial_metrics present.
 #   move_to_config: facility_metrics_profile
 #   parity_fixture_hint: healthcare_unit_estimate
 # - id: healthcare_outpatient_sensitivity_tiles
 #   location: UnifiedEngine.calculate_ownership_analysis
-#   selector_type: subtype_list
-#   keys: building_type=HEALTHCARE; subtype in outpatient_clinic/urgent_care/surgical_center
+#   selector_type: conditional_branch
+#   keys: building_type=HEALTHCARE; facility_metrics_profile=healthcare_outpatient
 #   current_behavior: Builds outpatient-specific sensitivity tiles instead of generic NOI adjustments.
 #   move_to_config: facility_metrics_profile
 #   parity_fixture_hint: healthcare_outpatient_sensitivity
 # - id: revenue_by_type_healthcare
 #   location: UnifiedEngine._calculate_revenue_by_type
 #   selector_type: conditional_branch
-#   keys: building_type=HEALTHCARE; subtype=medical_office for MOB revenue path
+#   keys: building_type=HEALTHCARE; subtype=medical_office_building for MOB revenue path
 #   current_behavior: Computes revenue via beds/visits/procedures/scans or per-SF, with MOB override.
 #   move_to_config: facility_metrics_profile
 #   parity_fixture_hint: revenue_healthcare_medical_office
@@ -303,8 +303,8 @@ logger = logging.getLogger(__name__)
 #   parity_fixture_hint: operational_metrics_restaurant
 # - id: operational_metrics_healthcare_outpatient
 #   location: UnifiedEngine.calculate_operational_metrics_for_display
-#   selector_type: subtype_list
-#   keys: building_type=healthcare; subtype in outpatient_clinic/urgent_care
+#   selector_type: conditional_branch
+#   keys: building_type=healthcare; facility_metrics_profile=healthcare_outpatient
 #   current_behavior: Builds outpatient clinic staffing/revenue KPIs based on visits and rooms.
 #   move_to_config: facility_metrics_profile
 #   parity_fixture_hint: operational_metrics_healthcare_outpatient
@@ -701,7 +701,7 @@ class UnifiedEngine:
             margin_pct_override = None
         if (
             building_type == BuildingType.HEALTHCARE
-            and subtype == 'medical_office'
+            and subtype == 'medical_office_building'
             and margin_pct_override is not None
         ):
             modifiers = {**modifiers, 'margin_pct': margin_pct_override}
@@ -1157,7 +1157,10 @@ class UnifiedEngine:
                 ],
                 'total_square_feet': total_sf
             }
-        elif building_type == BuildingType.HEALTHCARE and subtype in ('outpatient_clinic', 'urgent_care', 'imaging_center', 'surgical_center', 'medical_office', 'dental_office'):
+        elif (
+            building_type == BuildingType.HEALTHCARE
+            and getattr(building_config, "facility_metrics_profile", None) == "healthcare_outpatient"
+        ):
             financial_metrics_cfg = getattr(building_config, 'financial_metrics', {}) or {}
             units_per_sf_value = financial_metrics_cfg.get('units_per_sf')
             primary_unit_label = financial_metrics_cfg.get('primary_unit', 'Units')
@@ -2341,6 +2344,11 @@ class UnifiedEngine:
         
         # Calculate payback period
         payback_period = round(total_cost / net_income, 1) if net_income > 0 else 999
+
+        healthcare_outpatient_profile = (
+            building_enum == BuildingType.HEALTHCARE
+            and getattr(subtype_config, "facility_metrics_profile", None) == "healthcare_outpatient"
+        )
         
         # Derive units for display/per-unit metrics when not provided.
         units = calculations.get('units')
@@ -2357,8 +2365,7 @@ class UnifiedEngine:
                 except (TypeError, ValueError):
                     units = 0
             elif (
-                building_enum == BuildingType.HEALTHCARE
-                and subtype in ('outpatient_clinic', 'urgent_care', 'imaging_center', 'surgical_center', 'medical_office', 'dental_office')
+                healthcare_outpatient_profile
                 and hasattr(subtype_config, 'financial_metrics')
                 and isinstance(subtype_config.financial_metrics, dict)
             ):
@@ -2376,8 +2383,7 @@ class UnifiedEngine:
                     calculations['unit_type'] = unit_label_value
             if (
                 units
-                and building_enum == BuildingType.HEALTHCARE
-                and subtype in ('outpatient_clinic', 'urgent_care', 'imaging_center', 'surgical_center', 'medical_office', 'dental_office')
+                and healthcare_outpatient_profile
                 and hasattr(subtype_config, 'financial_metrics')
                 and isinstance(subtype_config.financial_metrics, dict)
             ):
@@ -2441,10 +2447,7 @@ class UnifiedEngine:
             try:
                 base_yoc = yield_on_cost
                 subtype_normalized = subtype.strip().lower() if isinstance(subtype, str) else ''
-                if (
-                    building_enum == BuildingType.HEALTHCARE
-                    and subtype_normalized in ('outpatient_clinic', 'urgent_care', 'surgical_center')
-                ):
+                if healthcare_outpatient_profile:
                     base_revenue = float(annual_revenue or 0)
                     base_margin = (float(net_income) / base_revenue) if base_revenue else 0.0
                     asc_mode = subtype_normalized == 'surgical_center'
@@ -2648,7 +2651,7 @@ class UnifiedEngine:
             else:
                 # Fallback for healthcare with missing revenue config
                 base_revenue = 0
-            if subtype_key == 'medical_office':
+            if subtype_key == 'medical_office_building':
                 base_revenue_per_sf = getattr(config, 'base_revenue_per_sf_annual', None)
                 operating_margin_base = getattr(config, 'operating_margin_base', None)
                 annual_revenue = 0.0
@@ -3412,7 +3415,16 @@ class UnifiedEngine:
                 or operational_efficiency.get('subtype')
                 or subtype
             )
-            if subtype_value in ('outpatient_clinic', 'urgent_care'):
+            facility_metrics_profile = None
+            building_enum = self._get_building_enum(building_type)
+            if building_enum:
+                subtype_key = subtype_value if isinstance(subtype_value, str) else subtype
+                subtype_key = subtype_key if isinstance(subtype_key, str) else str(subtype_key or "")
+                subtype_config = get_building_config(building_enum, subtype_key)
+                facility_metrics_profile = (
+                    getattr(subtype_config, "facility_metrics_profile", None) if subtype_config else None
+                )
+            if facility_metrics_profile == "healthcare_outpatient":
                 is_urgent_care = subtype_value == 'urgent_care'
                 exam_rooms = units
                 if not exam_rooms:
