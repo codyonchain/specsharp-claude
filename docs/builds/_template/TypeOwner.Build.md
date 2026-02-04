@@ -58,6 +58,21 @@ Maintain and improve the type-level underwriting contract and profiles so all su
 PROJECT_TIMELINES is a type-level schedule model used to power Key Milestones / Construction Schedule in outputs.
 After sharding PROJECT_TIMELINES into type-owner modules, we must fill coverage intentionally (this is a behavior change and must be done in a dedicated commit).
 
+## Margin Coverage Responsibilities (Type Owner Lane)
+
+### Why this exists
+MARGINS is a type-level default operating margin used as a fallback when subtype-specific margins are not provided.
+After sharding MARGINS into type-owner modules, missing types must be filled intentionally (this is a behavior change and must be done in a dedicated commit).
+
+### Required coverage
+- Provide a margin value for this building type (even if it’s a placeholder baseline).
+- Document whether subtype configs override this default (operating_margin_base/premium) and under what conditions.
+
+### Operator checks
+- python3 scripts/audit/fingerprint_margins.py
+- python3 scripts/audit/fingerprint_all.py
+
+
 ### Required coverage (post-shard follow-on)
 - ground_up (required baseline)
 - renovation (if supported by engine; otherwise add as TODO with explicit fallback note)
