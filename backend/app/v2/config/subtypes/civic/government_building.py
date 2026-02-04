@@ -1,0 +1,84 @@
+from app.v2.config.master_config import (
+    BuildingType,
+    BuildingConfig,
+    TradeBreakdown,
+    SoftCosts,
+    FinancingTerms,
+    OwnershipType,
+    NLPConfig,
+    ProjectClass,
+)
+
+
+CONFIG = (
+    BuildingType.CIVIC,
+    "government_building",
+    BuildingConfig(
+        display_name="Government Building",
+        base_cost_per_sf=265,
+        cost_range=(240, 290),
+        equipment_cost_per_sf=20,
+        typical_floors=4,
+        trades=TradeBreakdown(
+            structural=0.27,
+            mechanical=0.23,
+            electrical=0.14,
+            plumbing=0.14,
+            finishes=0.22,
+        ),
+        soft_costs=SoftCosts(
+            design_fees=0.07,
+            permits=0.015,  # Government project
+            legal=0.02,
+            financing=0.02,
+            contingency=0.08,
+            testing=0.01,
+            construction_management=0.035,
+            startup=0.01,
+        ),
+        ownership_types={
+            OwnershipType.GOVERNMENT: FinancingTerms(
+                debt_ratio=0.80,
+                debt_rate=0.038,  # Municipal bonds
+                equity_ratio=0.20,
+                target_dscr=1.15,
+                target_roi=0.0,
+            )
+        },
+        nlp=NLPConfig(
+            keywords=[
+                "city hall",
+                "courthouse",
+                "federal building",
+                "state building",
+                "municipal building",
+                "government center",
+                "capitol",
+                "administration",
+            ],
+            priority=36,
+            incompatible_classes=[ProjectClass.TENANT_IMPROVEMENT],
+        ),
+        regional_multipliers={
+            "Nashville": 1.03,
+            "Franklin": 1.03,
+            "Manchester": 0.94,
+            "Memphis": 0.92,
+            "New York": 1.38,
+            "San Francisco": 1.42,
+            "Chicago": 1.20,
+            "Miami": 1.12,
+        },
+        special_features={
+            "council_chambers": 40,
+            "secure_area": 35,
+            "public_plaza": 25,
+            "records_vault": 30,
+        },
+        base_revenue_per_sf_annual=0,
+        occupancy_rate_base=1.0,
+        occupancy_rate_premium=1.0,
+        operating_margin_base=0,
+        operating_margin_premium=0,
+    ),
+)
