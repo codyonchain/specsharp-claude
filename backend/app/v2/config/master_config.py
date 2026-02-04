@@ -214,30 +214,18 @@ class BuildingConfig:
     exclude_from_facility_opex: List[str] = field(default_factory=list)
 
 
+from app.v2.config.type_profiles.office_underwriting import (
+    class_a as office_underwriting_class_a,
+)
+
 # Class A office profile for strong urban markets (e.g., downtown Nashville).
 # Assumes full-service gross rent around $38/SF, 92% stabilized occupancy,
 # 6% vacancy/credit loss, 40% OpEx load, and amortized TI/LC over lease term.
 OFFICE_UNDERWRITING_CONFIG: Dict[str, Dict[str, float]] = {
-    "class_a": {
-        # Rent & occupancy
-        "base_rent_per_sf": 38.0,                # $/RSF/year, gross baseline
-        "stabilized_occupancy": 0.92,            # 92% occupied once stabilized
-        "vacancy_and_credit_loss_pct": 0.06,     # 6% of PGI
-
-        # Operating expenses (non-reimbursed share of EGI)
-        "opex_pct_of_egi": 0.40,
-
-        # Leasing costs (amortized over average lease term)
-        "ti_per_sf": 70.0,
-        "ti_amort_years": 10,
-        "lc_pct_of_lease_value": 0.06,
-        "lc_amort_years": 10,
-
-        # Capitalization / hurdle assumptions
-        "exit_cap_rate": 0.0675,                 # 6.75% stabilized exit cap
-        "yield_on_cost_hurdle": 0.09,            # 9.0% development hurdle
-        "discount_rate": 0.0825,                 # midpoint of 8.0–8.5%
-    }
+    profile_key: profile
+    for profile_key, profile in (
+        office_underwriting_class_a.CONFIG,
+    )
 }
 
 
