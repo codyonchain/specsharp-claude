@@ -79,6 +79,11 @@ CONFIG = (
         occupancy_rate_premium=0.90,
         operating_margin_base=0.10,
         operating_margin_premium=0.12,
+        finish_level_multipliers={
+            "standard": {"revenue_multiplier": 1.00, "occupancy_rate": 0.80, "operating_margin": 0.10},
+            "premium": {"revenue_multiplier": 1.18, "occupancy_rate": 0.82, "operating_margin": 0.11},
+            "luxury": {"revenue_multiplier": 1.32, "occupancy_rate": 0.86, "operating_margin": 0.12},
+        },
         food_cost_ratio=0.32,
         labor_cost_ratio=0.33,
         beverage_cost_ratio=0.15,

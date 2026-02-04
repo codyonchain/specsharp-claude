@@ -2136,18 +2136,12 @@ class UnifiedEngine:
         
         # Apply revenue modifiers
         annual_revenue *= revenue_factor
-        restaurant_full_service = (
-            building_enum == BuildingType.RESTAURANT
-            and isinstance(subtype, str)
-            and subtype.strip().lower() == 'full_service'
-        )
-        if restaurant_full_service:
-            finish_occ_override = calculations.get('restaurant_finish_occupancy_override')
-            if isinstance(finish_occ_override, (int, float)):
-                occupancy_rate = float(finish_occ_override)
-            finish_margin_override = calculations.get('restaurant_finish_margin_override')
-            if isinstance(finish_margin_override, (int, float)):
-                margin_pct = float(finish_margin_override)
+        finish_occ_override = calculations.get('restaurant_finish_occupancy_override')
+        if isinstance(finish_occ_override, (int, float)):
+            occupancy_rate = float(finish_occ_override)
+        finish_margin_override = calculations.get('restaurant_finish_margin_override')
+        if isinstance(finish_margin_override, (int, float)):
+            margin_pct = float(finish_margin_override)
         hospitality_financials = calculations.get('hospitality_financials') if building_enum == BuildingType.HOSPITALITY else None
         hospitality_expense_pct = None
         if hospitality_financials:
@@ -2807,24 +2801,17 @@ class UnifiedEngine:
 
         # Apply finish-level revenue/margin adjustments for full-service restaurants
         if building_enum == BuildingType.RESTAURANT and subtype_key == 'full_service':
-            finish_rev_multiplier_map = {
-                'standard': 1.00,
-                'premium': 1.18,
-                'luxury': 1.32,
+            standard_defaults = {
+                "revenue_multiplier": 1.00,
+                "occupancy_rate": 0.80,
+                "operating_margin": 0.10,
             }
-            finish_occupancy_map = {
-                'standard': 0.80,
-                'premium': 0.82,
-                'luxury': 0.86,
-            }
-            finish_margin_map = {
-                'standard': 0.10,
-                'premium': 0.11,
-                'luxury': 0.12,
-            }
-            finish_rev_multiplier = finish_rev_multiplier_map.get(finish_level_value, 1.00)
-            adjusted_occupancy = finish_occupancy_map.get(finish_level_value, occupancy_rate)
-            adjusted_margin = finish_margin_map.get(finish_level_value)
+            finish_level_multipliers = getattr(config, "finish_level_multipliers", None) or {}
+            standard_entry = {**standard_defaults, **(finish_level_multipliers.get("standard") or {})}
+            selected_entry = {**standard_entry, **(finish_level_multipliers.get(finish_level_value) or {})}
+            finish_rev_multiplier = selected_entry.get("revenue_multiplier", 1.00)
+            adjusted_occupancy = selected_entry.get("occupancy_rate", 0.80)
+            adjusted_margin = selected_entry.get("operating_margin")
             base_revenue *= finish_rev_multiplier
             occupancy_rate = adjusted_occupancy
             if adjusted_margin is not None:

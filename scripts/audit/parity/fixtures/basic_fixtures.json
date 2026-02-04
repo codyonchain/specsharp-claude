@@ -146,15 +146,15 @@
   },
   {
     "building_type": "restaurant",
-      "expected": {
-        "building_type": "restaurant",
-        "clamp_applied_mode": null,
-        "cost_per_sf_after": 780.785,
-        "cost_per_sf_before": null,
-        "max_cost_per_sf": 700,
-        "min_cost_per_sf": 250,
-        "subtype": "fine_dining"
-      },
+    "expected": {
+      "building_type": "restaurant",
+      "clamp_applied_mode": null,
+      "cost_per_sf_after": 780.785,
+      "cost_per_sf_before": null,
+      "max_cost_per_sf": 700,
+      "min_cost_per_sf": 250,
+      "subtype": "fine_dining"
+    },
     "extra_inputs": {
       "location": "Nashville, TN"
     },
@@ -162,6 +162,46 @@
     "project_class": "ground_up",
     "square_footage": 5000,
     "subtype": "fine_dining"
+  },
+  {
+    "building_type": "restaurant",
+    "expected": {
+      "building_type": "restaurant",
+      "clamp_applied_mode": null,
+      "cost_per_sf_after": 616.16125,
+      "cost_per_sf_before": null,
+      "max_cost_per_sf": 700,
+      "min_cost_per_sf": 250,
+      "subtype": "full_service"
+    },
+    "extra_inputs": {
+      "location": "Nashville, TN"
+    },
+    "finish_level": "luxury",
+    "id": "restaurant_full_service_luxury",
+    "project_class": "ground_up",
+    "square_footage": 4500,
+    "subtype": "full_service"
+  },
+  {
+    "building_type": "restaurant",
+    "expected": {
+      "building_type": "restaurant",
+      "clamp_applied_mode": null,
+      "cost_per_sf_after": 566.86835,
+      "cost_per_sf_before": null,
+      "max_cost_per_sf": 700,
+      "min_cost_per_sf": 250,
+      "subtype": "full_service"
+    },
+    "extra_inputs": {
+      "location": "Nashville, TN"
+    },
+    "finish_level": "premium",
+    "id": "restaurant_full_service_premium",
+    "project_class": "ground_up",
+    "square_footage": 4500,
+    "subtype": "full_service"
   },
   {
     "building_type": "restaurant",
