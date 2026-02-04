@@ -100,6 +100,8 @@ Required fields:
 - Phase list (ordered)
 - Key milestone table
 
+**Note:** If a type/subtype/project_class lacks a specific timeline template, output must clearly indicate the deterministic fallback used (and emit a trace/provenance entry).
+
 ### 4.2 Key Milestones (Required Structure)
 Each milestone must include:
 - id (snake_case)

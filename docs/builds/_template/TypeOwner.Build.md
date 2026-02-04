@@ -52,6 +52,33 @@ Maintain and improve the type-level underwriting contract and profiles so all su
 
 ---
 
+## Timeline Coverage Responsibilities (Type Owner Lane)
+
+### Why this exists
+PROJECT_TIMELINES is a type-level schedule model used to power Key Milestones / Construction Schedule in outputs.
+After sharding PROJECT_TIMELINES into type-owner modules, we must fill coverage intentionally (this is a behavior change and must be done in a dedicated commit).
+
+### Required coverage (post-shard follow-on)
+- ground_up (required baseline)
+- renovation (if supported by engine; otherwise add as TODO with explicit fallback note)
+- addition (if supported)
+- tenant_improvement (if supported)
+
+### Acceptance criteria
+- No silent fallback: timeline selection must be explicit and traceable.
+- Milestone list shape matches contract requirements (id/label/offset_months) and preserves ordering.
+- For missing project classes, document deterministic fallback behavior (and add TODO with owner + target milestone/date).
+
+### Operator checks (run before merge)
+- python3 scripts/audit/fingerprint_project_timelines.py
+- python3 scripts/audit/fingerprint_all.py
+
+### Coverage audit (run to see gaps)
+- Grep where PROJECT_TIMELINES is defined/consumed and list missing types/classes.
+- Record missing coverage as a tracked TODO in the type owner Build.md for the next pass.
+
+---
+
 # Non-Negotiable Invariants
 1) Do not collapse subtype distinctness:
    - Type-level defaults may exist, but subtype must own its deltas and its KPI/trade/milestone spec.
