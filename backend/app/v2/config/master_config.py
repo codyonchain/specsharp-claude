@@ -1030,11 +1030,11 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
     BuildingType.CIVIC: {
         subtype_key: config
         for _building_type, subtype_key, config in (
-            civic_government_building.CONFIG,
-            civic_public_safety.CONFIG,
-            civic_library.CONFIG,
             civic_community_center.CONFIG,
             civic_courthouse.CONFIG,
+            civic_government_building.CONFIG,
+            civic_library.CONFIG,
+            civic_public_safety.CONFIG,
         )
         if _building_type == BuildingType.CIVIC
     },
@@ -1048,10 +1048,10 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
     BuildingType.RECREATION: {
         subtype_key: config
         for _building_type, subtype_key, config in (
-            recreation_fitness_center.CONFIG,
-            recreation_sports_complex.CONFIG,
             recreation_aquatic_center.CONFIG,
             recreation_recreation_center.CONFIG,
+            recreation_fitness_center.CONFIG,
+            recreation_sports_complex.CONFIG,
             recreation_stadium.CONFIG,
         )
         if _building_type == BuildingType.RECREATION
