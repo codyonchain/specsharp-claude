@@ -339,7 +339,7 @@ logger = logging.getLogger(__name__)
 # - id: manufacturing_exclude_from_facility_opex
 #   location: UnifiedEngine.calculate_operational_efficiency
 #   selector_type: conditional_branch
-#   keys: subtype=manufacturing
+#   keys: exclude_from_facility_opex configured
 #   current_behavior: Excludes labor/materials ratios from facility opex for manufacturing.
 #   move_to_config: exclude_from_facility_opex
 #   parity_fixture_hint: manufacturing_exclude_opex
@@ -3618,10 +3618,9 @@ class UnifiedEngine:
         }
         
         # For manufacturing, separate facility expenses from business operations
-        exclude_from_facility_opex = []
-        if subtype == 'manufacturing':
-            # These are business operations, not real estate facility expenses
-            exclude_from_facility_opex = ['labor_cost_ratio', 'raw_materials_ratio']
+        exclude_from_facility_opex = getattr(config, 'exclude_from_facility_opex', None)
+        if not isinstance(exclude_from_facility_opex, (list, tuple)):
+            exclude_from_facility_opex = []
         
         # Calculate each expense category from config
         expense_mappings = [
