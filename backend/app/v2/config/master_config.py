@@ -341,6 +341,13 @@ from app.v2.config.type_profiles import (
     recreation as profile_recreation,
     parking as profile_parking,
 )
+from app.v2.config.type_profiles.project_timelines import (
+    healthcare as timelines_healthcare,
+    hospitality as timelines_hospitality,
+    industrial as timelines_industrial,
+    multifamily as timelines_multifamily,
+    restaurant as timelines_restaurant,
+)
 
 # ============================================================================
 # MASTER CONFIGURATION
@@ -350,103 +357,14 @@ from app.v2.config.type_profiles import (
 # Used to drive the Executive View "Key Milestones" card (groundbreaking, structure, etc.).
 # Values are month offsets from a notional start date (e.g., Q1 2025).
 PROJECT_TIMELINES = {
-    BuildingType.MULTIFAMILY: {
-        "ground_up": {
-            "total_months": 30,
-            "milestones": {
-                "groundbreaking": 0,
-                "structure_complete": 12,
-                "substantial_completion": 24,
-                "grand_opening": 30,
-            },
-        },
-    },
-    BuildingType.INDUSTRIAL: {
-        "ground_up": {
-            "total_months": 18,
-            "milestones": {
-                "groundbreaking": 0,
-                "structure_complete": 8,
-                "substantial_completion": 14,
-                "grand_opening": 18,
-            },
-        },
-    },
-    BuildingType.HOSPITALITY: {
-        "ground_up": {
-            "total_months": 30,
-            "milestones": {
-                "groundbreaking": 0,
-                "structure_complete": 14,
-                "substantial_completion": 24,
-                "grand_opening": 30,
-            },
-        },
-    },
-    BuildingType.RESTAURANT: {
-        "ground_up": {
-            "total_months": 14,
-            "milestones": [
-                {
-                    "id": "groundbreaking",
-                    "label": "Groundbreaking / Site & Shell Start",
-                    "offset_months": 0,
-                },
-                {
-                    "id": "structure_complete",
-                    "label": "Structure & Shell Complete",
-                    "offset_months": 6,
-                },
-                {
-                    "id": "kitchen_mep_rough_in",
-                    "label": "Kitchen & MEP Rough-In Complete",
-                    "offset_months": 9,
-                },
-                {
-                    "id": "substantial_completion",
-                    "label": "Health & Code Inspections + Final Punch",
-                    "offset_months": 11,
-                },
-                {
-                    "id": "grand_opening",
-                    "label": "Soft / Grand Opening",
-                    "offset_months": 13,
-                },
-            ],
-        },
-    },
-    BuildingType.HEALTHCARE: {
-        "ground_up": {
-            "total_months": 18,
-            "milestones": [
-                {
-                    "id": "design_licensing",
-                    "label": "Design & Licensing",
-                    "offset_months": 0,
-                },
-                {
-                    "id": "shell_mep_rough_in",
-                    "label": "Shell & MEP Rough-In",
-                    "offset_months": 4,
-                },
-                {
-                    "id": "interior_buildout",
-                    "label": "Interior Buildout & Finishes",
-                    "offset_months": 8,
-                },
-                {
-                    "id": "equipment_low_voltage",
-                    "label": "Equipment & Low Voltage",
-                    "offset_months": 12,
-                },
-                {
-                    "id": "soft_opening",
-                    "label": "Soft Opening & Ramp-Up",
-                    "offset_months": 16,
-                },
-            ],
-        },
-    },
+    building_type: timelines
+    for building_type, timelines in (
+        timelines_healthcare.CONFIG,
+        timelines_hospitality.CONFIG,
+        timelines_industrial.CONFIG,
+        timelines_multifamily.CONFIG,
+        timelines_restaurant.CONFIG,
+    )
 }
 
 MARGINS = {
