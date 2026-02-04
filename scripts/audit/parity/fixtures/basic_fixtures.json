@@ -1,0 +1,185 @@
+[
+  {
+    "building_type": "healthcare",
+    "expected": {
+      "building_type": "healthcare",
+      "facility_metrics_profile": null,
+      "metrics_shape_keyset": [],
+      "outpatient_mode": false,
+      "subtype": "hospital"
+    },
+    "extra_inputs": {
+      "location": "Nashville, TN"
+    },
+    "id": "healthcare_hospital",
+    "project_class": "ground_up",
+    "square_footage": 80000,
+    "subtype": "hospital"
+  },
+  {
+    "building_type": "healthcare",
+    "expected": {
+      "building_type": "healthcare",
+      "facility_metrics_profile": "healthcare_outpatient",
+      "metrics_shape_keyset": [
+        "cost_per_unit",
+        "revenue_per_unit",
+        "type",
+        "unit_label",
+        "units"
+      ],
+      "outpatient_mode": true,
+      "subtype": "medical_office_building"
+    },
+    "extra_inputs": {
+      "location": "Nashville, TN"
+    },
+    "id": "healthcare_medical_office_building",
+    "project_class": "ground_up",
+    "square_footage": 50000,
+    "subtype": "medical_office_building"
+  },
+  {
+    "building_type": "healthcare",
+    "expected": {
+      "building_type": "healthcare",
+      "facility_metrics_profile": "healthcare_outpatient",
+      "metrics_shape_keyset": [
+        "cost_per_unit",
+        "revenue_per_unit",
+        "type",
+        "unit_label",
+        "units"
+      ],
+      "outpatient_mode": true,
+      "subtype": "outpatient_clinic"
+    },
+    "extra_inputs": {
+      "location": "Nashville, TN"
+    },
+    "id": "healthcare_outpatient_clinic",
+    "project_class": "ground_up",
+    "square_footage": 12000,
+    "subtype": "outpatient_clinic"
+  },
+  {
+    "building_type": "industrial",
+    "expected": {
+      "building_type": "industrial",
+      "finishes_trade_total": 1297800.0,
+      "is_cold_storage": true,
+      "is_flex": false,
+      "scope_items_count": 5,
+      "scope_profile": "industrial_cold_storage",
+      "subtype": "cold_storage"
+    },
+    "extra_inputs": {
+      "location": "Nashville, TN"
+    },
+    "id": "industrial_cold_storage",
+    "project_class": "ground_up",
+    "square_footage": 60000,
+    "subtype": "cold_storage"
+  },
+  {
+    "building_type": "industrial",
+    "expected": {
+      "building_type": "industrial",
+      "finishes_trade_total": 1326640.0000000002,
+      "is_cold_storage": false,
+      "is_flex": true,
+      "scope_items_count": 5,
+      "scope_profile": "industrial_flex",
+      "subtype": "flex_space"
+    },
+    "extra_inputs": {
+      "location": "Nashville, TN"
+    },
+    "id": "industrial_flex_space",
+    "project_class": "ground_up",
+    "square_footage": 40000,
+    "subtype": "flex_space"
+  },
+  {
+    "building_type": "industrial",
+    "expected": {
+      "building_type": "industrial",
+      "computed_attrs_present": [
+        "maintenance_cost",
+        "property_tax",
+        "utility_cost"
+      ],
+      "excluded_attrs_present": [],
+      "finishes_trade_total": 1730400.0,
+      "is_cold_storage": false,
+      "is_flex": false,
+      "scope_items_count": 0,
+      "scope_profile": "industrial_manufacturing",
+      "subtype": "manufacturing"
+    },
+    "extra_inputs": {
+      "location": "Nashville, TN"
+    },
+    "id": "industrial_manufacturing",
+    "project_class": "ground_up",
+    "square_footage": 70000,
+    "subtype": "manufacturing"
+  },
+  {
+    "building_type": "industrial",
+    "expected": {
+      "building_type": "industrial",
+      "finishes_trade_total": 1135575.0,
+      "is_cold_storage": false,
+      "is_flex": false,
+      "scope_items_count": 5,
+      "scope_profile": "industrial_shell",
+      "subtype": "warehouse"
+    },
+    "extra_inputs": {
+      "location": "Nashville, TN"
+    },
+    "id": "industrial_warehouse_shell",
+    "project_class": "ground_up",
+    "square_footage": 50000,
+    "subtype": "warehouse"
+  },
+  {
+    "building_type": "restaurant",
+      "expected": {
+        "building_type": "restaurant",
+        "clamp_applied_mode": null,
+        "cost_per_sf_after": 780.785,
+        "cost_per_sf_before": null,
+        "max_cost_per_sf": 700,
+        "min_cost_per_sf": 250,
+        "subtype": "fine_dining"
+      },
+    "extra_inputs": {
+      "location": "Nashville, TN"
+    },
+    "id": "restaurant_fine_dining_no_max_clamp",
+    "project_class": "ground_up",
+    "square_footage": 5000,
+    "subtype": "fine_dining"
+  },
+  {
+    "building_type": "restaurant",
+    "expected": {
+      "building_type": "restaurant",
+      "clamp_applied_mode": null,
+      "cost_per_sf_after": 489.4096,
+      "cost_per_sf_before": null,
+      "max_cost_per_sf": 700,
+      "min_cost_per_sf": 250,
+      "subtype": "quick_service"
+    },
+    "extra_inputs": {
+      "location": "Nashville, TN"
+    },
+    "id": "restaurant_quick_service_clamp",
+    "project_class": "ground_up",
+    "square_footage": 3500,
+    "subtype": "quick_service"
+  }
+]
