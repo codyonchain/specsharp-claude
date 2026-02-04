@@ -341,6 +341,16 @@ from app.v2.config.type_profiles import (
     recreation as profile_recreation,
     parking as profile_parking,
 )
+from app.v2.config.type_profiles.margins import (
+    educational as margins_educational,
+    healthcare as margins_healthcare,
+    hospitality as margins_hospitality,
+    industrial as margins_industrial,
+    multifamily as margins_multifamily,
+    office as margins_office,
+    restaurant as margins_restaurant,
+    retail as margins_retail,
+)
 from app.v2.config.type_profiles.project_timelines import (
     healthcare as timelines_healthcare,
     hospitality as timelines_hospitality,
@@ -368,15 +378,17 @@ PROJECT_TIMELINES = {
 }
 
 MARGINS = {
-    BuildingType.MULTIFAMILY: 0.35,
-    BuildingType.OFFICE: 0.25,
-    BuildingType.RETAIL: 0.20,
-    # Industrial: NNN leases, very lean expenses. Treat margin as NOI margin.
-    BuildingType.INDUSTRIAL: 0.85,
-    BuildingType.HOSPITALITY: 0.18,
-    BuildingType.RESTAURANT: 0.17,
-    BuildingType.HEALTHCARE: 0.22,
-    BuildingType.EDUCATIONAL: 0.15,
+    building_type: margin
+    for building_type, margin in (
+        margins_educational.CONFIG,
+        margins_healthcare.CONFIG,
+        margins_hospitality.CONFIG,
+        margins_industrial.CONFIG,
+        margins_multifamily.CONFIG,
+        margins_office.CONFIG,
+        margins_restaurant.CONFIG,
+        margins_retail.CONFIG,
+    )
 }
 
 """
