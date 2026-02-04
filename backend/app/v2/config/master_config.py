@@ -326,6 +326,21 @@ from app.v2.config.subtypes.recreation import (
     sports_complex as recreation_sports_complex,
     stadium as recreation_stadium,
 )
+from app.v2.config.type_profiles import (
+    multifamily as profile_multifamily,
+    office as profile_office,
+    retail as profile_retail,
+    industrial as profile_industrial,
+    hospitality as profile_hospitality,
+    restaurant as profile_restaurant,
+    healthcare as profile_healthcare,
+    educational as profile_educational,
+    mixed_use as profile_mixed_use,
+    specialty as profile_specialty,
+    civic as profile_civic,
+    recreation as profile_recreation,
+    parking as profile_parking,
+)
 
 # ============================================================================
 # MASTER CONFIGURATION
@@ -457,74 +472,22 @@ For Multifamily specifically, these values are calibrated to:
   equity expectations for new development.
 """
 BUILDING_PROFILES: Dict[BuildingType, Dict[str, float]] = {
-    BuildingType.MULTIFAMILY: {
-        # Blended across luxury / market-rate / affordable
-        'market_cap_rate': 0.0650,   # ~6.5% MF market cap
-        'target_yield': 0.0800,      # ~8.0% yield-on-cost target
-        'target_dscr': 1.25,
-    },
-    BuildingType.OFFICE: {
-        'market_cap_rate': 0.0700,
-        'target_yield': 0.0950,
-        'target_dscr': 1.30,
-    },
-    BuildingType.RETAIL: {
-        'market_cap_rate': 0.0630,
-        'target_yield': 0.0830,
-        'target_dscr': 1.30,
-    },
-    BuildingType.INDUSTRIAL: {
-        # Modern bulk distribution in strong secondary markets (like Nashville).
-        # Cap rates ~6.25–6.75%, developers underwrite to ~7% yield-on-cost.
-        'market_cap_rate': 0.0650,
-        'target_yield': 0.0700,
-        'target_dscr': 1.25,
-    },
-    BuildingType.HOSPITALITY: {
-        'market_cap_rate': 0.0750,
-        'target_yield': 0.1000,
-        'target_dscr': 1.35,
-    },
-    BuildingType.RESTAURANT: {
-        'market_cap_rate': 0.0725,
-        'target_yield': 0.0900,
-        'target_dscr': 1.30,
-    },
-    BuildingType.HEALTHCARE: {
-        'market_cap_rate': 0.0625,
-        'target_yield': 0.0825,
-        'target_dscr': 1.30,
-    },
-    BuildingType.EDUCATIONAL: {
-        'market_cap_rate': 0.0675,
-        'target_yield': 0.0900,
-        'target_dscr': 1.30,
-    },
-    BuildingType.MIXED_USE: {
-        'market_cap_rate': 0.0575,
-        'target_yield': 0.0775,
-        'target_dscr': 1.30,
-    },
-    BuildingType.SPECIALTY: {
-        'market_cap_rate': 0.0700,
-        'target_yield': 0.0900,
-        'target_dscr': 1.25,
-    },
-    BuildingType.CIVIC: {
-        'market_cap_rate': 0.0675,
-        'target_yield': 0.0900,
-        'target_dscr': 1.30,
-    },
-    BuildingType.RECREATION: {
-        'market_cap_rate': 0.0675,
-        'target_yield': 0.0900,
-        'target_dscr': 1.30,
-    },
-    BuildingType.PARKING: {
-        'market_cap_rate': 0.0700,
-        'target_yield': 0.0900,
-        'target_dscr': 1.25,
-    },
+    building_type: profile
+    for building_type, profile in (
+        profile_multifamily.CONFIG,
+        profile_office.CONFIG,
+        profile_retail.CONFIG,
+        profile_industrial.CONFIG,
+        profile_hospitality.CONFIG,
+        profile_restaurant.CONFIG,
+        profile_healthcare.CONFIG,
+        profile_educational.CONFIG,
+        profile_mixed_use.CONFIG,
+        profile_specialty.CONFIG,
+        profile_civic.CONFIG,
+        profile_recreation.CONFIG,
+        profile_parking.CONFIG,
+    )
 }
 
 MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
