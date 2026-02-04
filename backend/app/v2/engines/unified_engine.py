@@ -797,7 +797,9 @@ class UnifiedEngine:
         if building_type == BuildingType.INDUSTRIAL:
             subtype_value = subtype.value if hasattr(subtype, "value") else subtype
             subtype_key = (subtype_value or "").lower().strip() if isinstance(subtype_value, str) else str(subtype_value or "").lower().strip()
-            if subtype_key == "flex_space":
+            scope_config = get_building_config(building_type, subtype_key)
+            scope_profile = getattr(scope_config, "scope_profile", None) if scope_config else None
+            if scope_profile == "industrial_flex":
                 finishes_item = next((item for item in scope_items if item.get("trade") == "Finishes"), None)
                 systems = finishes_item.get("systems", []) if isinstance(finishes_item, dict) else []
                 finishes_total_effective = sum(float(system.get("total_cost", 0.0) or 0.0) for system in systems)
