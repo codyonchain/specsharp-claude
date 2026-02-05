@@ -20,7 +20,7 @@ type TradeCostSplit = {
 
 type AnyRecord = Record<string, any>;
 
-const clampSplit = (split: TradeCostSplit): TradeCostSplit => {
+const normalizeTradeCostSplit = (split: TradeCostSplit): TradeCostSplit => {
   const { materials, labor, equipment } = split;
   const total = materials + labor + equipment || 1;
   return {
@@ -28,53 +28,6 @@ const clampSplit = (split: TradeCostSplit): TradeCostSplit => {
     labor: labor / total,
     equipment: equipment / total,
   };
-};
-
-/**
- * Get deterministic Materials / Labor / Equipment splits for a trade.
- * We bias toward realistic industrial heuristics when building type is industrial.
- */
-const getTradeCostSplit = (buildingTypeRaw: string, tradeNameRaw: string): TradeCostSplit => {
-  const buildingType = (buildingTypeRaw || '').toLowerCase();
-  const tradeName = (tradeNameRaw || '').toLowerCase();
-
-  // Industrial warehouse heuristics
-  if (buildingType === 'industrial') {
-    if (tradeName === 'structural') {
-      return clampSplit({ materials: 0.65, labor: 0.30, equipment: 0.05 });
-    }
-    if (tradeName === 'mechanical') {
-      return clampSplit({ materials: 0.10, labor: 0.25, equipment: 0.65 });
-    }
-    if (tradeName === 'electrical') {
-      return clampSplit({ materials: 0.35, labor: 0.55, equipment: 0.10 });
-    }
-    if (tradeName === 'plumbing') {
-      return clampSplit({ materials: 0.40, labor: 0.60, equipment: 0.00 });
-    }
-    if (tradeName === 'finishes') {
-      return clampSplit({ materials: 0.45, labor: 0.50, equipment: 0.05 });
-    }
-  }
-
-  // Generic fallback heuristics
-  if (tradeName === 'structural') {
-    return clampSplit({ materials: 0.60, labor: 0.35, equipment: 0.05 });
-  }
-  if (tradeName === 'mechanical') {
-    return clampSplit({ materials: 0.20, labor: 0.30, equipment: 0.50 });
-  }
-  if (tradeName === 'electrical') {
-    return clampSplit({ materials: 0.30, labor: 0.55, equipment: 0.15 });
-  }
-  if (tradeName === 'plumbing') {
-    return clampSplit({ materials: 0.40, labor: 0.60, equipment: 0.00 });
-  }
-  if (tradeName === 'finishes') {
-    return clampSplit({ materials: 0.45, labor: 0.50, equipment: 0.05 });
-  }
-
-  return clampSplit({ materials: 0.40, labor: 0.50, equipment: 0.10 });
 };
 
 interface Props {
@@ -573,24 +526,14 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
     typeof calculations.construction_costs?.equipment_total === 'number'
       ? calculations.construction_costs.equipment_total
       : Math.max(constructionTotal - baseConstructionTotal - specialFeaturesTotal, 0);
-  const equipmentBreakdown = (() => {
-    const total = typeof equipmentTotal === 'number' ? equipmentTotal : 0;
-    if (total <= 0) {
-      return null;
-    }
-    const mechShare = buildingTypeRaw.toLowerCase() === 'industrial' ? 0.6 : 0.5;
-    const elecShare = buildingTypeRaw.toLowerCase() === 'industrial' ? 0.25 : 0.3;
-    const dockShare = 1.0 - mechShare - elecShare;
-    const mech = total * mechShare;
-    const elec = total * elecShare;
-    const dock = total * dockShare;
-    return {
-      total,
-      mechanical: mech,
-      electrical: elec,
-      dock,
-    };
-  })();
+  const equipmentBreakdownRaw = calculations.construction_costs?.equipment_breakdown;
+  const equipmentBreakdown =
+    equipmentBreakdownRaw &&
+    typeof equipmentBreakdownRaw.mechanical === 'number' &&
+    typeof equipmentBreakdownRaw.electrical === 'number' &&
+    typeof equipmentBreakdownRaw.dock === 'number'
+      ? equipmentBreakdownRaw
+      : null;
 
   const displayCostPerSF = Math.round(
     finalCostPerSF || constructionTotal / safeSquareFootage
@@ -617,6 +560,26 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
         return acc;
       }, {})
     : (rawTradeBreakdown as Record<string, number>);
+
+  const tradeCostSplitsRaw = (calculations as AnyRecord).trade_cost_splits;
+  const tradeCostSplitsByTrade: Record<string, TradeCostSplit> =
+    tradeCostSplitsRaw && typeof tradeCostSplitsRaw === 'object'
+      ? Object.entries(tradeCostSplitsRaw).reduce((acc: Record<string, TradeCostSplit>, [rawKey, rawSplit]) => {
+          if (!rawSplit || typeof rawSplit !== 'object') return acc;
+          const materials = Number((rawSplit as AnyRecord).materials);
+          const labor = Number((rawSplit as AnyRecord).labor);
+          const equipment = Number((rawSplit as AnyRecord).equipment);
+          if ([materials, labor, equipment].some(v => Number.isNaN(v) || v < 0)) {
+            return acc;
+          }
+          acc[String(rawKey).toLowerCase()] = normalizeTradeCostSplit({
+            materials,
+            labor,
+            equipment,
+          });
+          return acc;
+        }, {})
+      : {};
 
   const tradeBaseTotal =
     Object.values(actualTradeBreakdown).reduce(
@@ -1501,10 +1464,10 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
             );
             const hasScopeForTrade =
               scopeForTrade && Array.isArray(scopeForTrade.systems) && scopeForTrade.systems.length > 0;
-            const split = getTradeCostSplit(buildingTypeRaw, trade.name);
-            const materialsCost = trade.amount * split.materials;
-            const laborCost = trade.amount * split.labor;
-            const equipmentCost = trade.amount * split.equipment;
+            const split = tradeCostSplitsByTrade[trade.name.toLowerCase()] || null;
+            const materialsCost = split ? trade.amount * split.materials : 0;
+            const laborCost = split ? trade.amount * split.labor : 0;
+            const equipmentCost = split ? trade.amount * split.equipment : 0;
             const progressWidth = Math.max(0, Math.min(100, trade.percent));
             return (
               <div key={trade.name} className="border rounded-lg hover:shadow-md transition">
@@ -1556,29 +1519,31 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                 {/* Expanded Details */}
                 {expandedTrade === trade.name && (
                   <div className="px-4 pb-4">
-                    <div className="pt-4 border-t grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <div className="text-[11px] text-gray-500">Materials</div>
-                        <div className="font-semibold text-gray-900">{formatCurrency(materialsCost)}</div>
-                        <div className="text-[11px] text-gray-500">
-                          {formatPercent(split.materials)} of {trade.percent}%
+                    {split && (
+                      <div className="pt-4 border-t grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <div className="text-[11px] text-gray-500">Materials</div>
+                          <div className="font-semibold text-gray-900">{formatCurrency(materialsCost)}</div>
+                          <div className="text-[11px] text-gray-500">
+                            {formatPercent(split.materials)} of {trade.percent}%
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] text-gray-500">Labor</div>
+                          <div className="font-semibold text-gray-900">{formatCurrency(laborCost)}</div>
+                          <div className="text-[11px] text-gray-500">
+                            {formatPercent(split.labor)} of {trade.percent}%
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] text-gray-500">Equipment</div>
+                          <div className="font-semibold text-gray-900">{formatCurrency(equipmentCost)}</div>
+                          <div className="text-[11px] text-gray-500">
+                            {formatPercent(split.equipment)} of {trade.percent}%
+                          </div>
                         </div>
                       </div>
-                      <div>
-                        <div className="text-[11px] text-gray-500">Labor</div>
-                        <div className="font-semibold text-gray-900">{formatCurrency(laborCost)}</div>
-                        <div className="text-[11px] text-gray-500">
-                          {formatPercent(split.labor)} of {trade.percent}%
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-gray-500">Equipment</div>
-                        <div className="font-semibold text-gray-900">{formatCurrency(equipmentCost)}</div>
-                        <div className="text-[11px] text-gray-500">
-                          {formatPercent(split.equipment)} of {trade.percent}%
-                        </div>
-                      </div>
-                    </div>
+                    )}
 
                     {hasScopeForTrade && (
                       <div className="mt-5">

@@ -18,6 +18,7 @@ CONFIG = (
         base_cost_per_sf=105,
         cost_range=(95, 125),
         scope_profile="industrial_shell",
+        scope_items_profile="industrial_warehouse_structural_v1",
         equipment_cost_per_sf=5,  # Dock equipment, minimal FFE
         typical_floors=1,
         trades=TradeBreakdown(

@@ -207,6 +207,8 @@ class BuildingConfig:
 
     # Config-driven behavior selectors (safe defaults)
     scope_profile: Optional[str] = None
+    scope_items_profile: Optional[str] = None
+    scope_items_overrides: Optional[Dict[str, Any]] = None
     scope_defaults: Dict[str, Any] = field(default_factory=dict)
     cost_clamp: Dict[str, Any] = field(default_factory=dict)
     finish_level_multipliers: Dict[str, Any] = field(default_factory=dict)

@@ -18,6 +18,7 @@ CONFIG = (
         # Keep range consistent with base_cost_per_sf (avoid clamp/logic bugs)
         cost_range=(105, 135),
         scope_profile="industrial_shell",
+        scope_items_profile="industrial_warehouse_structural_v1",
         equipment_cost_per_sf=8,
         typical_floors=1,
         trades=TradeBreakdown(
