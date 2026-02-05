@@ -18,6 +18,7 @@ CONFIG = (
         cost_range=(400, 475),
         facility_metrics_profile="healthcare_outpatient",
         scope_items_profile="healthcare_urgent_care_structural_v1",
+        dealshield_tile_profile="healthcare_urgent_care_v1",
         equipment_cost_per_sf=75,
         typical_floors=1,
         trades=TradeBreakdown(
