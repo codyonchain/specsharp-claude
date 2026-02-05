@@ -75,45 +75,6 @@ SCOPE_ITEM_PROFILES = {
                             },
                         },
                     },
-                    {
-                        "key": "mezzanine_structure",
-                        "label": "Mezzanine structure (framing, deck, stairs)",
-                        "unit": "SF",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.10,
-                        },
-                        "quantity_rule": {
-                            "type": "mezz_sf",
-                            "params": {
-                                "default_sf": 0.0,
-                                "override_keys": [
-                                    "mezzanine_sf",
-                                    "mezz_sf",
-                                    "mezzanineSquareFeet",
-                                ],
-                                "percent_override_keys": [
-                                    "mezzanine_percent",
-                                    "mezzanine_pct",
-                                    "mezzaninePercent",
-                                    "mezzaninePct",
-                                ],
-                            },
-                        },
-                        "omit_if_zero_quantity": True,
-                    },
-                ],
-                "conditional_rescales": [
-                    {
-                        "trigger_item_key": "mezzanine_structure",
-                        "target_item_keys": [
-                            "concrete_slab_on_grade",
-                            "tilt_wall_shell",
-                            "foundations_footings",
-                            "dock_pits_loading_aprons",
-                        ],
-                        "remaining_share": 0.90,
-                    },
                 ],
             },
             {
@@ -122,39 +83,7 @@ SCOPE_ITEM_PROFILES = {
                 "items": [
                     {
                         "key": "rtu_primary_hvac",
-                        "label": "Rooftop units (RTUs) & primary heating/cooling equipment",
-                        "unit": "EA",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.50,
-                        },
-                        "quantity_rule": {
-                            "type": "rtu_count",
-                            "params": {
-                                "sf_per_unit": 15000.0,
-                                "minimum": 1,
-                            },
-                        },
-                    },
-                    {
-                        "key": "makeup_air_exhaust",
-                        "label": "Make-up air units and exhaust fans",
-                        "unit": "EA",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.20,
-                        },
-                        "quantity_rule": {
-                            "type": "exhaust_fan_count",
-                            "params": {
-                                "sf_per_unit": 40000.0,
-                                "minimum": 1,
-                            },
-                        },
-                    },
-                    {
-                        "key": "ductwork_distribution",
-                        "label": "Ductwork, distribution, and ventilation",
+                        "label": "HVAC and ventilation baseline",
                         "unit": "SF",
                         "allocation": {
                             "type": "share_of_trade",
@@ -165,6 +94,87 @@ SCOPE_ITEM_PROFILES = {
                             "params": {},
                         },
                     },
+                    {
+                        "key": "unit_heaters_conditioning",
+                        "label": "Unit heaters and general conditioning allowance",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.20,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "makeup_air_exhaust",
+                        "label": "Make-up air and exhaust allowance",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.15,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "ductwork_distribution",
+                        "label": "Ductwork, distribution, and ventilation",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.15,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "hvac_controls_bms",
+                        "label": "HVAC controls and BMS allowance",
+                        "unit": "LS",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.10,
+                        },
+                        "quantity_rule": {
+                            "type": "constant",
+                            "params": {
+                                "value": 1,
+                            },
+                        },
+                    },
+                    {
+                        "key": "office_hvac_allowance",
+                        "label": "Office HVAC allowance",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.10,
+                        },
+                        "quantity_rule": {
+                            "type": "office_sf",
+                            "params": {
+                                "default_percent": 0.05,
+                                "default_min_sf": 1500.0,
+                                "override_keys": [
+                                    "office_sf",
+                                    "officeSquareFeet",
+                                    "office_space_sf",
+                                ],
+                                "percent_override_keys": [
+                                    "office_percent",
+                                    "office_pct",
+                                    "officePercent",
+                                    "officePct",
+                                ],
+                            },
+                        },
+                    },
                 ],
             },
             {
@@ -172,16 +182,18 @@ SCOPE_ITEM_PROFILES = {
                 "trade_label": "Electrical",
                 "items": [
                     {
-                        "key": "high_bay_lighting",
-                        "label": "High-bay lighting & controls",
-                        "unit": "SF",
+                        "key": "main_service_switchgear",
+                        "label": "Main electrical service and switchgear",
+                        "unit": "LS",
                         "allocation": {
                             "type": "share_of_trade",
-                            "share": 0.45,
+                            "share": 0.20,
                         },
                         "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
+                            "type": "constant",
+                            "params": {
+                                "value": 1,
+                            },
                         },
                     },
                     {
@@ -190,7 +202,7 @@ SCOPE_ITEM_PROFILES = {
                         "unit": "SF",
                         "allocation": {
                             "type": "share_of_trade",
-                            "share": 0.35,
+                            "share": 0.25,
                         },
                         "quantity_rule": {
                             "type": "sf",
@@ -198,12 +210,38 @@ SCOPE_ITEM_PROFILES = {
                         },
                     },
                     {
-                        "key": "main_service_switchgear",
-                        "label": "Main electrical service and switchgear",
+                        "key": "high_bay_lighting",
+                        "label": "Lighting, controls, and receptacles",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.30,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "equipment_power_allowance",
+                        "label": "Equipment power and specialty circuits allowance",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.15,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "fire_alarm_low_voltage",
+                        "label": "Fire alarm and low-voltage systems",
                         "unit": "LS",
                         "allocation": {
                             "type": "share_of_trade",
-                            "share": 0.20,
+                            "share": 0.10,
                         },
                         "quantity_rule": {
                             "type": "constant",
@@ -224,7 +262,7 @@ SCOPE_ITEM_PROFILES = {
                         "unit": "EA",
                         "allocation": {
                             "type": "share_of_trade",
-                            "share": 0.50,
+                            "share": 0.28,
                         },
                         "quantity_rule": {
                             "type": "restroom_groups",
@@ -235,12 +273,38 @@ SCOPE_ITEM_PROFILES = {
                         },
                     },
                     {
-                        "key": "domestic_water_roof_drains",
-                        "label": "Domestic water, hose bibs, and roof drains",
+                        "key": "domestic_water_sanitary",
+                        "label": "Domestic water and sanitary piping",
                         "unit": "SF",
                         "allocation": {
                             "type": "share_of_trade",
                             "share": 0.20,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "roof_drains_storm_tie_in",
+                        "label": "Roof drains and storm tie-in allowance",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.12,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "trench_drains_allowance",
+                        "label": "Trench drains and washdown allowance",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.10,
                         },
                         "quantity_rule": {
                             "type": "sf",
@@ -272,7 +336,7 @@ SCOPE_ITEM_PROFILES = {
                         "unit": "SF",
                         "allocation": {
                             "type": "share_of_trade",
-                            "share": 0.45,
+                            "share": 0.30,
                         },
                         "quantity_rule": {
                             "type": "office_sf",
@@ -299,25 +363,24 @@ SCOPE_ITEM_PROFILES = {
                         "unit": "SF",
                         "allocation": {
                             "type": "share_of_trade",
-                            "share": 0.40,
+                            "share": 0.35,
                         },
                         "quantity_rule": {
-                            "type": "warehouse_sf",
-                            "params": {
-                                "default_percent": 0.05,
-                                "default_min_sf": 1500.0,
-                                "office_override_keys": [
-                                    "office_sf",
-                                    "officeSquareFeet",
-                                    "office_space_sf",
-                                ],
-                                "office_percent_override_keys": [
-                                    "office_percent",
-                                    "office_pct",
-                                    "officePercent",
-                                    "officePct",
-                                ],
-                            },
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "minimal_interior_finishes",
+                        "label": "Minimal interior finishes allowance",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.20,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
                         },
                     },
                     {
