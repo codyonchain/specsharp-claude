@@ -1792,10 +1792,15 @@ class UnifiedEngine:
             if structural_total > 0:
                 if is_flex:
                     include_docks = bool(dock_count and dock_count > 0)
-                    slab_share = 0.45
-                    shell_share = 0.25
-                    foundations_share = 0.10
-                    dock_share = 0.20 if include_docks else 0.0
+                    flex_share_defaults = scope_items_industrial.SCOPE_ITEM_DEFAULTS.get(
+                        "industrial_flex_structural_shares",
+                        {},
+                    )
+                    slab_share = float(flex_share_defaults.get("slab", 0.0) or 0.0)
+                    shell_share = float(flex_share_defaults.get("shell", 0.0) or 0.0)
+                    foundations_share = float(flex_share_defaults.get("foundations", 0.0) or 0.0)
+                    dock_share_default = float(flex_share_defaults.get("dock", 0.0) or 0.0)
+                    dock_share = dock_share_default if include_docks else 0.0
 
                     if not include_docks:
                         base_total = slab_share + shell_share + foundations_share

@@ -1,3 +1,12 @@
+SCOPE_ITEM_DEFAULTS = {
+    "industrial_flex_structural_shares": {
+        "slab": 0.45,
+        "shell": 0.25,
+        "foundations": 0.10,
+        "dock": 0.20,
+    },
+}
+
 SCOPE_ITEM_PROFILES = {
     "industrial_warehouse_structural_v1": {
         "trade_profiles": [
