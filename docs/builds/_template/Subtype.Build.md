@@ -24,6 +24,7 @@ Make this subtype output client-trustworthy and **distinct** by fully specifying
 - docs/agents/decision_models.md
 - docs/library/constructionview_contract.md
 - docs/library/executiveview_contract.md
+- docs/library/dealshield_contract.md
 - docs/library/subtype_spec_checklist.md
 
 ## Type + subtype docs
