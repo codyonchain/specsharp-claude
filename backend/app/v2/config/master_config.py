@@ -125,6 +125,10 @@ class BuildingConfig:
     
     # Regional multipliers (base = Nashville = 1.0)
     regional_multipliers: Dict[str, float]
+
+    # DealShield tiles are config-driven via tile_profile + overrides
+    dealshield_tile_profile: Optional[str] = None
+    dealshield_tile_overrides: Optional[dict] = None
     
     # Special features that add cost
     special_features: Optional[Dict[str, float]] = None
