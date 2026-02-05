@@ -27,11 +27,12 @@ from app.v2.config.construction_schedule import (
     CONSTRUCTION_SCHEDULES,
     CONSTRUCTION_SCHEDULE_FALLBACKS,
 )
-from app.v2.config.type_profiles.scope_items import industrial as scope_items_industrial
+from app.v2.config.type_profiles import scope_items
 # from app.v2.services.financial_analyzer import FinancialAnalyzer  # TODO: Implement this
 from typing import Optional, Dict, Any, List, Tuple
 from copy import deepcopy
 from dataclasses import asdict, replace
+import math
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1383,24 +1384,34 @@ class UnifiedEngine:
         override_keys = params.get("override_keys") if isinstance(params.get("override_keys"), list) else []
         office_sf_override = self._get_override_number(override_sources, override_keys)
         if office_sf_override is not None:
-            return max(0.0, float(office_sf_override))
+            office_sf_value = float(office_sf_override)
+            if office_sf_value > 0.0:
+                return office_sf_value
 
         percent_override_keys = (
             params.get("percent_override_keys") if isinstance(params.get("percent_override_keys"), list) else []
         )
-        office_pct_override = self._get_percent_override(override_sources, percent_override_keys)
+        office_pct_override = self._get_override_number(override_sources, percent_override_keys)
+        percent: Optional[float] = None
         if office_pct_override is not None:
-            return max(0.0, square_footage * office_pct_override)
+            percent_value = float(office_pct_override)
+            if 0.0 <= percent_value <= 1.0:
+                percent = percent_value
 
-        default_percent = float(params.get("default_percent", 0.05) or 0.05)
+        if percent is None:
+            percent = float(params.get("default_percent", 0.05) or 0.05)
+
         default_min_sf = float(params.get("default_min_sf", 1500.0) or 1500.0)
-        return max(default_min_sf, square_footage * default_percent)
+        return max(default_min_sf, square_footage * percent)
 
     def _resolve_scope_item_quantity(
         self,
         quantity_rule: Dict[str, Any],
         square_footage: float,
         override_sources: List[Dict[str, Any]],
+        *,
+        item_key: Optional[str] = None,
+        profile_id: Optional[str] = None,
     ) -> Any:
         rule_type = str(quantity_rule.get("type") or "").strip().lower()
         params = quantity_rule.get("params") if isinstance(quantity_rule.get("params"), dict) else {}
@@ -1456,7 +1467,7 @@ class UnifiedEngine:
             minimum = int(params.get("minimum", 1) or 1)
             if sf_per_group <= 0:
                 return minimum
-            return max(minimum, int(round(square_footage / sf_per_group)))
+            return max(minimum, int(math.ceil(square_footage / sf_per_group)))
 
         if rule_type == "office_sf":
             return self._resolve_office_sf(square_footage, override_sources, params)
@@ -1479,18 +1490,33 @@ class UnifiedEngine:
             office_sf = self._resolve_office_sf(square_footage, override_sources, office_params)
             return max(0.0, square_footage - office_sf) if square_footage > office_sf else square_footage
 
-        return 0.0
+        resolved_item_key = item_key or "unknown"
+        resolved_profile_id = profile_id or "unknown"
+        raise ValueError(
+            f"Unsupported quantity_rule.type: {rule_type or 'unknown'} (item key: {resolved_item_key}, "
+            f"profile: {resolved_profile_id})"
+        )
 
     def _load_scope_item_profile(self, profile_id: str, building_type: BuildingType) -> Optional[Dict[str, Any]]:
         profile_sources: List[Dict[str, Dict[str, Any]]] = []
-        if building_type == BuildingType.INDUSTRIAL:
-            profile_sources.append(scope_items_industrial.SCOPE_ITEM_PROFILES)
+        profile_sources.extend(scope_items.SCOPE_ITEM_PROFILE_SOURCES)
 
         for source in profile_sources:
             profile = source.get(profile_id)
             if isinstance(profile, dict):
                 return deepcopy(profile)
         return None
+
+    def _resolve_scope_item_defaults(self, default_key: str) -> Dict[str, Any]:
+        default_sources: List[Dict[str, Any]] = []
+        default_sources.extend(scope_items.SCOPE_ITEM_DEFAULT_SOURCES)
+        for source in default_sources:
+            if not isinstance(source, dict):
+                continue
+            default_value = source.get(default_key)
+            if isinstance(default_value, dict):
+                return default_value
+        return {}
 
     def _apply_scope_item_overrides(
         self,
@@ -1558,6 +1584,7 @@ class UnifiedEngine:
         trades: Dict[str, float],
         square_footage: float,
         override_sources: List[Dict[str, Any]],
+        profile_id: str,
     ) -> Optional[Dict[str, Any]]:
         trade_key = str(trade_profile.get("trade_key") or "").strip().lower()
         if not trade_key:
@@ -1586,6 +1613,8 @@ class UnifiedEngine:
                 quantity_rule,
                 float(square_footage),
                 override_sources,
+                item_key=key,
+                profile_id=profile_id,
             )
             ordered_items.append(item)
 
@@ -1676,6 +1705,7 @@ class UnifiedEngine:
                     trades=trades,
                     square_footage=square_footage,
                     override_sources=override_sources,
+                    profile_id=profile_id,
                 )
                 if built:
                     built_scope_items.append(built)
@@ -1685,6 +1715,7 @@ class UnifiedEngine:
                 trades=trades,
                 square_footage=square_footage,
                 override_sources=override_sources,
+                profile_id=profile_id,
             )
             if built:
                 built_scope_items.append(built)
@@ -1792,9 +1823,8 @@ class UnifiedEngine:
             if structural_total > 0:
                 if is_flex:
                     include_docks = bool(dock_count and dock_count > 0)
-                    flex_share_defaults = scope_items_industrial.SCOPE_ITEM_DEFAULTS.get(
+                    flex_share_defaults = self._resolve_scope_item_defaults(
                         "industrial_flex_structural_shares",
-                        {},
                     )
                     slab_share = float(flex_share_defaults.get("slab", 0.0) or 0.0)
                     shell_share = float(flex_share_defaults.get("shell", 0.0) or 0.0)
