@@ -17,6 +17,7 @@ CONFIG = (
         base_cost_per_sf=360,
         cost_range=(250, 350),
         cost_clamp={"min_cost_per_sf": 250, "max_cost_per_sf": 700},
+        scope_items_profile="restaurant_quick_service_structural_v1",
         equipment_cost_per_sf=40,  # Kitchen equipment mostly in base cost
         typical_floors=1,
         trades=TradeBreakdown(
