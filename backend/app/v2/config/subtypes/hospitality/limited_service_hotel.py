@@ -17,6 +17,7 @@ CONFIG = (
         display_name="Select Service Hotel",
         base_cost_per_sf=205,
         cost_range=(190, 230),
+        scope_items_profile="hospitality_limited_service_hotel_structural_v1",
         equipment_cost_per_sf=28,
         typical_floors=5,
         trades=TradeBreakdown(
