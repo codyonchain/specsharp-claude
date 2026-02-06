@@ -17,7 +17,7 @@ async function testV2API() {
 
     // 2. Test NLP analysis
     console.log('\n2. Testing NLP analysis...');
-    const analysis = await api.analyzeProject('Build a 200,000 square foot hospital in Nashville');
+    const analysis = await api.analyzeProject('Build a 200,000 SF hospital in Nashville, TN');
     console.log('✅ Analysis:', {
       building_type: analysis.parsed_input.building_type,
       subtype: analysis.parsed_input.subtype,

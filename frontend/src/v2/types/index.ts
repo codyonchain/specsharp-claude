@@ -325,3 +325,9 @@ export interface FinancialRequirements {
   performance_targets: FinancialRequirementsSection;
   market_analysis: FinancialRequirementsSection;
 }
+
+// ============================================================================
+// DEALSHIELD TYPES
+// ============================================================================
+
+export type DealShieldViewModel = Record<string, any>;

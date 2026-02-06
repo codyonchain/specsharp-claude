@@ -1,13 +1,13 @@
 import React from 'react';
 import { Project } from '../../types';
-import { ArrowLeft, FileSpreadsheet, HardHat } from 'lucide-react';
+import { ArrowLeft, FileSpreadsheet, HardHat, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface Props {
   project: Project;
   onDelete: () => void;
-  activeView: 'executive' | 'construction';
-  onViewChange: (view: 'executive' | 'construction') => void;
+  activeView: 'dealshield' | 'executive' | 'construction';
+  onViewChange: (view: 'dealshield' | 'executive' | 'construction') => void;
 }
 
 export const ProjectHeader: React.FC<Props> = ({ project: _project, onDelete: _onDelete, activeView, onViewChange }) => {
@@ -26,6 +26,17 @@ export const ProjectHeader: React.FC<Props> = ({ project: _project, onDelete: _o
         <div className="flex-1">
           <div className="w-full overflow-x-auto">
             <div className="inline-flex bg-gray-100 p-1 rounded-lg min-w-full sm:min-w-0">
+              <button
+                onClick={() => onViewChange('dealshield')}
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 rounded-md font-medium transition-all ${
+                  activeView === 'dealshield'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <ShieldCheck className="h-4 w-4" />
+                DealShield
+              </button>
               <button
                 onClick={() => onViewChange('executive')}
                 className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 rounded-md font-medium transition-all ${
