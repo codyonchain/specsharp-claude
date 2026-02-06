@@ -3,11 +3,48 @@ from __future__ import annotations
 import copy
 import json
 import math
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from app.v2.config.type_profiles.dealshield_content import get_dealshield_content_profile
 
 _MISSING = object()
+
+_WAVE1_PROFILE_IDS: Set[str] = {
+    "industrial_warehouse_v1",
+    "industrial_cold_storage_v1",
+    "healthcare_medical_office_building_v1",
+    "healthcare_urgent_care_v1",
+    "restaurant_quick_service_v1",
+    "hospitality_limited_service_hotel_v1",
+}
+
+_DECISION_TABLE_COLUMNS: List[Dict[str, str]] = [
+    {
+        "id": "total_cost",
+        "label": "Total Project Cost",
+        "metric_ref": "totals.total_project_cost",
+    },
+    {
+        "id": "annual_revenue",
+        "label": "Annual Revenue",
+        "metric_ref": "revenue_analysis.annual_revenue",
+    },
+    {
+        "id": "noi",
+        "label": "NOI",
+        "metric_ref": "return_metrics.estimated_annual_noi",
+    },
+    {
+        "id": "dscr",
+        "label": "DSCR",
+        "metric_ref": "ownership_analysis.debt_metrics.calculated_dscr",
+    },
+    {
+        "id": "yoc",
+        "label": "Yield on Cost",
+        "metric_ref": "ownership_analysis.yield_on_cost",
+    },
+]
 
 class DealShieldResolutionError(ValueError):
     pass
@@ -122,6 +159,119 @@ def _collect_sensitivity_presence(payload: Dict[str, Any]) -> List[str]:
             if isinstance(os.get("scenarios"), dict):
                 paths.append("ownership_analysis.sensitivity_analysis.scenarios")
     return paths
+
+
+def _resolve_profile_scenario_rows(profile: Dict[str, Any]) -> List[Dict[str, str]]:
+    derived_rows = profile.get("derived_rows")
+    if not isinstance(derived_rows, list):
+        return [{"scenario_id": "base", "label": "Base"}]
+
+    rows: List[Dict[str, str]] = [{"scenario_id": "base", "label": "Base"}]
+    seen = {"base"}
+    for row in derived_rows:
+        if not isinstance(row, dict):
+            continue
+        scenario_id = row.get("row_id") or row.get("id") or row.get("scenario_id")
+        if not isinstance(scenario_id, str) or not scenario_id.strip():
+            continue
+        normalized_id = scenario_id.strip()
+        if normalized_id in seen:
+            continue
+        seen.add(normalized_id)
+        label = row.get("label") if isinstance(row.get("label"), str) and row.get("label").strip() else normalized_id
+        rows.append({"scenario_id": normalized_id, "label": label})
+    return rows
+
+
+def _resolve_dealshield_scenario_snapshot(payload: Dict[str, Any], scenario_id: str) -> Optional[Dict[str, Any]]:
+    ds = payload.get("dealshield_scenarios")
+    if not isinstance(ds, dict):
+        return None
+    scenarios = ds.get("scenarios")
+    if not isinstance(scenarios, dict):
+        return None
+    scenario_payload = scenarios.get(scenario_id)
+    if not isinstance(scenario_payload, dict):
+        return None
+    return scenario_payload
+
+
+def _resolve_decision_value(
+    payload: Dict[str, Any],
+    scenario_id: str,
+    metric_ref: str,
+) -> Tuple[Optional[float], Optional[str], str]:
+    if scenario_id == "base":
+        v, src = _resolve_dealshield_scenarios_value(payload, "base", metric_ref)
+        if v is not None:
+            return v, src, "dealshield_scenarios"
+        raw = _resolve_metric_ref(payload, metric_ref)
+        if raw is not _MISSING and _is_number(raw):
+            return float(raw), metric_ref, "payload_base"
+        return None, None, "missing"
+
+    v, src = _resolve_dealshield_scenarios_value(payload, scenario_id, metric_ref)
+    if v is not None:
+        return v, src, "dealshield_scenarios"
+    return None, None, "missing"
+
+
+def _build_decision_table(payload: Dict[str, Any], profile: Dict[str, Any]) -> Dict[str, Any]:
+    columns: List[Dict[str, Any]] = []
+    for col in _DECISION_TABLE_COLUMNS:
+        col_id = col["id"]
+        columns.append(
+            {
+                "id": col_id,
+                "tile_id": col_id,
+                "label": col["label"],
+                "metric_ref": col["metric_ref"],
+            }
+        )
+
+    scenario_rows = _resolve_profile_scenario_rows(profile)
+    profile_id = profile.get("profile_id")
+    is_wave1_profile = isinstance(profile_id, str) and profile_id in _WAVE1_PROFILE_IDS
+
+    rows: List[Dict[str, Any]] = []
+    for row in scenario_rows:
+        scenario_id = row["scenario_id"]
+        label = row["label"]
+        scenario_snapshot = _resolve_dealshield_scenario_snapshot(payload, scenario_id)
+
+        if is_wave1_profile and scenario_snapshot is None:
+            raise DealShieldResolutionError(
+                f"Wave-1 profile '{profile_id}' missing dealshield_scenarios snapshot for scenario '{scenario_id}'"
+            )
+
+        cells: List[Dict[str, Any]] = []
+        for col in columns:
+            metric_ref = col["metric_ref"]
+            col_id = col["id"]
+
+            if is_wave1_profile:
+                raw_snapshot_value = _resolve_metric_ref(scenario_snapshot or {}, metric_ref)
+                if raw_snapshot_value is _MISSING or not _is_number(raw_snapshot_value):
+                    raise DealShieldResolutionError(
+                        f"Wave-1 profile '{profile_id}' missing/non-numeric snapshot metric_ref "
+                        f"'{metric_ref}' for scenario '{scenario_id}'"
+                    )
+
+            value, source_path, provenance_kind = _resolve_decision_value(payload, scenario_id, metric_ref)
+            cells.append(
+                {
+                    "col_id": col_id,
+                    "tile_id": col_id,
+                    "value": value,
+                    "metric_ref": metric_ref,
+                    "provenance_kind": provenance_kind,
+                    "scenario_source_path": source_path,
+                }
+            )
+
+        rows.append({"scenario_id": scenario_id, "label": label, "cells": cells})
+
+    return {"columns": columns, "rows": rows}
 
 def build_dealshield_scenario_table(project_id: str, payload: Dict[str, Any], profile: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(payload, dict):
@@ -278,16 +428,16 @@ def _extract_dealshield_context(payload: Dict[str, Any]) -> Dict[str, Any]:
     return context
 
 
-def _extract_dealshield_scenario_inputs(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def _extract_dealshield_scenario_inputs(payload: Dict[str, Any]) -> Dict[str, Any]:
     ds_block = payload.get("dealshield_scenarios")
     if not isinstance(ds_block, dict):
-        return None
+        return {}
     provenance = ds_block.get("provenance")
     if not isinstance(provenance, dict):
-        return None
+        return {}
     scenario_inputs = provenance.get("scenario_inputs")
     if not isinstance(scenario_inputs, dict):
-        return None
+        return {}
     return scenario_inputs
 
 
@@ -343,16 +493,27 @@ def _resolve_dealshield_content_drivers(content: Dict[str, Any], profile: Dict[s
 
 def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profile: Dict[str, Any]) -> Dict[str, Any]:
     view_model = build_dealshield_scenario_table(project_id, payload, profile)
+    legacy_columns = copy.deepcopy(view_model.get("columns", []))
+    legacy_rows = copy.deepcopy(view_model.get("rows", []))
+
+    decision_table = _build_decision_table(payload, profile)
+    view_model["decision_table"] = decision_table
+    view_model["legacy_scenario_table"] = {
+        "columns": legacy_columns if isinstance(legacy_columns, list) else [],
+        "rows": legacy_rows if isinstance(legacy_rows, list) else [],
+    }
+    view_model["columns"] = decision_table.get("columns", [])
+    view_model["rows"] = decision_table.get("rows", [])
+
     context = _extract_dealshield_context(payload)
     if context:
         view_model["context"] = context
     scenario_inputs = _extract_dealshield_scenario_inputs(payload)
-    if scenario_inputs:
-        provenance = view_model.get("provenance")
-        if not isinstance(provenance, dict):
-            provenance = {}
-        provenance["scenario_inputs"] = scenario_inputs
-        view_model["provenance"] = provenance
+    provenance = view_model.get("provenance")
+    if not isinstance(provenance, dict):
+        provenance = {}
+    provenance["scenario_inputs"] = scenario_inputs
+    view_model["provenance"] = provenance
 
     content_profile_id = _resolve_dealshield_content_profile_id(payload, profile)
     if content_profile_id:

@@ -40,6 +40,19 @@ SECTION_HEADERS = [
 ]
 
 
+def _is_placeholder_text(value: Any) -> bool:
+    if not isinstance(value, str):
+        return True
+    text = value.strip()
+    if not text:
+        return True
+    if text in {"-", "—"}:
+        return True
+    if "tbd" in text.lower():
+        return True
+    return False
+
+
 def _resolve_project_class(value: Optional[str]) -> ProjectClass:
     if not value:
         return ProjectClass.GROUND_UP
@@ -132,16 +145,47 @@ def run() -> int:
                 failures.append(f"{name}: fastest_change.drivers must have length 3")
 
         most_likely_wrong = content.get("most_likely_wrong")
-        if not isinstance(most_likely_wrong, list) or not most_likely_wrong:
-            failures.append(f"{name}: most_likely_wrong must be non-empty")
+        if not isinstance(most_likely_wrong, list) or len(most_likely_wrong) < 2:
+            failures.append(f"{name}: most_likely_wrong must have at least 2 entries")
+        else:
+            for idx, item in enumerate(most_likely_wrong):
+                if not isinstance(item, dict):
+                    failures.append(f"{name}: most_likely_wrong[{idx}] must be an object")
+                    continue
+                text = item.get("text")
+                if _is_placeholder_text(text):
+                    failures.append(f"{name}: most_likely_wrong[{idx}].text has placeholder content")
 
         question_bank = content.get("question_bank")
-        if not isinstance(question_bank, list) or not question_bank:
-            failures.append(f"{name}: question_bank must be non-empty")
+        if not isinstance(question_bank, list) or len(question_bank) < 2:
+            failures.append(f"{name}: question_bank must have at least 2 groups")
+        else:
+            for idx, group in enumerate(question_bank):
+                if not isinstance(group, dict):
+                    failures.append(f"{name}: question_bank[{idx}] must be an object")
+                    continue
+                questions = group.get("questions")
+                if not isinstance(questions, list) or len(questions) < 2:
+                    failures.append(f"{name}: question_bank[{idx}].questions must have at least 2 questions")
+                    continue
+                for q_idx, question in enumerate(questions):
+                    if _is_placeholder_text(question):
+                        failures.append(f"{name}: question_bank[{idx}].questions[{q_idx}] has placeholder content")
 
         red_flags_actions = content.get("red_flags_actions")
-        if not isinstance(red_flags_actions, list) or not red_flags_actions:
-            failures.append(f"{name}: red_flags_actions must be non-empty")
+        if not isinstance(red_flags_actions, list) or not (2 <= len(red_flags_actions) <= 4):
+            failures.append(f"{name}: red_flags_actions must have 2-4 entries")
+        else:
+            for idx, item in enumerate(red_flags_actions):
+                if not isinstance(item, dict):
+                    failures.append(f"{name}: red_flags_actions[{idx}] must be an object")
+                    continue
+                flag = item.get("flag")
+                action = item.get("action")
+                if _is_placeholder_text(flag):
+                    failures.append(f"{name}: red_flags_actions[{idx}].flag has placeholder content")
+                if _is_placeholder_text(action):
+                    failures.append(f"{name}: red_flags_actions[{idx}].action has placeholder content")
 
         html = render_dealshield_html(view_model)
         for header in SECTION_HEADERS:
