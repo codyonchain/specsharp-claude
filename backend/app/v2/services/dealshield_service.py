@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import copy
 import json
 import math
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+from app.v2.config.type_profiles.dealshield_content import get_dealshield_content_profile
 
 _MISSING = object()
 
@@ -288,6 +291,56 @@ def _extract_dealshield_scenario_inputs(payload: Dict[str, Any]) -> Optional[Dic
     return scenario_inputs
 
 
+def _resolve_dealshield_content_profile_id(payload: Dict[str, Any], profile: Dict[str, Any]) -> Optional[str]:
+    payload_profile_id = payload.get("dealshield_content_profile")
+    if isinstance(payload_profile_id, str) and payload_profile_id.strip():
+        return payload_profile_id.strip()
+    profile_id = profile.get("profile_id")
+    if isinstance(profile_id, str) and profile_id.strip():
+        return profile_id.strip()
+    return None
+
+
+def _resolve_dealshield_content_drivers(content: Dict[str, Any], profile: Dict[str, Any]) -> List[Dict[str, Any]]:
+    tiles = profile.get("tiles")
+    if not isinstance(tiles, list):
+        return []
+
+    tile_map: Dict[str, Dict[str, Any]] = {}
+    for tile in tiles:
+        if not isinstance(tile, dict):
+            continue
+        tile_id = tile.get("tile_id")
+        if isinstance(tile_id, str) and tile_id:
+            tile_map[tile_id] = tile
+
+    fastest_change = content.get("fastest_change")
+    if not isinstance(fastest_change, dict):
+        return []
+    drivers = fastest_change.get("drivers")
+    if not isinstance(drivers, list):
+        return []
+
+    resolved: List[Dict[str, Any]] = []
+    for driver in drivers:
+        if not isinstance(driver, dict):
+            continue
+        tile_id = driver.get("tile_id")
+        if not isinstance(tile_id, str) or not tile_id:
+            continue
+        tile = tile_map.get(tile_id)
+        if not isinstance(tile, dict):
+            continue
+        resolved.append(
+            {
+                "tile_id": tile_id,
+                "metric_ref": tile.get("metric_ref"),
+                "transform": tile.get("transform"),
+            }
+        )
+    return resolved
+
+
 def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profile: Dict[str, Any]) -> Dict[str, Any]:
     view_model = build_dealshield_scenario_table(project_id, payload, profile)
     context = _extract_dealshield_context(payload)
@@ -300,4 +353,16 @@ def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profil
             provenance = {}
         provenance["scenario_inputs"] = scenario_inputs
         view_model["provenance"] = provenance
+
+    content_profile_id = _resolve_dealshield_content_profile_id(payload, profile)
+    if content_profile_id:
+        try:
+            content_profile = copy.deepcopy(get_dealshield_content_profile(content_profile_id))
+        except KeyError:
+            content_profile = None
+        if isinstance(content_profile, dict):
+            content_profile["resolved_drivers"] = _resolve_dealshield_content_drivers(
+                content_profile, profile
+            )
+            view_model["content"] = content_profile
     return view_model
