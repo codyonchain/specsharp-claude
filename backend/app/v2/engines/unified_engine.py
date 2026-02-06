@@ -862,12 +862,11 @@ class UnifiedEngine:
                 total_project_cost = max_cost * square_footage
         
         # Calculate ownership/financing analysis with enhanced financial metrics
-        ownership_analysis = None
-        revenue_data = None
-        flex_revenue_per_sf = None
-        if ownership_type in building_config.ownership_types:
-            # Calculate comprehensive revenue analysis using master_config
-            revenue_data = self.calculate_ownership_analysis({
+        ownership_bundle = self._build_ownership_bundle(
+            building_config=building_config,
+            ownership_type=ownership_type,
+            total_project_cost=total_project_cost,
+            calculation_context={
                 'building_type': building_type.value,
                 'subtype': subtype,
                 'square_footage': square_footage,
@@ -879,61 +878,11 @@ class UnifiedEngine:
                 'regional_context': regional_context,
                 'location': location,
                 'scenario': scenario_key,
-            })
-
-            # Get basic ownership metrics (prefer revenue-derived NOI when available)
-            revenue_analysis_for_financing = revenue_data.get('revenue_analysis') if revenue_data else None
-            if revenue_data:
-                flex_metric = revenue_data.get('flex_revenue_per_sf')
-                if isinstance(flex_metric, (int, float)):
-                    flex_revenue_per_sf = flex_metric
-            ownership_analysis = self._calculate_ownership(
-                total_project_cost,
-                building_config.ownership_types[ownership_type],
-                revenue_analysis=revenue_analysis_for_financing
-            )
-            
-            # Merge revenue analysis into ownership analysis
-            if revenue_data and 'revenue_analysis' in revenue_data:
-                ownership_analysis['revenue_analysis'] = revenue_data['revenue_analysis']
-                ownership_analysis['return_metrics'].update(revenue_data['return_metrics'])
-                ownership_analysis['roi_analysis'] = {
-                    'financial_metrics': {
-                        'annual_revenue': revenue_data['revenue_analysis']['annual_revenue'],
-                        'operating_margin': revenue_data['revenue_analysis']['operating_margin'],
-                        'net_income': revenue_data['revenue_analysis']['net_income']
-                    }
-                }
-                # Add the new metrics from our enhanced analysis
-                ownership_analysis['revenue_requirements'] = revenue_data.get('revenue_requirements', {})
-                ownership_analysis['operational_efficiency'] = revenue_data.get('operational_efficiency', {})
-                ownership_analysis['operational_metrics'] = revenue_data.get('operational_metrics', {})
-                if 'sensitivity_analysis' in revenue_data:
-                    ownership_analysis['sensitivity_analysis'] = revenue_data.get('sensitivity_analysis')
-                if 'yield_on_cost' in revenue_data:
-                    ownership_analysis['yield_on_cost'] = revenue_data.get('yield_on_cost')
-                if 'market_cap_rate' in revenue_data:
-                    ownership_analysis['market_cap_rate'] = revenue_data.get('market_cap_rate')
-                if 'cap_rate_spread_bps' in revenue_data:
-                    ownership_analysis['cap_rate_spread_bps'] = revenue_data.get('cap_rate_spread_bps')
-                
-                actual_noi = (
-                    revenue_data.get('return_metrics', {}).get('estimated_annual_noi')
-                    or revenue_data['revenue_analysis'].get('net_income')
-                )
-                debt_metrics = ownership_analysis.get('debt_metrics') or {}
-                annual_debt_service = debt_metrics.get('annual_debt_service', 0)
-                if actual_noi is not None:
-                    recalculated_dscr = actual_noi / annual_debt_service if annual_debt_service else 0
-                    debt_metrics['calculated_dscr'] = recalculated_dscr
-                    debt_metrics['dscr_meets_target'] = recalculated_dscr >= debt_metrics.get('target_dscr', 0)
-                    ownership_analysis['debt_metrics'] = debt_metrics
-                    ownership_analysis['return_metrics']['estimated_annual_noi'] = actual_noi
-                    self._log_trace("dscr_recalculated_from_revenue", {
-                        'actual_noi': actual_noi,
-                        'annual_debt_service': annual_debt_service,
-                        'calculated_dscr': recalculated_dscr
-                    })
+            },
+        )
+        ownership_analysis = ownership_bundle['ownership_analysis']
+        revenue_data = ownership_bundle['revenue_data']
+        flex_revenue_per_sf = ownership_bundle['flex_revenue_per_sf']
         
         # Financial requirements removed - was only partially implemented for hospital
         
@@ -1114,6 +1063,29 @@ class UnifiedEngine:
             'timestamp': datetime.now().isoformat()
         }
 
+        profile_id = getattr(building_config, "dealshield_tile_profile", None)
+        if isinstance(profile_id, str) and profile_id.strip():
+            result["dealshield_tile_profile"] = profile_id
+            if profile_id in {
+                "industrial_warehouse_v1",
+                "industrial_cold_storage_v1",
+                "healthcare_medical_office_building_v1",
+                "healthcare_urgent_care_v1",
+                "restaurant_quick_service_v1",
+                "hospitality_limited_service_hotel_v1",
+            }:
+                from app.v2.services.dealshield_scenarios import (
+                    build_dealshield_scenarios,
+                    DealShieldScenarioError,
+                )
+                try:
+                    result["dealshield_scenarios"] = build_dealshield_scenarios(
+                        result,
+                        building_config,
+                        self,
+                    )
+                except DealShieldScenarioError as exc:
+                    raise ValueError(f"DealShield scenario build failed: {exc}") from exc
         revenue_block = result.get('revenue_analysis')
         if isinstance(revenue_block, dict):
             revenue_block.setdefault('market_factor', regional_market_factor)
@@ -2133,6 +2105,78 @@ class UnifiedEngine:
                     })
 
         return scope_items
+
+    def _build_ownership_bundle(
+        self,
+        building_config: Any,
+        ownership_type: OwnershipType,
+        total_project_cost: float,
+        calculation_context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        ownership_analysis = None
+        revenue_data = None
+        flex_revenue_per_sf = None
+
+        if ownership_type in building_config.ownership_types:
+            revenue_data = self.calculate_ownership_analysis(calculation_context)
+
+            revenue_analysis_for_financing = revenue_data.get('revenue_analysis') if revenue_data else None
+            if revenue_data:
+                flex_metric = revenue_data.get('flex_revenue_per_sf')
+                if isinstance(flex_metric, (int, float)):
+                    flex_revenue_per_sf = flex_metric
+
+            ownership_analysis = self._calculate_ownership(
+                total_project_cost,
+                building_config.ownership_types[ownership_type],
+                revenue_analysis=revenue_analysis_for_financing
+            )
+
+            if revenue_data and 'revenue_analysis' in revenue_data:
+                ownership_analysis['revenue_analysis'] = revenue_data['revenue_analysis']
+                ownership_analysis['return_metrics'].update(revenue_data['return_metrics'])
+                ownership_analysis['roi_analysis'] = {
+                    'financial_metrics': {
+                        'annual_revenue': revenue_data['revenue_analysis']['annual_revenue'],
+                        'operating_margin': revenue_data['revenue_analysis']['operating_margin'],
+                        'net_income': revenue_data['revenue_analysis']['net_income']
+                    }
+                }
+                ownership_analysis['revenue_requirements'] = revenue_data.get('revenue_requirements', {})
+                ownership_analysis['operational_efficiency'] = revenue_data.get('operational_efficiency', {})
+                ownership_analysis['operational_metrics'] = revenue_data.get('operational_metrics', {})
+                if 'sensitivity_analysis' in revenue_data:
+                    ownership_analysis['sensitivity_analysis'] = revenue_data.get('sensitivity_analysis')
+                if 'yield_on_cost' in revenue_data:
+                    ownership_analysis['yield_on_cost'] = revenue_data.get('yield_on_cost')
+                if 'market_cap_rate' in revenue_data:
+                    ownership_analysis['market_cap_rate'] = revenue_data.get('market_cap_rate')
+                if 'cap_rate_spread_bps' in revenue_data:
+                    ownership_analysis['cap_rate_spread_bps'] = revenue_data.get('cap_rate_spread_bps')
+
+                actual_noi = (
+                    revenue_data.get('return_metrics', {}).get('estimated_annual_noi')
+                    or revenue_data['revenue_analysis'].get('net_income')
+                )
+                debt_metrics = ownership_analysis.get('debt_metrics') or {}
+                annual_debt_service = debt_metrics.get('annual_debt_service', 0)
+                if actual_noi is not None:
+                    recalculated_dscr = actual_noi / annual_debt_service if annual_debt_service else 0
+                    debt_metrics['calculated_dscr'] = recalculated_dscr
+                    debt_metrics['dscr_meets_target'] = recalculated_dscr >= debt_metrics.get('target_dscr', 0)
+                    ownership_analysis['debt_metrics'] = debt_metrics
+                    ownership_analysis['return_metrics']['estimated_annual_noi'] = actual_noi
+                    self._log_trace("dscr_recalculated_from_revenue", {
+                        'actual_noi': actual_noi,
+                        'annual_debt_service': annual_debt_service,
+                        'calculated_dscr': recalculated_dscr
+                    })
+
+        return {
+            'ownership_analysis': ownership_analysis,
+            'revenue_data': revenue_data,
+            'flex_revenue_per_sf': flex_revenue_per_sf,
+        }
     
     def _calculate_ownership(
         self,

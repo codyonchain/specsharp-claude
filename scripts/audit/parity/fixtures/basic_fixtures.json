@@ -221,5 +221,42 @@
     "project_class": "ground_up",
     "square_footage": 3500,
     "subtype": "quick_service"
+  },
+  {
+    "building_type": "healthcare",
+    "expected": {
+      "building_type": "healthcare",
+      "facility_metrics_profile": "healthcare_outpatient",
+      "metrics_shape_keyset": [
+        "cost_per_unit",
+        "revenue_per_unit",
+        "type",
+        "unit_label",
+        "units"
+      ],
+      "outpatient_mode": true,
+      "subtype": "urgent_care"
+    },
+    "extra_inputs": {
+      "location": "Nashville, TN"
+    },
+    "id": "healthcare_urgent_care",
+    "project_class": "ground_up",
+    "square_footage": 12000,
+    "subtype": "urgent_care"
+  },
+  {
+    "building_type": "hospitality",
+    "expected": {
+      "building_type": "hospitality",
+      "subtype": "limited_service_hotel"
+    },
+    "extra_inputs": {
+      "location": "Nashville, TN"
+    },
+    "id": "hospitality_limited_service_hotel",
+    "project_class": "ground_up",
+    "square_footage": 60000,
+    "subtype": "limited_service_hotel"
   }
 ]

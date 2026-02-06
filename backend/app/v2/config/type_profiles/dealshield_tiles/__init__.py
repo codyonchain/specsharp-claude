@@ -46,3 +46,25 @@ DEALSHIELD_TILE_DEFAULT_SOURCES: list[dict] = [
     retail.DEALSHIELD_TILE_DEFAULTS,
     specialty.DEALSHIELD_TILE_DEFAULTS,
 ]
+
+from typing import Any, Dict
+
+def get_dealshield_profile(profile_id: str) -> Dict[str, Any]:
+    if not isinstance(profile_id, str) or not profile_id.strip():
+        raise ValueError("profile_id required")
+    pid = profile_id.strip()
+
+    sources = globals().get("DEALSHIELD_TILE_PROFILE_SOURCES")
+    if not isinstance(sources, list) or not sources:
+        raise RuntimeError("DEALSHIELD_TILE_PROFILE_SOURCES missing/empty")
+
+    for src in sources:
+        if isinstance(src, dict) and pid in src:
+            prof = src[pid]
+            if not isinstance(prof, dict):
+                raise TypeError(f"DealShield profile must be dict for {pid}")
+            if "profile_id" not in prof:
+                prof = {**prof, "profile_id": pid}
+            return prof
+
+    raise KeyError(f"DealShield profile not found: {pid}")
