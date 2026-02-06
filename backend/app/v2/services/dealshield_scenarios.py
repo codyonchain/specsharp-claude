@@ -184,6 +184,31 @@ def _select_ownership_type(building_config: Any) -> OwnershipType:
     return sorted(ownership_types, key=lambda item: item.value)[0]
 
 
+def _scalar_from_transforms(transforms: List[Dict[str, Any]]) -> Optional[float]:
+    if len(transforms) != 1:
+        return None
+    transform = transforms[0]
+    if transform.get("op") != "mul":
+        return None
+    value = transform.get("value")
+    if not _is_number(value):
+        return None
+    return float(value)
+
+
+def _driver_entry(tile_id: str, metric_ref: str, transforms: List[Dict[str, Any]]) -> Dict[str, Any]:
+    entry: Dict[str, Any] = {
+        "tile_id": tile_id,
+        "metric_ref": metric_ref,
+    }
+    if len(transforms) == 1:
+        entry["op"] = transforms[0].get("op")
+        entry["value"] = transforms[0].get("value")
+    else:
+        entry["transforms"] = transforms
+    return entry
+
+
 def _build_calculation_context(
     payload: Dict[str, Any],
     scenario_id: str,
@@ -289,7 +314,19 @@ def build_dealshield_scenarios(
     base_snapshot.pop("dealshield_scenarios", None)
 
     scenarios: Dict[str, Dict[str, Any]] = {"base": base_snapshot}
+    scenario_inputs: Dict[str, Any] = {}
     _assert_tile_metrics(base_snapshot, tile_metric_refs, "base")
+
+    scenario_inputs["base"] = {
+        "applied_tile_ids": [],
+        "cost_scalar": None,
+        "revenue_scalar": None,
+        "driver": None,
+        "explain": {
+            "short": "Base scenario (no profile levers applied; financials recomputed).",
+            "levers": [],
+        },
+    }
 
     for scenario in scenario_defs:
         scenario_id = scenario["scenario_id"]
@@ -299,9 +336,13 @@ def build_dealshield_scenarios(
         cost_transforms: List[Dict[str, Any]] = []
         revenue_transforms: List[Dict[str, Any]] = []
         driver_overrides: List[Tuple[str, List[Dict[str, Any]]]] = []
+        applied_tile_ids = list(scenario.get("apply_tiles") or []) + list(scenario.get("plus_tiles") or [])
+        cost_tiles: List[Dict[str, Any]] = []
+        revenue_tiles: List[Dict[str, Any]] = []
+        driver_entries: List[Dict[str, Any]] = []
+        levers: List[str] = []
 
-        tile_ids = list(scenario.get("apply_tiles") or []) + list(scenario.get("plus_tiles") or [])
-        for tile_id in tile_ids:
+        for tile_id in applied_tile_ids:
             tile = tile_by_id.get(tile_id)
             if not tile:
                 raise DealShieldScenarioError(f"Scenario '{scenario_id}' references missing tile '{tile_id}'")
@@ -309,10 +350,56 @@ def build_dealshield_scenarios(
             transforms = _normalize_transforms(tile.get("transform"))
             if metric_ref == "totals.total_project_cost":
                 cost_transforms.extend(transforms)
+                cost_tiles.append({
+                    "tile_id": tile_id,
+                    "transforms": transforms,
+                })
+                levers.append(f"Total project cost scaled (tile {tile_id}).")
             elif metric_ref == "revenue_analysis.annual_revenue":
                 revenue_transforms.extend(transforms)
+                revenue_tiles.append({
+                    "tile_id": tile_id,
+                    "transforms": transforms,
+                })
+                levers.append(f"Annual revenue scaled (tile {tile_id}).")
             else:
                 driver_overrides.append((metric_ref, transforms))
+                driver_entries.append(_driver_entry(tile_id, metric_ref, transforms))
+                levers.append(f"Driver override applied (tile {tile_id}).")
+
+        display_name = scenario_id.replace("_", " ").title()
+        cost_scalar = _scalar_from_transforms(cost_tiles[0]["transforms"]) if len(cost_tiles) == 1 else None
+        revenue_scalar = _scalar_from_transforms(revenue_tiles[0]["transforms"]) if len(revenue_tiles) == 1 else None
+
+        scenario_input: Dict[str, Any] = {
+            "applied_tile_ids": applied_tile_ids,
+            "cost_scalar": cost_scalar,
+            "revenue_scalar": revenue_scalar,
+            "driver": None,
+            "explain": {
+                "short": f"{display_name} scenario (profile-defined levers applied; financials recomputed).",
+                "levers": levers,
+            },
+        }
+
+        if cost_tiles and cost_scalar is None:
+            if len(cost_tiles) == 1:
+                scenario_input["cost_transforms"] = cost_tiles[0]["transforms"]
+            else:
+                scenario_input["cost_transforms"] = cost_tiles
+
+        if revenue_tiles and revenue_scalar is None:
+            if len(revenue_tiles) == 1:
+                scenario_input["revenue_transforms"] = revenue_tiles[0]["transforms"]
+            else:
+                scenario_input["revenue_transforms"] = revenue_tiles
+
+        if len(driver_entries) == 1:
+            scenario_input["driver"] = driver_entries[0]
+        elif len(driver_entries) > 1:
+            scenario_input["driver"] = driver_entries
+
+        scenario_inputs[scenario_id] = scenario_input
 
         if cost_transforms:
             totals = scenario_payload.get("totals") or {}
@@ -368,6 +455,7 @@ def build_dealshield_scenarios(
         "profile_id": profile_id,
         "scenario_ids": ["base"] + [row["scenario_id"] for row in scenario_defs],
         "tile_metric_refs": tile_metric_refs,
+        "scenario_inputs": scenario_inputs,
         "driver_specs": scenario_defs,
     }
 

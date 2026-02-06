@@ -15,7 +15,13 @@ sys.path.insert(0, str(PARITY_DIR))
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile  # noqa: E402
 from app.v2.services.dealshield_service import build_dealshield_scenario_table  # noqa: E402
 from app.v2.services.dealshield_scenarios import WAVE1_PROFILES  # noqa: E402
-from run_parity import get_fixture_outputs  # noqa: E402
+from app.v2.engines.unified_engine import UnifiedEngine  # noqa: E402
+from app.v2.config.master_config import (  # noqa: E402
+    BuildingType,
+    ProjectClass,
+    OwnershipType,
+)
+from fixtures import load_fixtures  # noqa: E402
 
 
 def _is_number(value: Any) -> bool:
@@ -106,8 +112,66 @@ def _is_close(left: float, right: float, tol: float = 0.01) -> bool:
     return math.isclose(left, right, rel_tol=1e-6, abs_tol=tol)
 
 
+def _resolve_project_class(value: Optional[str]) -> ProjectClass:
+    if not value:
+        return ProjectClass.GROUND_UP
+    try:
+        return ProjectClass(value)
+    except Exception:
+        return ProjectClass.GROUND_UP
+
+
+def _resolve_ownership_type(value: Optional[str]) -> OwnershipType:
+    if not value:
+        return OwnershipType.FOR_PROFIT
+    try:
+        return OwnershipType(value)
+    except Exception:
+        return OwnershipType.FOR_PROFIT
+
+
+def _compute_payload(engine: UnifiedEngine, fixture: Dict[str, Any]) -> Dict[str, Any]:
+    building_type = BuildingType(fixture["building_type"])
+    subtype = fixture["subtype"]
+    square_footage = fixture["square_footage"]
+    project_class = _resolve_project_class(fixture.get("project_class"))
+    finish_level = fixture.get("finish_level")
+
+    extra_inputs = fixture.get("extra_inputs") or {}
+    location = extra_inputs.get("location", "Nashville, TN")
+    floors = extra_inputs.get("floors", 1)
+    ownership_type = _resolve_ownership_type(extra_inputs.get("ownership_type"))
+    special_features = extra_inputs.get("special_features")
+    parsed_input_overrides = extra_inputs.get("parsed_input_overrides")
+
+    return engine.calculate_project(
+        building_type=building_type,
+        subtype=subtype,
+        square_footage=square_footage,
+        location=location,
+        project_class=project_class,
+        floors=floors,
+        ownership_type=ownership_type,
+        finish_level=finish_level,
+        special_features=special_features,
+        parsed_input_overrides=parsed_input_overrides,
+    )
+
+
+def _get_fixture_outputs() -> List[Dict[str, Any]]:
+    fixtures = load_fixtures()
+    fixtures = sorted(fixtures, key=lambda item: item.get("id", ""))
+    engine = UnifiedEngine()
+    outputs: List[Dict[str, Any]] = []
+    for fixture in fixtures:
+        fixture_id = fixture.get("id", "<missing-id>")
+        payload = _compute_payload(engine, fixture)
+        outputs.append({"name": fixture_id, "payload": payload})
+    return outputs
+
+
 def run() -> int:
-    fixtures = get_fixture_outputs()
+    fixtures = _get_fixture_outputs()
     failures: List[str] = []
 
     for fixture in fixtures:
@@ -140,6 +204,16 @@ def run() -> int:
             failures.append(f"{name}: dealshield_scenarios.scenarios missing")
             continue
 
+        provenance = ds_block.get("provenance")
+        if not isinstance(provenance, dict):
+            failures.append(f"{name}: dealshield_scenarios.provenance missing")
+            continue
+
+        scenario_inputs = provenance.get("scenario_inputs")
+        if not isinstance(scenario_inputs, dict):
+            failures.append(f"{name}: provenance.scenario_inputs missing")
+            continue
+
         for scenario_id in expected_scenarios:
             scenario_payload = scenarios.get(scenario_id)
             if not isinstance(scenario_payload, dict):
@@ -151,6 +225,16 @@ def run() -> int:
                     failures.append(
                         f"{name}: scenario '{scenario_id}' missing numeric '{metric_ref}'"
                     )
+
+            scenario_input = scenario_inputs.get(scenario_id)
+            if not isinstance(scenario_input, dict):
+                failures.append(f"{name}: scenario_inputs missing '{scenario_id}'")
+                continue
+
+            if scenario_id == "base":
+                applied_tile_ids = scenario_input.get("applied_tile_ids")
+                if applied_tile_ids != []:
+                    failures.append(f"{name}: base applied_tile_ids not empty")
 
         table = build_dealshield_scenario_table(name, payload, profile)
         for row in table.get("rows", []):
@@ -182,6 +266,15 @@ def run() -> int:
             driver_tiles: List[Tuple[str, List[Dict[str, Any]]]] = []
 
             tile_ids = list(row["apply_tiles"]) + list(row["plus_tiles"])
+            scenario_input = scenario_inputs.get(scenario_id)
+            if isinstance(scenario_input, dict):
+                applied_tile_ids = scenario_input.get("applied_tile_ids")
+                if applied_tile_ids != tile_ids:
+                    failures.append(
+                        f"{name}: scenario_inputs '{scenario_id}' applied_tile_ids mismatch"
+                    )
+            else:
+                failures.append(f"{name}: scenario_inputs missing '{scenario_id}'")
             for tile_id in tile_ids:
                 tile = tile_by_id.get(tile_id)
                 if not tile:
@@ -253,6 +346,43 @@ def run() -> int:
                         failures.append(
                             f"{name}: ugly total_project_cost not >= conservative"
                         )
+
+            if scenario_id == "conservative" and isinstance(scenario_input, dict):
+                cost_scalar = scenario_input.get("cost_scalar")
+                revenue_scalar = scenario_input.get("revenue_scalar")
+                cost_transforms_input = scenario_input.get("cost_transforms")
+                revenue_transforms_input = scenario_input.get("revenue_transforms")
+                if cost_scalar is None and cost_transforms_input is None:
+                    failures.append(f"{name}: conservative missing cost_scalar/transforms")
+                if revenue_scalar is None and revenue_transforms_input is None:
+                    failures.append(f"{name}: conservative missing revenue_scalar/transforms")
+                if _is_number(cost_scalar) and not _is_close(float(cost_scalar), 1.10, tol=1e-6):
+                    failures.append(f"{name}: conservative cost_scalar not 1.10")
+                if _is_number(revenue_scalar) and not _is_close(float(revenue_scalar), 0.90, tol=1e-6):
+                    failures.append(f"{name}: conservative revenue_scalar not 0.90")
+
+            if scenario_id == "ugly" and isinstance(scenario_input, dict):
+                expected_driver_refs = []
+                for tile_id in row["plus_tiles"]:
+                    tile = tile_by_id.get(tile_id)
+                    if tile and tile.get("metric_ref"):
+                        expected_driver_refs.append(tile.get("metric_ref"))
+                driver_info = scenario_input.get("driver")
+                if expected_driver_refs:
+                    if not driver_info:
+                        failures.append(f"{name}: ugly missing driver in scenario_inputs")
+                    else:
+                        if isinstance(driver_info, list):
+                            driver_refs = [entry.get("metric_ref") for entry in driver_info if isinstance(entry, dict)]
+                        elif isinstance(driver_info, dict):
+                            driver_refs = [driver_info.get("metric_ref")]
+                        else:
+                            driver_refs = []
+                        for expected_ref in expected_driver_refs:
+                            if expected_ref not in driver_refs:
+                                failures.append(
+                                    f"{name}: ugly driver metric_ref missing '{expected_ref}'"
+                                )
 
     if failures:
         print("FAIL: DealShield scenario validation failed")
