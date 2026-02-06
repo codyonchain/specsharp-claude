@@ -13,7 +13,8 @@ import {
   APIError,
   Project,
   ComparisonScenario,
-  ParsedInput
+  ParsedInput,
+  DealShieldViewModel
 } from '../types';
 import { tracer } from '../utils/traceSystem';
 
@@ -348,6 +349,13 @@ class V2APIClient {
     subtypes_loaded: number;
   }> {
     return this.request('/health');
+  }
+
+  /**
+   * Fetch DealShield view model for a project
+   */
+  async fetchDealShield(projectId: string): Promise<DealShieldViewModel> {
+    return this.request<DealShieldViewModel>(`/scope/projects/${projectId}/dealshield`, {}, 'v2');
   }
 
   // ============================================================================
