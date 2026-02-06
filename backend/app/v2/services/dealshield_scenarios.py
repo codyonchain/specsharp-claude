@@ -322,8 +322,11 @@ def build_dealshield_scenarios(
             new_total = _apply_transforms(float(base_total), cost_transforms)
             if not _is_number(new_total):
                 raise DealShieldScenarioError("Scenario total_project_cost is not numeric")
-            factor = (new_total / float(base_total)) if base_total else 1.0
-            _apply_cost_scale(scenario_payload, factor)
+            totals["total_project_cost"] = float(new_total)
+            square_footage = (scenario_payload.get("project_info") or {}).get("square_footage")
+            if _is_number(square_footage) and square_footage:
+                totals["cost_per_sf"] = float(new_total) / float(square_footage)
+            scenario_payload["totals"] = totals
 
         for metric_ref, transforms in driver_overrides:
             _apply_driver_override(scenario_payload, metric_ref, transforms)
