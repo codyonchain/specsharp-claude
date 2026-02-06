@@ -261,3 +261,43 @@ def build_dealshield_scenario_table(project_id: str, payload: Dict[str, Any], pr
             "dealshield_scenarios_present": bool(ds_present),
         },
     }
+
+
+def _extract_dealshield_context(payload: Dict[str, Any]) -> Dict[str, Any]:
+    info = payload.get("project_info")
+    if not isinstance(info, dict):
+        return {}
+    context: Dict[str, Any] = {}
+    if info.get("location"):
+        context["location"] = info.get("location")
+    if info.get("square_footage") is not None:
+        context["square_footage"] = info.get("square_footage")
+    return context
+
+
+def _extract_dealshield_scenario_inputs(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    ds_block = payload.get("dealshield_scenarios")
+    if not isinstance(ds_block, dict):
+        return None
+    provenance = ds_block.get("provenance")
+    if not isinstance(provenance, dict):
+        return None
+    scenario_inputs = provenance.get("scenario_inputs")
+    if not isinstance(scenario_inputs, dict):
+        return None
+    return scenario_inputs
+
+
+def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profile: Dict[str, Any]) -> Dict[str, Any]:
+    view_model = build_dealshield_scenario_table(project_id, payload, profile)
+    context = _extract_dealshield_context(payload)
+    if context:
+        view_model["context"] = context
+    scenario_inputs = _extract_dealshield_scenario_inputs(payload)
+    if scenario_inputs:
+        provenance = view_model.get("provenance")
+        if not isinstance(provenance, dict):
+            provenance = {}
+        provenance["scenario_inputs"] = scenario_inputs
+        view_model["provenance"] = provenance
+    return view_model

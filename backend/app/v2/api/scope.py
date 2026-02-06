@@ -24,6 +24,8 @@ from app.v2.config.master_config import (
     MASTER_CONFIG
 )
 from app.v2.services.industrial_override_extractor import extract_industrial_overrides
+from app.v2.services.dealshield_service import build_dealshield_view_model, DealShieldResolutionError
+from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.core.building_taxonomy import normalize_building_type, validate_building_type
 from app.db.models import Project
 from app.db.database import get_db
@@ -777,6 +779,56 @@ async def get_single_project(
         debug_trace=_build_debug_trace_payload(formatted)
     )
 
+
+@router.get("/scope/projects/{project_id}/dealshield", response_model=ProjectResponse)
+async def get_dealshield_view(
+    project_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get DealShield scenario table view model for a project."""
+    project = db.query(Project).filter(Project.project_id == project_id).first()
+    if not project and project_id.isdigit():
+        project = db.query(Project).filter(Project.id == int(project_id)).first()
+
+    if not project:
+        return ProjectResponse(
+            success=False,
+            data={},
+            errors=["Project not found"]
+        )
+
+    payload = _resolve_project_payload(project)
+    profile_id = payload.get("dealshield_tile_profile")
+    if not isinstance(profile_id, str) or not profile_id.strip():
+        return ProjectResponse(
+            success=False,
+            data={},
+            errors=["DealShield not available for this project"]
+        )
+
+    try:
+        profile = get_dealshield_profile(profile_id)
+    except Exception as exc:
+        return ProjectResponse(
+            success=False,
+            data={},
+            errors=[str(exc)]
+        )
+
+    try:
+        view_model = build_dealshield_view_model(project.project_id or project_id, payload, profile)
+    except DealShieldResolutionError as exc:
+        return ProjectResponse(
+            success=False,
+            data={},
+            errors=[str(exc)]
+        )
+
+    return ProjectResponse(
+        success=True,
+        data=view_model
+    )
+
 @router.delete("/scope/projects/{project_id}")
 async def delete_project(
     project_id: str,
@@ -1118,6 +1170,48 @@ async def export_project_pdf(
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
+
+@router.get("/scope/projects/{project_id}/dealshield/pdf")
+async def export_dealshield_pdf(
+    project_id: str,
+    db: Session = Depends(get_db)
+):
+    """Generate a DealShield PDF report for a project."""
+    project = db.query(Project).filter(Project.project_id == project_id).first()
+    if not project and project_id.isdigit():
+        project = db.query(Project).filter(Project.id == int(project_id)).first()
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    payload = _resolve_project_payload(project)
+    profile_id = payload.get("dealshield_tile_profile")
+    if not isinstance(profile_id, str) or not profile_id.strip():
+        raise HTTPException(status_code=400, detail="DealShield not available for this project")
+
+    try:
+        profile = get_dealshield_profile(profile_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    try:
+        view_model = build_dealshield_view_model(project.project_id or project_id, payload, profile)
+        pdf_buffer = pdf_export_service.generate_dealshield_pdf(view_model)
+    except DealShieldResolutionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error(f"Failed to generate DealShield PDF for project {project_id}: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to generate DealShield PDF report") from exc
+
+    filename = f"DealShield_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
+    pdf_bytes = pdf_buffer.getvalue()
+
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
 # Process owner view data for a project
 async def _process_owner_view_data(project):
     """Process and return owner view data for a project"""
@@ -1227,6 +1321,21 @@ async def _process_owner_view_data(project):
             data={},
             errors=[str(e)]
         )
+
+
+def _resolve_project_payload(project: Project) -> Dict[str, Any]:
+    project_payload = format_project_response(project)
+    calculation_data = project_payload.get("calculation_data")
+    if isinstance(calculation_data, dict) and calculation_data:
+        return calculation_data
+    scope_data = project_payload.get("scope_data")
+    if isinstance(scope_data, dict) and scope_data:
+        return scope_data
+    cost_data = project_payload.get("cost_data")
+    if isinstance(cost_data, dict) and cost_data:
+        return cost_data
+    return {}
+
 
 def format_project_response(project: Project) -> dict:
     """
