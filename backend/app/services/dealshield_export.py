@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, Optional
 import html as html_module
 
@@ -66,6 +67,153 @@ def _dealshield_driver_refs(driver: Any) -> str:
                 refs.append(str(entry.get("metric_ref")))
         return ", ".join(refs) if refs else "—"
     return str(driver)
+
+
+def _dealshield_render_content_sections(view_model: Dict[str, Any]) -> str:
+    content = view_model.get("content")
+    if not isinstance(content, dict):
+        return (
+            "<section>"
+            "<h2>DealShield Content</h2>"
+            "<div class=\"content-note\">Content profile not available.</div>"
+            "</section>"
+        )
+
+    resolved_drivers = content.get("resolved_drivers")
+    driver_map: Dict[str, Dict[str, Any]] = {}
+    if isinstance(resolved_drivers, list):
+        for resolved in resolved_drivers:
+            if not isinstance(resolved, dict):
+                continue
+            tile_id = resolved.get("tile_id")
+            if isinstance(tile_id, str) and tile_id:
+                driver_map[tile_id] = resolved
+
+    fastest_change = content.get("fastest_change")
+    fastest_headline = "What would change this decision fastest?"
+    fastest_drivers: list[Any] = []
+    if isinstance(fastest_change, dict):
+        headline = fastest_change.get("headline")
+        if isinstance(headline, str) and headline.strip():
+            fastest_headline = headline.strip()
+        drivers = fastest_change.get("drivers")
+        if isinstance(drivers, list):
+            fastest_drivers = drivers
+
+    fastest_items = []
+    for driver in fastest_drivers[:3]:
+        if not isinstance(driver, dict):
+            continue
+        label = driver.get("label") or driver.get("id") or driver.get("tile_id") or "Driver"
+        tile_id = driver.get("tile_id")
+        details = []
+        if isinstance(tile_id, str) and tile_id:
+            details.append(f"Tile: {tile_id}")
+            resolved = driver_map.get(tile_id)
+            if isinstance(resolved, dict):
+                metric_ref = resolved.get("metric_ref")
+                if metric_ref:
+                    details.append(f"Metric: {metric_ref}")
+                transform = resolved.get("transform")
+                if transform:
+                    details.append(f"Transform: {json.dumps(transform, sort_keys=True)}")
+        detail_line = (
+            f"<div class=\"content-subtle\">{html_module.escape(' | '.join(details))}</div>"
+            if details
+            else ""
+        )
+        fastest_items.append(
+            f"<li><span class=\"content-label\">{html_module.escape(str(label))}</span>{detail_line}</li>"
+        )
+    if not fastest_items:
+        fastest_items.append("<li>No drivers configured.</li>")
+
+    mlw = content.get("most_likely_wrong")
+    mlw_items = []
+    if isinstance(mlw, list):
+        for entry in mlw:
+            if not isinstance(entry, dict):
+                continue
+            text = entry.get("text") or "No text."
+            why = entry.get("why")
+            why_line = (
+                f"<div class=\"content-subtle\">{html_module.escape(str(why))}</div>" if why else ""
+            )
+            mlw_items.append(
+                f"<li><span class=\"content-label\">{html_module.escape(str(text))}</span>{why_line}</li>"
+            )
+    if not mlw_items:
+        mlw_items.append("<li>No entries configured.</li>")
+
+    question_bank = content.get("question_bank")
+    question_items = []
+    if isinstance(question_bank, list):
+        for entry in question_bank:
+            if not isinstance(entry, dict):
+                continue
+            driver_tile_id = entry.get("driver_tile_id") or "unknown"
+            questions = entry.get("questions")
+            question_lines = []
+            if isinstance(questions, list):
+                for question in questions:
+                    if isinstance(question, str) and question.strip():
+                        question_lines.append(f"<li>{html_module.escape(question.strip())}</li>")
+            if not question_lines:
+                question_lines.append("<li>No questions configured.</li>")
+            question_items.append(
+                "<li>"
+                f"<div class=\"content-subtle\">Driver tile: {html_module.escape(str(driver_tile_id))}</div>"
+                "<ul class=\"content-sublist\">"
+                + "".join(question_lines)
+                + "</ul>"
+                "</li>"
+            )
+    if not question_items:
+        question_items.append("<li>No entries configured.</li>")
+
+    red_flags_actions = content.get("red_flags_actions")
+    red_flag_items = []
+    if isinstance(red_flags_actions, list):
+        for entry in red_flags_actions:
+            if not isinstance(entry, dict):
+                continue
+            flag = entry.get("flag") or "Flag not set."
+            action = entry.get("action") or "Action not set."
+            red_flag_items.append(
+                "<li>"
+                f"<span class=\"content-label\">{html_module.escape(str(flag))}</span>"
+                f"<div class=\"content-subtle\">Action: {html_module.escape(str(action))}</div>"
+                "</li>"
+            )
+    if not red_flag_items:
+        red_flag_items.append("<li>No entries configured.</li>")
+
+    return (
+        "<section>"
+        f"<h2>{html_module.escape(fastest_headline)}</h2>"
+        "<ul class=\"content-list\">"
+        + "".join(fastest_items)
+        + "</ul>"
+        "</section>"
+        "<section>"
+        "<h2>Most likely wrong</h2>"
+        "<ul class=\"content-list\">"
+        + "".join(mlw_items)
+        + "</ul>"
+        "</section>"
+        "<section>"
+        "<h2>Question bank</h2>"
+        "<ul class=\"content-list\">"
+        + "".join(question_items)
+        + "</ul>"
+        "</section>"
+        "<section>"
+        "<h2>Red flags &amp; actions</h2>"
+        "<ul class=\"content-list\">"
+        + "".join(red_flag_items)
+        + "</ul>"
+        "</section>"
+    )
 
 
 def render_dealshield_html(view_model: Dict[str, Any]) -> str:
@@ -183,6 +331,7 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
         )
 
     meta_block = f"<div class=\"meta\">{html_module.escape(header_meta)}</div>" if header_meta else ""
+    content_sections = _dealshield_render_content_sections(view_model)
 
     return f"""<!doctype html>
 <html>
@@ -205,6 +354,12 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
     .provenance-note {{ margin-top: 6px; color: #6b7280; font-size: 12px; }}
     .provenance-meta {{ margin-top: 4px; color: #4b5563; font-size: 12px; }}
     .provenance-table th {{ font-size: 11px; }}
+    .content-note {{ margin-top: 6px; color: #6b7280; font-size: 12px; }}
+    .content-list {{ margin: 8px 0 0; padding-left: 20px; font-size: 12px; }}
+    .content-list li {{ margin: 0 0 8px; }}
+    .content-sublist {{ margin: 4px 0 0; padding-left: 18px; }}
+    .content-subtle {{ color: #4b5563; font-size: 11px; margin-top: 2px; }}
+    .content-label {{ font-weight: 600; color: #111827; }}
   </style>
 </head>
 <body>
@@ -227,5 +382,6 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
     <h2>Provenance</h2>
     {provenance_table}
   </section>
+  {content_sections}
 </body>
 </html>"""
