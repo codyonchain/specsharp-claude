@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import copy
 import math
 import sys
 from pathlib import Path
@@ -14,12 +15,13 @@ sys.path.insert(0, str(PARITY_DIR))
 
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile  # noqa: E402
 from app.v2.services.dealshield_service import build_dealshield_scenario_table  # noqa: E402
-from app.v2.services.dealshield_scenarios import WAVE1_PROFILES  # noqa: E402
+from app.v2.services.dealshield_scenarios import WAVE1_PROFILES, build_dealshield_scenarios  # noqa: E402
 from app.v2.engines.unified_engine import UnifiedEngine  # noqa: E402
 from app.v2.config.master_config import (  # noqa: E402
     BuildingType,
     ProjectClass,
     OwnershipType,
+    get_building_config,
 )
 from fixtures import load_fixtures  # noqa: E402
 
@@ -173,6 +175,8 @@ def _get_fixture_outputs() -> List[Dict[str, Any]]:
 def run() -> int:
     fixtures = _get_fixture_outputs()
     failures: List[str] = []
+    anchor_probe_complete = False
+    anchor_probe_engine = UnifiedEngine()
 
     for fixture in fixtures:
         name = fixture.get("name") or "<unknown>"
@@ -267,20 +271,36 @@ def run() -> int:
 
             tile_ids = list(row["apply_tiles"]) + list(row["plus_tiles"])
             scenario_input = scenario_inputs.get(scenario_id)
+            stress_band_pct = 10
             if isinstance(scenario_input, dict):
                 applied_tile_ids = scenario_input.get("applied_tile_ids")
                 if applied_tile_ids != tile_ids:
                     failures.append(
                         f"{name}: scenario_inputs '{scenario_id}' applied_tile_ids mismatch"
                     )
+                if not _is_number(scenario_input.get("stress_band_pct")):
+                    failures.append(f"{name}: scenario_inputs '{scenario_id}' missing stress_band_pct")
+                else:
+                    candidate = int(float(scenario_input.get("stress_band_pct")))
+                    if candidate in {10, 7, 5, 3}:
+                        stress_band_pct = candidate
+                    else:
+                        failures.append(
+                            f"{name}: scenario_inputs '{scenario_id}' stress_band_pct invalid"
+                        )
             else:
                 failures.append(f"{name}: scenario_inputs missing '{scenario_id}'")
+            stress_band = float(stress_band_pct) / 100.0
             for tile_id in tile_ids:
                 tile = tile_by_id.get(tile_id)
                 if not tile:
                     continue
                 metric_ref = tile.get("metric_ref")
                 transforms = _normalize_transforms(tile.get("transform"))
+                if tile_id == "cost_plus_10" and metric_ref == "totals.total_project_cost":
+                    transforms = [{"op": "mul", "value": 1.0 + stress_band}]
+                if tile_id == "revenue_minus_10" and metric_ref == "revenue_analysis.annual_revenue":
+                    transforms = [{"op": "mul", "value": 1.0 - stress_band}]
                 if metric_ref == "totals.total_project_cost":
                     cost_transforms.extend(transforms)
                 elif metric_ref == "revenue_analysis.annual_revenue":
@@ -352,14 +372,26 @@ def run() -> int:
                 revenue_scalar = scenario_input.get("revenue_scalar")
                 cost_transforms_input = scenario_input.get("cost_transforms")
                 revenue_transforms_input = scenario_input.get("revenue_transforms")
+                cost_anchor_used = bool(scenario_input.get("cost_anchor_used"))
                 if cost_scalar is None and cost_transforms_input is None:
                     failures.append(f"{name}: conservative missing cost_scalar/transforms")
                 if revenue_scalar is None and revenue_transforms_input is None:
                     failures.append(f"{name}: conservative missing revenue_scalar/transforms")
-                if _is_number(cost_scalar) and not _is_close(float(cost_scalar), 1.10, tol=1e-6):
-                    failures.append(f"{name}: conservative cost_scalar not 1.10")
-                if _is_number(revenue_scalar) and not _is_close(float(revenue_scalar), 0.90, tol=1e-6):
-                    failures.append(f"{name}: conservative revenue_scalar not 0.90")
+                expected_cost_scalar = 1.0 + stress_band
+                expected_revenue_scalar = 1.0 - stress_band
+                if _is_number(cost_scalar) and not _is_close(float(cost_scalar), expected_cost_scalar, tol=1e-6):
+                    failures.append(
+                        f"{name}: conservative cost_scalar not {expected_cost_scalar:.2f}"
+                    )
+                if _is_number(revenue_scalar) and not _is_close(float(revenue_scalar), expected_revenue_scalar, tol=1e-6):
+                    failures.append(
+                        f"{name}: conservative revenue_scalar not {expected_revenue_scalar:.2f}"
+                    )
+                if (not cost_anchor_used) and _is_number(cost_scalar):
+                    if not _is_close(float(cost_scalar), expected_cost_scalar, tol=1e-6):
+                        failures.append(
+                            f"{name}: conservative cost_scalar mismatch for stress band {stress_band_pct}"
+                        )
 
             if scenario_id == "ugly" and isinstance(scenario_input, dict):
                 expected_driver_refs = []
@@ -383,6 +415,41 @@ def run() -> int:
                                 failures.append(
                                     f"{name}: ugly driver metric_ref missing '{expected_ref}'"
                                 )
+
+        if not anchor_probe_complete:
+            info = payload.get("project_info") if isinstance(payload, dict) else None
+            building_type_raw = info.get("building_type") if isinstance(info, dict) else None
+            subtype = info.get("subtype") if isinstance(info, dict) else None
+            if isinstance(building_type_raw, str) and isinstance(subtype, str) and subtype:
+                try:
+                    building_type = BuildingType(building_type_raw)
+                    building_config = get_building_config(building_type, subtype)
+                    anchor_payload = copy.deepcopy(payload)
+                    anchor_payload["dealshield_controls"] = {
+                        "stress_band_pct": 5,
+                        "anchor_total_project_cost": 15_000_000,
+                        "use_cost_anchor": True,
+                        "anchor_annual_revenue": None,
+                        "use_revenue_anchor": False,
+                    }
+                    anchor_ds = build_dealshield_scenarios(anchor_payload, building_config, anchor_probe_engine)
+                    conservative_payload = (anchor_ds.get("scenarios") or {}).get("conservative")
+                    conservative_total = _resolve_metric_ref(conservative_payload or {}, "totals.total_project_cost")
+                    expected_anchor_total = 15_000_000 * 1.05
+                    if not _is_number(conservative_total) or not _is_close(
+                        float(conservative_total), expected_anchor_total, tol=1e-6
+                    ):
+                        failures.append(
+                            f"{name}: anchored conservative total_project_cost not {expected_anchor_total:.2f}"
+                        )
+                    scenario_input = (((anchor_ds.get("provenance") or {}).get("scenario_inputs") or {}).get("conservative") or {})
+                    if scenario_input.get("stress_band_pct") != 5:
+                        failures.append(f"{name}: anchored conservative stress_band_pct missing")
+                    if not bool(scenario_input.get("cost_anchor_used")):
+                        failures.append(f"{name}: anchored conservative cost_anchor_used missing")
+                    anchor_probe_complete = True
+                except Exception as exc:  # pragma: no cover - diagnostic path
+                    failures.append(f"{name}: anchor probe failed ({exc})")
 
     if failures:
         print("FAIL: DealShield scenario validation failed")

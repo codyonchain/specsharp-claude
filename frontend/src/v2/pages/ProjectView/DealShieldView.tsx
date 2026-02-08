@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Download, ShieldCheck } from 'lucide-react';
 import { api } from '../../api/client';
-import { DealShieldViewModel } from '../../types';
+import { DealShieldControls, DealShieldViewModel } from '../../types';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { ErrorMessage } from '../../components/common/ErrorMessage';
 import { pdfService } from '@/services/api';
@@ -15,6 +15,14 @@ interface Props {
 
 const MISSING_VALUE = '—';
 const NOT_MODELED_VALUE = 'Not modeled';
+const DEALSHIELD_STRESS_OPTIONS: Array<DealShieldControls['stress_band_pct']> = [10, 7, 5, 3];
+const DEFAULT_DEALSHIELD_CONTROLS: DealShieldControls = {
+  stress_band_pct: 10,
+  anchor_total_project_cost: null,
+  use_cost_anchor: false,
+  anchor_annual_revenue: null,
+  use_revenue_anchor: false,
+};
 
 type DecisionMetricType = 'currency' | 'percent' | 'ratio' | 'number';
 
@@ -166,6 +174,54 @@ const listValue = (value: unknown) => {
   return formatValue(value);
 };
 
+const normalizeStressBand = (value: unknown): DealShieldControls['stress_band_pct'] => {
+  const numeric = toFiniteNumber(value);
+  if (numeric === null) return 10;
+  const band = Math.trunc(numeric) as DealShieldControls['stress_band_pct'];
+  return DEALSHIELD_STRESS_OPTIONS.includes(band) ? band : 10;
+};
+
+const normalizeDealShieldControls = (value: unknown, scenarioInputsRaw: unknown): DealShieldControls => {
+  const controls = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+  const scenarioInputs =
+    scenarioInputsRaw && typeof scenarioInputsRaw === 'object'
+      ? (scenarioInputsRaw as Record<string, unknown>)
+      : {};
+  const baseScenario =
+    (scenarioInputs.base && typeof scenarioInputs.base === 'object'
+      ? (scenarioInputs.base as Record<string, unknown>)
+      : null) ||
+    (scenarioInputs.conservative && typeof scenarioInputs.conservative === 'object'
+      ? (scenarioInputs.conservative as Record<string, unknown>)
+      : null);
+
+  const stress_band_pct = normalizeStressBand(
+    controls.stress_band_pct ?? baseScenario?.stress_band_pct ?? DEFAULT_DEALSHIELD_CONTROLS.stress_band_pct
+  );
+
+  const anchor_total_project_cost = toFiniteNumber(
+    controls.anchor_total_project_cost ?? baseScenario?.cost_anchor_value
+  );
+  const use_cost_anchor =
+    controls.use_cost_anchor === true ||
+    (baseScenario?.cost_anchor_used === true && anchor_total_project_cost !== null);
+
+  const anchor_annual_revenue = toFiniteNumber(
+    controls.anchor_annual_revenue ?? baseScenario?.revenue_anchor_value
+  );
+  const use_revenue_anchor =
+    controls.use_revenue_anchor === true ||
+    (baseScenario?.revenue_anchor_used === true && anchor_annual_revenue !== null);
+
+  return {
+    stress_band_pct,
+    anchor_total_project_cost,
+    use_cost_anchor,
+    anchor_annual_revenue,
+    use_revenue_anchor,
+  };
+};
+
 const getScenarioBadge = (scenarioLabel: string) => {
   const key = scenarioLabel.toLowerCase();
   if (key.includes('base')) {
@@ -196,7 +252,11 @@ export const DealShieldView: React.FC<Props> = ({
     loading: !isControlled,
     error: null,
   });
+  const [overrideData, setOverrideData] = useState<DealShieldViewModel | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [controlsSaving, setControlsSaving] = useState(false);
+  const [controlsError, setControlsError] = useState<string | null>(null);
+  const [controls, setControls] = useState<DealShieldControls>(DEFAULT_DEALSHIELD_CONTROLS);
 
   useEffect(() => {
     if (isControlled || !projectId) return;
@@ -216,7 +276,11 @@ export const DealShieldView: React.FC<Props> = ({
     };
   }, [isControlled, projectId]);
 
-  const dealShieldData = isControlled ? data ?? null : localState.data;
+  useEffect(() => {
+    setOverrideData(null);
+  }, [projectId]);
+
+  const dealShieldData = isControlled ? overrideData ?? data ?? null : localState.data;
   const dealShieldLoading = isControlled ? !!loading : localState.loading;
   const dealShieldError = isControlled ? error ?? null : localState.error;
 
@@ -298,6 +362,7 @@ export const DealShieldView: React.FC<Props> = ({
 
   const provenance = (viewModel as any)?.provenance ?? (dealShieldData as any)?.provenance ?? {};
   const scenarioInputsRaw = provenance?.scenario_inputs ?? (viewModel as any)?.scenario_inputs;
+  const provenanceControlsRaw = provenance?.dealshield_controls ?? (dealShieldData as any)?.dealshield_controls;
   const scenarioInputs = useMemo(() => {
     if (Array.isArray(scenarioInputsRaw)) return scenarioInputsRaw;
     if (scenarioInputsRaw && typeof scenarioInputsRaw === 'object') {
@@ -311,6 +376,14 @@ export const DealShieldView: React.FC<Props> = ({
     }
     return [];
   }, [scenarioInputsRaw]);
+  const controlsFromPayload = useMemo(
+    () => normalizeDealShieldControls(provenanceControlsRaw, scenarioInputsRaw),
+    [provenanceControlsRaw, scenarioInputsRaw]
+  );
+
+  useEffect(() => {
+    setControls(controlsFromPayload);
+  }, [controlsFromPayload]);
   const metricRefsUsed = Array.isArray(provenance?.metric_refs_used)
     ? provenance.metric_refs_used
     : Array.isArray((viewModel as any)?.metric_refs_used)
@@ -340,6 +413,52 @@ export const DealShieldView: React.FC<Props> = ({
     context?.sf ??
     context?.gross_sf ??
     context?.grossSf;
+
+  const persistControls = async (nextControls: DealShieldControls) => {
+    if (!projectId) return;
+    setControls(nextControls);
+    setControlsError(null);
+    try {
+      setControlsSaving(true);
+      await api.updateDealShieldControls(projectId, nextControls);
+      const refreshed = await api.fetchDealShield(projectId);
+      if (isControlled) {
+        setOverrideData(refreshed);
+      } else {
+        setLocalState({ data: refreshed, loading: false, error: null });
+      }
+    } catch (err) {
+      console.error('Failed to update DealShield controls:', err);
+      setControlsError('Could not update controls. Please retry.');
+    } finally {
+      setControlsSaving(false);
+    }
+  };
+
+  const handleStressBandChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const stressBand = normalizeStressBand(Number(event.target.value));
+    void persistControls({
+      ...controls,
+      stress_band_pct: stressBand,
+    });
+  };
+
+  const handleUseCostAnchorChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const useAnchor = event.target.checked;
+    void persistControls({
+      ...controls,
+      use_cost_anchor: useAnchor,
+    });
+  };
+
+  const handleAnchorTotalCostChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = event.target.value;
+    const numeric = raw.trim() ? toFiniteNumber(raw) : null;
+    void persistControls({
+      ...controls,
+      anchor_total_project_cost: numeric,
+    });
+  };
 
   const handleExportPdf = async () => {
     if (!projectId || exporting) return;
@@ -390,6 +509,53 @@ export const DealShieldView: React.FC<Props> = ({
                 <span className="rounded-full bg-slate-100 px-2.5 py-1">
                   {formatValue(contextSf)} SF
                 </span>
+              )}
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="flex flex-col gap-1 text-sm text-slate-700">
+                  <span className="font-medium">Stress band</span>
+                  <select
+                    value={controls.stress_band_pct}
+                    onChange={handleStressBandChange}
+                    disabled={controlsSaving}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {DEALSHIELD_STRESS_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        ±{option}%
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-xs text-slate-500">Stress band (not estimate accuracy).</span>
+                </label>
+                <label className="flex items-center gap-2 self-end text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={controls.use_cost_anchor}
+                    onChange={handleUseCostAnchorChange}
+                    disabled={controlsSaving}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="font-medium">Use bid/GMP anchor</span>
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-slate-700">
+                  <span className="font-medium">Anchor total cost</span>
+                  <input
+                    type="number"
+                    value={controls.anchor_total_project_cost ?? ''}
+                    onChange={handleAnchorTotalCostChange}
+                    placeholder="15000000"
+                    disabled={controlsSaving}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </label>
+              </div>
+              {controlsSaving && (
+                <p className="mt-2 text-xs text-slate-500">Updating DealShield scenarios...</p>
+              )}
+              {controlsError && (
+                <p className="mt-2 text-xs text-rose-600">{controlsError}</p>
               )}
             </div>
           </div>
@@ -603,8 +769,10 @@ export const DealShieldView: React.FC<Props> = ({
                     <tr>
                       <th className="px-2.5 py-2 text-left font-semibold">Scenario</th>
                       <th className="px-2.5 py-2 text-left font-semibold">Applied Tile IDs</th>
+                      <th className="px-2.5 py-2 text-left font-semibold">Stress Band</th>
                       <th className="px-2.5 py-2 text-left font-semibold">Cost Scalar</th>
                       <th className="px-2.5 py-2 text-left font-semibold">Revenue Scalar</th>
+                      <th className="px-2.5 py-2 text-left font-semibold">Cost Anchor</th>
                       <th className="px-2.5 py-2 text-left font-semibold">Driver metric (Ugly only)</th>
                     </tr>
                   </thead>
@@ -624,10 +792,20 @@ export const DealShieldView: React.FC<Props> = ({
                             {listValue(input?.applied_tile_ids ?? input?.appliedTileIds ?? input?.tiles)}
                           </td>
                           <td className="px-2.5 py-2 text-slate-700">
+                            {input?.stress_band_pct !== undefined && input?.stress_band_pct !== null
+                              ? `±${formatValue(input?.stress_band_pct)}%`
+                              : MISSING_VALUE}
+                          </td>
+                          <td className="px-2.5 py-2 text-slate-700">
                             {formatValue(input?.cost_scalar ?? input?.costScalar)}
                           </td>
                           <td className="px-2.5 py-2 text-slate-700">
                             {formatValue(input?.revenue_scalar ?? input?.revenueScalar)}
+                          </td>
+                          <td className="px-2.5 py-2 text-slate-700">
+                            {input?.cost_anchor_used
+                              ? formatDecisionMetricValue(input?.cost_anchor_value, 'totals.total_project_cost')
+                              : 'No'}
                           </td>
                           <td className="px-2.5 py-2 text-slate-700">
                             {formatValue(metricRef)}

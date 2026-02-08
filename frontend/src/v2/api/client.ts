@@ -14,6 +14,7 @@ import {
   Project,
   ComparisonScenario,
   ParsedInput,
+  DealShieldControls,
   DealShieldViewModel
 } from '../types';
 import { tracer } from '../utils/traceSystem';
@@ -356,6 +357,83 @@ class V2APIClient {
    */
   async fetchDealShield(projectId: string): Promise<DealShieldViewModel> {
     return this.request<DealShieldViewModel>(`/scope/projects/${projectId}/dealshield`, {}, 'v2');
+  }
+
+  /**
+   * Persist DealShield controls onto the project calculation payload.
+   */
+  async updateDealShieldControls(projectId: string, controls: DealShieldControls): Promise<void> {
+    const project = await this.getProject(projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+
+    const stressBand = [10, 7, 5, 3].includes(controls.stress_band_pct) ? controls.stress_band_pct : 10;
+    const updatedControls: DealShieldControls = {
+      stress_band_pct: stressBand as DealShieldControls['stress_band_pct'],
+      anchor_total_project_cost:
+        typeof controls.anchor_total_project_cost === 'number' && Number.isFinite(controls.anchor_total_project_cost)
+          ? controls.anchor_total_project_cost
+          : null,
+      use_cost_anchor: !!controls.use_cost_anchor,
+      anchor_annual_revenue:
+        typeof controls.anchor_annual_revenue === 'number' && Number.isFinite(controls.anchor_annual_revenue)
+          ? controls.anchor_annual_revenue
+          : null,
+      use_revenue_anchor: !!controls.use_revenue_anchor,
+    };
+
+    const projectRecord = project as any;
+    const existingCalculations =
+      (projectRecord?.calculation_data && typeof projectRecord.calculation_data === 'object'
+        ? projectRecord.calculation_data
+        : null) ||
+      (projectRecord?.analysis?.calculations && typeof projectRecord.analysis.calculations === 'object'
+        ? projectRecord.analysis.calculations
+        : {}) ||
+      {};
+
+    const updatedCalculations = {
+      ...existingCalculations,
+      dealshield_controls: updatedControls,
+    };
+
+    const updatedProject = {
+      ...projectRecord,
+      calculation_data: updatedCalculations,
+      analysis: {
+        ...(projectRecord.analysis || {}),
+        calculations: updatedCalculations,
+      },
+    };
+    const cleanProject = this.adaptV1ToV2Structure(updatedProject);
+
+    try {
+      await this.request<any>('/scope/projects', {
+        method: 'POST',
+        body: JSON.stringify(cleanProject),
+      }, 'v1');
+    } catch (error) {
+      console.error('Failed to persist DealShield controls to backend, using local storage fallback:', error);
+    }
+
+    const stored = localStorage.getItem('specsharp_projects');
+    const projects = stored ? JSON.parse(stored) : [];
+    const upsertKey = projectRecord.id ?? projectRecord.project_id ?? projectId;
+    const nextProject = this.adaptV1ToV2Structure(cleanProject);
+    const existingIndex = projects.findIndex(
+      (item: any) =>
+        item?.id === upsertKey ||
+        item?.project_id === upsertKey ||
+        item?.id === projectId ||
+        item?.project_id === projectId
+    );
+    if (existingIndex >= 0) {
+      projects[existingIndex] = { ...projects[existingIndex], ...nextProject };
+    } else {
+      projects.push(nextProject);
+    }
+    localStorage.setItem('specsharp_projects', JSON.stringify(projects));
   }
 
   // ============================================================================

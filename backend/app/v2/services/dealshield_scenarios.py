@@ -18,6 +18,8 @@ WAVE1_PROFILES: Set[str] = {
     "hospitality_limited_service_hotel_v1",
 }
 
+_ALLOWED_STRESS_BAND_PCTS: Set[int] = {10, 7, 5, 3}
+
 
 class DealShieldScenarioError(ValueError):
     pass
@@ -40,6 +42,34 @@ def _resolve_metric_ref(payload: Dict[str, Any], metric_ref: str) -> Any:
             return None
         current = current[part]
     return current
+
+
+def _get_dealshield_controls(base_payload: Dict[str, Any]) -> Dict[str, Any]:
+    raw_controls = base_payload.get("dealshield_controls")
+    controls = raw_controls if isinstance(raw_controls, dict) else {}
+
+    raw_band = controls.get("stress_band_pct")
+    band_pct = 10
+    if _is_number(raw_band):
+        candidate_band = int(float(raw_band))
+        if candidate_band in _ALLOWED_STRESS_BAND_PCTS:
+            band_pct = candidate_band
+
+    anchor_total_project_cost = controls.get("anchor_total_project_cost")
+    normalized_cost_anchor = float(anchor_total_project_cost) if _is_number(anchor_total_project_cost) else None
+    use_cost_anchor = bool(controls.get("use_cost_anchor")) and normalized_cost_anchor is not None
+
+    anchor_annual_revenue = controls.get("anchor_annual_revenue")
+    normalized_revenue_anchor = float(anchor_annual_revenue) if _is_number(anchor_annual_revenue) else None
+    use_revenue_anchor = bool(controls.get("use_revenue_anchor")) and normalized_revenue_anchor is not None
+
+    return {
+        "stress_band_pct": band_pct,
+        "anchor_total_project_cost": normalized_cost_anchor,
+        "use_cost_anchor": use_cost_anchor,
+        "anchor_annual_revenue": normalized_revenue_anchor,
+        "use_revenue_anchor": use_revenue_anchor,
+    }
 
 
 def _normalize_transforms(transform: Any) -> List[Dict[str, Any]]:
@@ -291,6 +321,14 @@ def build_dealshield_scenarios(
 
     tiles = profile.get("tiles") or []
     derived_rows = profile.get("derived_rows") or []
+    controls = _get_dealshield_controls(base_payload)
+    band_fraction = float(controls["stress_band_pct"]) / 100.0
+    stress_cost_scalar = 1.0 + band_fraction
+    stress_revenue_scalar = 1.0 - band_fraction
+    cost_anchor_used = bool(controls.get("use_cost_anchor"))
+    cost_anchor_value = controls.get("anchor_total_project_cost")
+    revenue_anchor_used = bool(controls.get("use_revenue_anchor"))
+    revenue_anchor_value = controls.get("anchor_annual_revenue")
 
     tile_metric_refs = [tile.get("metric_ref") for tile in tiles if isinstance(tile, dict)]
     tile_by_id = {tile.get("tile_id"): tile for tile in tiles if isinstance(tile, dict)}
@@ -317,11 +355,36 @@ def build_dealshield_scenarios(
     scenario_inputs: Dict[str, Any] = {}
     _assert_tile_metrics(base_snapshot, tile_metric_refs, "base")
 
+    if cost_anchor_used:
+        totals = base_snapshot.get("totals") or {}
+        base_total = totals.get("total_project_cost")
+        if not _is_number(base_total):
+            raise DealShieldScenarioError("Missing totals.total_project_cost for base cost anchor")
+        _apply_cost_delta(base_snapshot, float(cost_anchor_value) - float(base_total))
+
+        ownership_type = _select_ownership_type(building_config)
+        calculation_context = _build_calculation_context(base_snapshot, "base")
+        total_cost_value = (base_snapshot.get("totals") or {}).get("total_project_cost")
+        if not _is_number(total_cost_value):
+            raise DealShieldScenarioError("Base total_project_cost missing or invalid after cost anchor")
+        bundle = engine._build_ownership_bundle(
+            building_config=building_config,
+            ownership_type=ownership_type,
+            total_project_cost=total_cost_value,
+            calculation_context=calculation_context,
+        )
+        _apply_financial_bundle(base_snapshot, bundle)
+
     scenario_inputs["base"] = {
         "applied_tile_ids": [],
         "cost_scalar": None,
         "revenue_scalar": None,
         "driver": None,
+        "stress_band_pct": controls["stress_band_pct"],
+        "cost_anchor_used": cost_anchor_used,
+        "cost_anchor_value": float(cost_anchor_value) if cost_anchor_used else None,
+        "revenue_anchor_used": revenue_anchor_used,
+        "revenue_anchor_value": float(revenue_anchor_value) if revenue_anchor_used else None,
         "explain": {
             "short": "Base scenario (no profile levers applied; financials recomputed).",
             "levers": [],
@@ -348,6 +411,10 @@ def build_dealshield_scenarios(
                 raise DealShieldScenarioError(f"Scenario '{scenario_id}' references missing tile '{tile_id}'")
             metric_ref = tile.get("metric_ref")
             transforms = _normalize_transforms(tile.get("transform"))
+            if tile_id == "cost_plus_10" and metric_ref == "totals.total_project_cost":
+                transforms = [{"op": "mul", "value": stress_cost_scalar}]
+            elif tile_id == "revenue_minus_10" and metric_ref == "revenue_analysis.annual_revenue":
+                transforms = [{"op": "mul", "value": stress_revenue_scalar}]
             if metric_ref == "totals.total_project_cost":
                 cost_transforms.extend(transforms)
                 cost_tiles.append({
@@ -376,6 +443,11 @@ def build_dealshield_scenarios(
             "cost_scalar": cost_scalar,
             "revenue_scalar": revenue_scalar,
             "driver": None,
+            "stress_band_pct": controls["stress_band_pct"],
+            "cost_anchor_used": cost_anchor_used,
+            "cost_anchor_value": float(cost_anchor_value) if cost_anchor_used else None,
+            "revenue_anchor_used": revenue_anchor_used,
+            "revenue_anchor_value": float(revenue_anchor_value) if revenue_anchor_used else None,
             "explain": {
                 "short": f"{display_name} scenario (profile-defined levers applied; financials recomputed).",
                 "levers": levers,
@@ -401,19 +473,20 @@ def build_dealshield_scenarios(
 
         scenario_inputs[scenario_id] = scenario_input
 
+        totals = scenario_payload.get("totals") or {}
+        base_total_raw = totals.get("total_project_cost")
+        if not _is_number(base_total_raw):
+            raise DealShieldScenarioError("Missing totals.total_project_cost for scenario override")
+        base_total_cost = float(base_total_raw)
+        if cost_anchor_used:
+            base_total_cost = float(cost_anchor_value)
+            _apply_cost_delta(scenario_payload, base_total_cost - float(base_total_raw))
+
         if cost_transforms:
-            totals = scenario_payload.get("totals") or {}
-            base_total = totals.get("total_project_cost")
-            if not _is_number(base_total):
-                raise DealShieldScenarioError("Missing totals.total_project_cost for scenario cost override")
-            new_total = _apply_transforms(float(base_total), cost_transforms)
+            new_total = _apply_transforms(base_total_cost, cost_transforms)
             if not _is_number(new_total):
                 raise DealShieldScenarioError("Scenario total_project_cost is not numeric")
-            totals["total_project_cost"] = float(new_total)
-            square_footage = (scenario_payload.get("project_info") or {}).get("square_footage")
-            if _is_number(square_footage) and square_footage:
-                totals["cost_per_sf"] = float(new_total) / float(square_footage)
-            scenario_payload["totals"] = totals
+            _apply_cost_delta(scenario_payload, float(new_total) - base_total_cost)
 
         for metric_ref, transforms in driver_overrides:
             _apply_driver_override(scenario_payload, metric_ref, transforms)

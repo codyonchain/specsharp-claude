@@ -330,4 +330,12 @@ export interface FinancialRequirements {
 // DEALSHIELD TYPES
 // ============================================================================
 
+export interface DealShieldControls {
+  stress_band_pct: 10 | 7 | 5 | 3;
+  anchor_total_project_cost: number | null;
+  use_cost_anchor: boolean;
+  anchor_annual_revenue: number | null;
+  use_revenue_anchor: boolean;
+}
+
 export type DealShieldViewModel = Record<string, any>;
