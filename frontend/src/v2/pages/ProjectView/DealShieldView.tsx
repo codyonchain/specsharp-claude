@@ -316,6 +316,9 @@ export const DealShieldView: React.FC<Props> = ({
     : Array.isArray((viewModel as any)?.metric_refs_used)
       ? (viewModel as any).metric_refs_used
       : [];
+  const metricRefPills = metricRefsUsed
+    .map((ref: any) => (ref == null ? '' : String(ref).trim()))
+    .filter(Boolean);
 
   const profileId =
     (dealShieldData as any)?.profile_id ??
@@ -534,14 +537,14 @@ export const DealShieldView: React.FC<Props> = ({
                   {Object.entries(questionGroups).map(([groupKey, items]) => (
                     <div key={groupKey} className="space-y-2">
                       {hasDriverTileId && (
-                        <>
-                          <p className="text-sm font-semibold text-slate-700">
-                            {driverLabelByTileId.get(groupKey) ?? groupKey}
-                          </p>
-                          {driverLabelByTileId.get(groupKey) && (
-                            <p className="text-xs text-slate-500">{groupKey}</p>
+                        <p className="text-sm font-semibold text-slate-700">
+                          {driverLabelByTileId.get(groupKey) ?? groupKey}
+                          {groupKey !== '-' && (
+                            <span className="ml-2 align-middle text-[10px] font-medium text-slate-400 font-mono">
+                              (tile: {groupKey})
+                            </span>
                           )}
-                        </>
+                        </p>
                       )}
                       <ul className="list-disc pl-5 text-sm text-slate-700 space-y-1">
                         {(items as any[]).flatMap((item, index) => {
@@ -639,10 +642,19 @@ export const DealShieldView: React.FC<Props> = ({
               <p className="text-sm text-slate-500">-</p>
             )}
 
-            {metricRefsUsed.length > 0 && (
-              <div className="mt-4 text-sm text-slate-600">
-                <span className="font-medium text-slate-700">metric_refs_used:</span>{' '}
-                {listValue(metricRefsUsed)}
+            {metricRefPills.length > 0 && (
+              <div className="mt-4">
+                <div className="text-sm font-medium text-slate-700">metric_refs_used:</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {metricRefPills.map((ref: string, index: number) => (
+                    <span
+                      key={`${ref}-${index}`}
+                      className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600 font-mono"
+                    >
+                      {ref}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
           </section>
