@@ -147,11 +147,14 @@ def _dealshield_render_content_sections(view_model: Dict[str, Any]) -> str:
             fastest_drivers = drivers
 
     fastest_items = []
+    driver_label_by_tile: Dict[str, str] = {}
     for driver in fastest_drivers[:3]:
         if not isinstance(driver, dict):
             continue
         label = driver.get("label") or driver.get("id") or driver.get("tile_id") or "Driver"
         tile_id = driver.get("tile_id")
+        if isinstance(tile_id, str) and tile_id:
+            driver_label_by_tile[tile_id] = str(label)
         details = []
         if isinstance(tile_id, str) and tile_id:
             details.append(f"Tile: {tile_id}")
@@ -197,7 +200,19 @@ def _dealshield_render_content_sections(view_model: Dict[str, Any]) -> str:
         for entry in question_bank:
             if not isinstance(entry, dict):
                 continue
-            driver_tile_id = entry.get("driver_tile_id") or "unknown"
+            raw_driver_tile_id = entry.get("driver_tile_id")
+            driver_tile_id = str(raw_driver_tile_id) if raw_driver_tile_id else ""
+            driver_label = (
+                driver_label_by_tile.get(driver_tile_id)
+                or entry.get("label")
+                or entry.get("id")
+                or "Questions"
+            )
+            tile_tag = (
+                f" <span class=\"content-inline-muted\">(tile: {html_module.escape(driver_tile_id)})</span>"
+                if driver_tile_id
+                else ""
+            )
             questions = entry.get("questions")
             question_lines = []
             if isinstance(questions, list):
@@ -208,7 +223,7 @@ def _dealshield_render_content_sections(view_model: Dict[str, Any]) -> str:
                 question_lines.append("<li>No questions configured.</li>")
             question_items.append(
                 "<li>"
-                f"<div class=\"content-subtle\">Driver tile: {html_module.escape(str(driver_tile_id))}</div>"
+                f"<div class=\"content-label\">{html_module.escape(str(driver_label))}{tile_tag}</div>"
                 "<ul class=\"content-sublist\">"
                 + "".join(question_lines)
                 + "</ul>"
@@ -371,10 +386,20 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
         metric_refs_used = []
         if isinstance(provenance, dict):
             metric_refs_used = provenance.get("metric_refs_used") or []
-        refs_text = ", ".join(str(ref) for ref in metric_refs_used) if metric_refs_used else "—"
+        ref_pills = []
+        if isinstance(metric_refs_used, list):
+            for ref in metric_refs_used:
+                if ref is None:
+                    continue
+                ref_pills.append(f"<span class=\"ref-pill\">{html_module.escape(str(ref))}</span>")
+        if not ref_pills:
+            ref_pills.append("<span class=\"ref-pill ref-pill-empty\">—</span>")
         provenance_table = (
             "<div class=\"provenance-note\">Scenario inputs not available.</div>"
-            f"<div class=\"provenance-meta\">Metric refs used: {html_module.escape(refs_text)}</div>"
+            "<div class=\"provenance-meta\">"
+            "<span class=\"provenance-meta-label\">Metric refs used:</span>"
+            f"<div class=\"provenance-ref-list\">{''.join(ref_pills)}</div>"
+            "</div>"
         )
 
     meta_block = f"<div class=\"meta\">{html_module.escape(header_meta)}</div>" if header_meta else ""
@@ -403,6 +428,10 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
     .context-note {{ margin-top: 8px; color: #6b7280; font-size: 12px; }}
     .provenance-note {{ margin-top: 6px; color: #6b7280; font-size: 12px; }}
     .provenance-meta {{ margin-top: 4px; color: #4b5563; font-size: 12px; }}
+    .provenance-meta-label {{ color: #374151; display: inline-block; margin-bottom: 6px; }}
+    .provenance-ref-list {{ display: flex; flex-wrap: wrap; gap: 6px; }}
+    .ref-pill {{ display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid #e5e7eb; background: #f8fafc; color: #374151; font-size: 11px; font-family: Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; line-height: 1.3; max-width: 100%; overflow-wrap: anywhere; }}
+    .ref-pill-empty {{ font-family: 'Helvetica Neue', Arial, sans-serif; }}
     .provenance-table {{ font-size: 11px; }}
     .provenance-table th {{ font-size: 10px; }}
     .provenance-table td {{ padding: 6px 8px; }}
@@ -412,6 +441,7 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
     .content-sublist {{ margin: 4px 0 0; padding-left: 18px; }}
     .content-subtle {{ color: #4b5563; font-size: 11px; margin-top: 2px; }}
     .content-label {{ font-weight: 600; color: #111827; }}
+    .content-inline-muted {{ color: #9ca3af; font-size: 10px; font-weight: 500; font-family: Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; }}
   </style>
 </head>
 <body>
