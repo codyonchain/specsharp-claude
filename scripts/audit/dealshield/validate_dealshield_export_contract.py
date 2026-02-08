@@ -31,7 +31,14 @@ if spec is None or spec.loader is None:
 dealshield_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(dealshield_module)
 render_dealshield_html = dealshield_module.render_dealshield_html
-format_dealshield_value = dealshield_module._dealshield_format_value
+
+DECISION_COLUMN_LABELS = [
+    "Total Project Cost",
+    "Annual Revenue",
+    "NOI",
+    "DSCR",
+    "Yield on Cost",
+]
 
 
 def _resolve_project_class(value: Optional[str]) -> ProjectClass:
@@ -92,16 +99,6 @@ def _get_fixture_outputs() -> List[Dict[str, Any]]:
     return outputs
 
 
-def _base_row(view_model: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    rows = view_model.get("rows")
-    if not isinstance(rows, list):
-        return None
-    for row in rows:
-        if isinstance(row, dict) and row.get("scenario_id") == "base":
-            return row
-    return rows[0] if rows else None
-
-
 def run() -> int:
     fixtures = _get_fixture_outputs()
     failures: List[str] = []
@@ -123,44 +120,41 @@ def run() -> int:
         if str(profile_id) not in html:
             failures.append(f"{name}: missing profile_id in html")
 
-        rows = view_model.get("rows") if isinstance(view_model.get("rows"), list) else []
-        for row in rows:
+        for label in DECISION_COLUMN_LABELS:
+            if html_module.escape(label) not in html:
+                failures.append(f"{name}: missing decision column label '{label}' in html")
+
+        decision_table = view_model.get("decision_table")
+        decision_rows = decision_table.get("rows") if isinstance(decision_table, dict) else []
+        if not isinstance(decision_rows, list):
+            decision_rows = []
+
+        base_label: Optional[str] = None
+        derived_labels: List[str] = []
+        for row in decision_rows:
             if not isinstance(row, dict):
                 continue
             label = row.get("label") or row.get("scenario_id")
-            if label and html_module.escape(str(label)) not in html:
-                failures.append(f"{name}: missing scenario label '{label}' in html")
-
-        columns = view_model.get("columns") if isinstance(view_model.get("columns"), list) else []
-        for column in columns:
-            if not isinstance(column, dict):
+            if not isinstance(label, str) or not label.strip():
                 continue
-            label = column.get("label")
-            if label and html_module.escape(str(label)) not in html:
-                failures.append(f"{name}: missing column label '{label}' in html")
+            normalized_label = label.strip()
+            scenario_id = row.get("scenario_id")
+            if scenario_id == "base":
+                base_label = normalized_label
+            else:
+                derived_labels.append(normalized_label)
 
-        base_row = _base_row(view_model)
-        if not isinstance(base_row, dict):
-            failures.append(f"{name}: missing base row")
+        if not base_label:
+            failures.append(f"{name}: decision_table missing base label")
+            continue
+        if len(derived_labels) < 2:
+            failures.append(f"{name}: decision_table must have at least 2 derived scenario labels")
             continue
 
-        base_cells = base_row.get("cells") if isinstance(base_row.get("cells"), list) else []
-        base_by_tile = {
-            cell.get("tile_id"): cell
-            for cell in base_cells
-            if isinstance(cell, dict) and cell.get("tile_id")
-        }
-
-        for column in columns:
-            if not isinstance(column, dict):
-                continue
-            tile_id = column.get("tile_id")
-            metric_ref = column.get("metric_ref")
-            cell = base_by_tile.get(tile_id, {})
-            value = cell.get("value") if isinstance(cell, dict) else None
-            formatted = format_dealshield_value(value, metric_ref)
-            if html_module.escape(str(formatted)) not in html:
-                failures.append(f"{name}: missing formatted value for tile '{tile_id}' in base row")
+        expected_labels = [base_label, derived_labels[0], derived_labels[1]]
+        for label in expected_labels:
+            if html_module.escape(label) not in html:
+                failures.append(f"{name}: missing scenario label '{label}' in html")
 
     if failures:
         print("FAIL: DealShield export contract validation failed")

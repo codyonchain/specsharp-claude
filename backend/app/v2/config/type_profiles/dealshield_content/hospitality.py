@@ -27,33 +27,44 @@ DEALSHIELD_CONTENT_PROFILES = {
         "most_likely_wrong": [
             {
                 "id": "mlw_1",
-                "text": "Guestroom finish scope can shift close to procurement.",
-                "why": "Finishes tile highlights this sensitivity channel.",
-            }
+                "text": "Guestroom finish scope is exposed to late operator and brand comments before release.",
+                "why": "Finishes sensitivity is explicit, and late changes can move both cost and opening date.",
+            },
+            {
+                "id": "mlw_2",
+                "text": "Revenue case assumes ADR and occupancy stabilize faster than market absorption may support.",
+                "why": "Revenue downside is a core lever and should be stress-tested against slower ramp.",
+            },
+            {
+                "id": "mlw_3",
+                "text": "Procurement plan assumes no long-lead disruption across guestroom and public-area packages.",
+                "why": "Cost pressure compounds when schedule slippage forces substitutions or acceleration.",
+            },
         ],
         "question_bank": [
             {
                 "id": "qb_cost_1",
                 "driver_tile_id": "cost_plus_10",
                 "questions": [
-                    "What hard-cost inclusions are still basis assumptions?",
-                    "Any site logistics or utility constraints still open?",
+                    "Which hard-cost inclusions are still basis assumptions rather than finalized bids?",
+                    "Any site logistics or utility constraints still open that can impact total project cost?",
                 ],
             },
             {
                 "id": "qb_revenue_1",
                 "driver_tile_id": "revenue_minus_10",
                 "questions": [
-                    "What ADR and occupancy assumptions need third-party support?",
-                    "Which market comps back the baseline revenue case?",
+                    "What ADR and occupancy assumptions need third-party support before IC sign-off?",
+                    "Which market comps back the baseline revenue case, and what has changed since that pull?",
+                    "What operating plan supports debt coverage if stabilization arrives later than underwritten?",
                 ],
             },
             {
                 "id": "qb_trade_1",
                 "driver_tile_id": "finishes_plus_10",
                 "questions": [
-                    "Which finish packages are design-complete today?",
-                    "Any brand or operator standards pending confirmation?",
+                    "Which finish packages are design-complete and released for buyout today?",
+                    "Any brand or operator standards still pending confirmation or waiver?",
                 ],
             },
         ],
@@ -61,8 +72,18 @@ DEALSHIELD_CONTENT_PROFILES = {
             {
                 "id": "rf_1",
                 "flag": "Finish and brand standards are not fully reconciled.",
-                "action": "Request signed design standards and finish delta log.",
-            }
+                "action": "Request signed design standards, finish delta log, and cost/schedule impact per open item.",
+            },
+            {
+                "id": "rf_2",
+                "flag": "Stabilization assumptions are optimistic relative to recent submarket performance.",
+                "action": "Ask for downside operating case with ADR and occupancy drag and confirm covenant headroom.",
+            },
+            {
+                "id": "rf_3",
+                "flag": "Long-lead procurement status lacks clear contingency paths.",
+                "action": "Require long-lead tracker with approved alternates and owner decision dates.",
+            },
         ],
     }
 }

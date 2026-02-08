@@ -27,33 +27,44 @@ DEALSHIELD_CONTENT_PROFILES = {
         "most_likely_wrong": [
             {
                 "id": "mlw_1",
-                "text": "Prototype changes can push finish scope late in pricing.",
-                "why": "Finishes tile is the explicit third sensitivity driver.",
-            }
+                "text": "Prototype alignment is assumed complete, but brand revisions can still re-open finish scope.",
+                "why": "Finishes pressure is explicit in the ugly case and can reset procurement quickly.",
+            },
+            {
+                "id": "mlw_2",
+                "text": "Revenue ramp assumes immediate throughput before local demand patterns are proven.",
+                "why": "Revenue downside is a core decision lever; opening-month softness matters.",
+            },
+            {
+                "id": "mlw_3",
+                "text": "Utility and service-capacity assumptions are carried as baseline rather than committed.",
+                "why": "Cost exposure rises fast when late utility upgrades move from assumption to requirement.",
+            },
         ],
         "question_bank": [
             {
                 "id": "qb_cost_1",
                 "driver_tile_id": "cost_plus_10",
                 "questions": [
-                    "What hard-cost assumptions are still carried as allowances?",
-                    "Any site utility or civil constraints not captured?",
+                    "Which hard-cost assumptions are still carried as allowances rather than subcontractor quotes?",
+                    "Any site utility or civil constraints not yet priced into the base case?",
                 ],
             },
             {
                 "id": "qb_revenue_1",
                 "driver_tile_id": "revenue_minus_10",
                 "questions": [
-                    "What sales ramp assumptions are most exposed?",
-                    "Which demand comps support the baseline case?",
+                    "What opening-quarter sales ramp assumptions are most exposed to local demand variance?",
+                    "Which demand comps support the baseline case and how recent are they?",
+                    "What labor plan protects margin if throughput starts below plan?",
                 ],
             },
             {
                 "id": "qb_trade_1",
                 "driver_tile_id": "finishes_plus_10",
                 "questions": [
-                    "Which finish packages are fully specified vs placeholder?",
-                    "Any brand-standard revisions pending approval?",
+                    "Which finish packages are fully specified versus still design-intent only?",
+                    "Any brand-standard revisions pending approval or value-engineering decisions?",
                 ],
             },
         ],
@@ -61,8 +72,18 @@ DEALSHIELD_CONTENT_PROFILES = {
             {
                 "id": "rf_1",
                 "flag": "Brand finish standards are not fully locked.",
-                "action": "Request final finish schedule and approved alternates.",
-            }
+                "action": "Request final finish schedule, approved alternates, and buyout timing against schedule.",
+            },
+            {
+                "id": "rf_2",
+                "flag": "Revenue case is not tied to site-specific opening performance data.",
+                "action": "Require a site-level launch bridge from comp performance to underwritten volume.",
+            },
+            {
+                "id": "rf_3",
+                "flag": "Utility readiness dates are not contract-backed.",
+                "action": "Confirm utility commitments in writing and map late dates to opening delay impact.",
+            },
         ],
     }
 }
