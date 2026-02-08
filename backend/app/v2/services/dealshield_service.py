@@ -441,6 +441,13 @@ def _extract_dealshield_scenario_inputs(payload: Dict[str, Any]) -> Dict[str, An
     return scenario_inputs
 
 
+def _extract_dealshield_controls(payload: Dict[str, Any]) -> Dict[str, Any]:
+    controls = payload.get("dealshield_controls")
+    if not isinstance(controls, dict):
+        return {}
+    return copy.deepcopy(controls)
+
+
 def _resolve_dealshield_content_profile_id(payload: Dict[str, Any], profile: Dict[str, Any]) -> Optional[str]:
     payload_profile_id = payload.get("dealshield_content_profile")
     if isinstance(payload_profile_id, str) and payload_profile_id.strip():
@@ -513,6 +520,7 @@ def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profil
     if not isinstance(provenance, dict):
         provenance = {}
     provenance["scenario_inputs"] = scenario_inputs
+    provenance["dealshield_controls"] = _extract_dealshield_controls(payload)
     view_model["provenance"] = provenance
 
     content_profile_id = _resolve_dealshield_content_profile_id(payload, profile)
