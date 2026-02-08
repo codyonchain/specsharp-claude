@@ -481,9 +481,9 @@ export const DealShieldView: React.FC<Props> = ({
                             String(colIndex);
                           const cell = byColId.get(String(columnId)) ?? rowValues[colIndex];
                           const rawValue =
-                            cell?.display ??
-                            cell?.formatted ??
                             cell?.value ??
+                            cell?.formatted ??
+                            cell?.display ??
                             cell?.label ??
                             cell;
                           const metricRef =
