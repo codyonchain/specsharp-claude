@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from typing import Any, Dict, Optional
 import html as html_module
 
@@ -11,6 +12,8 @@ def _dealshield_is_currency_metric(metric_ref: Optional[str]) -> bool:
     if not metric_ref:
         return False
     ref = metric_ref.lower()
+    if "dscr" in ref or "yield_on_cost" in ref:
+        return False
     currency_hints = (
         "cost",
         "revenue",
@@ -26,15 +29,57 @@ def _dealshield_is_currency_metric(metric_ref: Optional[str]) -> bool:
     return any(hint in ref for hint in currency_hints)
 
 
+def _dealshield_parse_numeric(value: Any) -> Optional[float]:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        trimmed = value.strip()
+        if not trimmed:
+            return None
+        normalized = trimmed.replace("$", "").replace(",", "").replace("%", "")
+        if not normalized:
+            return None
+        try:
+            parsed = float(normalized)
+        except Exception:
+            return None
+        return parsed if math.isfinite(parsed) else None
+    try:
+        parsed = float(value)
+    except Exception:
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def _dealshield_format_percent(value: float) -> str:
+    return f"{value:,.1f}%"
+
+
+def _dealshield_format_yield_on_cost(value: float) -> str:
+    if value <= 1.5:
+        return _dealshield_format_percent(value * 100)
+    if value <= 150:
+        return _dealshield_format_percent(value)
+    return _dealshield_format_percent(value)
+
+
 def _dealshield_format_value(value: Any, metric_ref: Optional[str]) -> str:
     if value is None:
         return "—"
     if isinstance(value, bool):
         return str(value)
-    try:
-        numeric = float(value)
-    except Exception:
-        return str(value)
+    if isinstance(value, str) and "not modeled" in value.lower():
+        return "Not modeled"
+
+    numeric = _dealshield_parse_numeric(value)
+    if numeric is None:
+        return "—"
+
+    ref = metric_ref.lower() if isinstance(metric_ref, str) else ""
+    if "yield_on_cost" in ref:
+        return _dealshield_format_yield_on_cost(numeric)
+    if "dscr" in ref:
+        return f"{numeric:,.2f}"
     if _dealshield_is_currency_metric(metric_ref):
         return format_currency(numeric)
     decimals = 0 if numeric.is_integer() else 2
@@ -46,10 +91,11 @@ def _dealshield_format_scalar(value: Any) -> str:
         return "—"
     if isinstance(value, bool):
         return str(value)
-    try:
-        numeric = float(value)
-    except Exception:
-        return str(value)
+    numeric = _dealshield_parse_numeric(value)
+    if numeric is None:
+        if isinstance(value, str) and "not modeled" in value.lower():
+            return "Not modeled"
+        return "—"
     decimals = 0 if numeric.is_integer() else 2
     return f"{numeric:,.{decimals}f}"
 
@@ -251,7 +297,7 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
     header_row = "".join(header_cells)
 
     body_rows = []
-    for row in rows:
+    for row_index, row in enumerate(rows):
         if not isinstance(row, dict):
             continue
         scenario_label = row.get("label") or row.get("scenario_id") or "—"
@@ -272,7 +318,8 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
             value = cell.get("value") if isinstance(cell, dict) else None
             formatted = _dealshield_format_value(value, metric_ref)
             row_cells.append(f"<td class=\"num\">{html_module.escape(formatted)}</td>")
-        body_rows.append(f"<tr>{''.join(row_cells)}</tr>")
+        row_class = "main-row-alt" if row_index % 2 else "main-row"
+        body_rows.append(f"<tr class=\"{row_class}\">{''.join(row_cells)}</tr>")
     table_body = "\n".join(body_rows)
 
     provenance_rows = []
@@ -314,7 +361,7 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
             "<th>Applied Tiles</th>"
             "<th>Cost Scalar</th>"
             "<th>Revenue Scalar</th>"
-            "<th>Driver Metric</th>"
+            "<th>Driver metric (Ugly only)</th>"
             "</tr></thead>"
             "<tbody>"
             + "".join(provenance_rows)
@@ -342,18 +389,23 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
     * {{ box-sizing: border-box; }}
     body {{ font-family: 'Helvetica Neue', Arial, sans-serif; color: #111827; margin: 0; padding: 32px; }}
     h1 {{ margin: 0; font-size: 28px; letter-spacing: 0.3px; }}
-    h2 {{ margin: 24px 0 8px; font-size: 18px; color: #1f2937; }}
+    section {{ margin-top: 28px; }}
+    h2 {{ margin: 0 0 10px; font-size: 19px; color: #1f2937; }}
     .subtitle {{ color: #4b5563; margin-top: 4px; font-size: 13px; }}
     .meta {{ color: #6b7280; font-size: 12px; margin-top: 4px; }}
-    .table-wrap {{ margin-top: 18px; }}
+    .table-wrap {{ margin-top: 22px; }}
     table {{ width: 100%; border-collapse: collapse; font-size: 12px; }}
-    th, td {{ border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; }}
-    th {{ background: #f9fafb; font-weight: 600; color: #111827; }}
+    th, td {{ border: 1px solid #e5e7eb; padding: 7px 9px; text-align: left; }}
+    th {{ background: #f8fafc; font-weight: 600; color: #111827; }}
     td.num {{ text-align: right; font-variant-numeric: tabular-nums; }}
     td.scenario {{ font-weight: 600; }}
+    .main-row-alt td {{ background: #f8fafc; }}
+    .context-note {{ margin-top: 8px; color: #6b7280; font-size: 12px; }}
     .provenance-note {{ margin-top: 6px; color: #6b7280; font-size: 12px; }}
     .provenance-meta {{ margin-top: 4px; color: #4b5563; font-size: 12px; }}
-    .provenance-table th {{ font-size: 11px; }}
+    .provenance-table {{ font-size: 11px; }}
+    .provenance-table th {{ font-size: 10px; }}
+    .provenance-table td {{ padding: 6px 8px; }}
     .content-note {{ margin-top: 6px; color: #6b7280; font-size: 12px; }}
     .content-list {{ margin: 8px 0 0; padding-left: 20px; font-size: 12px; }}
     .content-list li {{ margin: 0 0 8px; }}
@@ -370,12 +422,13 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
   </header>
 
   <section class="table-wrap">
-    <table>
+    <table class="main-table">
       <thead><tr>{header_row}</tr></thead>
       <tbody>
         {table_body}
       </tbody>
     </table>
+    <div class="context-note">DSCR and Yield reflect the underwriting/debt terms in this run — see Provenance.</div>
   </section>
 
   <section>

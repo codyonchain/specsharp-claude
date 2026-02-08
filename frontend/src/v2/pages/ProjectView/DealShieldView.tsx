@@ -13,13 +13,56 @@ interface Props {
   error?: Error | null;
 }
 
+const MISSING_VALUE = '—';
+const NOT_MODELED_VALUE = 'Not modeled';
+
+type DecisionMetricType = 'currency' | 'percent' | 'ratio' | 'number';
+
+const toFiniteNumber = (value: unknown): number | null => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const normalized = trimmed.replace(/[$,%\s,]/g, '');
+    if (!normalized) return null;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const inferDecisionMetricType = (metricRef: unknown): DecisionMetricType => {
+  if (typeof metricRef !== 'string') return 'number';
+  const ref = metricRef.toLowerCase();
+  if (ref.includes('dscr') || ref.includes('cap_rate')) return 'ratio';
+  if (ref.includes('yield_on_cost') || ref.includes('pct') || ref.includes('percent')) return 'percent';
+  const currencyHints = [
+    'total_project_cost',
+    'annual_revenue',
+    'noi',
+    'cost',
+    'revenue',
+    'income',
+    'budget',
+    'amount',
+  ];
+  if (currencyHints.some((hint) => ref.includes(hint))) return 'currency';
+  return 'number';
+};
+
 const formatValue = (value: unknown) => {
-  if (value === null || value === undefined || value === '') return '-';
+  if (value === null || value === undefined || value === '') return MISSING_VALUE;
   if (typeof value === 'number' && Number.isFinite(value)) {
     return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(value);
   }
+  if (typeof value === 'number') return MISSING_VALUE;
+  if (typeof value === 'string') {
+    if (/not modeled/i.test(value)) return NOT_MODELED_VALUE;
+    return value.trim() ? value : MISSING_VALUE;
+  }
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (typeof value === 'string') return value;
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
 };
@@ -27,26 +70,74 @@ const formatValue = (value: unknown) => {
 const isCurrencyMetric = (metricRef: unknown) => {
   if (typeof metricRef !== 'string') return false;
   const ref = metricRef.toLowerCase();
+  if (ref.includes('dscr') || ref.includes('yield_on_cost')) return false;
   const hints = ['cost', 'revenue', 'price', 'value', 'amount', 'budget', 'income', 'noi', 'capex', 'opex'];
   return hints.some(hint => ref.includes(hint));
 };
 
 const formatDecisionMetricValue = (value: unknown, metricRef: unknown) => {
-  if (value === null || value === undefined || value === '') return '-';
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    if (isCurrencyMetric(metricRef)) {
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        maximumFractionDigits: 0,
-      }).format(value);
+  if (value === null || value === undefined || value === '') return MISSING_VALUE;
+  if (typeof value === 'string' && /not modeled/i.test(value)) return NOT_MODELED_VALUE;
+
+  const numeric = toFiniteNumber(value);
+  if (numeric === null) return MISSING_VALUE;
+
+  const ref = typeof metricRef === 'string' ? metricRef.toLowerCase() : '';
+  if (ref.includes('yield_on_cost')) {
+    if (numeric <= 1.5) {
+      return `${new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }).format(numeric * 100)}%`;
     }
+    if (numeric <= 150) {
+      return `${new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }).format(numeric)}%`;
+    }
+    return `${new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }).format(numeric)}%`;
+  }
+
+  if (ref.includes('dscr')) {
     return new Intl.NumberFormat('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(value);
+    }).format(numeric);
   }
-  return formatValue(value);
+
+  const metricType = inferDecisionMetricType(metricRef);
+  if (metricType === 'currency' || isCurrencyMetric(metricRef)) {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: Math.abs(numeric) >= 1000 ? 0 : 2,
+      maximumFractionDigits: Math.abs(numeric) >= 1000 ? 0 : 2,
+    }).format(numeric);
+  }
+
+  if (metricType === 'percent') {
+    const percentValue = Math.abs(numeric) <= 1.5 ? numeric * 100 : numeric;
+    return `${new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }).format(percentValue)}%`;
+  }
+
+  if (metricType === 'ratio') {
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(numeric);
+  }
+
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(numeric);
 };
 
 const labelFrom = (value: any, fallback: string = '-') => {
@@ -73,6 +164,20 @@ const labelFrom = (value: any, fallback: string = '-') => {
 const listValue = (value: unknown) => {
   if (Array.isArray(value)) return value.map(item => formatValue(item)).join(', ');
   return formatValue(value);
+};
+
+const getScenarioBadge = (scenarioLabel: string) => {
+  const key = scenarioLabel.toLowerCase();
+  if (key.includes('base')) {
+    return { label: 'Base', className: 'bg-emerald-50 text-emerald-700 ring-emerald-200' };
+  }
+  if (key.includes('conservative') || key.includes('cons')) {
+    return { label: 'Conservative', className: 'bg-amber-50 text-amber-700 ring-amber-200' };
+  }
+  if (key.includes('ugly')) {
+    return { label: 'Ugly', className: 'bg-rose-50 text-rose-700 ring-rose-200' };
+  }
+  return null;
 };
 
 export const DealShieldView: React.FC<Props> = ({
@@ -136,6 +241,16 @@ export const DealShieldView: React.FC<Props> = ({
     : Array.isArray(content?.fastestChange?.drivers)
       ? content.fastestChange.drivers
       : [];
+  const driverLabelByTileId = useMemo(() => {
+    const map = new Map<string, string>();
+    fastestChangeDrivers.forEach((driver: any) => {
+      const tileId = driver?.tile_id ?? driver?.tileId ?? driver?.id;
+      if (!tileId) return;
+      const label = labelFrom(driver, String(tileId));
+      map.set(String(tileId), String(label));
+    });
+    return map;
+  }, [fastestChangeDrivers]);
   const fastestChangeText = fastestChangeDrivers
     .map((driver: any) => labelFrom(driver, ''))
     .filter(Boolean)
@@ -304,14 +419,14 @@ export const DealShieldView: React.FC<Props> = ({
       {!dealShieldLoading && !dealShieldError && dealShieldData && (
         <>
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Decision Metrics</h3>
+            <h3 className="mb-4 text-xl font-semibold tracking-tight text-slate-900">Decision Metrics</h3>
             <div className="overflow-x-auto">
-              <table className="min-w-full border border-slate-200 text-sm">
-                <thead className="bg-slate-50 text-slate-600">
+              <table className="min-w-full overflow-hidden rounded-xl border border-slate-200 text-sm">
+                <thead className="bg-slate-50/90 text-slate-600">
                   <tr>
-                    <th className="px-3 py-2 text-left font-semibold">Scenario</th>
+                    <th className="px-2.5 py-2 text-left font-semibold">Scenario</th>
                     {columns.map((column: any, index: number) => (
-                      <th key={index} className="px-3 py-2 text-left font-semibold">
+                      <th key={index} className="px-2.5 py-2 text-left font-semibold">
                         {labelFrom(column?.label ?? column, '-')}
                       </th>
                     ))}
@@ -319,6 +434,8 @@ export const DealShieldView: React.FC<Props> = ({
                 </thead>
                 <tbody>
                   {rows.map((row: any, rowIndex: number) => {
+                    const scenarioLabel = labelFrom(row, '-');
+                    const scenarioBadge = getScenarioBadge(scenarioLabel);
                     const rowValues = Array.isArray(row?.values)
                       ? row.values
                       : Array.isArray(row?.cells)
@@ -343,9 +460,16 @@ export const DealShieldView: React.FC<Props> = ({
                       }
                     });
                     return (
-                      <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-                        <td className="px-3 py-2 font-medium text-slate-800">
-                          {labelFrom(row, '-')}
+                      <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
+                        <td className="px-2.5 py-2 font-medium text-slate-800">
+                          <div className="flex items-center gap-2">
+                            {scenarioBadge && (
+                              <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${scenarioBadge.className}`}>
+                                {scenarioBadge.label}
+                              </span>
+                            )}
+                            <span>{scenarioLabel}</span>
+                          </div>
                         </td>
                         {columns.map((column: any, colIndex: number) => {
                           const columnId =
@@ -368,7 +492,7 @@ export const DealShieldView: React.FC<Props> = ({
                             column?.metric_ref ??
                             column?.metricRef;
                           return (
-                            <td key={colIndex} className="px-3 py-2 text-slate-700">
+                            <td key={colIndex} className="px-2.5 py-2 text-slate-700">
                               {formatDecisionMetricValue(rawValue, metricRef)}
                             </td>
                           );
@@ -379,17 +503,20 @@ export const DealShieldView: React.FC<Props> = ({
                 </tbody>
               </table>
             </div>
+            <p className="mt-3 text-xs text-slate-500">
+              DSCR and Yield reflect the underwriting/debt terms in this run — see Provenance.
+            </p>
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-5">
             <div>
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">Fastest-Change</h3>
+              <h3 className="mb-2 text-xl font-semibold tracking-tight text-slate-900">Fastest-Change</h3>
               <p className="text-sm text-slate-700">
                 {fastestChangeText || '-'}
               </p>
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">Most Likely Wrong</h3>
+              <h3 className="mb-2 text-xl font-semibold tracking-tight text-slate-900">Most Likely Wrong</h3>
               {mostLikelyWrong.length > 0 ? (
                 <ul className="list-disc pl-5 text-sm text-slate-700 space-y-1">
                   {mostLikelyWrong.map((item: any, index: number) => (
@@ -401,15 +528,20 @@ export const DealShieldView: React.FC<Props> = ({
               )}
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">Question Bank</h3>
+              <h3 className="mb-2 text-xl font-semibold tracking-tight text-slate-900">Question Bank</h3>
               {questionBank.length > 0 ? (
                 <div className="space-y-4">
                   {Object.entries(questionGroups).map(([groupKey, items]) => (
                     <div key={groupKey} className="space-y-2">
                       {hasDriverTileId && (
-                        <p className="text-xs font-semibold uppercase text-slate-500">
-                          driver_tile_id: {groupKey}
-                        </p>
+                        <>
+                          <p className="text-sm font-semibold text-slate-700">
+                            {driverLabelByTileId.get(groupKey) ?? groupKey}
+                          </p>
+                          {driverLabelByTileId.get(groupKey) && (
+                            <p className="text-xs text-slate-500">{groupKey}</p>
+                          )}
+                        </>
                       )}
                       <ul className="list-disc pl-5 text-sm text-slate-700 space-y-1">
                         {(items as any[]).flatMap((item, index) => {
@@ -430,7 +562,7 @@ export const DealShieldView: React.FC<Props> = ({
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">Red Flags</h3>
+                <h3 className="mb-2 text-xl font-semibold tracking-tight text-slate-900">Red Flags</h3>
                 {redFlags.length > 0 ? (
                   <ul className="list-disc pl-5 text-sm text-slate-700 space-y-1">
                     {redFlags.map((item: any, index: number) => (
@@ -442,7 +574,7 @@ export const DealShieldView: React.FC<Props> = ({
                 )}
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">Actions</h3>
+                <h3 className="mb-2 text-xl font-semibold tracking-tight text-slate-900">Actions</h3>
                 {actions.length > 0 ? (
                   <ul className="list-disc pl-5 text-sm text-slate-700 space-y-1">
                     {actions.map((item: any, index: number) => (
@@ -458,19 +590,19 @@ export const DealShieldView: React.FC<Props> = ({
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-900">Provenance</h3>
+              <h3 className="text-xl font-semibold tracking-tight text-slate-900">Provenance</h3>
               <span className="text-xs uppercase tracking-wide text-slate-400">Inputs</span>
             </div>
             {scenarioInputs.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="min-w-full border border-slate-200 text-sm">
-                  <thead className="bg-slate-50 text-slate-600">
+                <table className="min-w-full overflow-hidden rounded-xl border border-slate-200 text-sm">
+                  <thead className="bg-slate-50/90 text-slate-600">
                     <tr>
-                      <th className="px-3 py-2 text-left font-semibold">Scenario</th>
-                      <th className="px-3 py-2 text-left font-semibold">Applied Tile IDs</th>
-                      <th className="px-3 py-2 text-left font-semibold">Cost Scalar</th>
-                      <th className="px-3 py-2 text-left font-semibold">Revenue Scalar</th>
-                      <th className="px-3 py-2 text-left font-semibold">Metric Ref</th>
+                      <th className="px-2.5 py-2 text-left font-semibold">Scenario</th>
+                      <th className="px-2.5 py-2 text-left font-semibold">Applied Tile IDs</th>
+                      <th className="px-2.5 py-2 text-left font-semibold">Cost Scalar</th>
+                      <th className="px-2.5 py-2 text-left font-semibold">Revenue Scalar</th>
+                      <th className="px-2.5 py-2 text-left font-semibold">Driver metric (Ugly only)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -481,20 +613,20 @@ export const DealShieldView: React.FC<Props> = ({
                         input?.metric_ref ??
                         input?.metricRef;
                       return (
-                        <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-                          <td className="px-3 py-2 text-slate-700">
+                        <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
+                          <td className="px-2.5 py-2 text-slate-700">
                             {labelFrom(input?.scenario ?? input?.scenario_label ?? input?.label ?? input?.name)}
                           </td>
-                          <td className="px-3 py-2 text-slate-700">
+                          <td className="px-2.5 py-2 text-slate-700">
                             {listValue(input?.applied_tile_ids ?? input?.appliedTileIds ?? input?.tiles)}
                           </td>
-                          <td className="px-3 py-2 text-slate-700">
+                          <td className="px-2.5 py-2 text-slate-700">
                             {formatValue(input?.cost_scalar ?? input?.costScalar)}
                           </td>
-                          <td className="px-3 py-2 text-slate-700">
+                          <td className="px-2.5 py-2 text-slate-700">
                             {formatValue(input?.revenue_scalar ?? input?.revenueScalar)}
                           </td>
-                          <td className="px-3 py-2 text-slate-700">
+                          <td className="px-2.5 py-2 text-slate-700">
                             {formatValue(metricRef)}
                           </td>
                         </tr>
