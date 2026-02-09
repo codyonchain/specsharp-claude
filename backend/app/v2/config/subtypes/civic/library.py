@@ -6,7 +6,6 @@ from app.v2.config.master_config import (
     FinancingTerms,
     OwnershipType,
     NLPConfig,
-    ProjectClass,
 )
 
 
@@ -20,11 +19,11 @@ CONFIG = (
         equipment_cost_per_sf=25,
         typical_floors=2,
         trades=TradeBreakdown(
-            structural=0.26,
-            mechanical=0.24,
-            electrical=0.15,
-            plumbing=0.12,
-            finishes=0.23,
+            structural=0.28,  # Higher loads from dense book stacks
+            mechanical=0.25,  # Ventilation and thermal control for community/maker areas
+            electrical=0.16,  # Daylighting controls, AV, and maker-space power density
+            plumbing=0.13,
+            finishes=0.18,  # Acoustic treatments are carried in feature adders
         ),
         soft_costs=SoftCosts(
             design_fees=0.07,
@@ -38,13 +37,22 @@ CONFIG = (
         ),
         ownership_types={
             OwnershipType.GOVERNMENT: FinancingTerms(
-                debt_ratio=0.75,
+                debt_ratio=0.70,
                 debt_rate=0.038,
-                equity_ratio=0.15,
-                grants_ratio=0.10,  # Library grants
+                equity_ratio=0.20,
+                grants_ratio=0.10,
                 target_dscr=1.15,
                 target_roi=0.0,
-            )
+            ),
+            OwnershipType.NON_PROFIT: FinancingTerms(
+                debt_ratio=0.60,
+                debt_rate=0.045,
+                equity_ratio=0.15,
+                philanthropy_ratio=0.15,
+                grants_ratio=0.10,
+                target_dscr=1.10,
+                target_roi=0.0,
+            ),
         },
         nlp=NLPConfig(
             keywords=[
@@ -54,9 +62,12 @@ CONFIG = (
                 "main library",
                 "media center",
                 "learning center",
+                "learning commons",
+                "community library",
+                "library makerspace",
             ],
             priority=38,
-            incompatible_classes=[ProjectClass.TENANT_IMPROVEMENT],
+            incompatible_classes=[],
         ),
         regional_multipliers={
             "Nashville": 1.03,
@@ -69,11 +80,11 @@ CONFIG = (
             "Miami": 1.10,
         },
         special_features={
-            "reading_room": 20,
-            "computer_lab": 25,
-            "childrens_area": 20,
-            "meeting_rooms": 15,
-            "archives": 30,
+            "stacks_load_reinforcement": 35,
+            "acoustic_treatment": 25,
+            "daylighting_controls": 20,
+            "community_rooms": 20,
+            "maker_space_mep": 40,
         },
         base_revenue_per_sf_annual=0,
         occupancy_rate_base=1.0,

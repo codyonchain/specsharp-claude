@@ -17,6 +17,8 @@ CONFIG = (
         display_name="Community Center",
         base_cost_per_sf=245,
         cost_range=(220, 270),
+        dealshield_tile_profile="civic_baseline_v1",
+        scope_items_profile="civic_baseline_structural_v1",
         equipment_cost_per_sf=20,
         typical_floors=1,
         trades=TradeBreakdown(
@@ -92,3 +94,5 @@ CONFIG = (
         operating_margin_premium=0,
     ),
 )
+
+# BuildingConfig does not yet declare this field, so we attach it explicitly.

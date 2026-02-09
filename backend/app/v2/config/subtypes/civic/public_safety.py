@@ -17,6 +17,8 @@ CONFIG = (
         display_name="Public Safety Facility",
         base_cost_per_sf=285,
         cost_range=(260, 310),
+        dealshield_tile_profile="civic_baseline_v1",
+        scope_items_profile="civic_baseline_structural_v1",
         equipment_cost_per_sf=35,
         typical_floors=2,
         trades=TradeBreakdown(
@@ -83,3 +85,5 @@ CONFIG = (
         operating_margin_premium=0,
     ),
 )
+
+# BuildingConfig does not yet declare this field, so we attach it explicitly.

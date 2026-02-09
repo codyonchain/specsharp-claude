@@ -38,12 +38,22 @@ CONFIG = (
         ),
         ownership_types={
             OwnershipType.GOVERNMENT: FinancingTerms(
-                debt_ratio=0.80,
-                debt_rate=0.038,  # Municipal bonds
+                debt_ratio=0.70,
+                debt_rate=0.038,
                 equity_ratio=0.20,
+                grants_ratio=0.10,
                 target_dscr=1.15,
                 target_roi=0.0,
-            )
+            ),
+            OwnershipType.NON_PROFIT: FinancingTerms(
+                debt_ratio=0.60,
+                debt_rate=0.045,
+                equity_ratio=0.15,
+                philanthropy_ratio=0.15,
+                grants_ratio=0.10,
+                target_dscr=1.10,
+                target_roi=0.0,
+            ),
         },
         nlp=NLPConfig(
             keywords=[
@@ -57,7 +67,7 @@ CONFIG = (
                 "administration",
             ],
             priority=36,
-            incompatible_classes=[ProjectClass.TENANT_IMPROVEMENT],
+            incompatible_classes=[],
         ),
         regional_multipliers={
             "Nashville": 1.03,
