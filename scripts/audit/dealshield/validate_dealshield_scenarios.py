@@ -310,6 +310,20 @@ def run() -> int:
 
             expected_total = _apply_transforms(float(base_total), cost_transforms) if cost_transforms else float(base_total)
             expected_revenue = _apply_transforms(float(base_revenue), revenue_transforms) if revenue_transforms else float(base_revenue)
+            if scenario_id == "ugly" and profile_id == "industrial_cold_storage_v1" and isinstance(scenario_input, dict):
+                commissioning_delay_months = scenario_input.get("commissioning_delay_months")
+                ramp_factor = scenario_input.get("ramp_factor")
+                if not _is_number(commissioning_delay_months):
+                    failures.append(f"{name}: ugly missing commissioning_delay_months")
+                if not _is_number(ramp_factor):
+                    failures.append(f"{name}: ugly missing ramp_factor")
+                if _is_number(commissioning_delay_months) and _is_number(ramp_factor):
+                    expected_ramp_factor = max(0.0, (12.0 - float(commissioning_delay_months)) / 12.0)
+                    if not _is_close(float(ramp_factor), expected_ramp_factor, tol=1e-6):
+                        failures.append(
+                            f"{name}: ugly ramp_factor not derived from commissioning_delay_months"
+                        )
+                    expected_revenue *= float(ramp_factor)
 
             scenario_total = _resolve_metric_ref(scenario_payload, "totals.total_project_cost")
             scenario_revenue = _resolve_metric_ref(scenario_payload, "revenue_analysis.annual_revenue")
@@ -366,6 +380,20 @@ def run() -> int:
                         failures.append(
                             f"{name}: ugly total_project_cost not >= conservative"
                         )
+                if profile_id == "industrial_cold_storage_v1" and isinstance(conservative_payload, dict):
+                    conservative_revenue = _resolve_metric_ref(conservative_payload, "revenue_analysis.annual_revenue")
+                    if _is_number(conservative_revenue) and _is_number(scenario_revenue):
+                        if float(scenario_revenue) >= float(conservative_revenue):
+                            failures.append(
+                                f"{name}: cold_storage ugly annual_revenue not < conservative"
+                            )
+                    conservative_noi = _resolve_metric_ref(conservative_payload, "return_metrics.estimated_annual_noi")
+                    ugly_noi = _resolve_metric_ref(scenario_payload, "return_metrics.estimated_annual_noi")
+                    if _is_number(conservative_noi) and _is_number(ugly_noi):
+                        if float(ugly_noi) >= float(conservative_noi):
+                            failures.append(
+                                f"{name}: cold_storage ugly NOI not < conservative"
+                            )
 
             if scenario_id == "conservative" and isinstance(scenario_input, dict):
                 cost_scalar = scenario_input.get("cost_scalar")
@@ -415,6 +443,11 @@ def run() -> int:
                                 failures.append(
                                     f"{name}: ugly driver metric_ref missing '{expected_ref}'"
                                 )
+                if profile_id == "industrial_cold_storage_v1":
+                    if not _is_number(scenario_input.get("commissioning_delay_months")):
+                        failures.append(f"{name}: ugly scenario_inputs missing commissioning_delay_months")
+                    if not _is_number(scenario_input.get("ramp_factor")):
+                        failures.append(f"{name}: ugly scenario_inputs missing ramp_factor")
 
         if not anchor_probe_complete:
             info = payload.get("project_info") if isinstance(payload, dict) else None

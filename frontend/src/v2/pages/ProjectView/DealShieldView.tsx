@@ -148,6 +148,26 @@ const formatDecisionMetricValue = (value: unknown, metricRef: unknown) => {
   }).format(numeric);
 };
 
+const formatSignedCurrency = (value: number) => {
+  const sign = value < 0 ? '-' : '+';
+  const absoluteValue = Math.abs(value);
+  const formatted = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: absoluteValue >= 1000 ? 0 : 2,
+    maximumFractionDigits: absoluteValue >= 1000 ? 0 : 2,
+  }).format(absoluteValue);
+  return `${sign}${formatted}`;
+};
+
+const formatSignedPercent = (value: number) => {
+  const sign = value < 0 ? '-' : '+';
+  return `${sign}${new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(Math.abs(value))}%`;
+};
+
 const formatAssumptionPercent = (value: unknown) => {
   const numeric = toFiniteNumber(value);
   if (numeric === null) return MISSING_VALUE;
@@ -444,6 +464,96 @@ export const DealShieldView: React.FC<Props> = ({
       ).filter((value, index, array) => array.indexOf(value) === index),
     [provenance?.dealshield_disclosures, viewModel]
   );
+  const decisionSummary = useMemo(() => {
+    const summaryRaw =
+      ((viewModel as any)?.decision_summary && typeof (viewModel as any).decision_summary === 'object'
+        ? (viewModel as any).decision_summary
+        : (viewModel as any)?.decisionSummary && typeof (viewModel as any).decisionSummary === 'object'
+          ? (viewModel as any).decisionSummary
+          : {}) as Record<string, unknown>;
+
+    const fallbackCapRate =
+      (viewModel as any)?.cap_rate_used_pct ?? (viewModel as any)?.capRateUsedPct;
+    const fallbackValueGap =
+      (viewModel as any)?.value_gap ?? (viewModel as any)?.valueGap;
+    const fallbackValueGapPct =
+      (viewModel as any)?.value_gap_pct ?? (viewModel as any)?.valueGapPct;
+
+    const capRateUsedPct = toFiniteNumber(
+      summaryRaw.cap_rate_used_pct ?? summaryRaw.capRateUsedPct ?? fallbackCapRate
+    );
+    const stabilizedValueFromSummary = toFiniteNumber(
+      summaryRaw.stabilized_value ?? summaryRaw.stabilizedValue
+    );
+    let valueGap = toFiniteNumber(
+      summaryRaw.value_gap ?? summaryRaw.valueGap ?? fallbackValueGap
+    );
+    let valueGapPct = toFiniteNumber(
+      summaryRaw.value_gap_pct ?? summaryRaw.valueGapPct ?? fallbackValueGapPct
+    );
+    const notModeledRaw = summaryRaw.not_modeled_reason ?? summaryRaw.notModeledReason;
+    let notModeledReason =
+      typeof notModeledRaw === 'string' && notModeledRaw.trim()
+        ? notModeledRaw.trim()
+        : null;
+
+    const baseRow = rows.find((row: any) => {
+      if (!row || typeof row !== 'object') return false;
+      const scenarioId = typeof row?.scenario_id === 'string' ? row.scenario_id.toLowerCase() : '';
+      const label = typeof row?.label === 'string' ? row.label.toLowerCase() : '';
+      return scenarioId === 'base' || label === 'base';
+    }) ?? rows[0];
+
+    let baseStabilizedValue = stabilizedValueFromSummary;
+    let baseTotalCost: number | null = null;
+    if (baseRow && typeof baseRow === 'object') {
+      const baseCells = Array.isArray(baseRow?.cells)
+        ? baseRow.cells
+        : Array.isArray(baseRow?.values)
+          ? baseRow.values
+          : [];
+      const cellMap = new Map<string, any>();
+      baseCells.forEach((cell: any, index: number) => {
+        if (!cell || typeof cell !== 'object') {
+          cellMap.set(String(index), cell);
+          return;
+        }
+        const cellId =
+          cell?.col_id ??
+          cell?.colId ??
+          cell?.tile_id ??
+          cell?.tileId ??
+          cell?.id ??
+          String(index);
+        cellMap.set(String(cellId), cell);
+      });
+      const stabilizedCell = cellMap.get('stabilized_value');
+      const totalCostCell = cellMap.get('total_cost');
+      baseStabilizedValue = toFiniteNumber(stabilizedCell?.value ?? stabilizedCell ?? stabilizedValueFromSummary);
+      baseTotalCost = toFiniteNumber(totalCostCell?.value ?? totalCostCell);
+    }
+
+    if (valueGap === null && baseStabilizedValue !== null && baseTotalCost !== null) {
+      valueGap = baseStabilizedValue - baseTotalCost;
+    }
+    if (valueGapPct === null && valueGap !== null && baseTotalCost !== null && baseTotalCost !== 0) {
+      valueGapPct = (valueGap / baseTotalCost) * 100;
+    }
+    if (!notModeledReason && baseStabilizedValue === null && capRateUsedPct === null) {
+      const capRateDisclosure = dealShieldDisclosures.find((item) => /cap rate missing/i.test(item));
+      if (capRateDisclosure) {
+        notModeledReason = capRateDisclosure;
+      }
+    }
+
+    return {
+      stabilizedValue: baseStabilizedValue,
+      capRateUsedPct,
+      valueGap,
+      valueGapPct,
+      notModeledReason,
+    };
+  }, [dealShieldDisclosures, rows, viewModel]);
   const scenarioInputsRaw = provenance?.scenario_inputs ?? (viewModel as any)?.scenario_inputs;
   const provenanceControlsRaw = provenance?.dealshield_controls ?? (dealShieldData as any)?.dealshield_controls;
   const scenarioInputs = useMemo(() => {
@@ -758,6 +868,36 @@ export const DealShieldView: React.FC<Props> = ({
             <p className="mt-3 text-xs text-slate-500">
               DSCR and Yield reflect the underwriting/debt terms in this run — see Provenance.
             </p>
+            {(decisionSummary.stabilizedValue !== null || decisionSummary.notModeledReason) && (
+              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Decision Summary</p>
+                {decisionSummary.stabilizedValue !== null && decisionSummary.capRateUsedPct !== null ? (
+                  <div className="mt-2 grid gap-x-4 gap-y-1 text-xs text-slate-700 sm:grid-cols-2">
+                    <p>
+                      <span className="font-medium text-slate-600">Stabilized Value:</span>{' '}
+                      <span>{formatDecisionMetricValue(decisionSummary.stabilizedValue, 'derived.stabilized_value')}</span>
+                    </p>
+                    <p>
+                      <span className="font-medium text-slate-600">Cap Rate Used:</span>{' '}
+                      <span>{formatAssumptionPercent(decisionSummary.capRateUsedPct)}</span>
+                    </p>
+                    {decisionSummary.valueGap !== null && (
+                      <p className="sm:col-span-2">
+                        <span className="font-medium text-slate-600">Value Gap:</span>{' '}
+                        <span>{formatSignedCurrency(decisionSummary.valueGap)}</span>
+                        {decisionSummary.valueGapPct !== null && (
+                          <span> ({formatSignedPercent(decisionSummary.valueGapPct)} of cost)</span>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs text-slate-700">
+                    {decisionSummary.notModeledReason ?? 'Not modeled: cap rate missing'}
+                  </p>
+                )}
+              </div>
+            )}
             {(financingAssumptionItems.length > 0 || dealShieldDisclosures.length > 0) && (
               <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Assumptions</p>

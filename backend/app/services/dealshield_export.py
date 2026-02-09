@@ -122,6 +122,16 @@ def _dealshield_format_assumption_months(value: Any) -> str:
     return f"{int(round(numeric)):,d} mo"
 
 
+def _dealshield_format_signed_currency(value: float) -> str:
+    sign = "+" if value >= 0 else "-"
+    return f"{sign}{format_currency(abs(value))}"
+
+
+def _dealshield_format_signed_percent(value: float) -> str:
+    sign = "+" if value >= 0 else "-"
+    return f"{sign}{abs(value):,.1f}%"
+
+
 def _dealshield_normalize_disclosures(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -134,6 +144,106 @@ def _dealshield_normalize_disclosures(value: Any) -> list[str]:
             continue
         output.append(text)
     return output
+
+
+def _dealshield_extract_decision_row_value(row: Any, col_id: str) -> Optional[float]:
+    if not isinstance(row, dict):
+        return None
+    cells = row.get("cells")
+    if not isinstance(cells, list):
+        return None
+    for cell in cells:
+        if not isinstance(cell, dict):
+            continue
+        cell_id = cell.get("col_id") or cell.get("tile_id") or cell.get("id")
+        if cell_id != col_id:
+            continue
+        return _dealshield_parse_numeric(cell.get("value"))
+    return None
+
+
+def _dealshield_render_decision_summary(view_model: Dict[str, Any], rows: list[Any], disclosures: list[str]) -> str:
+    summary_raw = view_model.get("decision_summary")
+    summary = summary_raw if isinstance(summary_raw, dict) else {}
+
+    cap_rate_used_pct = _dealshield_parse_numeric(
+        summary.get("cap_rate_used_pct")
+        if isinstance(summary, dict)
+        else view_model.get("cap_rate_used_pct")
+    )
+    if cap_rate_used_pct is None:
+        cap_rate_used_pct = _dealshield_parse_numeric(view_model.get("cap_rate_used_pct"))
+
+    stabilized_value = _dealshield_parse_numeric(summary.get("stabilized_value")) if isinstance(summary, dict) else None
+    value_gap = _dealshield_parse_numeric(summary.get("value_gap")) if isinstance(summary, dict) else None
+    value_gap_pct = _dealshield_parse_numeric(summary.get("value_gap_pct")) if isinstance(summary, dict) else None
+
+    base_row = next(
+        (
+            row for row in rows
+            if isinstance(row, dict)
+            and (
+                row.get("scenario_id") == "base"
+                or str(row.get("label", "")).strip().lower() == "base"
+            )
+        ),
+        rows[0] if rows else None,
+    )
+    base_total_cost = _dealshield_extract_decision_row_value(base_row, "total_cost")
+    if stabilized_value is None:
+        stabilized_value = _dealshield_extract_decision_row_value(base_row, "stabilized_value")
+    if value_gap is None and stabilized_value is not None and base_total_cost is not None:
+        value_gap = stabilized_value - base_total_cost
+    if value_gap_pct is None and value_gap is not None and base_total_cost not in (None, 0):
+        value_gap_pct = (value_gap / float(base_total_cost)) * 100.0
+
+    not_modeled_reason = summary.get("not_modeled_reason") if isinstance(summary.get("not_modeled_reason"), str) else None
+    if not not_modeled_reason and stabilized_value is None and cap_rate_used_pct is None:
+        for disclosure in disclosures:
+            if "cap rate missing" in disclosure.lower():
+                not_modeled_reason = disclosure
+                break
+
+    if stabilized_value is not None and cap_rate_used_pct is not None:
+        summary_lines = [
+            "<div class=\"decision-summary-item\">"
+            "<span class=\"decision-summary-label\">Stabilized Value:</span> "
+            f"<span>{html_module.escape(_dealshield_format_value(stabilized_value, 'derived.stabilized_value'))}</span>"
+            "</div>",
+            "<div class=\"decision-summary-item\">"
+            "<span class=\"decision-summary-label\">Cap Rate Used:</span> "
+            f"<span>{html_module.escape(_dealshield_format_assumption_percent(cap_rate_used_pct))}</span>"
+            "</div>",
+        ]
+        if value_gap is not None:
+            gap_text = _dealshield_format_signed_currency(value_gap)
+            if value_gap_pct is not None:
+                gap_text = f"{gap_text} ({_dealshield_format_signed_percent(value_gap_pct)} of cost)"
+            summary_lines.append(
+                "<div class=\"decision-summary-item decision-summary-item-wide\">"
+                "<span class=\"decision-summary-label\">Value Gap:</span> "
+                f"<span>{html_module.escape(gap_text)}</span>"
+                "</div>"
+            )
+
+        return (
+            "<div class=\"decision-summary-block\">"
+            "<div class=\"decision-summary-title\">Decision Summary</div>"
+            "<div class=\"decision-summary-grid\">"
+            + "".join(summary_lines)
+            + "</div></div>"
+        )
+
+    if not_modeled_reason:
+        return (
+            "<div class=\"decision-summary-block\">"
+            "<div class=\"decision-summary-title\">Decision Summary</div>"
+            "<div class=\"decision-summary-note\">"
+            f"{html_module.escape(not_modeled_reason)}"
+            "</div></div>"
+        )
+
+    return ""
 
 
 def _dealshield_render_assumptions(financing_assumptions: Any, disclosures: list[str]) -> str:
@@ -504,6 +614,7 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
             if item not in disclosures:
                 disclosures.append(item)
     assumptions_block = _dealshield_render_assumptions(financing_assumptions, disclosures)
+    decision_summary_block = _dealshield_render_decision_summary(view_model, rows, disclosures)
 
     meta_block = f"<div class=\"meta\">{html_module.escape(header_meta)}</div>" if header_meta else ""
     content_sections = _dealshield_render_content_sections(view_model)
@@ -552,6 +663,13 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
     .assumption-label {{ font-weight: 600; color: #475569; }}
     .assumptions-disclosures {{ margin: 6px 0 0; padding-left: 18px; font-size: 11px; color: #475569; }}
     .assumptions-disclosures li {{ margin: 0 0 2px; }}
+    .decision-summary-block {{ margin-top: 8px; border: 1px solid #e5e7eb; background: #f8fafc; border-radius: 6px; padding: 8px 10px; }}
+    .decision-summary-title {{ font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: #6b7280; font-weight: 700; }}
+    .decision-summary-grid {{ margin-top: 6px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; font-size: 11px; color: #334155; }}
+    .decision-summary-item {{ margin: 0; }}
+    .decision-summary-item-wide {{ grid-column: 1 / -1; }}
+    .decision-summary-label {{ font-weight: 600; color: #475569; }}
+    .decision-summary-note {{ margin-top: 6px; font-size: 11px; color: #475569; }}
   </style>
 </head>
 <body>
@@ -569,6 +687,7 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
       </tbody>
     </table>
     <div class="context-note">DSCR and Yield reflect the underwriting/debt terms in this run — see Provenance.</div>
+    {decision_summary_block}
     {assumptions_block}
   </section>
 

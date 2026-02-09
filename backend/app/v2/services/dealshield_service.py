@@ -216,10 +216,44 @@ def _resolve_decision_value(
     return None, None, "missing"
 
 
+def _resolve_cap_rate_used(payload: Dict[str, Any]) -> Optional[float]:
+    return_metrics = payload.get("return_metrics")
+    profile = payload.get("profile")
+
+    cap_rate_value: Optional[float] = None
+    if isinstance(return_metrics, dict) and _is_number(return_metrics.get("market_cap_rate")):
+        cap_rate_value = float(return_metrics.get("market_cap_rate"))
+    elif isinstance(profile, dict) and _is_number(profile.get("market_cap_rate")):
+        cap_rate_value = float(profile.get("market_cap_rate"))
+    elif isinstance(return_metrics, dict) and _is_number(return_metrics.get("cap_rate")):
+        cap_rate_value = float(return_metrics.get("cap_rate"))
+
+    if cap_rate_value is not None and cap_rate_value <= 0:
+        return None
+    return cap_rate_value
+
+
+def _extract_decision_cell_value(row: Dict[str, Any], col_id: str) -> Optional[float]:
+    cells = row.get("cells")
+    if not isinstance(cells, list):
+        return None
+    for cell in cells:
+        if not isinstance(cell, dict):
+            continue
+        cell_id = cell.get("col_id") or cell.get("tile_id") or cell.get("id")
+        if cell_id != col_id:
+            continue
+        raw_value = cell.get("value")
+        if _is_number(raw_value):
+            return float(raw_value)
+        return None
+    return None
+
+
 def _apply_display_guards(
     payload: Dict[str, Any],
     decision_table: Dict[str, Any],
-) -> Tuple[Dict[str, Any], List[str]]:
+) -> Tuple[Dict[str, Any], List[str], Dict[str, Any]]:
     columns = decision_table.get("columns")
     if not isinstance(columns, list):
         columns = []
@@ -261,17 +295,7 @@ def _apply_display_guards(
         )
     )
 
-    return_metrics = payload.get("return_metrics")
-    profile = payload.get("profile")
-    cap_rate_value: Optional[float] = None
-    if isinstance(return_metrics, dict) and _is_number(return_metrics.get("market_cap_rate")):
-        cap_rate_value = float(return_metrics.get("market_cap_rate"))
-    elif isinstance(profile, dict) and _is_number(profile.get("market_cap_rate")):
-        cap_rate_value = float(profile.get("market_cap_rate"))
-    elif isinstance(return_metrics, dict) and _is_number(return_metrics.get("cap_rate")):
-        cap_rate_value = float(return_metrics.get("cap_rate"))
-    if cap_rate_value is not None and cap_rate_value <= 0:
-        cap_rate_value = None
+    cap_rate_value = _resolve_cap_rate_used(payload)
 
     has_stabilized_value_column = any(
         isinstance(col, dict) and col.get("id") == "stabilized_value" for col in columns
@@ -314,6 +338,10 @@ def _apply_display_guards(
         noi_cell = row_cell_map.get("noi")
         if isinstance(noi_cell, dict) and _is_number(noi_cell.get("value")):
             noi_value = float(noi_cell.get("value"))
+        total_cost_value: Optional[float] = None
+        total_cost_cell = row_cell_map.get("total_cost")
+        if isinstance(total_cost_cell, dict) and _is_number(total_cost_cell.get("value")):
+            total_cost_value = float(total_cost_cell.get("value"))
 
         stabilized_value: Optional[float] = None
         if noi_value is not None:
@@ -333,11 +361,61 @@ def _apply_display_guards(
 
         stabilized_cell["value"] = stabilized_value
         stabilized_cell["provenance_kind"] = "derived" if stabilized_value is not None else "missing"
+        stabilized_cell["cap_rate_used_pct"] = (cap_rate_value * 100.0) if stabilized_value is not None and cap_rate_value is not None else None
+        if stabilized_value is not None and total_cost_value is not None:
+            value_gap = stabilized_value - total_cost_value
+            stabilized_cell["value_gap"] = value_gap
+            stabilized_cell["value_gap_pct"] = (
+                (value_gap / total_cost_value) * 100.0
+                if total_cost_value != 0
+                else None
+            )
+        else:
+            stabilized_cell["value_gap"] = None
+            stabilized_cell["value_gap_pct"] = None
+
+    decision_summary: Dict[str, Any] = {
+        "scenario_id": "base",
+        "scenario_label": "Base",
+        "stabilized_value": None,
+        "cap_rate_used_pct": (cap_rate_value * 100.0) if cap_rate_value is not None else None,
+        "value_gap": None,
+        "value_gap_pct": None,
+    }
+    base_row = next(
+        (
+            row
+            for row in rows
+            if isinstance(row, dict)
+            and (
+                row.get("scenario_id") == "base"
+                or str(row.get("label", "")).strip().lower() == "base"
+            )
+        ),
+        rows[0] if rows else None,
+    )
+    if isinstance(base_row, dict):
+        scenario_id = base_row.get("scenario_id")
+        if isinstance(scenario_id, str) and scenario_id:
+            decision_summary["scenario_id"] = scenario_id
+        scenario_label = base_row.get("label")
+        if isinstance(scenario_label, str) and scenario_label.strip():
+            decision_summary["scenario_label"] = scenario_label.strip()
+        base_stabilized_value = _extract_decision_cell_value(base_row, "stabilized_value")
+        base_total_cost = _extract_decision_cell_value(base_row, "total_cost")
+        decision_summary["stabilized_value"] = base_stabilized_value
+        if base_stabilized_value is not None and base_total_cost is not None:
+            value_gap = base_stabilized_value - base_total_cost
+            decision_summary["value_gap"] = value_gap
+            if base_total_cost != 0:
+                decision_summary["value_gap_pct"] = (value_gap / base_total_cost) * 100.0
+    if decision_summary.get("stabilized_value") is None and cap_rate_value is None:
+        decision_summary["not_modeled_reason"] = "Not modeled: cap rate missing"
 
     if not has_financing_assumptions:
         financing_assumptions = {}
 
-    return financing_assumptions, disclosures
+    return financing_assumptions, disclosures, decision_summary
 
 
 def _build_decision_table(payload: Dict[str, Any], profile: Dict[str, Any]) -> Dict[str, Any]:
@@ -628,7 +706,7 @@ def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profil
     legacy_rows = copy.deepcopy(view_model.get("rows", []))
 
     decision_table = _build_decision_table(payload, profile)
-    financing_assumptions, dealshield_disclosures = _apply_display_guards(payload, decision_table)
+    financing_assumptions, dealshield_disclosures, decision_summary = _apply_display_guards(payload, decision_table)
     view_model["decision_table"] = decision_table
     view_model["legacy_scenario_table"] = {
         "columns": legacy_columns if isinstance(legacy_columns, list) else [],
@@ -652,6 +730,13 @@ def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profil
     if dealshield_disclosures:
         view_model["dealshield_disclosures"] = list(dealshield_disclosures)
         provenance["dealshield_disclosures"] = list(dealshield_disclosures)
+    if isinstance(decision_summary, dict):
+        summary_copy = copy.deepcopy(decision_summary)
+        view_model["decision_summary"] = summary_copy
+        view_model["cap_rate_used_pct"] = summary_copy.get("cap_rate_used_pct")
+        view_model["value_gap"] = summary_copy.get("value_gap")
+        view_model["value_gap_pct"] = summary_copy.get("value_gap_pct")
+        provenance["decision_summary"] = summary_copy
     view_model["provenance"] = provenance
 
     content_profile_id = _resolve_dealshield_content_profile_id(payload, profile)

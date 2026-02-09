@@ -19,6 +19,8 @@ WAVE1_PROFILES: Set[str] = {
 }
 
 _ALLOWED_STRESS_BAND_PCTS: Set[int] = {10, 7, 5, 3}
+_COLD_STORAGE_UGLY_COMMISSIONING_DELAY_MONTHS = 3
+_MONTHS_PER_YEAR = 12.0
 
 
 class DealShieldScenarioError(ValueError):
@@ -239,6 +241,14 @@ def _driver_entry(tile_id: str, metric_ref: str, transforms: List[Dict[str, Any]
     return entry
 
 
+def _cold_storage_ugly_ramp_factor(commissioning_delay_months: int) -> float:
+    if commissioning_delay_months <= 0:
+        return 1.0
+    if commissioning_delay_months >= int(_MONTHS_PER_YEAR):
+        return 0.0
+    return (_MONTHS_PER_YEAR - float(commissioning_delay_months)) / _MONTHS_PER_YEAR
+
+
 def _build_calculation_context(
     payload: Dict[str, Any],
     scenario_id: str,
@@ -404,6 +414,8 @@ def build_dealshield_scenarios(
         revenue_tiles: List[Dict[str, Any]] = []
         driver_entries: List[Dict[str, Any]] = []
         levers: List[str] = []
+        commissioning_delay_months: Optional[int] = None
+        ramp_factor: Optional[float] = None
 
         for tile_id in applied_tile_ids:
             tile = tile_by_id.get(tile_id)
@@ -453,6 +465,15 @@ def build_dealshield_scenarios(
                 "levers": levers,
             },
         }
+        if profile_id == "industrial_cold_storage_v1" and scenario_id == "ugly":
+            commissioning_delay_months = _COLD_STORAGE_UGLY_COMMISSIONING_DELAY_MONTHS
+            ramp_factor = _cold_storage_ugly_ramp_factor(commissioning_delay_months)
+            scenario_input["commissioning_delay_months"] = commissioning_delay_months
+            scenario_input["ramp_factor"] = ramp_factor
+            levers.append(
+                "Cold-storage ugly commissioning delay applied "
+                f"({commissioning_delay_months} months; year-1 ramp factor {ramp_factor:.2f})."
+            )
 
         if cost_tiles and cost_scalar is None:
             if len(cost_tiles) == 1:
@@ -505,6 +526,14 @@ def build_dealshield_scenarios(
             if not _is_number(base_factor):
                 base_factor = 1.0
             modifiers["revenue_factor"] = float(base_factor) * factor
+            scenario_payload["modifiers"] = modifiers
+
+        if ramp_factor is not None:
+            modifiers = dict(scenario_payload.get("modifiers") or {})
+            base_factor = modifiers.get("revenue_factor", 1.0)
+            if not _is_number(base_factor):
+                base_factor = 1.0
+            modifiers["revenue_factor"] = float(base_factor) * float(ramp_factor)
             scenario_payload["modifiers"] = modifiers
 
         ownership_type = _select_ownership_type(building_config)
