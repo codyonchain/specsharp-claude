@@ -14,8 +14,13 @@ from . import restaurant
 from . import retail
 from . import specialty
 
+CIVIC_TILE_PROFILE_ALIASES: dict[str, dict] = {
+    "civic_baseline_v1": civic.DEALSHIELD_TILE_PROFILES["civic_library_v1"],
+}
+
 # Explicit aggregation for determinism (no filesystem scanning).
 DEALSHIELD_TILE_PROFILE_SOURCES: list[dict] = [
+    CIVIC_TILE_PROFILE_ALIASES,
     industrial.DEALSHIELD_TILE_PROFILES,
     healthcare.DEALSHIELD_TILE_PROFILES,
     restaurant.DEALSHIELD_TILE_PROFILES,

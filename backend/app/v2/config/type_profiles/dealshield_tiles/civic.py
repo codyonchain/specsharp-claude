@@ -13,6 +13,13 @@ def _civic_tile_profile(subtype_label: str) -> dict:
                 "transform": {"op": "mul", "value": 1.10},
             },
             {
+                "tile_id": "revenue_minus_10",
+                "label": "Revenue -10% (not modeled)",
+                "metric_ref": "revenue_analysis.market_factor",
+                "required": True,
+                "transform": {"op": "mul", "value": 0.90},
+            },
+            {
                 "tile_id": "mechanical_plus_10",
                 "label": "MEP Complexity +10%",
                 "metric_ref": "trade_breakdown.mechanical",
@@ -31,7 +38,7 @@ def _civic_tile_profile(subtype_label: str) -> dict:
             {
                 "row_id": "conservative",
                 "label": "Conservative",
-                "apply_tiles": ["cost_plus_10"],
+                "apply_tiles": ["cost_plus_10", "revenue_minus_10"],
             },
             {
                 "row_id": "permitting_and_mep",

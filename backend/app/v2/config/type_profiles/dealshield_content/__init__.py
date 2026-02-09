@@ -2,10 +2,18 @@
 
 from typing import Any, Dict
 
+from . import civic
 from . import healthcare
 from . import hospitality
 from . import industrial
 from . import restaurant
+
+CIVIC_CONTENT_PROFILE_ALIASES: dict[str, dict] = {
+    "civic_baseline_v1": {
+        **civic.DEALSHIELD_CONTENT_PROFILES["civic_library_v1"],
+        "profile_id": "civic_baseline_v1",
+    },
+}
 
 # Explicit aggregation for determinism (no filesystem scanning).
 DEALSHIELD_CONTENT_PROFILE_SOURCES: list[dict] = [
@@ -13,6 +21,8 @@ DEALSHIELD_CONTENT_PROFILE_SOURCES: list[dict] = [
     healthcare.DEALSHIELD_CONTENT_PROFILES,
     restaurant.DEALSHIELD_CONTENT_PROFILES,
     hospitality.DEALSHIELD_CONTENT_PROFILES,
+    civic.DEALSHIELD_CONTENT_PROFILES,
+    CIVIC_CONTENT_PROFILE_ALIASES,
 ]
 
 

@@ -1,9 +1,16 @@
+from . import civic
 from . import industrial
 from . import healthcare
 from . import hospitality
 from . import restaurant
 
+CIVIC_SCOPE_ITEM_PROFILE_ALIASES = {
+    "civic_baseline_structural_v1": civic.SCOPE_ITEM_PROFILES["civic_library_structural_v1"],
+}
+
 SCOPE_ITEM_PROFILE_SOURCES = [
+    CIVIC_SCOPE_ITEM_PROFILE_ALIASES,
+    civic.SCOPE_ITEM_PROFILES,
     industrial.SCOPE_ITEM_PROFILES,
     healthcare.SCOPE_ITEM_PROFILES,
     hospitality.SCOPE_ITEM_PROFILES,
@@ -11,6 +18,7 @@ SCOPE_ITEM_PROFILE_SOURCES = [
 ]
 
 SCOPE_ITEM_DEFAULT_SOURCES = [
+    civic.SCOPE_ITEM_DEFAULTS,
     industrial.SCOPE_ITEM_DEFAULTS,
     healthcare.SCOPE_ITEM_DEFAULTS,
     hospitality.SCOPE_ITEM_DEFAULTS,
