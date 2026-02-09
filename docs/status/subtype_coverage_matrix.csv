@@ -1,9 +1,9 @@
 building_type,subtype,wave1,dealshield_tile_profile,dealshield_has_tile_profile,dealshield_has_content_profile,scope_items_profile,scope_items_overrides,facility_metrics_profile,has_special_features,subtype_doc_exists,status
-civic,community_center,false,,false,false,,false,,true,false,🔴
-civic,courthouse,false,,false,false,,false,,true,false,🔴
+civic,community_center,false,civic_baseline_v1,false,false,civic_baseline_structural_v1,false,,true,true,🟡
+civic,courthouse,false,civic_baseline_v1,false,false,civic_baseline_structural_v1,false,,true,true,🟡
 civic,government_building,false,,false,false,,false,,true,false,🔴
-civic,library,false,,false,false,,false,,true,false,🔴
-civic,public_safety,false,,false,false,,false,,true,false,🔴
+civic,library,false,,false,false,,false,,true,true,🟡
+civic,public_safety,false,civic_baseline_v1,false,false,civic_baseline_structural_v1,false,,true,true,🟡
 educational,community_college,false,,false,false,,false,,true,false,🔴
 educational,elementary_school,false,,false,false,,false,,true,false,🔴
 educational,high_school,false,,false,false,,false,,true,false,🔴

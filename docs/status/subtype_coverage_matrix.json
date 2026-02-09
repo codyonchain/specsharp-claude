@@ -18,8 +18,8 @@
       "civic": {
         "total": 5,
         "\u2705": 0,
-        "\ud83d\udd34": 5,
-        "\ud83d\udfe1": 0
+        "\ud83d\udd34": 1,
+        "\ud83d\udfe1": 4
       },
       "educational": {
         "total": 5,
@@ -97,8 +97,8 @@
     "totals": {
       "total": 58,
       "\u2705": 6,
-      "\ud83d\udd34": 49,
-      "\ud83d\udfe1": 3
+      "\ud83d\udd34": 45,
+      "\ud83d\udfe1": 7
     }
   },
   "rows": [
@@ -106,28 +106,28 @@
       "building_type": "civic",
       "dealshield_has_content_profile": false,
       "dealshield_has_tile_profile": false,
-      "dealshield_tile_profile": "",
+      "dealshield_tile_profile": "civic_baseline_v1",
       "facility_metrics_profile": "",
       "has_special_features": true,
       "scope_items_overrides": false,
-      "scope_items_profile": "",
-      "status": "\ud83d\udd34",
+      "scope_items_profile": "civic_baseline_structural_v1",
+      "status": "\ud83d\udfe1",
       "subtype": "community_center",
-      "subtype_doc_exists": false,
+      "subtype_doc_exists": true,
       "wave1": false
     },
     {
       "building_type": "civic",
       "dealshield_has_content_profile": false,
       "dealshield_has_tile_profile": false,
-      "dealshield_tile_profile": "",
+      "dealshield_tile_profile": "civic_baseline_v1",
       "facility_metrics_profile": "",
       "has_special_features": true,
       "scope_items_overrides": false,
-      "scope_items_profile": "",
-      "status": "\ud83d\udd34",
+      "scope_items_profile": "civic_baseline_structural_v1",
+      "status": "\ud83d\udfe1",
       "subtype": "courthouse",
-      "subtype_doc_exists": false,
+      "subtype_doc_exists": true,
       "wave1": false
     },
     {
@@ -153,23 +153,23 @@
       "has_special_features": true,
       "scope_items_overrides": false,
       "scope_items_profile": "",
-      "status": "\ud83d\udd34",
+      "status": "\ud83d\udfe1",
       "subtype": "library",
-      "subtype_doc_exists": false,
+      "subtype_doc_exists": true,
       "wave1": false
     },
     {
       "building_type": "civic",
       "dealshield_has_content_profile": false,
       "dealshield_has_tile_profile": false,
-      "dealshield_tile_profile": "",
+      "dealshield_tile_profile": "civic_baseline_v1",
       "facility_metrics_profile": "",
       "has_special_features": true,
       "scope_items_overrides": false,
-      "scope_items_profile": "",
-      "status": "\ud83d\udd34",
+      "scope_items_profile": "civic_baseline_structural_v1",
+      "status": "\ud83d\udfe1",
       "subtype": "public_safety",
-      "subtype_doc_exists": false,
+      "subtype_doc_exists": true,
       "wave1": false
     },
     {
