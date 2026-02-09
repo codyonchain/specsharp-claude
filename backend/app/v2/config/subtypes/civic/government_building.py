@@ -14,6 +14,8 @@ CONFIG = (
     BuildingType.CIVIC,
     "government_building",
     BuildingConfig(
+        dealshield_tile_profile="civic_baseline_v1",
+        scope_items_profile="civic_baseline_structural_v1",
         display_name="Government Building",
         base_cost_per_sf=265,
         cost_range=(240, 290),

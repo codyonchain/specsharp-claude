@@ -13,6 +13,8 @@ CONFIG = (
     BuildingType.CIVIC,
     "library",
     BuildingConfig(
+        dealshield_tile_profile="civic_baseline_v1",
+        scope_items_profile="civic_baseline_structural_v1",
         display_name="Public Library",
         base_cost_per_sf=275,
         cost_range=(250, 300),
