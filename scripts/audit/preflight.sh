@@ -45,8 +45,14 @@ if ! git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
   exit 2
 fi
 
-if [[ "${PWD}" != "${git_root}" ]]; then
-  echo "ERROR: run from repo root: ${git_root}" >&2
+if [[ "" != "" ]]; then
+  echo "ERROR: run from repo root: " >&2
+  exit 2
+fi
+
+if [[ -n "20 20 12 61 79 80 81 98 701 33 100 204 250 395 398 399 400git status --porcelain)" ]] && [[ "-e" != "1" ]]; then
+  echo "ERROR: working tree is dirty. Commit/stash changes or run with PREFLIGHT_ALLOW_DIRTY=1" >&2
+  git status --short
   exit 2
 fi
 
