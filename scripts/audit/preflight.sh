@@ -32,7 +32,7 @@ run_optional_script() {
   if [[ ! -f "${script_path}" ]]; then
     print_section "${label}"
     echo "SKIP (optional missing): ${script_path}"
-    return
+    return 0
   fi
 
   print_section "${label}"
@@ -40,17 +40,18 @@ run_optional_script() {
   "${PYTHON_CMD}" "${script_path}"
 }
 
-if ! git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+git_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -z "${git_root}" ]]; then
   echo "ERROR: must run inside a git repository" >&2
   exit 2
 fi
 
-if [[ "" != "" ]]; then
-  echo "ERROR: run from repo root: " >&2
+if [[ "${PWD}" != "${git_root}" ]]; then
+  echo "ERROR: run from repo root: ${git_root}" >&2
   exit 2
 fi
 
-if [[ -n "20 20 12 61 79 80 81 98 701 33 100 204 250 395 398 399 400git status --porcelain)" ]] && [[ "-e" != "1" ]]; then
+if [[ -n "$(git status --porcelain)" ]] && [[ "${PREFLIGHT_ALLOW_DIRTY:-0}" != "1" ]]; then
   echo "ERROR: working tree is dirty. Commit/stash changes or run with PREFLIGHT_ALLOW_DIRTY=1" >&2
   git status --short
   exit 2
@@ -88,16 +89,15 @@ run_optional_script "scripts/audit/subtype_promotion_audit.py" "Optional: subtyp
 
 print_section "Optional: dealshield runner"
 if [[ -d "scripts/audit/dealshield" ]]; then
-  dealshield_runners=()
-  while IFS= read -r runner; do
-    dealshield_runners+=("${runner}")
-  done < <(find scripts/audit/dealshield -maxdepth 1 -type f -name 'run*.py' | LC_ALL=C sort)
-  if [[ "${#dealshield_runners[@]}" -eq 1 ]]; then
-    echo "+ ${PYTHON_CMD} ${dealshield_runners[0]}"
-    "${PYTHON_CMD}" "${dealshield_runners[0]}"
-  elif [[ "${#dealshield_runners[@]}" -gt 1 ]]; then
+  dealshield_runners="$(find scripts/audit/dealshield -maxdepth 1 -type f -name 'run*.py' 2>/dev/null | LC_ALL=C sort || true)"
+  runner_count="$(printf "%s\n" "${dealshield_runners}" | sed '/^$/d' | wc -l | tr -d ' ')"
+  if [[ "${runner_count}" -eq 1 ]]; then
+    runner_path="$(printf "%s\n" "${dealshield_runners}" | sed '/^$/d')"
+    echo "+ ${PYTHON_CMD} ${runner_path}"
+    "${PYTHON_CMD}" "${runner_path}"
+  elif [[ "${runner_count}" -gt 1 ]]; then
     echo "SKIP (optional): multiple dealshield runners found; expected one"
-    printf '  - %s\n' "${dealshield_runners[@]}"
+    printf "%s\n" "${dealshield_runners}" | sed '/^$/d' | sed 's/^/  - /'
   else
     echo "SKIP (optional): no single dealshield runner found"
   fi
