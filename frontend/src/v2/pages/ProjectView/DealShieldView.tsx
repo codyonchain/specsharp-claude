@@ -148,6 +148,41 @@ const formatDecisionMetricValue = (value: unknown, metricRef: unknown) => {
   }).format(numeric);
 };
 
+const formatAssumptionPercent = (value: unknown) => {
+  const numeric = toFiniteNumber(value);
+  if (numeric === null) return MISSING_VALUE;
+  const percentValue = Math.abs(numeric) <= 1.5 ? numeric * 100 : numeric;
+  return `${new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 2,
+  }).format(percentValue)}%`;
+};
+
+const formatAssumptionYears = (value: unknown) => {
+  const numeric = toFiniteNumber(value);
+  if (numeric === null) return MISSING_VALUE;
+  return `${new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1,
+  }).format(numeric)} yrs`;
+};
+
+const formatAssumptionMonths = (value: unknown) => {
+  const numeric = toFiniteNumber(value);
+  if (numeric === null) return MISSING_VALUE;
+  return `${new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(numeric)} mo`;
+};
+
+const normalizeDisclosures = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (item == null ? '' : String(item).trim()))
+    .filter(Boolean);
+};
+
 const labelFrom = (value: any, fallback: string = '-') => {
   if (!value) return fallback;
   if (typeof value === 'string') return value;
@@ -361,6 +396,54 @@ export const DealShieldView: React.FC<Props> = ({
     : redFlagsActions.map((item: any) => item?.action).filter(Boolean);
 
   const provenance = (viewModel as any)?.provenance ?? (dealShieldData as any)?.provenance ?? {};
+  const financingAssumptionsRaw =
+    (viewModel as any)?.financing_assumptions ??
+    provenance?.financing_assumptions ??
+    (dealShieldData as any)?.financing_assumptions;
+  const financingAssumptions =
+    financingAssumptionsRaw && typeof financingAssumptionsRaw === 'object'
+      ? (financingAssumptionsRaw as Record<string, unknown>)
+      : null;
+  const financingAssumptionItems = useMemo(() => {
+    if (!financingAssumptions) return [];
+    const debtPct = financingAssumptions.debt_pct ?? financingAssumptions.ltv;
+    const ioValue =
+      financingAssumptions.interest_only_months ??
+      financingAssumptions.io_months ??
+      financingAssumptions.interest_only;
+    return [
+      {
+        label: 'Debt %',
+        value: formatAssumptionPercent(debtPct),
+      },
+      {
+        label: 'Rate',
+        value: formatAssumptionPercent(financingAssumptions.interest_rate_pct),
+      },
+      {
+        label: 'Amortization',
+        value: formatAssumptionYears(financingAssumptions.amort_years),
+      },
+      {
+        label: 'Loan term',
+        value: formatAssumptionYears(financingAssumptions.loan_term_years),
+      },
+      {
+        label: 'Interest-only',
+        value:
+          typeof ioValue === 'boolean'
+            ? (ioValue ? 'Yes' : 'No')
+            : formatAssumptionMonths(ioValue),
+      },
+    ].filter((item) => item.value !== MISSING_VALUE);
+  }, [financingAssumptions]);
+  const dealShieldDisclosures = useMemo(
+    () =>
+      normalizeDisclosures((viewModel as any)?.dealshield_disclosures).concat(
+        normalizeDisclosures(provenance?.dealshield_disclosures)
+      ).filter((value, index, array) => array.indexOf(value) === index),
+    [provenance?.dealshield_disclosures, viewModel]
+  );
   const scenarioInputsRaw = provenance?.scenario_inputs ?? (viewModel as any)?.scenario_inputs;
   const provenanceControlsRaw = provenance?.dealshield_controls ?? (dealShieldData as any)?.dealshield_controls;
   const scenarioInputs = useMemo(() => {
@@ -675,6 +758,34 @@ export const DealShieldView: React.FC<Props> = ({
             <p className="mt-3 text-xs text-slate-500">
               DSCR and Yield reflect the underwriting/debt terms in this run — see Provenance.
             </p>
+            {(financingAssumptionItems.length > 0 || dealShieldDisclosures.length > 0) && (
+              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Assumptions</p>
+                {financingAssumptionItems.length > 0 ? (
+                  <div className="mt-2 grid gap-x-4 gap-y-1 text-xs text-slate-700 sm:grid-cols-2">
+                    {financingAssumptionItems.map((item) => (
+                      <p key={item.label}>
+                        <span className="font-medium text-slate-600">{item.label}:</span>{' '}
+                        <span>{item.value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <ul className="mt-2 space-y-1 text-xs text-slate-700">
+                    {dealShieldDisclosures.map((item, index) => (
+                      <li key={`assumptions-disclosure-${index}`}>{item}</li>
+                    ))}
+                  </ul>
+                )}
+                {financingAssumptionItems.length > 0 && dealShieldDisclosures.length > 0 && (
+                  <ul className="mt-2 space-y-1 text-xs text-slate-600">
+                    {dealShieldDisclosures.map((item, index) => (
+                      <li key={`assumptions-extra-disclosure-${index}`}>{item}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-5">

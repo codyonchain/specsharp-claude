@@ -216,6 +216,130 @@ def _resolve_decision_value(
     return None, None, "missing"
 
 
+def _apply_display_guards(
+    payload: Dict[str, Any],
+    decision_table: Dict[str, Any],
+) -> Tuple[Dict[str, Any], List[str]]:
+    columns = decision_table.get("columns")
+    if not isinstance(columns, list):
+        columns = []
+        decision_table["columns"] = columns
+
+    rows = decision_table.get("rows")
+    if not isinstance(rows, list):
+        rows = []
+        decision_table["rows"] = rows
+
+    disclosures: List[str] = []
+    financing_raw = payload.get("financing_assumptions")
+    if not isinstance(financing_raw, dict):
+        ownership_analysis = payload.get("ownership_analysis")
+        debt_metrics = ownership_analysis.get("debt_metrics") if isinstance(ownership_analysis, dict) else None
+        financing_raw = debt_metrics if isinstance(debt_metrics, dict) else {}
+
+    financing_assumptions = {
+        key: financing_raw.get(key)
+        for key in (
+            "debt_pct",
+            "ltv",
+            "interest_rate_pct",
+            "amort_years",
+            "loan_term_years",
+            "interest_only_months",
+        )
+        if key in financing_raw
+    }
+    debt_pct = financing_assumptions.get("debt_pct")
+    if not _is_number(debt_pct):
+        debt_pct = financing_assumptions.get("ltv")
+    has_financing_assumptions = (
+        _is_number(debt_pct)
+        and _is_number(financing_assumptions.get("interest_rate_pct"))
+        and (
+            _is_number(financing_assumptions.get("amort_years"))
+            or _is_number(financing_assumptions.get("loan_term_years"))
+        )
+    )
+
+    return_metrics = payload.get("return_metrics")
+    profile = payload.get("profile")
+    cap_rate_value: Optional[float] = None
+    if isinstance(return_metrics, dict) and _is_number(return_metrics.get("market_cap_rate")):
+        cap_rate_value = float(return_metrics.get("market_cap_rate"))
+    elif isinstance(profile, dict) and _is_number(profile.get("market_cap_rate")):
+        cap_rate_value = float(profile.get("market_cap_rate"))
+    elif isinstance(return_metrics, dict) and _is_number(return_metrics.get("cap_rate")):
+        cap_rate_value = float(return_metrics.get("cap_rate"))
+    if cap_rate_value is not None and cap_rate_value <= 0:
+        cap_rate_value = None
+
+    has_stabilized_value_column = any(
+        isinstance(col, dict) and col.get("id") == "stabilized_value" for col in columns
+    )
+    if not has_stabilized_value_column:
+        columns.append(
+            {
+                "id": "stabilized_value",
+                "tile_id": "stabilized_value",
+                "label": "Stabilized Value",
+                "metric_ref": "derived.stabilized_value",
+            }
+        )
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        row_cells = row.get("cells")
+        if not isinstance(row_cells, list):
+            row_cells = []
+            row["cells"] = row_cells
+
+        row_cell_map: Dict[str, Dict[str, Any]] = {}
+        for cell in row_cells:
+            if not isinstance(cell, dict):
+                continue
+            cell_id = cell.get("col_id") or cell.get("tile_id") or cell.get("id")
+            if isinstance(cell_id, str) and cell_id:
+                row_cell_map[cell_id] = cell
+
+        dscr_cell = row_cell_map.get("dscr")
+        if isinstance(dscr_cell, dict) and _is_number(dscr_cell.get("value")) and not has_financing_assumptions:
+            dscr_cell["value"] = None
+            dscr_cell["provenance_kind"] = "missing"
+            dscr_cell["scenario_source_path"] = None
+            if "Not modeled: financing assumptions missing" not in disclosures:
+                disclosures.append("Not modeled: financing assumptions missing")
+
+        noi_value: Optional[float] = None
+        noi_cell = row_cell_map.get("noi")
+        if isinstance(noi_cell, dict) and _is_number(noi_cell.get("value")):
+            noi_value = float(noi_cell.get("value"))
+
+        stabilized_value: Optional[float] = None
+        if noi_value is not None:
+            if cap_rate_value is not None:
+                stabilized_value = noi_value / cap_rate_value
+            else:
+                if "Not modeled: cap rate missing" not in disclosures:
+                    disclosures.append("Not modeled: cap rate missing")
+
+        stabilized_cell = row_cell_map.get("stabilized_value")
+        if not isinstance(stabilized_cell, dict):
+            stabilized_cell = {
+                "col_id": "stabilized_value",
+                "tile_id": "stabilized_value",
+            }
+            row_cells.append(stabilized_cell)
+
+        stabilized_cell["value"] = stabilized_value
+        stabilized_cell["provenance_kind"] = "derived" if stabilized_value is not None else "missing"
+
+    if not has_financing_assumptions:
+        financing_assumptions = {}
+
+    return financing_assumptions, disclosures
+
+
 def _build_decision_table(payload: Dict[str, Any], profile: Dict[str, Any]) -> Dict[str, Any]:
     columns: List[Dict[str, Any]] = []
     for col in _DECISION_TABLE_COLUMNS:
@@ -504,6 +628,7 @@ def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profil
     legacy_rows = copy.deepcopy(view_model.get("rows", []))
 
     decision_table = _build_decision_table(payload, profile)
+    financing_assumptions, dealshield_disclosures = _apply_display_guards(payload, decision_table)
     view_model["decision_table"] = decision_table
     view_model["legacy_scenario_table"] = {
         "columns": legacy_columns if isinstance(legacy_columns, list) else [],
@@ -521,6 +646,12 @@ def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profil
         provenance = {}
     provenance["scenario_inputs"] = scenario_inputs
     provenance["dealshield_controls"] = _extract_dealshield_controls(payload)
+    if financing_assumptions:
+        view_model["financing_assumptions"] = copy.deepcopy(financing_assumptions)
+        provenance["financing_assumptions"] = copy.deepcopy(financing_assumptions)
+    if dealshield_disclosures:
+        view_model["dealshield_disclosures"] = list(dealshield_disclosures)
+        provenance["dealshield_disclosures"] = list(dealshield_disclosures)
     view_model["provenance"] = provenance
 
     content_profile_id = _resolve_dealshield_content_profile_id(payload, profile)

@@ -100,6 +100,93 @@ def _dealshield_format_scalar(value: Any) -> str:
     return f"{numeric:,.{decimals}f}"
 
 
+def _dealshield_format_assumption_percent(value: Any) -> str:
+    numeric = _dealshield_parse_numeric(value)
+    if numeric is None:
+        return "—"
+    percent_value = numeric * 100 if abs(numeric) <= 1.5 else numeric
+    return f"{percent_value:,.1f}%"
+
+
+def _dealshield_format_assumption_years(value: Any) -> str:
+    numeric = _dealshield_parse_numeric(value)
+    if numeric is None:
+        return "—"
+    return f"{numeric:,.1f} yrs" if not float(numeric).is_integer() else f"{int(numeric):,d} yrs"
+
+
+def _dealshield_format_assumption_months(value: Any) -> str:
+    numeric = _dealshield_parse_numeric(value)
+    if numeric is None:
+        return "—"
+    return f"{int(round(numeric)):,d} mo"
+
+
+def _dealshield_normalize_disclosures(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    output: list[str] = []
+    for item in value:
+        text = str(item).strip() if item is not None else ""
+        if not text:
+            continue
+        if text in output:
+            continue
+        output.append(text)
+    return output
+
+
+def _dealshield_render_assumptions(financing_assumptions: Any, disclosures: list[str]) -> str:
+    assumption_items: list[tuple[str, str]] = []
+    if isinstance(financing_assumptions, dict):
+        debt_pct = financing_assumptions.get("debt_pct")
+        if debt_pct is None:
+            debt_pct = financing_assumptions.get("ltv")
+        assumption_items.extend(
+            [
+                ("Debt %", _dealshield_format_assumption_percent(debt_pct)),
+                ("Rate", _dealshield_format_assumption_percent(financing_assumptions.get("interest_rate_pct"))),
+                ("Amortization", _dealshield_format_assumption_years(financing_assumptions.get("amort_years"))),
+                ("Loan term", _dealshield_format_assumption_years(financing_assumptions.get("loan_term_years"))),
+            ]
+        )
+        io_value = financing_assumptions.get("interest_only_months")
+        if io_value is None:
+            io_value = financing_assumptions.get("interest_only")
+        if isinstance(io_value, bool):
+            assumption_items.append(("Interest-only", "Yes" if io_value else "No"))
+        else:
+            assumption_items.append(("Interest-only", _dealshield_format_assumption_months(io_value)))
+
+    assumption_items = [item for item in assumption_items if item[1] != "—"]
+    if not assumption_items and not disclosures:
+        return ""
+
+    lines: list[str] = [
+        "<div class=\"assumptions-block\">",
+        "<div class=\"assumptions-title\">Assumptions</div>",
+    ]
+    if assumption_items:
+        lines.append("<div class=\"assumptions-grid\">")
+        for label, value in assumption_items:
+            lines.append(
+                "<div class=\"assumption-item\">"
+                f"<span class=\"assumption-label\">{html_module.escape(label)}:</span> "
+                f"<span>{html_module.escape(value)}</span>"
+                "</div>"
+            )
+        lines.append("</div>")
+
+    if disclosures:
+        lines.append("<ul class=\"assumptions-disclosures\">")
+        for disclosure in disclosures:
+            lines.append(f"<li>{html_module.escape(disclosure)}</li>")
+        lines.append("</ul>")
+
+    lines.append("</div>")
+    return "".join(lines)
+
+
 def _dealshield_driver_refs(driver: Any) -> str:
     if not driver:
         return "—"
@@ -318,16 +405,19 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
         scenario_label = row.get("label") or row.get("scenario_id") or "—"
         row_cells = [f"<td class=\"scenario\">{html_module.escape(str(scenario_label))}</td>"]
         cells = row.get("cells") if isinstance(row.get("cells"), list) else []
-        cell_by_tile = {
-            cell.get("tile_id"): cell
-            for cell in cells
-            if isinstance(cell, dict) and cell.get("tile_id")
-        }
+        cell_by_tile: Dict[str, Dict[str, Any]] = {}
+        for cell in cells:
+            if not isinstance(cell, dict):
+                continue
+            for key in ("tile_id", "col_id", "id"):
+                cell_id = cell.get(key)
+                if isinstance(cell_id, str) and cell_id:
+                    cell_by_tile[cell_id] = cell
         for col in columns:
             if not isinstance(col, dict):
                 row_cells.append("<td class=\"num\">—</td>")
                 continue
-            tile_id = col.get("tile_id")
+            tile_id = col.get("tile_id") or col.get("id")
             metric_ref = col.get("metric_ref")
             cell = cell_by_tile.get(tile_id, {})
             value = cell.get("value") if isinstance(cell, dict) else None
@@ -402,6 +492,19 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
             "</div>"
         )
 
+    financing_assumptions = view_model.get("financing_assumptions")
+    if not isinstance(financing_assumptions, dict) and isinstance(provenance, dict):
+        financing_assumptions = provenance.get("financing_assumptions")
+    if not isinstance(financing_assumptions, dict):
+        financing_assumptions = {}
+
+    disclosures = _dealshield_normalize_disclosures(view_model.get("dealshield_disclosures"))
+    if isinstance(provenance, dict):
+        for item in _dealshield_normalize_disclosures(provenance.get("dealshield_disclosures")):
+            if item not in disclosures:
+                disclosures.append(item)
+    assumptions_block = _dealshield_render_assumptions(financing_assumptions, disclosures)
+
     meta_block = f"<div class=\"meta\">{html_module.escape(header_meta)}</div>" if header_meta else ""
     content_sections = _dealshield_render_content_sections(view_model)
 
@@ -442,6 +545,13 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
     .content-subtle {{ color: #4b5563; font-size: 11px; margin-top: 2px; }}
     .content-label {{ font-weight: 600; color: #111827; }}
     .content-inline-muted {{ color: #9ca3af; font-size: 10px; font-weight: 500; font-family: Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; }}
+    .assumptions-block {{ margin-top: 8px; border: 1px solid #e5e7eb; background: #f8fafc; border-radius: 6px; padding: 8px 10px; }}
+    .assumptions-title {{ font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: #6b7280; font-weight: 700; }}
+    .assumptions-grid {{ margin-top: 6px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; font-size: 11px; color: #334155; }}
+    .assumption-item {{ margin: 0; }}
+    .assumption-label {{ font-weight: 600; color: #475569; }}
+    .assumptions-disclosures {{ margin: 6px 0 0; padding-left: 18px; font-size: 11px; color: #475569; }}
+    .assumptions-disclosures li {{ margin: 0 0 2px; }}
   </style>
 </head>
 <body>
@@ -459,6 +569,7 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
       </tbody>
     </table>
     <div class="context-note">DSCR and Yield reflect the underwriting/debt terms in this run — see Provenance.</div>
+    {assumptions_block}
   </section>
 
   <section>
