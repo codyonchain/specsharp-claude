@@ -164,6 +164,27 @@ def _build_queue(rows: Iterable[Dict[str, Any]], building_type_filter: str | Non
     )
 
 
+def _split_stub_files(item: QueueItem) -> Tuple[List[str], List[Tuple[str, str | None]]]:
+    shared_paths = {
+        f"backend/app/v2/config/type_profiles/dealshield_tiles/{item.building_type}.py",
+        f"backend/app/v2/config/type_profiles/dealshield_content/{item.building_type}.py",
+        f"backend/app/v2/config/type_profiles/scope_items/{item.building_type}.py",
+        "scripts/audit/parity/fixtures/basic_fixtures.json",
+    }
+    shared_notes = {
+        "scripts/audit/parity/fixtures/basic_fixtures.json": "only if adding fixture.",
+    }
+
+    subtype_specific: List[str] = []
+    shared: List[Tuple[str, str | None]] = []
+    for file_path in item.files_to_touch:
+        if file_path in shared_paths:
+            shared.append((file_path, shared_notes.get(file_path)))
+        else:
+            subtype_specific.append(file_path)
+    return subtype_specific, shared
+
+
 def _render_markdown(matrix_path: Path, queue: Sequence[QueueItem], limit: int, building_type_filter: str | None) -> str:
     top = list(queue[:limit])
     lines: List[str] = []
@@ -187,12 +208,26 @@ def _render_markdown(matrix_path: Path, queue: Sequence[QueueItem], limit: int, 
     lines.append("## Work Order Stubs")
     lines.append("")
     for item in top:
+        subtype_specific_files, shared_files = _split_stub_files(item)
         lines.append(f"### `{item.building_type}/{item.subtype}`")
         lines.append(f"- Priority: `{item.status.upper()}`")
         lines.append(f"- Rationale: {item.rationale}")
         lines.append("- Files to touch:")
-        for file_path in item.files_to_touch:
-            lines.append(f"  - `{file_path}`")
+        lines.append("  - Subtype-specific files (safe to parallelize):")
+        if subtype_specific_files:
+            for file_path in subtype_specific_files:
+                lines.append(f"    - `{file_path}`")
+        else:
+            lines.append("    - _(none)_")
+        lines.append("  - Shared type-level files (one-agent ownership):")
+        if shared_files:
+            for file_path, note in shared_files:
+                if note:
+                    lines.append(f"    - `{file_path}` ({note})")
+                else:
+                    lines.append(f"    - `{file_path}`")
+        else:
+            lines.append("    - _(none)_")
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
