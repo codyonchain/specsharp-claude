@@ -4,6 +4,42 @@
 def _civic_tile_profile(subtype_label: str) -> dict:
     return {
         "version": "v1",
+        "decision_table_columns": [
+            {
+                "id": "total_cost",
+                "label": "Total Project Cost",
+                "metric_ref": "totals.total_project_cost",
+            },
+            {
+                "id": "cost_per_sf",
+                "label": "Cost/SF",
+                "metric_ref": "totals.cost_per_sf",
+            },
+            {
+                "id": "schedule_risk",
+                "label": "Schedule Risk",
+                "metric_ref": "row.risk_labels.schedule_risk",
+            },
+            {
+                "id": "procurement_risk",
+                "label": "Procurement Risk",
+                "metric_ref": "row.risk_labels.procurement_risk",
+            },
+            {
+                "id": "permitting_mep_complexity",
+                "label": "Permitting/MEP Complexity",
+                "metric_ref": "row.risk_labels.permitting_mep_complexity",
+            },
+        ],
+        "base_row": {
+            "label": "Base",
+            "delta": "Baseline feasibility",
+            "risk_labels": {
+                "schedule_risk": "low",
+                "procurement_risk": "low",
+                "permitting_mep_complexity": "low",
+            },
+        },
         "tiles": [
             {
                 "tile_id": "cost_plus_10",
@@ -39,18 +75,36 @@ def _civic_tile_profile(subtype_label: str) -> dict:
                 "row_id": "conservative",
                 "label": "Conservative",
                 "apply_tiles": ["cost_plus_10", "revenue_minus_10"],
+                "delta": "Cost +10% (broad)",
+                "risk_labels": {
+                    "schedule_risk": "med",
+                    "procurement_risk": "med",
+                    "permitting_mep_complexity": "med",
+                },
             },
             {
                 "row_id": "permitting_and_mep",
                 "label": "Permitting + MEP Risk",
                 "apply_tiles": ["cost_plus_10"],
                 "plus_tiles": ["mechanical_plus_10"],
+                "delta": "MEP scope stress + schedule risk",
+                "risk_labels": {
+                    "schedule_risk": "med",
+                    "procurement_risk": "low",
+                    "permitting_mep_complexity": "high",
+                },
             },
             {
                 "row_id": "procurement_stress",
                 "label": "Procurement Stress",
                 "apply_tiles": ["cost_plus_10"],
                 "plus_tiles": ["electrical_plus_10"],
+                "delta": "Lead times + price volatility",
+                "risk_labels": {
+                    "schedule_risk": "low",
+                    "procurement_risk": "high",
+                    "permitting_mep_complexity": "med",
+                },
             },
         ],
         "provenance": {

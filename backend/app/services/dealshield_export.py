@@ -68,12 +68,16 @@ def _dealshield_format_value(value: Any, metric_ref: Optional[str]) -> str:
         return "—"
     if isinstance(value, bool):
         return str(value)
-    if isinstance(value, str) and "not modeled" in value.lower():
-        return "Not modeled"
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return "—"
+        if "not modeled" in text.lower():
+            return "Not modeled"
 
     numeric = _dealshield_parse_numeric(value)
     if numeric is None:
-        return "—"
+        return text if isinstance(value, str) else "—"
 
     ref = metric_ref.lower() if isinstance(metric_ref, str) else ""
     if "yield_on_cost" in ref:
@@ -513,7 +517,11 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
         if not isinstance(row, dict):
             continue
         scenario_label = row.get("label") or row.get("scenario_id") or "—"
-        row_cells = [f"<td class=\"scenario\">{html_module.escape(str(scenario_label))}</td>"]
+        scenario_delta = row.get("delta") if isinstance(row.get("delta"), str) and row.get("delta").strip() else None
+        scenario_text = f"<div class=\"scenario-label\">{html_module.escape(str(scenario_label))}</div>"
+        if scenario_delta:
+            scenario_text += f"<div class=\"scenario-delta\">{html_module.escape(scenario_delta)}</div>"
+        row_cells = [f"<td class=\"scenario\">{scenario_text}</td>"]
         cells = row.get("cells") if isinstance(row.get("cells"), list) else []
         cell_by_tile: Dict[str, Dict[str, Any]] = {}
         for cell in cells:
@@ -536,6 +544,15 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
         row_class = "main-row-alt" if row_index % 2 else "main-row"
         body_rows.append(f"<tr class=\"{row_class}\">{''.join(row_cells)}</tr>")
     table_body = "\n".join(body_rows)
+    has_underwriting_cols = any(
+        isinstance(col, dict) and (col.get("id") in {"annual_revenue", "noi", "dscr", "yoc"})
+        for col in columns
+    )
+    context_note = (
+        "DSCR and Yield reflect the underwriting/debt terms in this run — see Provenance."
+        if has_underwriting_cols
+        else "Feasibility risk labels are deterministic scenario tags, not modeled probabilities."
+    )
 
     provenance_rows = []
     if scenario_inputs:
@@ -568,6 +585,26 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
             )
 
     provenance_table = ""
+    profiles_controls_block = ""
+    if isinstance(provenance, dict):
+        controls = provenance.get("dealshield_controls") if isinstance(provenance.get("dealshield_controls"), dict) else {}
+        anchor_on = controls.get("use_anchor")
+        if not isinstance(anchor_on, bool):
+            anchor_on = controls.get("use_cost_anchor")
+        anchor_value = controls.get("anchor_total_cost") if controls.get("anchor_total_cost") is not None else controls.get("anchor_total_project_cost")
+        anchor_label = "On" if anchor_on is True else "Off" if anchor_on is False else "—"
+        if anchor_on is True and _dealshield_parse_numeric(anchor_value) is not None:
+            anchor_label = f"On ({_dealshield_format_value(anchor_value, 'totals.total_project_cost')})"
+        stress_band = controls.get("stress_band_pct")
+        stress_label = f"±{int(float(stress_band))}%" if _dealshield_parse_numeric(stress_band) is not None else "—"
+        profiles_controls_block = (
+            "<div class=\"provenance-note\"><strong>Profiles &amp; Controls:</strong> "
+            f"Tile: {html_module.escape(str(provenance.get('profile_id') or profile_id or '—'))} | "
+            f"Content: {html_module.escape(str(provenance.get('content_profile_id') or '—'))} | "
+            f"Scope: {html_module.escape(str(provenance.get('scope_items_profile_id') or '—'))} | "
+            f"Stress band: {html_module.escape(stress_label)} | "
+            f"Anchor: {html_module.escape(anchor_label)}</div>"
+        )
     if provenance_rows:
         provenance_table = (
             "<table class=\"provenance-table\">"
@@ -638,6 +675,8 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
     th {{ background: #f8fafc; font-weight: 600; color: #111827; }}
     td.num {{ text-align: right; font-variant-numeric: tabular-nums; }}
     td.scenario {{ font-weight: 600; }}
+    .scenario-label {{ font-weight: 600; }}
+    .scenario-delta {{ margin-top: 2px; font-size: 10px; color: #64748b; font-weight: 500; }}
     .main-row-alt td {{ background: #f8fafc; }}
     .context-note {{ margin-top: 8px; color: #6b7280; font-size: 12px; }}
     .provenance-note {{ margin-top: 6px; color: #6b7280; font-size: 12px; }}
@@ -686,13 +725,14 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
         {table_body}
       </tbody>
     </table>
-    <div class="context-note">DSCR and Yield reflect the underwriting/debt terms in this run — see Provenance.</div>
+    <div class="context-note">{html_module.escape(context_note)}</div>
     {decision_summary_block}
     {assumptions_block}
   </section>
 
   <section>
     <h2>Provenance</h2>
+    {profiles_controls_block}
     {provenance_table}
   </section>
   {content_sections}
