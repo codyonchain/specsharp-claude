@@ -18,7 +18,7 @@ _WAVE1_PROFILE_IDS: Set[str] = {
     "hospitality_limited_service_hotel_v1",
 }
 
-_DECISION_TABLE_COLUMNS: List[Dict[str, str]] = [
+_DEFAULT_DECISION_TABLE_COLUMNS: List[Dict[str, str]] = [
     {
         "id": "total_cost",
         "label": "Total Project Cost",
@@ -45,6 +45,8 @@ _DECISION_TABLE_COLUMNS: List[Dict[str, str]] = [
         "metric_ref": "ownership_analysis.yield_on_cost",
     },
 ]
+
+_ROW_RISK_LABEL_PREFIX = "row.risk_labels."
 
 class DealShieldResolutionError(ValueError):
     pass
@@ -161,12 +163,69 @@ def _collect_sensitivity_presence(payload: Dict[str, Any]) -> List[str]:
     return paths
 
 
-def _resolve_profile_scenario_rows(profile: Dict[str, Any]) -> List[Dict[str, str]]:
-    derived_rows = profile.get("derived_rows")
-    if not isinstance(derived_rows, list):
-        return [{"scenario_id": "base", "label": "Base"}]
+def _normalize_risk_label(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower()
+    if normalized == "low":
+        return "Low"
+    if normalized in {"med", "medium"}:
+        return "Med"
+    if normalized == "high":
+        return "High"
+    return None
 
-    rows: List[Dict[str, str]] = [{"scenario_id": "base", "label": "Base"}]
+
+def _resolve_decision_columns(profile: Dict[str, Any]) -> List[Dict[str, str]]:
+    configured = profile.get("decision_table_columns")
+    if not isinstance(configured, list):
+        return _DEFAULT_DECISION_TABLE_COLUMNS
+
+    columns: List[Dict[str, str]] = []
+    for col in configured:
+        if not isinstance(col, dict):
+            continue
+        col_id = col.get("id")
+        label = col.get("label")
+        metric_ref = col.get("metric_ref")
+        if not (
+            isinstance(col_id, str)
+            and col_id.strip()
+            and isinstance(label, str)
+            and label.strip()
+            and isinstance(metric_ref, str)
+            and metric_ref.strip()
+        ):
+            continue
+        columns.append(
+            {
+                "id": col_id.strip(),
+                "label": label.strip(),
+                "metric_ref": metric_ref.strip(),
+            }
+        )
+    return columns or _DEFAULT_DECISION_TABLE_COLUMNS
+
+
+def _resolve_profile_scenario_rows(profile: Dict[str, Any]) -> List[Dict[str, Any]]:
+    derived_rows = profile.get("derived_rows")
+    base_row_cfg = profile.get("base_row") if isinstance(profile.get("base_row"), dict) else {}
+    base_row: Dict[str, Any] = {
+        "scenario_id": "base",
+        "label": (
+            base_row_cfg.get("label")
+            if isinstance(base_row_cfg.get("label"), str) and base_row_cfg.get("label").strip()
+            else "Base"
+        ),
+    }
+    if isinstance(base_row_cfg.get("delta"), str) and base_row_cfg.get("delta").strip():
+        base_row["delta"] = base_row_cfg.get("delta").strip()
+    if isinstance(base_row_cfg.get("risk_labels"), dict):
+        base_row["risk_labels"] = copy.deepcopy(base_row_cfg.get("risk_labels"))
+    if not isinstance(derived_rows, list):
+        return [base_row]
+
+    rows: List[Dict[str, Any]] = [base_row]
     seen = {"base"}
     for row in derived_rows:
         if not isinstance(row, dict):
@@ -179,8 +238,96 @@ def _resolve_profile_scenario_rows(profile: Dict[str, Any]) -> List[Dict[str, st
             continue
         seen.add(normalized_id)
         label = row.get("label") if isinstance(row.get("label"), str) and row.get("label").strip() else normalized_id
-        rows.append({"scenario_id": normalized_id, "label": label})
+        resolved_row: Dict[str, Any] = {"scenario_id": normalized_id, "label": label}
+        if isinstance(row.get("delta"), str) and row.get("delta").strip():
+            resolved_row["delta"] = row.get("delta").strip()
+        if isinstance(row.get("risk_labels"), dict):
+            resolved_row["risk_labels"] = copy.deepcopy(row.get("risk_labels"))
+        rows.append(resolved_row)
     return rows
+
+
+def _resolve_row_metric_value(
+    row: Dict[str, Any],
+    metric_ref: str,
+) -> Tuple[Optional[str], Optional[str], str]:
+    if not metric_ref.startswith(_ROW_RISK_LABEL_PREFIX):
+        return None, None, "missing"
+    key = metric_ref[len(_ROW_RISK_LABEL_PREFIX):].strip()
+    if not key:
+        return None, None, "missing"
+    risk_labels = row.get("risk_labels")
+    if not isinstance(risk_labels, dict):
+        return None, None, "missing"
+    value = _normalize_risk_label(risk_labels.get(key))
+    return value, (f"row.risk_labels.{key}" if value is not None else None), ("profile_row" if value is not None else "missing")
+
+
+def _resolve_profile_row_for_scenario(profile: Dict[str, Any], scenario_id: str) -> Dict[str, Any]:
+    if scenario_id == "base":
+        base_row = profile.get("base_row")
+        return base_row if isinstance(base_row, dict) else {}
+    derived_rows = profile.get("derived_rows")
+    if not isinstance(derived_rows, list):
+        return {}
+    for row in derived_rows:
+        if not isinstance(row, dict):
+            continue
+        row_id = row.get("row_id") or row.get("id") or row.get("scenario_id")
+        if row_id == scenario_id:
+            return row
+    return {}
+
+
+def _resolve_profile_transformed_value(
+    payload: Dict[str, Any],
+    profile: Dict[str, Any],
+    scenario_id: str,
+    metric_ref: str,
+) -> Optional[float]:
+    if scenario_id == "base":
+        return None
+    raw_base = _resolve_metric_ref(payload, metric_ref)
+    if raw_base is _MISSING or not _is_number(raw_base):
+        return None
+    row = _resolve_profile_row_for_scenario(profile, scenario_id)
+    if not isinstance(row, dict):
+        return None
+    tiles = profile.get("tiles")
+    if not isinstance(tiles, list):
+        return None
+    tile_map = {
+        tile.get("tile_id"): tile
+        for tile in tiles
+        if isinstance(tile, dict) and isinstance(tile.get("tile_id"), str)
+    }
+    tile_ids: List[str] = []
+    for key in ("apply_tiles", "plus_tiles"):
+        values = row.get(key)
+        if isinstance(values, list):
+            tile_ids.extend(tile_id for tile_id in values if isinstance(tile_id, str))
+    transforms: List[Dict[str, Any]] = []
+    for tile_id in tile_ids:
+        tile = tile_map.get(tile_id)
+        if not isinstance(tile, dict) or tile.get("metric_ref") != metric_ref:
+            continue
+        transforms.extend(_normalize_transforms(tile.get("transform")))
+    if not transforms:
+        return None
+    return _apply_transforms(float(raw_base), transforms)
+
+
+def _resolve_project_square_footage(payload: Dict[str, Any]) -> Optional[float]:
+    project_info = payload.get("project_info")
+    if isinstance(project_info, dict) and _is_number(project_info.get("square_footage")):
+        sf = float(project_info.get("square_footage"))
+        if sf > 0:
+            return sf
+    if _is_number(payload.get("square_footage")):
+        sf = float(payload.get("square_footage"))
+        if sf > 0:
+            return sf
+    return None
 
 
 def _resolve_dealshield_scenario_snapshot(payload: Dict[str, Any], scenario_id: str) -> Optional[Dict[str, Any]]:
@@ -263,6 +410,13 @@ def _apply_display_guards(
     if not isinstance(rows, list):
         rows = []
         decision_table["rows"] = rows
+    column_ids = {
+        col.get("id")
+        for col in columns
+        if isinstance(col, dict) and isinstance(col.get("id"), str)
+    }
+    if not column_ids.intersection({"annual_revenue", "noi", "dscr", "yoc"}):
+        return {}, [], {}
 
     disclosures: List[str] = []
     financing_raw = payload.get("financing_assumptions")
@@ -420,7 +574,7 @@ def _apply_display_guards(
 
 def _build_decision_table(payload: Dict[str, Any], profile: Dict[str, Any]) -> Dict[str, Any]:
     columns: List[Dict[str, Any]] = []
-    for col in _DECISION_TABLE_COLUMNS:
+    for col in _resolve_decision_columns(profile):
         col_id = col["id"]
         columns.append(
             {
@@ -434,11 +588,16 @@ def _build_decision_table(payload: Dict[str, Any], profile: Dict[str, Any]) -> D
     scenario_rows = _resolve_profile_scenario_rows(profile)
     profile_id = profile.get("profile_id")
     is_wave1_profile = isinstance(profile_id, str) and profile_id in _WAVE1_PROFILE_IDS
+    square_footage = _resolve_project_square_footage(payload)
 
     rows: List[Dict[str, Any]] = []
     for row in scenario_rows:
-        scenario_id = row["scenario_id"]
-        label = row["label"]
+        scenario_id = row.get("scenario_id")
+        label = row.get("label")
+        if not isinstance(scenario_id, str) or not scenario_id:
+            continue
+        if not isinstance(label, str) or not label:
+            label = scenario_id
         scenario_snapshot = _resolve_dealshield_scenario_snapshot(payload, scenario_id)
 
         if is_wave1_profile and scenario_snapshot is None:
@@ -447,9 +606,23 @@ def _build_decision_table(payload: Dict[str, Any], profile: Dict[str, Any]) -> D
             )
 
         cells: List[Dict[str, Any]] = []
+        total_cost_value_for_row: Optional[float] = None
         for col in columns:
             metric_ref = col["metric_ref"]
             col_id = col["id"]
+            row_value, row_source_path, row_provenance_kind = _resolve_row_metric_value(row, metric_ref)
+            if row_value is not None:
+                cells.append(
+                    {
+                        "col_id": col_id,
+                        "tile_id": col_id,
+                        "value": row_value,
+                        "metric_ref": metric_ref,
+                        "provenance_kind": row_provenance_kind,
+                        "scenario_source_path": row_source_path,
+                    }
+                )
+                continue
 
             if is_wave1_profile:
                 raw_snapshot_value = _resolve_metric_ref(scenario_snapshot or {}, metric_ref)
@@ -460,6 +633,29 @@ def _build_decision_table(payload: Dict[str, Any], profile: Dict[str, Any]) -> D
                     )
 
             value, source_path, provenance_kind = _resolve_decision_value(payload, scenario_id, metric_ref)
+            if value is None:
+                transformed_value = _resolve_profile_transformed_value(
+                    payload=payload,
+                    profile=profile,
+                    scenario_id=scenario_id,
+                    metric_ref=metric_ref,
+                )
+                if transformed_value is not None:
+                    value = transformed_value
+                    source_path = f"profile.derived_rows.{scenario_id}"
+                    provenance_kind = "profile_transform"
+            if metric_ref == "totals.total_project_cost" and value is not None:
+                total_cost_value_for_row = float(value)
+            if (
+                metric_ref == "totals.cost_per_sf"
+                and value is None
+                and total_cost_value_for_row is not None
+                and square_footage is not None
+                and square_footage > 0
+            ):
+                value = total_cost_value_for_row / square_footage
+                source_path = "derived.total_cost_over_square_footage"
+                provenance_kind = "derived"
             cells.append(
                 {
                     "col_id": col_id,
@@ -471,7 +667,11 @@ def _build_decision_table(payload: Dict[str, Any], profile: Dict[str, Any]) -> D
                 }
             )
 
-        rows.append({"scenario_id": scenario_id, "label": label, "cells": cells})
+        resolved_row: Dict[str, Any] = {"scenario_id": scenario_id, "label": label, "cells": cells}
+        delta = row.get("delta")
+        if isinstance(delta, str) and delta.strip():
+            resolved_row["delta"] = delta.strip()
+        rows.append(resolved_row)
 
     return {"columns": columns, "rows": rows}
 
@@ -647,7 +847,31 @@ def _extract_dealshield_controls(payload: Dict[str, Any]) -> Dict[str, Any]:
     controls = payload.get("dealshield_controls")
     if not isinstance(controls, dict):
         return {}
-    return copy.deepcopy(controls)
+    resolved = copy.deepcopy(controls)
+    if _is_number(controls.get("stress_band_pct")):
+        resolved["stress_band_pct"] = float(controls.get("stress_band_pct"))
+    use_anchor = controls.get("use_anchor")
+    if not isinstance(use_anchor, bool):
+        use_anchor = controls.get("use_cost_anchor")
+    if isinstance(use_anchor, bool):
+        resolved["use_anchor"] = use_anchor
+    anchor_total_cost = controls.get("anchor_total_cost")
+    if not _is_number(anchor_total_cost):
+        anchor_total_cost = controls.get("anchor_total_project_cost")
+    if _is_number(anchor_total_cost):
+        resolved["anchor_total_cost"] = float(anchor_total_cost)
+    return resolved
+
+
+def _resolve_scope_items_profile_id(payload: Dict[str, Any]) -> Optional[str]:
+    for source in (payload, payload.get("project_info"), payload.get("profile")):
+        if not isinstance(source, dict):
+            continue
+        for key in ("scope_items_profile_id", "scope_items_profile", "scope_profile_id"):
+            value = source.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return None
 
 
 def _resolve_dealshield_content_profile_id(payload: Dict[str, Any], profile: Dict[str, Any]) -> Optional[str]:
@@ -704,6 +928,7 @@ def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profil
     view_model = build_dealshield_scenario_table(project_id, payload, profile)
     legacy_columns = copy.deepcopy(view_model.get("columns", []))
     legacy_rows = copy.deepcopy(view_model.get("rows", []))
+    content_profile_id = _resolve_dealshield_content_profile_id(payload, profile)
 
     decision_table = _build_decision_table(payload, profile)
     financing_assumptions, dealshield_disclosures, decision_summary = _apply_display_guards(payload, decision_table)
@@ -722,8 +947,18 @@ def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profil
     provenance = view_model.get("provenance")
     if not isinstance(provenance, dict):
         provenance = {}
+    profile_id = profile.get("profile_id")
+    if isinstance(profile_id, str) and profile_id.strip():
+        provenance["profile_id"] = profile_id.strip()
+    if content_profile_id:
+        provenance["content_profile_id"] = content_profile_id
+    scope_items_profile_id = _resolve_scope_items_profile_id(payload)
+    if scope_items_profile_id:
+        provenance["scope_items_profile_id"] = scope_items_profile_id
     provenance["scenario_inputs"] = scenario_inputs
-    provenance["dealshield_controls"] = _extract_dealshield_controls(payload)
+    controls = _extract_dealshield_controls(payload)
+    if controls:
+        provenance["dealshield_controls"] = controls
     if financing_assumptions:
         view_model["financing_assumptions"] = copy.deepcopy(financing_assumptions)
         provenance["financing_assumptions"] = copy.deepcopy(financing_assumptions)
@@ -739,7 +974,6 @@ def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profil
         provenance["decision_summary"] = summary_copy
     view_model["provenance"] = provenance
 
-    content_profile_id = _resolve_dealshield_content_profile_id(payload, profile)
     if content_profile_id:
         try:
             content_profile = copy.deepcopy(get_dealshield_content_profile(content_profile_id))

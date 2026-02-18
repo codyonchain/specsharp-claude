@@ -85,7 +85,12 @@ const isCurrencyMetric = (metricRef: unknown) => {
 
 const formatDecisionMetricValue = (value: unknown, metricRef: unknown) => {
   if (value === null || value === undefined || value === '') return MISSING_VALUE;
-  if (typeof value === 'string' && /not modeled/i.test(value)) return NOT_MODELED_VALUE;
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if (!text) return MISSING_VALUE;
+    if (/not modeled/i.test(text)) return NOT_MODELED_VALUE;
+    if (toFiniteNumber(text) === null) return text;
+  }
 
   const numeric = toFiniteNumber(value);
   if (numeric === null) return MISSING_VALUE;
@@ -591,6 +596,23 @@ export const DealShieldView: React.FC<Props> = ({
     (dealShieldData as any)?.profileId ??
     (viewModel as any)?.profile_id ??
     (viewModel as any)?.profileId;
+  const tileProfileId = provenance?.profile_id ?? profileId;
+  const contentProfileId = provenance?.content_profile_id ?? content?.profile_id;
+  const scopeProfileId = provenance?.scope_items_profile_id;
+  const provenanceControls = provenanceControlsRaw && typeof provenanceControlsRaw === 'object'
+    ? (provenanceControlsRaw as Record<string, unknown>)
+    : {};
+  const stressBandText = toFiniteNumber(provenanceControls?.stress_band_pct) !== null
+    ? `±${Math.trunc(Number(provenanceControls.stress_band_pct))}%`
+    : MISSING_VALUE;
+  const anchorEnabled = typeof provenanceControls?.use_anchor === 'boolean'
+    ? provenanceControls.use_anchor
+    : (typeof provenanceControls?.use_cost_anchor === 'boolean' ? provenanceControls.use_cost_anchor : null);
+  const anchorAmount = provenanceControls?.anchor_total_cost ?? provenanceControls?.anchor_total_project_cost;
+  const anchorText = anchorEnabled === true
+    ? `On${toFiniteNumber(anchorAmount) !== null ? ` (${formatDecisionMetricValue(anchorAmount, 'totals.total_project_cost')})` : ''}`
+    : (anchorEnabled === false ? 'Off' : MISSING_VALUE);
+  const hasUnderwritingColumns = columns.some((column: any) => ['annual_revenue', 'noi', 'dscr', 'yoc'].includes(String(column?.id ?? column?.tile_id ?? '')));
   const context =
     (dealShieldData as any)?.context ??
     (viewModel as any)?.context ??
@@ -797,6 +819,7 @@ export const DealShieldView: React.FC<Props> = ({
                 <tbody>
                   {rows.map((row: any, rowIndex: number) => {
                     const scenarioLabel = labelFrom(row, '-');
+                    const scenarioDelta = typeof row?.delta === 'string' && row.delta.trim() ? row.delta.trim() : null;
                     const scenarioBadge = getScenarioBadge(scenarioLabel);
                     const rowValues = Array.isArray(row?.values)
                       ? row.values
@@ -824,13 +847,16 @@ export const DealShieldView: React.FC<Props> = ({
                     return (
                       <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
                         <td className="px-2.5 py-2 font-medium text-slate-800">
-                          <div className="flex items-center gap-2">
-                            {scenarioBadge && (
-                              <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${scenarioBadge.className}`}>
-                                {scenarioBadge.label}
-                              </span>
-                            )}
-                            <span>{scenarioLabel}</span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              {scenarioBadge && (
+                                <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${scenarioBadge.className}`}>
+                                  {scenarioBadge.label}
+                                </span>
+                              )}
+                              <span>{scenarioLabel}</span>
+                            </div>
+                            {scenarioDelta && <p className="text-[11px] font-normal text-slate-500">{scenarioDelta}</p>}
                           </div>
                         </td>
                         {columns.map((column: any, colIndex: number) => {
@@ -866,7 +892,9 @@ export const DealShieldView: React.FC<Props> = ({
               </table>
             </div>
             <p className="mt-3 text-xs text-slate-500">
-              DSCR and Yield reflect the underwriting/debt terms in this run — see Provenance.
+              {hasUnderwritingColumns
+                ? 'DSCR and Yield reflect the underwriting/debt terms in this run — see Provenance.'
+                : 'Feasibility risk labels are deterministic scenario tags, not modeled probabilities.'}
             </p>
             {(decisionSummary.stabilizedValue !== null || decisionSummary.notModeledReason) && (
               <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
@@ -1013,6 +1041,10 @@ export const DealShieldView: React.FC<Props> = ({
               <h3 className="text-xl font-semibold tracking-tight text-slate-900">Provenance</h3>
               <span className="text-xs uppercase tracking-wide text-slate-400">Inputs</span>
             </div>
+            <p className="mb-3 text-xs text-slate-600">
+              <span className="font-semibold text-slate-700">Profiles &amp; Controls:</span>{' '}
+              Tile: {formatValue(tileProfileId)} | Content: {formatValue(contentProfileId)} | Scope: {formatValue(scopeProfileId)} | Stress band: {stressBandText} | Anchor: {anchorText}
+            </p>
             {scenarioInputs.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="min-w-full overflow-hidden rounded-xl border border-slate-200 text-sm">
