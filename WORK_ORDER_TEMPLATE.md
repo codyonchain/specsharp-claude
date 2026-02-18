@@ -150,6 +150,7 @@ Rollback plan is mandatory. Do not execute implementation without explicit trigg
 - No silent behavior changes outside objective.
 - No contract breaks unless explicitly declared.
 - If unexpected repo state appears, stop and escalate.
+- If any step touches backend calculation logic, the work order must include at least one relevant TEST_MATRIX category ID and the exact validation command(s); otherwise the work order is invalid.
 
 ## 12) Reporting Format During Execution
 Require status updates in this format:
