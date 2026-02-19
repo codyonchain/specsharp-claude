@@ -419,6 +419,12 @@ def _apply_display_guards(
         return {}, [], {}
 
     disclosures: List[str] = []
+    schedule_disclosure = (
+        "DealShield scenarios stress cost/revenue assumptions only; schedule slippage or acceleration impacts "
+        "(carry, debt timing, lease-up timing) are not modeled here."
+    )
+    if schedule_disclosure not in disclosures:
+        disclosures.append(schedule_disclosure)
     financing_raw = payload.get("financing_assumptions")
     if not isinstance(financing_raw, dict):
         ownership_analysis = payload.get("ownership_analysis")

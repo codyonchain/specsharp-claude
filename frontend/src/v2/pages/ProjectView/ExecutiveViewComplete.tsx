@@ -3764,6 +3764,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               <Calendar className="h-6 w-6 text-blue-600" />
               Key Milestones
             </h3>
+            <p className="text-sm text-gray-600 mb-6">
+              Milestones are baseline planning assumptions. Yield, DSCR, and NOI metrics do not currently include schedule-delay or acceleration effects.
+            </p>
             <div className="relative">
               <div className="absolute left-10 top-10 bottom-0 w-0.5 bg-gradient-to-b from-blue-400 via-purple-400 to-pink-400"></div>
               <div className="space-y-8">

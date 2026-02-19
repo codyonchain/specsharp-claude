@@ -1265,6 +1265,9 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
               </span>
             </div>
             <p className="text-sm text-gray-600 mb-4">Phased timeline with trade overlap optimization</p>
+            <p className="text-xs text-gray-500 mb-4">
+              Schedule shown is a planning baseline by building type. It does not yet reflect subtype-specific permitting, procurement, or financing-timing variance.
+            </p>
             {/* Mobile Timeline */}
             <div className="md:hidden space-y-4">
               {phasesWithTrades.map((phase) => {
