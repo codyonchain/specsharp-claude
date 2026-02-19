@@ -77,6 +77,9 @@ def test_multifamily_dealshield_view_model_is_available():
         assert view_model["content"].get("profile_id") == expected_profile_id
         provenance = view_model.get("provenance", {})
         assert provenance.get("profile_id") == expected_profile_id
+        assert "decision_summary" in view_model
+        assert "value_gap" in view_model
+        assert "value_gap_pct" in view_model
 
 
 def _resolve_metric_ref(payload, metric_ref):
@@ -116,3 +119,87 @@ def test_multifamily_emits_dealshield_scenario_snapshots():
             for metric_ref in metric_refs:
                 value = _resolve_metric_ref(snapshot, metric_ref)
                 assert isinstance(value, (int, float))
+
+
+def test_multifamily_decision_insurance_outputs_and_provenance():
+    for subtype, expected_profile_id in MULTIFAMILY_PROFILE_IDS.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.MULTIFAMILY,
+            subtype=subtype,
+            square_footage=120_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        profile = get_dealshield_profile(expected_profile_id)
+        view_model = build_dealshield_view_model(
+            project_id=f"test-di-{subtype}",
+            payload=payload,
+            profile=profile,
+        )
+
+        assert "primary_control_variable" in view_model
+        assert "first_break_condition" in view_model
+        assert "flex_before_break_pct" in view_model
+        assert "exposure_concentration_pct" in view_model
+        assert "ranked_likely_wrong" in view_model
+        assert "decision_insurance_provenance" in view_model
+
+        di_provenance = view_model.get("decision_insurance_provenance")
+        assert isinstance(di_provenance, dict)
+        assert di_provenance.get("enabled") is True
+        assert di_provenance.get("profile_id") == expected_profile_id
+
+        model_provenance = view_model.get("provenance")
+        assert isinstance(model_provenance, dict)
+        assert model_provenance.get("decision_insurance") == di_provenance
+
+        for key in (
+            "primary_control_variable",
+            "first_break_condition",
+            "flex_before_break_pct",
+            "exposure_concentration_pct",
+            "ranked_likely_wrong",
+        ):
+            assert key in di_provenance
+            block = di_provenance.get(key)
+            assert isinstance(block, dict)
+            assert block.get("status") in {"available", "unavailable"}
+            if block.get("status") == "unavailable":
+                reason = block.get("reason")
+                assert isinstance(reason, str) and reason.strip()
+
+        primary_control = view_model.get("primary_control_variable")
+        if primary_control is not None:
+            assert isinstance(primary_control, dict)
+            assert primary_control.get("tile_id")
+            assert primary_control.get("metric_ref")
+            assert isinstance(primary_control.get("impact_pct"), (int, float))
+            assert primary_control.get("severity") in {"Low", "Med", "High"}
+
+        first_break = view_model.get("first_break_condition")
+        if first_break is not None:
+            assert isinstance(first_break, dict)
+            assert first_break.get("break_metric") == "value_gap"
+            assert first_break.get("operator") == "<="
+            assert first_break.get("threshold") == 0.0
+            assert isinstance(first_break.get("observed_value"), (int, float))
+            assert first_break["observed_value"] <= 0
+
+        flex_before_break = view_model.get("flex_before_break_pct")
+        if flex_before_break is not None:
+            assert isinstance(flex_before_break, (int, float))
+            assert flex_before_break >= 0
+
+        concentration = view_model.get("exposure_concentration_pct")
+        if concentration is not None:
+            assert isinstance(concentration, (int, float))
+            assert 0 <= concentration <= 100
+
+        ranked_likely_wrong = view_model.get("ranked_likely_wrong")
+        assert isinstance(ranked_likely_wrong, list)
+        assert ranked_likely_wrong
+        for entry in ranked_likely_wrong:
+            assert isinstance(entry, dict)
+            assert "text" in entry
+            assert "impact_pct" in entry
+            assert entry.get("severity") in {"Low", "Med", "High", "Unknown"}

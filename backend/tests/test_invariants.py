@@ -12,6 +12,8 @@ from app.v2.config.master_config import (
     get_target_roi,
     validate_config,
 )
+from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
+from app.v2.services.dealshield_service import build_dealshield_view_model
 
 
 def test_state_required_for_multiplier():
@@ -339,3 +341,40 @@ def test_config_integrity():
     """Master config should validate trade percentages and financing ratios."""
     errors = validate_config()
     assert errors == [], f"Configuration integrity issues detected: {errors}"
+
+
+def test_multifamily_decision_insurance_outputs_are_deterministic():
+    """Decision-insurance outputs should be deterministic for identical multifamily inputs."""
+    kwargs = dict(
+        building_type=BuildingType.MULTIFAMILY,
+        subtype="market_rate_apartments",
+        square_footage=120_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+    )
+    payload_a = unified_engine.calculate_project(**kwargs)
+    payload_b = unified_engine.calculate_project(**kwargs)
+
+    profile_a = get_dealshield_profile(payload_a["dealshield_tile_profile"])
+    profile_b = get_dealshield_profile(payload_b["dealshield_tile_profile"])
+
+    view_a = build_dealshield_view_model(
+        project_id="deterministic-a",
+        payload=payload_a,
+        profile=profile_a,
+    )
+    view_b = build_dealshield_view_model(
+        project_id="deterministic-b",
+        payload=payload_b,
+        profile=profile_b,
+    )
+
+    for key in (
+        "primary_control_variable",
+        "first_break_condition",
+        "flex_before_break_pct",
+        "exposure_concentration_pct",
+        "ranked_likely_wrong",
+        "decision_insurance_provenance",
+    ):
+        assert view_a.get(key) == view_b.get(key), f"Expected deterministic equality for '{key}'"

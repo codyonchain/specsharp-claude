@@ -924,6 +924,492 @@ def _resolve_dealshield_content_drivers(content: Dict[str, Any], profile: Dict[s
     return resolved
 
 
+def _is_multifamily_profile(profile_id: Any) -> bool:
+    return isinstance(profile_id, str) and profile_id.startswith("multifamily_")
+
+
+def _resolve_cell_map(row: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    cell_map: Dict[str, Dict[str, Any]] = {}
+    cells = row.get("cells")
+    if not isinstance(cells, list):
+        return cell_map
+    for cell in cells:
+        if not isinstance(cell, dict):
+            continue
+        col_id = cell.get("col_id") or cell.get("tile_id") or cell.get("id")
+        if isinstance(col_id, str) and col_id:
+            cell_map[col_id] = cell
+    return cell_map
+
+
+def _resolve_severity_thresholds(content: Optional[Dict[str, Any]]) -> Tuple[float, float]:
+    high_default = 10.0
+    med_default = 4.0
+    if not isinstance(content, dict):
+        return high_default, med_default
+    block = content.get("decision_insurance")
+    if not isinstance(block, dict):
+        return high_default, med_default
+    thresholds = block.get("severity_thresholds_pct")
+    if not isinstance(thresholds, dict):
+        return high_default, med_default
+    high = float(thresholds.get("high")) if _is_number(thresholds.get("high")) else high_default
+    med = float(thresholds.get("med")) if _is_number(thresholds.get("med")) else med_default
+    if high < med:
+        high, med = med, high
+    if med < 0:
+        med = med_default
+    return high, med
+
+
+def _classify_impact_severity(impact_pct: Optional[float], high_threshold: float, med_threshold: float) -> str:
+    if impact_pct is None:
+        return "Unknown"
+    if impact_pct >= high_threshold:
+        return "High"
+    if impact_pct >= med_threshold:
+        return "Med"
+    return "Low"
+
+
+def _resolve_metric_for_driver(
+    payload: Dict[str, Any],
+    metric_ref: str,
+) -> Tuple[Optional[float], Optional[str]]:
+    base_snapshot = _resolve_dealshield_scenario_snapshot(payload, "base")
+    if isinstance(base_snapshot, dict):
+        raw = _resolve_metric_ref(base_snapshot, metric_ref)
+        if raw is not _MISSING and _is_number(raw):
+            return float(raw), f"dealshield_scenarios.scenarios.base.{metric_ref}"
+    raw_payload = _resolve_metric_ref(payload, metric_ref)
+    if raw_payload is not _MISSING and _is_number(raw_payload):
+        return float(raw_payload), metric_ref
+    return None, None
+
+
+def _resolve_base_total_cost(payload: Dict[str, Any], rows: List[Dict[str, Any]]) -> Tuple[Optional[float], Optional[str]]:
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        scenario_id = row.get("scenario_id")
+        label = str(row.get("label", "")).strip().lower()
+        if scenario_id != "base" and label != "base":
+            continue
+        value = _extract_decision_cell_value(row, "total_cost")
+        if value is not None:
+            return value, f"rows[{index}].cells.total_cost"
+    raw = _resolve_metric_ref(payload, "totals.total_project_cost")
+    if raw is not _MISSING and _is_number(raw):
+        return float(raw), "totals.total_project_cost"
+    return None, None
+
+
+def _build_row_snapshots(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    snapshots: List[Dict[str, Any]] = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        cell_map = _resolve_cell_map(row)
+        total_cost = None
+        stabilized_value = None
+        value_gap = None
+        value_gap_pct = None
+        total_cell = cell_map.get("total_cost")
+        if isinstance(total_cell, dict) and _is_number(total_cell.get("value")):
+            total_cost = float(total_cell.get("value"))
+        stabilized_cell = cell_map.get("stabilized_value")
+        if isinstance(stabilized_cell, dict):
+            if _is_number(stabilized_cell.get("value")):
+                stabilized_value = float(stabilized_cell.get("value"))
+            if _is_number(stabilized_cell.get("value_gap")):
+                value_gap = float(stabilized_cell.get("value_gap"))
+            if _is_number(stabilized_cell.get("value_gap_pct")):
+                value_gap_pct = float(stabilized_cell.get("value_gap_pct"))
+        if value_gap is None and stabilized_value is not None and total_cost is not None:
+            value_gap = stabilized_value - total_cost
+        if value_gap_pct is None and value_gap is not None and total_cost not in (None, 0):
+            value_gap_pct = (value_gap / total_cost) * 100.0
+        snapshots.append(
+            {
+                "index": index,
+                "scenario_id": row.get("scenario_id"),
+                "scenario_label": row.get("label"),
+                "total_cost": total_cost,
+                "stabilized_value": stabilized_value,
+                "value_gap": value_gap,
+                "value_gap_pct": value_gap_pct,
+            }
+        )
+    return snapshots
+
+
+def _build_multifamily_decision_insurance(
+    payload: Dict[str, Any],
+    profile: Dict[str, Any],
+    rows: List[Dict[str, Any]],
+    content: Optional[Dict[str, Any]],
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    profile_id = profile.get("profile_id")
+    if not _is_multifamily_profile(profile_id):
+        return {}, {}
+
+    outputs: Dict[str, Any] = {
+        "primary_control_variable": None,
+        "first_break_condition": None,
+        "flex_before_break_pct": None,
+        "exposure_concentration_pct": None,
+        "ranked_likely_wrong": [],
+    }
+    provenance: Dict[str, Any] = {
+        "enabled": True,
+        "profile_id": profile_id,
+    }
+
+    high_threshold, med_threshold = _resolve_severity_thresholds(content)
+    provenance["severity_thresholds_pct"] = {
+        "high": high_threshold,
+        "med": med_threshold,
+    }
+
+    fastest_change = content.get("fastest_change") if isinstance(content, dict) else None
+    fastest_drivers = fastest_change.get("drivers") if isinstance(fastest_change, dict) else None
+    driver_order: Dict[str, int] = {}
+    driver_labels: Dict[str, str] = {}
+    if isinstance(fastest_drivers, list):
+        for idx, driver in enumerate(fastest_drivers):
+            if not isinstance(driver, dict):
+                continue
+            tile_id = driver.get("tile_id")
+            if not isinstance(tile_id, str) or not tile_id:
+                continue
+            if tile_id not in driver_order:
+                driver_order[tile_id] = idx
+            label = driver.get("label")
+            if isinstance(label, str) and label.strip():
+                driver_labels[tile_id] = label.strip()
+
+    base_total_cost, base_total_cost_source = _resolve_base_total_cost(payload, rows)
+    square_footage = _resolve_project_square_footage(payload)
+    square_footage_source = (
+        "project_info.square_footage"
+        if isinstance(payload.get("project_info"), dict) and _is_number((payload.get("project_info") or {}).get("square_footage"))
+        else ("square_footage" if _is_number(payload.get("square_footage")) else None)
+    )
+
+    resolved_drivers = content.get("resolved_drivers") if isinstance(content, dict) else None
+    driver_impacts: List[Dict[str, Any]] = []
+    if isinstance(resolved_drivers, list):
+        for driver in resolved_drivers:
+            if not isinstance(driver, dict):
+                continue
+            tile_id = driver.get("tile_id")
+            metric_ref = driver.get("metric_ref")
+            if not isinstance(tile_id, str) or not tile_id or not isinstance(metric_ref, str) or not metric_ref:
+                continue
+            label = driver_labels.get(tile_id, tile_id)
+            transforms = []
+            transform_source = f"content.resolved_drivers[{len(driver_impacts)}].transform"
+            try:
+                transforms = _normalize_transforms(driver.get("transform"))
+            except DealShieldResolutionError as exc:
+                driver_impacts.append(
+                    {
+                        "tile_id": tile_id,
+                        "label": label,
+                        "metric_ref": metric_ref,
+                        "impact_pct": None,
+                        "delta_cost": None,
+                        "severity": "Unknown",
+                        "unavailable_reason": f"invalid_transform:{exc}",
+                        "order_index": driver_order.get(tile_id, 999),
+                    }
+                )
+                continue
+
+            base_metric_value, base_metric_source = _resolve_metric_for_driver(payload, metric_ref)
+            if base_metric_value is None:
+                driver_impacts.append(
+                    {
+                        "tile_id": tile_id,
+                        "label": label,
+                        "metric_ref": metric_ref,
+                        "impact_pct": None,
+                        "delta_cost": None,
+                        "severity": "Unknown",
+                        "unavailable_reason": "base_metric_missing",
+                        "order_index": driver_order.get(tile_id, 999),
+                        "base_metric_source": base_metric_source,
+                    }
+                )
+                continue
+
+            transformed_metric_value = _apply_transforms(base_metric_value, transforms) if transforms else base_metric_value
+            delta_metric = transformed_metric_value - base_metric_value
+            delta_cost: Optional[float] = None
+            delta_cost_source = None
+            unavailable_reason = None
+            if metric_ref == "totals.total_project_cost":
+                delta_cost = delta_metric
+                delta_cost_source = "driver_delta.total_project_cost"
+            elif metric_ref == "totals.cost_per_sf":
+                if square_footage is None or square_footage <= 0:
+                    unavailable_reason = "square_footage_missing"
+                else:
+                    delta_cost = delta_metric * square_footage
+                    delta_cost_source = "driver_delta.cost_per_sf_times_square_footage"
+            elif metric_ref.startswith("trade_breakdown.") or metric_ref == "construction_costs.equipment_total":
+                delta_cost = delta_metric
+                delta_cost_source = "driver_delta.absolute_cost_component"
+            else:
+                unavailable_reason = "unsupported_metric_ref"
+
+            impact_pct: Optional[float] = None
+            if delta_cost is not None and base_total_cost is not None and base_total_cost > 0:
+                impact_pct = abs(delta_cost / base_total_cost) * 100.0
+            elif delta_cost is not None and (base_total_cost is None or base_total_cost <= 0):
+                unavailable_reason = "base_total_cost_missing_or_non_positive"
+
+            driver_impacts.append(
+                {
+                    "tile_id": tile_id,
+                    "label": label,
+                    "metric_ref": metric_ref,
+                    "impact_pct": impact_pct,
+                    "delta_cost": delta_cost,
+                    "severity": _classify_impact_severity(impact_pct, high_threshold, med_threshold),
+                    "unavailable_reason": unavailable_reason,
+                    "order_index": driver_order.get(tile_id, 999),
+                    "base_metric_source": base_metric_source,
+                    "transform_source": transform_source,
+                    "delta_cost_source": delta_cost_source,
+                }
+            )
+
+    sortable_impacts = [
+        entry
+        for entry in driver_impacts
+        if _is_number(entry.get("impact_pct")) and _is_number(entry.get("delta_cost"))
+    ]
+    sortable_impacts.sort(key=lambda entry: (-float(entry["impact_pct"]), int(entry.get("order_index", 999))))
+
+    if sortable_impacts:
+        top = sortable_impacts[0]
+        outputs["primary_control_variable"] = {
+            "tile_id": top.get("tile_id"),
+            "label": top.get("label"),
+            "metric_ref": top.get("metric_ref"),
+            "impact_pct": top.get("impact_pct"),
+            "delta_cost": top.get("delta_cost"),
+            "severity": top.get("severity"),
+        }
+        provenance["primary_control_variable"] = {
+            "status": "available",
+            "selected_tile_id": top.get("tile_id"),
+            "selection_basis": "max_abs_cost_impact_pct",
+            "base_total_cost_source": base_total_cost_source,
+            "square_footage_source": square_footage_source,
+            "driver_impacts": copy.deepcopy(driver_impacts),
+        }
+    else:
+        provenance["primary_control_variable"] = {
+            "status": "unavailable",
+            "reason": "no_driver_impact_available",
+            "base_total_cost_source": base_total_cost_source,
+            "square_footage_source": square_footage_source,
+            "driver_impacts": copy.deepcopy(driver_impacts),
+        }
+
+    if sortable_impacts:
+        denominator = sum(abs(float(entry.get("delta_cost", 0.0))) for entry in sortable_impacts)
+        if denominator > 0:
+            numerator = max(abs(float(entry.get("delta_cost", 0.0))) for entry in sortable_impacts)
+            outputs["exposure_concentration_pct"] = (numerator / denominator) * 100.0
+            provenance["exposure_concentration_pct"] = {
+                "status": "available",
+                "numerator_abs_delta_cost": numerator,
+                "denominator_abs_delta_cost": denominator,
+                "source": "resolved_driver_impacts",
+            }
+        else:
+            provenance["exposure_concentration_pct"] = {
+                "status": "unavailable",
+                "reason": "zero_driver_delta_denominator",
+                "source": "resolved_driver_impacts",
+            }
+    else:
+        provenance["exposure_concentration_pct"] = {
+            "status": "unavailable",
+            "reason": "no_driver_impact_available",
+            "source": "resolved_driver_impacts",
+        }
+
+    row_snapshots = _build_row_snapshots(rows)
+    provenance["row_snapshots"] = copy.deepcopy(row_snapshots)
+    base_row_snapshot = next(
+        (
+            row
+            for row in row_snapshots
+            if row.get("scenario_id") == "base"
+            or str(row.get("scenario_label", "")).strip().lower() == "base"
+        ),
+        row_snapshots[0] if row_snapshots else None,
+    )
+    first_break_row = next(
+        (
+            row
+            for row in row_snapshots
+            if row is not base_row_snapshot and _is_number(row.get("value_gap")) and float(row.get("value_gap")) <= 0
+        ),
+        None,
+    )
+    if first_break_row is not None:
+        outputs["first_break_condition"] = {
+            "scenario_id": first_break_row.get("scenario_id"),
+            "scenario_label": first_break_row.get("scenario_label"),
+            "break_metric": "value_gap",
+            "operator": "<=",
+            "threshold": 0.0,
+            "observed_value": first_break_row.get("value_gap"),
+            "observed_value_pct": first_break_row.get("value_gap_pct"),
+        }
+        provenance["first_break_condition"] = {
+            "status": "available",
+            "row_index": first_break_row.get("index"),
+            "source": "decision_table.rows.stabilized_value.value_gap",
+        }
+    else:
+        provenance["first_break_condition"] = {
+            "status": "unavailable",
+            "reason": "no_modeled_break_condition",
+            "source": "decision_table.rows.stabilized_value.value_gap",
+        }
+
+    if base_row_snapshot is None:
+        provenance["flex_before_break_pct"] = {
+            "status": "unavailable",
+            "reason": "base_row_missing",
+        }
+    else:
+        base_gap = base_row_snapshot.get("value_gap")
+        base_total = base_row_snapshot.get("total_cost")
+        if not _is_number(base_gap) or not _is_number(base_total) or float(base_total) <= 0:
+            provenance["flex_before_break_pct"] = {
+                "status": "unavailable",
+                "reason": "base_row_gap_or_total_cost_missing",
+                "base_row_index": base_row_snapshot.get("index"),
+            }
+        elif float(base_gap) <= 0:
+            outputs["flex_before_break_pct"] = 0.0
+            provenance["flex_before_break_pct"] = {
+                "status": "available",
+                "reason": "base_already_broken",
+                "base_row_index": base_row_snapshot.get("index"),
+            }
+        elif first_break_row is None:
+            provenance["flex_before_break_pct"] = {
+                "status": "unavailable",
+                "reason": "no_modeled_break_condition",
+                "base_row_index": base_row_snapshot.get("index"),
+            }
+        else:
+            break_total = first_break_row.get("total_cost")
+            break_gap = first_break_row.get("value_gap")
+            if not _is_number(break_total) or not _is_number(break_gap):
+                provenance["flex_before_break_pct"] = {
+                    "status": "unavailable",
+                    "reason": "break_row_gap_or_total_cost_missing",
+                    "break_row_index": first_break_row.get("index"),
+                }
+            else:
+                base_gap_value = float(base_gap)
+                break_gap_value = float(break_gap)
+                denominator = base_gap_value - break_gap_value
+                if denominator <= 0:
+                    provenance["flex_before_break_pct"] = {
+                        "status": "unavailable",
+                        "reason": "non_positive_interpolation_denominator",
+                        "base_gap": base_gap_value,
+                        "break_gap": break_gap_value,
+                    }
+                else:
+                    stress_break_row_pct = ((float(break_total) - float(base_total)) / float(base_total)) * 100.0
+                    outputs["flex_before_break_pct"] = max(
+                        0.0,
+                        stress_break_row_pct * (base_gap_value / denominator),
+                    )
+                    provenance["flex_before_break_pct"] = {
+                        "status": "available",
+                        "method": "linear_interpolation_to_value_gap_zero",
+                        "stress_break_row_pct": stress_break_row_pct,
+                        "base_gap": base_gap_value,
+                        "break_gap": break_gap_value,
+                        "base_row_index": base_row_snapshot.get("index"),
+                        "break_row_index": first_break_row.get("index"),
+                    }
+
+    impact_by_tile: Dict[str, Optional[float]] = {}
+    for entry in driver_impacts:
+        tile_id = entry.get("tile_id")
+        impact_pct = entry.get("impact_pct")
+        if isinstance(tile_id, str) and tile_id:
+            impact_by_tile[tile_id] = float(impact_pct) if _is_number(impact_pct) else None
+
+    mlw_source = content.get("most_likely_wrong") if isinstance(content, dict) else None
+    ranked_items: List[Dict[str, Any]] = []
+    if isinstance(mlw_source, list):
+        for idx, entry in enumerate(mlw_source):
+            if not isinstance(entry, dict):
+                continue
+            fallback_tile = None
+            if idx < len(driver_order):
+                fallback_tile = next(
+                    (tile for tile, order_idx in driver_order.items() if order_idx == idx),
+                    None,
+                )
+            driver_tile_id = entry.get("driver_tile_id")
+            if not isinstance(driver_tile_id, str) or not driver_tile_id:
+                driver_tile_id = fallback_tile
+            impact_pct = impact_by_tile.get(driver_tile_id) if isinstance(driver_tile_id, str) else None
+            ranked_items.append(
+                {
+                    "id": entry.get("id"),
+                    "text": entry.get("text"),
+                    "why": entry.get("why"),
+                    "driver_tile_id": driver_tile_id,
+                    "impact_pct": impact_pct,
+                    "severity": _classify_impact_severity(impact_pct, high_threshold, med_threshold),
+                    "_original_index": idx,
+                }
+            )
+
+    ranked_items.sort(
+        key=lambda item: (
+            item.get("impact_pct") is None,
+            -(float(item.get("impact_pct")) if _is_number(item.get("impact_pct")) else 0.0),
+            int(item.get("_original_index", 0)),
+        )
+    )
+    outputs["ranked_likely_wrong"] = [
+        {
+            "id": item.get("id"),
+            "text": item.get("text"),
+            "why": item.get("why"),
+            "driver_tile_id": item.get("driver_tile_id"),
+            "impact_pct": item.get("impact_pct"),
+            "severity": item.get("severity"),
+        }
+        for item in ranked_items
+    ]
+    provenance["ranked_likely_wrong"] = {
+        "status": "available" if ranked_items else "unavailable",
+        "reason": None if ranked_items else "content_most_likely_wrong_missing_or_empty",
+        "source": "content.most_likely_wrong",
+        "driver_impact_source": "decision_insurance.primary_control_variable.driver_impacts",
+    }
+
+    return outputs, provenance
+
+
 def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profile: Dict[str, Any]) -> Dict[str, Any]:
     view_model = build_dealshield_scenario_table(project_id, payload, profile)
     legacy_columns = copy.deepcopy(view_model.get("columns", []))
@@ -972,8 +1458,7 @@ def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profil
         view_model["value_gap"] = summary_copy.get("value_gap")
         view_model["value_gap_pct"] = summary_copy.get("value_gap_pct")
         provenance["decision_summary"] = summary_copy
-    view_model["provenance"] = provenance
-
+    content_profile: Optional[Dict[str, Any]] = None
     if content_profile_id:
         try:
             content_profile = copy.deepcopy(get_dealshield_content_profile(content_profile_id))
@@ -984,4 +1469,18 @@ def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profil
                 content_profile, profile
             )
             view_model["content"] = content_profile
+
+    decision_insurance_outputs, decision_insurance_provenance = _build_multifamily_decision_insurance(
+        payload=payload,
+        profile=profile,
+        rows=view_model["rows"] if isinstance(view_model.get("rows"), list) else [],
+        content=view_model.get("content") if isinstance(view_model.get("content"), dict) else None,
+    )
+    if decision_insurance_provenance:
+        view_model["decision_insurance_provenance"] = copy.deepcopy(decision_insurance_provenance)
+        provenance["decision_insurance"] = copy.deepcopy(decision_insurance_provenance)
+        for output_key, output_value in decision_insurance_outputs.items():
+            view_model[output_key] = output_value
+
+    view_model["provenance"] = provenance
     return view_model

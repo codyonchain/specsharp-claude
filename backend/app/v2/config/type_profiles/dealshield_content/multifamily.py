@@ -25,21 +25,30 @@ def _multifamily_content_profile(profile_id: str, subtype_label: str) -> dict:
                 },
             ],
         },
+        "decision_insurance": {
+            "severity_thresholds_pct": {
+                "high": 10.0,
+                "med": 4.0,
+            },
+        },
         "most_likely_wrong": [
             {
                 "id": "mlw_1",
                 "text": f"{subtype_label.title()} unit mix and efficiency assumptions may be miscalibrated.",
                 "why": "Cost-per-SF sensitivity is a primary decision lever in this profile.",
+                "driver_tile_id": "cost_per_sf_plus_10",
             },
             {
                 "id": "mlw_2",
                 "text": "Final construction scope can shift late due to code, utility, and design coordination.",
                 "why": "Base cost assumptions are highly sensitive to late scope movement.",
+                "driver_tile_id": "cost_plus_10",
             },
             {
                 "id": "mlw_3",
                 "text": "Interior finish package selections are often not fully locked before procurement.",
                 "why": "Finish volatility can stack on top of broad cost stress in the ugly case.",
+                "driver_tile_id": "finishes_plus_10",
             },
         ],
         "question_bank": [
