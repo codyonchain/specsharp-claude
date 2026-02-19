@@ -629,7 +629,7 @@ MARKET_OVERRIDES: Dict[str, float] = {
 
 FINISH_LEVELS: Dict[str, float] = {
     'standard': 1.00,
-    'premium': 1.15,
+    'premium': 1.20,
     'luxury': 1.25
 }
 
@@ -776,7 +776,7 @@ def get_finish_cost_factor(finish_level: Optional[str]) -> float:
     """Return cost factor for a finish level using configured defaults when available."""
     defaults = {
         'standard': 1.00,
-        'premium': 1.15,
+        'premium': 1.20,
         'luxury': 1.25,
     }
     level_map = {**defaults, **FINISH_LEVELS}
