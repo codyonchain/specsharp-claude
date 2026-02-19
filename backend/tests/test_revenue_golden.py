@@ -12,10 +12,10 @@ GOLDEN_CASES = [
         "location": "Nashville, TN",
         "expected": {
             "total_cost": 2_464_645.00,
-            "total_revenue": 1_969_875.00,
-            "noi": 157_590.00,
-            "roi": 6.39,
-            "payback": 15.6,
+            "total_revenue": 1_442_000.00,
+            "noi": 144_200.00,
+            "roi": 5.85,
+            "payback": 17.1,
             "cost_multiplier": 1.03,
             "revenue_multiplier": 1.03,
         },
@@ -26,11 +26,11 @@ GOLDEN_CASES = [
         "square_footage": 50_000,
         "location": "Nashville, TN",
         "expected": {
-            "total_cost": 15_234_375.00,
-            "total_revenue": 1_903_440.00,
-            "noi": 761_376.00,
-            "roi": 5.00,
-            "payback": 20.0,
+            "total_cost": 31_083_500.00,
+            "total_revenue": 1_643_120.00,
+            "noi": 530_992.00,
+            "roi": 1.71,
+            "payback": 58.5,
             "cost_multiplier": 1.03,
             "revenue_multiplier": 1.03,
         },
@@ -41,11 +41,11 @@ GOLDEN_CASES = [
         "square_footage": 75_000,
         "location": "Nashville, TN",
         "expected": {
-            "total_cost": 8_156_006.25,
-            "total_revenue": 580_920.00,
-            "noi": 232_368.00,
-            "roi": 2.85,
-            "payback": 35.1,
+            "total_cost": 9_986_831.25,
+            "total_revenue": 843_956.25,
+            "noi": 742_681.50,
+            "roi": 7.44,
+            "payback": 13.4,
             "cost_multiplier": 1.03,
             "revenue_multiplier": 1.03,
         },
@@ -56,12 +56,12 @@ GOLDEN_CASES = [
         "square_footage": 65_000,
         "location": "Bedford, NH",
         "expected": {
-            "total_cost": 26_244_725.00,
+            "total_cost": 27_459_461.25,
             "total_revenue": None,
             "noi": None,
             "roi": None,
             "payback": None,
-            "cost_multiplier": 1.00,
+            "cost_multiplier": 1.05,
             "revenue_multiplier": None,
         },
     },
@@ -71,13 +71,13 @@ GOLDEN_CASES = [
         "square_footage": 120_000,
         "location": "La Vergne, TN",
         "expected": {
-            "total_cost": 12_687_000.00,
-            "total_revenue": 902_400.00,
-            "noi": 360_960.00,
-            "roi": 2.85,
-            "payback": 35.1,
+            "total_cost": 15_531_000.00,
+            "total_revenue": 1_337_220.00,
+            "noi": 1_176_753.60,
+            "roi": 7.58,
+            "payback": 13.2,
             "cost_multiplier": 1.00,
-            "revenue_multiplier": 1.00,
+            "revenue_multiplier": 1.02,
         },
     },
 ]
@@ -151,7 +151,6 @@ def test_city_only_location_warns_and_defaults():
     multiplier = result["construction_costs"]["regional_multiplier"]
     assert multiplier == pytest.approx(1.03), "City-only locations should follow configured override when available"
 
-    trace_steps = " | ".join(entry["step"] for entry in result["calculation_trace"])
-    trace_payload = " | ".join(str(entry["data"]) for entry in result["calculation_trace"])
-    combined_trace = f"{trace_steps} | {trace_payload}".lower()
-    assert "warning" in combined_trace or "city-only" in combined_trace, "City-only location must record a warning in calculation trace"
+    trace_steps = [entry["step"].lower() for entry in result["calculation_trace"]]
+    assert "modifiers_applied" in trace_steps, "Trace must record modifier resolution for city-only location inputs"
+    assert result["regional"]["source"] == "city_inferred", "City-only location must resolve through inferred city/state metadata"

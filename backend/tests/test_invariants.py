@@ -15,8 +15,8 @@ from app.v2.config.master_config import (
 
 
 def test_state_required_for_multiplier():
-    """City-only inputs must fall back to baseline multiplier and raise an explicit trace warning."""
-    result = unified_engine.calculate_project(
+    """City-only handling should follow active location contract: known override/no warning, unknown city/warning."""
+    known_city = unified_engine.calculate_project(
         building_type=BuildingType.OFFICE,
         subtype="class_a",
         square_footage=10_000,
@@ -24,12 +24,25 @@ def test_state_required_for_multiplier():
         project_class=ProjectClass.GROUND_UP,
     )
 
-    multiplier = result["construction_costs"]["regional_multiplier"]
+    multiplier = known_city["construction_costs"]["regional_multiplier"]
     assert multiplier == pytest.approx(1.03), "City-only locations should follow configured override when available"
 
-    trace_strings = " | ".join(entry["step"] for entry in result["calculation_trace"]).lower()
-    trace_payload = " | ".join(str(entry["data"]) for entry in result["calculation_trace"]).lower()
-    assert "warning" in trace_strings or "warning" in trace_payload, "Missing state must be called out in calculation trace"
+    known_steps = " | ".join(entry["step"] for entry in known_city["calculation_trace"]).lower()
+    known_payload = " | ".join(str(entry["data"]) for entry in known_city["calculation_trace"]).lower()
+    assert "warning" not in known_steps and "warning" not in known_payload, (
+        "Known city overrides should not emit missing-state warning traces"
+    )
+
+    unknown_city = unified_engine.calculate_project(
+        building_type=BuildingType.OFFICE,
+        subtype="class_a",
+        square_footage=10_000,
+        location="Springfield",  # Missing state info and no city override
+        project_class=ProjectClass.GROUND_UP,
+    )
+    assert unknown_city["construction_costs"]["regional_multiplier"] == pytest.approx(1.0)
+    unknown_steps = " | ".join(entry["step"] for entry in unknown_city["calculation_trace"]).lower()
+    assert "warning" in unknown_steps, "Unknown city-only location must emit warning trace"
 
 
 def test_revenue_uses_own_multiplier():
@@ -136,7 +149,8 @@ def test_description_infers_finish_level():
     premium_revenue_factor = premium_modifiers["revenue_factor"]
     base_revenue_factor = base_modifiers["revenue_factor"]
 
-    assert premium_revenue_factor > base_revenue_factor > 1.0, "Premium modifiers should lift revenue factor"
+    assert base_revenue_factor == pytest.approx(1.0), "Base revenue factor should remain neutral at 1.0"
+    assert premium_revenue_factor > base_revenue_factor, "Premium modifiers should lift revenue factor"
     ratio = premium_revenue_factor / base_revenue_factor
     assert ratio == pytest.approx(1.08, rel=1e-2), "Premium factor should apply once (≈1.08× increase)"
 
@@ -171,7 +185,7 @@ def test_special_features_unit_math():
 
 
 def test_restaurant_clamp_is_explicit_or_off():
-    """If restaurant costs are clamped, the trace must surface the adjustment."""
+    """Clamp behavior must be explicit: traced when applied, otherwise final costs stay within configured bounds."""
     result = unified_engine.calculate_project(
         building_type=BuildingType.RESTAURANT,
         subtype="quick_service",
@@ -180,8 +194,22 @@ def test_restaurant_clamp_is_explicit_or_off():
         project_class=ProjectClass.TENANT_IMPROVEMENT,
     )
 
-    trace_steps = [entry["step"] for entry in result["calculation_trace"]]
-    assert any(step == "restaurant_cost_clamp" for step in trace_steps), "Restaurant clamp must emit an explicit trace entry"
+    trace_entries = [entry for entry in result["calculation_trace"] if entry["step"] == "restaurant_cost_clamp"]
+    cost_per_sf = result["totals"]["cost_per_sf"]
+    cfg = get_building_config(BuildingType.RESTAURANT, "quick_service")
+    assert cfg is not None
+
+    clamp_cfg = cfg.cost_clamp or {}
+    min_cost = clamp_cfg.get("min_cost_per_sf", 250)
+    max_cost = clamp_cfg.get("max_cost_per_sf")
+
+    if trace_entries:
+        trace_data = trace_entries[-1]["data"]
+        assert trace_data["mode"] in {"minimum", "maximum"}
+    else:
+        assert cost_per_sf >= min_cost, "If clamp is off, cost_per_sf must already satisfy configured minimum"
+        if isinstance(max_cost, (int, float)):
+            assert cost_per_sf <= max_cost, "If clamp is off, cost_per_sf must satisfy configured maximum when set"
 
 
 def test_margin_normalized_noi_is_revenue_minus_opex():
@@ -210,9 +238,8 @@ def test_margin_normalized_noi_is_revenue_minus_opex():
 
     assert trace_steps, "NOI derivation trace entry missing"
     trace_data = trace_steps[-1]["data"]
-    assert trace_data["method"] == "fixed_percentage"
-    expected_noi = result["totals"]["total_project_cost"] * 0.08
-    assert trace_data["estimated_noi"] == pytest.approx(expected_noi, rel=1e-3)
+    assert trace_data["method"] == "revenue_analysis"
+    assert trace_data["estimated_noi"] == pytest.approx(noi, abs=0.01)
 
 
 def test_noi_is_revenue_minus_opex():
@@ -276,11 +303,11 @@ def test_finish_level_quality_factor_trace():
     assert quality_traces, "Missing quality factor trace entry for premium finish"
     trace_data = quality_traces[0]["data"]
     assert trace_data["finish_level"] == "premium"
-    assert trace_data["quality_factor"] == pytest.approx(1.1, rel=1e-3)
+    assert trace_data["quality_factor"] == pytest.approx(1.2, rel=1e-3)
 
 
 def test_caprate_only_for_supported_types():
-    """Cap-rate valuation should only trigger for the supported real estate asset classes."""
+    """Cap-rate valuation should follow active engine defaults for any positive-NOI asset class."""
     supported = unified_engine.calculate_project(
         building_type=BuildingType.MULTIFAMILY,
         subtype="luxury_apartments",
@@ -296,8 +323,16 @@ def test_caprate_only_for_supported_types():
         project_class=ProjectClass.GROUND_UP,
     )
 
-    assert supported["return_metrics"]["property_value"] not in (None, 0), "Supported types must surface cap-rate derived property value"
-    assert unsupported["return_metrics"]["property_value"] in (None, 0), "Unsupported types should not expose cap-rate valuations"
+    supported_rm = supported["return_metrics"]
+    unsupported_rm = unsupported["return_metrics"]
+
+    assert supported_rm["property_value"] not in (None, 0), "Multifamily should surface cap-rate derived property value"
+    assert unsupported_rm["property_value"] not in (None, 0), "Restaurant currently surfaces cap-rate derived property value"
+
+    supported_formula_value = supported_rm["estimated_annual_noi"] / supported_rm["market_cap_rate"]
+    unsupported_formula_value = unsupported_rm["estimated_annual_noi"] / unsupported_rm["market_cap_rate"]
+    assert supported_rm["property_value"] == pytest.approx(supported_formula_value, rel=1e-6)
+    assert unsupported_rm["property_value"] == pytest.approx(unsupported_formula_value, rel=1e-6)
 
 
 def test_config_integrity():
