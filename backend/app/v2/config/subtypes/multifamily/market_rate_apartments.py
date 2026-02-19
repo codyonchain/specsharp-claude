@@ -17,6 +17,7 @@ CONFIG = (
         display_name="Class B / Market Rate Apartments",
         base_cost_per_sf=145,
         cost_range=(130, 160),
+        dealshield_tile_profile="multifamily_market_rate_apartments_v1",
         equipment_cost_per_sf=15,
         typical_floors=3,
         trades=TradeBreakdown(

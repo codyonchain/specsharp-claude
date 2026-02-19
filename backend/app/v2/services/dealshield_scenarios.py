@@ -16,6 +16,9 @@ WAVE1_PROFILES: Set[str] = {
     "healthcare_urgent_care_v1",
     "restaurant_quick_service_v1",
     "hospitality_limited_service_hotel_v1",
+    "multifamily_market_rate_apartments_v1",
+    "multifamily_luxury_apartments_v1",
+    "multifamily_affordable_housing_v1",
 }
 
 _ALLOWED_STRESS_BAND_PCTS: Set[int] = {10, 7, 5, 3}
@@ -175,6 +178,31 @@ def _apply_driver_override(
     metric_ref: str,
     transforms: List[Dict[str, Any]],
 ) -> None:
+    if metric_ref == "totals.cost_per_sf":
+        totals = payload.get("totals")
+        project_info = payload.get("project_info")
+        if not isinstance(totals, dict) or not isinstance(project_info, dict):
+            raise DealShieldScenarioError("Missing totals/project_info for cost_per_sf scenario override")
+        square_footage = project_info.get("square_footage")
+        if not _is_number(square_footage) or float(square_footage) <= 0:
+            raise DealShieldScenarioError("Missing/invalid project_info.square_footage for cost_per_sf scenario override")
+
+        old_cost_per_sf = totals.get("cost_per_sf")
+        if not _is_number(old_cost_per_sf):
+            total_project_cost = totals.get("total_project_cost")
+            if not _is_number(total_project_cost):
+                raise DealShieldScenarioError("Missing totals.cost_per_sf and totals.total_project_cost for scenario override")
+            old_cost_per_sf = float(total_project_cost) / float(square_footage)
+
+        new_cost_per_sf = _apply_transforms(float(old_cost_per_sf), transforms)
+        target_total_cost = float(new_cost_per_sf) * float(square_footage)
+        current_total_cost = totals.get("total_project_cost")
+        if not _is_number(current_total_cost):
+            current_total_cost = float(old_cost_per_sf) * float(square_footage)
+
+        _apply_cost_delta(payload, float(target_total_cost) - float(current_total_cost))
+        return
+
     if metric_ref.startswith("trade_breakdown."):
         trade_key = metric_ref.split(".", 1)[1]
         trade_breakdown = payload.get("trade_breakdown")

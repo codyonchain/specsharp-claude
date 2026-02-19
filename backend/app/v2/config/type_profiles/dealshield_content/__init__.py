@@ -6,6 +6,7 @@ from . import civic
 from . import healthcare
 from . import hospitality
 from . import industrial
+from . import multifamily
 from . import restaurant
 
 CIVIC_CONTENT_PROFILE_ALIASES: dict[str, dict] = {
@@ -21,6 +22,7 @@ DEALSHIELD_CONTENT_PROFILE_SOURCES: list[dict] = [
     healthcare.DEALSHIELD_CONTENT_PROFILES,
     restaurant.DEALSHIELD_CONTENT_PROFILES,
     hospitality.DEALSHIELD_CONTENT_PROFILES,
+    multifamily.DEALSHIELD_CONTENT_PROFILES,
     civic.DEALSHIELD_CONTENT_PROFILES,
     CIVIC_CONTENT_PROFILE_ALIASES,
 ]

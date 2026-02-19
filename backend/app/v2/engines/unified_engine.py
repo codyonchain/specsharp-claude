@@ -1073,6 +1073,9 @@ class UnifiedEngine:
                 "healthcare_urgent_care_v1",
                 "restaurant_quick_service_v1",
                 "hospitality_limited_service_hotel_v1",
+                "multifamily_market_rate_apartments_v1",
+                "multifamily_luxury_apartments_v1",
+                "multifamily_affordable_housing_v1",
             }:
                 from app.v2.services.dealshield_scenarios import (
                     build_dealshield_scenarios,
