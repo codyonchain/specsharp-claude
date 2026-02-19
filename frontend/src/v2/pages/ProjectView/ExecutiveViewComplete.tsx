@@ -15,7 +15,7 @@ import {
   BarChart3, Users, Building2, Home, Briefcase, Target,
   GraduationCap, CheckCircle, Info, ArrowUpRight, XCircle,
   Activity, Shield, Wrench, Zap, Droplet, PaintBucket,
-  TrendingDown, AlertTriangle, Lightbulb, Download
+  AlertTriangle, Lightbulb, Download
 } from 'lucide-react';
 
 const DEBUG_EXECUTIVE =
@@ -480,7 +480,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       dentalOpsPerProviderValue
     });
   }
-  const quickSensitivity = displayData?.sensitivity || {};
   const revenueRequired = {
     impliedAdrForTargetRevpar: displayData.impliedAdrForTargetRevpar,
     impliedOccupancyForTargetRevpar: displayData.impliedOccupancyForTargetRevpar,
@@ -901,23 +900,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   // Extract additional raw data we need - check multiple paths for data
   const parsed = analysis?.parsed_input || {};
   const ownership = calculations?.ownership_analysis || {};
-  const backendSensitivity =
-    ownership?.sensitivity_analysis ||
-    calculations?.sensitivity_analysis ||
-    calculations?.quick_sensitivity ||
-    null;
-  const backendSensitivityScenarios = Array.isArray(backendSensitivity?.scenarios)
-    ? backendSensitivity.scenarios
-    : null;
-  // TEMP: debug Quick Sensitivity wiring
-  if (process.env.NODE_ENV === 'development') {
-    if (DEBUG_EXECUTIVE) {
-      // eslint-disable-next-line no-console
-      console.log('QS debug – backendSensitivity:', backendSensitivity);
-      // eslint-disable-next-line no-console
-      console.log('QS debug – backendSensitivityScenarios:', backendSensitivityScenarios);
-    }
-  }
   const rawConstructionSchedule = calculations?.construction_schedule;
   const totals = calculations?.totals || {};
   const construction_costs = calculations?.construction_costs || {};
@@ -1348,94 +1330,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   const salesPerSfText = hasRestaurantSalesPerSf ? formatPerSf(restaurantSalesPerSf) : '—';
   const noiPerSfText = hasRestaurantNoiPerSf ? formatPerSf(restaurantNoiPerSf) : '—';
   const costPerSfText = hasRestaurantCostPerSf ? formatPerSf(restaurantCostPerSf) : '—';
-  const baselineRevenue = typeof annualRevenue === 'number' && Number.isFinite(annualRevenue) ? annualRevenue : undefined;
-  const baselineNoi = typeof noi === 'number' && Number.isFinite(noi) ? noi : undefined;
-  const baselineTotalCost =
-    typeof totalProjectCost === 'number' && Number.isFinite(totalProjectCost) && totalProjectCost > 0
-      ? totalProjectCost
-      : undefined;
-  const baselineYieldOnCost =
-    typeof baselineNoi === 'number' && typeof baselineTotalCost === 'number' && baselineTotalCost > 0
-      ? baselineNoi / baselineTotalCost
-      : undefined;
-  const baselineDscr = typeof dscrValue === 'number' ? dscrValue : undefined;
-  const baselineOperatingMargin =
-    typeof baselineRevenue === 'number' &&
-    baselineRevenue > 0 &&
-    typeof baselineNoi === 'number'
-      ? baselineNoi / baselineRevenue
-      : undefined;
-  type RestaurantSensitivityScenario = {
-    id: string;
-    label: string;
-    subtitle: string;
-    yieldOnCost?: number;
-    dscr?: number;
-  };
-  let restaurantSensitivityScenarios: RestaurantSensitivityScenario[] | undefined;
-  if (
-    isRestaurantProject &&
-    typeof baselineRevenue === 'number' &&
-    typeof baselineNoi === 'number' &&
-    typeof baselineTotalCost === 'number' &&
-    baselineTotalCost > 0
-  ) {
-    const baseYield = typeof baselineYieldOnCost === 'number' ? baselineYieldOnCost : undefined;
-    const baseDscr = typeof baselineDscr === 'number' ? baselineDscr : undefined;
-    const margin = baselineOperatingMargin;
-    const scaleDscr = (noiMultiplier: number): number | undefined =>
-      typeof baseDscr === 'number' ? baseDscr * noiMultiplier : undefined;
-
-    restaurantSensitivityScenarios = [];
-
-    const pushScenario = (
-      id: string,
-      label: string,
-      subtitle: string,
-      noiMultiplier: number | undefined
-    ) => {
-      const scenarioYield =
-        typeof baseYield === 'number' && typeof noiMultiplier === 'number'
-          ? baseYield * noiMultiplier
-          : undefined;
-      const scenarioDscr =
-        typeof noiMultiplier === 'number' ? scaleDscr(noiMultiplier) : undefined;
-      restaurantSensitivityScenarios?.push({
-        id,
-        label,
-        subtitle,
-        yieldOnCost: scenarioYield,
-        dscr: scenarioDscr,
-      });
-    };
-
-    pushScenario('sales_plus_5', 'Sales +5%', 'Top-line sales increase by 5%.', 1.05);
-    pushScenario('sales_minus_5', 'Sales –5%', 'Top-line sales decrease by 5%.', 0.95);
-
-    if (typeof margin === 'number') {
-      const adjustForMargin = (deltaPts: number): number | undefined => {
-        const newMargin = Math.max(0, margin - deltaPts);
-        if (!baselineRevenue || !baselineNoi || baselineNoi === 0) {
-          return undefined;
-        }
-        return (baselineRevenue * newMargin) / baselineNoi;
-      };
-
-      pushScenario(
-        'cogs_plus_2',
-        'COGS +2 pts',
-        'Food & beverage cost ratio increases by 2 percentage points.',
-        adjustForMargin(0.02)
-      );
-
-      pushScenario(
-        'labor_plus_2',
-        'Labor +2 pts',
-        'Labor cost ratio increases by 2 percentage points.',
-        adjustForMargin(0.02)
-      );
-    }
-  }
   const officeNoiGapValue =
     typeof requiredNoi === 'number' && typeof currentNoi === 'number'
       ? requiredNoi - currentNoi
@@ -1454,77 +1348,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     requiredRevenuePerSf !== 0
       ? (officeRentGapValue / requiredRevenuePerSf) * 100
       : undefined;
-  const quickSensitivityBaseYield = (() => {
-    const candidates = [
-      quickSensitivity?.currentYield,
-      quickSensitivity?.yieldBase,
-      quickSensitivity?.yieldOnCost,
-      quickSensitivity?.baseYieldOnCost,
-      displayData?.yieldOnCost,
-    ];
-    for (const value of candidates) {
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        return value;
-      }
-    }
-    return undefined;
-  })();
-  const breakEvenOccupancyValue =
-    typeof displayData.breakEvenOccupancyForTargetYield === 'number'
-      ? displayData.breakEvenOccupancyForTargetYield
-      : typeof displayData.breakEvenOccupancy === 'number'
-        ? displayData.breakEvenOccupancy
-        : undefined;
-  const breakEvenLabel =
-    typeof breakEvenOccupancyValue === 'number'
-      ? breakEvenOccupancyValue > 1.02
-        ? '> 100% (not achievable)'
-        : formatters.percentage(breakEvenOccupancyValue)
-      : 'N/A';
-  const isHotel = isHospitalityProject;
-  let adrMinus10Yield: number | undefined;
-  let adrPlus10Yield: number | undefined;
-  let occMinus5Yield: number | undefined;
-  let occPlus5Yield: number | undefined;
-  const adrForSensitivity = typeof hospitalityAdr === 'number' ? hospitalityAdr : undefined;
-  const occForSensitivity = typeof hospitalityOccupancy === 'number' ? hospitalityOccupancy : undefined;
-  if (
-    isHotel &&
-    typeof quickSensitivityBaseYield === 'number' &&
-    typeof adrForSensitivity === 'number' &&
-    adrForSensitivity > 0 &&
-    typeof occForSensitivity === 'number' &&
-    occForSensitivity > 0
-  ) {
-    const revparBase = adrForSensitivity * occForSensitivity;
-    if (revparBase > 0) {
-      const adrMinus10 = adrForSensitivity - 10;
-      const adrPlus10 = adrForSensitivity + 10;
-      const occMinus5 = occForSensitivity - 0.05;
-      const occPlus5 = occForSensitivity + 0.05;
-
-      if (adrMinus10 > 0) {
-        const revparAdrMinus10 = adrMinus10 * occForSensitivity;
-        adrMinus10Yield = quickSensitivityBaseYield * (revparAdrMinus10 / revparBase);
-      }
-
-      if (adrPlus10 > 0) {
-        const revparAdrPlus10 = adrPlus10 * occForSensitivity;
-        adrPlus10Yield = quickSensitivityBaseYield * (revparAdrPlus10 / revparBase);
-      }
-
-      if (occMinus5 > 0) {
-        const revparOccMinus5 = adrForSensitivity * occMinus5;
-        occMinus5Yield = quickSensitivityBaseYield * (revparOccMinus5 / revparBase);
-      }
-
-      if (occPlus5 < 1.0) {
-        const revparOccPlus5 = adrForSensitivity * occPlus5;
-        occPlus5Yield = quickSensitivityBaseYield * (revparOccPlus5 / revparBase);
-      }
-    }
-  }
-
   const hospitalityRequiredNoiPerKeyValue =
     displayData.requiredNoiPerKey ??
     (isHospitalityProject &&
@@ -2304,15 +2127,22 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                 <span className={`w-2 h-2 ${displayData.roi >= 0.08 ? 'bg-green-500' : 'bg-red-500'} rounded-full`}></span>
                 <span className="text-sm">ROI: <strong>{formatters.percentage(displayData.roi)}</strong></span>
               </span>
-              <span className="flex items-center gap-2">
-                <span className={`w-2 h-2 ${displayData.dscr >= 1.25 ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></span>
-                <span className="text-sm">DSCR: <strong>{formatters.multiplier(displayData.dscr)}</strong></span>
+            <span className="flex items-center gap-2">
+              <span className={`w-2 h-2 ${displayData.dscr >= 1.25 ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></span>
+              <span className="text-sm">DSCR: <strong>{formatters.multiplier(displayData.dscr)}</strong></span>
+            </span>
+            <span className="flex items-center gap-2">
+              <span className={`w-2 h-2 ${irrDisplayValue !== '—' ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></span>
+              <span className="text-sm">
+                {irrDisplayLabel}: <strong>{irrDisplayValue}</strong>
+                {irrHelperText ? <span className="ml-2 text-xs text-gray-500">{irrHelperText}</span> : null}
               </span>
-              <span className="flex items-center gap-2">
-                <span className={`w-2 h-2 ${displayData.paybackPeriod <= 20 ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></span>
-                <span className="text-sm">Payback: <strong>{formatters.years(displayData.paybackPeriod)}</strong></span>
-              </span>
-            </div>
+            </span>
+            <span className="flex items-center gap-2">
+              <span className={`w-2 h-2 ${displayData.paybackPeriod <= 20 ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></span>
+              <span className="text-sm">Payback: <strong>{formatters.years(displayData.paybackPeriod)}</strong></span>
+            </span>
+          </div>
       </section>
 
       {/* Three Key Metrics Cards */}
@@ -3274,37 +3104,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         </section>
       )}
 
-      {/* Key Financial Indicators */}
-      <section className="rounded-2xl shadow-xl overflow-hidden">
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-5 sm:p-8 text-white space-y-6">
-          <h3 className="text-2xl font-bold">Key Financial Indicators</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-            <div>
-              <p className="text-indigo-200 text-sm uppercase tracking-wider mb-2">BREAK-EVEN OCCUPANCY</p>
-              <p className="text-4xl font-bold">{formatters.percentage(displayData.breakEvenOccupancy)}</p>
-            </div>
-            <div>
-              <p className="text-indigo-200 text-sm uppercase tracking-wider mb-2">10-YEAR NPV</p>
-              <p className="text-4xl font-bold">{formatters.currency(displayData.npv)}</p>
-            </div>
-            <div className="mt-6">
-              <p className="text-indigo-200 text-sm uppercase tracking-wider mb-2">{irrDisplayLabel}</p>
-              <p className="text-3xl font-bold">{irrDisplayValue}</p>
-              {irrHelperText ? (
-                <p className="text-sm text-indigo-100 mt-1">{irrHelperText}</p>
-              ) : null}
-            </div>
-            <div className="mt-6">
-              <p className="text-indigo-200 text-sm uppercase tracking-wider mb-2">PAYBACK PERIOD</p>
-              <p className="text-3xl font-bold">{formatters.years(displayData.paybackPeriod)}</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Market Position & Quick Sensitivity */}
+      {/* Market Position */}
       <section className={`${sectionCardClasses} border-0 bg-transparent shadow-none p-0`}>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         {/* Market Position */}
         <div className="bg-gradient-to-br from-white to-blue-50 rounded-xl shadow-lg border border-blue-100 overflow-hidden">
           <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 sm:px-6">
@@ -3399,255 +3201,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           </div>
         </div>
 
-        {/* Quick Sensitivity */}
-        <div className="bg-gradient-to-br from-white to-purple-50 rounded-xl shadow-lg border border-purple-100 overflow-hidden">
-          <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-3 sm:px-6">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Quick Sensitivity
-            </h3>
-          </div>
-          <div className="p-4 sm:p-6 space-y-4">
-            {isRestaurantProject && restaurantSensitivityScenarios ? (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {restaurantSensitivityScenarios.map((scenario) => (
-                    <div
-                      key={scenario.id}
-                      className="bg-white rounded-lg p-4 shadow-sm border border-slate-200 space-y-2"
-                    >
-                      <p className="text-xs text-gray-500 uppercase tracking-wider">{scenario.label}</p>
-                      <p className="text-[11px] text-slate-500">{scenario.subtitle}</p>
-                      <div className="mt-2 text-xs text-slate-600 space-y-1">
-                        <div className="flex justify-between">
-                          <span>Yield on cost</span>
-                          <span className="font-semibold text-slate-900">
-                            {typeof scenario.yieldOnCost === 'number'
-                              ? `${(scenario.yieldOnCost * 100).toFixed(1)}%`
-                              : '—'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>DSCR</span>
-                          <span className="font-semibold text-slate-900">
-                            {typeof scenario.dscr === 'number' ? `${scenario.dscr.toFixed(2)}×` : '—'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="p-4 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg">
-                  <p className="text-xs text-gray-600 uppercase tracking-wider mb-2">Break-even needs:</p>
-                  <span className="text-xl font-bold text-purple-700">{breakEvenLabel}</span>
-                </div>
-              </>
-            ) : (
-              (() => {
-                const sensitivity = backendSensitivity ?? quickSensitivity ?? {};
-                const baseYOC = quickSensitivityBaseYield;
-
-                const fmt = (value?: number) =>
-                  typeof value === 'number' && Number.isFinite(value)
-                    ? formatters.percentage(value)
-                    : '—';
-                const occLabel = breakEvenLabel;
-
-                // Return backend scenario metric when present; otherwise fall back to naive +/-10% adjustments.
-                const scenarioValue = (
-                  backendValue: number | undefined,
-                  fallbackFn: (base: number) => number
-                ): string => {
-                  if (typeof backendValue === 'number' && Number.isFinite(backendValue)) {
-                    return fmt(backendValue);
-                  }
-                  if (typeof baseYOC === 'number') {
-                    return fmt(fallbackFn(baseYOC));
-                  }
-                  return '—';
-                };
-
-                const scenarioCards = Array.isArray(backendSensitivityScenarios)
-                  ? backendSensitivityScenarios.map((scenario: any, index: number) => {
-                      const scenarioYield = typeof scenario?.yield_on_cost === 'number'
-                        ? scenario.yield_on_cost
-                        : typeof scenario?.yield === 'number'
-                          ? scenario.yield
-                          : undefined;
-                      const delta = typeof scenario?.yield_delta === 'number'
-                        ? scenario.yield_delta
-                        : typeof scenario?.yieldDelta === 'number'
-                          ? scenario.yieldDelta
-                          : null;
-                      const isPositive = typeof delta === 'number'
-                        ? delta >= 0
-                        : (typeof scenarioYield === 'number' && typeof baseYOC === 'number'
-                            ? scenarioYield >= baseYOC
-                            : true);
-                      const iconElement = isPositive ? (
-                        <TrendingUp className="h-5 w-5 text-green-500" />
-                      ) : (
-                        <TrendingDown className="h-5 w-5 text-red-500" />
-                      );
-                      return {
-                        key: scenario?.label || `scenario-${index}`,
-                        label: scenario?.label || 'Scenario',
-                        icon: iconElement,
-                        value: scenarioYield !== undefined ? fmt(scenarioYield) : '—',
-                        color: isPositive ? 'text-green-600' : 'text-red-600'
-                      };
-                    })
-                  : null;
-
-                let cards;
-                if (scenarioCards && scenarioCards.length > 0) {
-                  cards = scenarioCards;
-                } else if (isDentalOffice) {
-                  cards = [
-                    {
-                      label: 'If build cost / SF +10%',
-                      icon: <TrendingDown className="h-5 w-5 text-red-500" />,
-                      value: scenarioValue(
-                        sensitivity?.cost_up_10?.yield_on_cost ?? sensitivity?.costUp10YieldOnCost,
-                        (base) => base / 1.1
-                      ),
-                      color: 'text-red-600'
-                    },
-                    {
-                      label: 'If build cost / SF -10%',
-                      icon: <TrendingUp className="h-5 w-5 text-green-500" />,
-                      value: scenarioValue(
-                        sensitivity?.cost_down_10?.yield_on_cost ?? sensitivity?.costDown10YieldOnCost,
-                        (base) => base / 0.9
-                      ),
-                      color: 'text-green-600'
-                    },
-                    {
-                      label: 'If production +10%',
-                      icon: <TrendingUp className="h-5 w-5 text-green-500" />,
-                      value: scenarioValue(
-                        sensitivity?.revenue_up_10?.yield_on_cost ?? sensitivity?.revenueUp10YieldOnCost,
-                        (base) => base * 1.1
-                      ),
-                      color: 'text-green-600'
-                    },
-                    {
-                      label: 'If production -10%',
-                      icon: <TrendingDown className="h-5 w-5 text-red-500" />,
-                      value: scenarioValue(
-                        sensitivity?.revenue_down_10?.yield_on_cost ?? sensitivity?.revenueDown10YieldOnCost,
-                        (base) => base * 0.9
-                      ),
-                      color: 'text-red-600'
-                    }
-                  ];
-                } else {
-                  cards = [
-                    {
-                      label: 'If costs +10%',
-                      icon: <TrendingDown className="h-5 w-5 text-red-500" />,
-                      value: scenarioValue(
-                        sensitivity?.cost_up_10?.yield_on_cost ?? sensitivity?.costUp10YieldOnCost,
-                        (base) => base / 1.1
-                      ),
-                      color: 'text-red-600'
-                    },
-                    {
-                      label: 'If costs -10%',
-                      icon: <TrendingUp className="h-5 w-5 text-green-500" />,
-                      value: scenarioValue(
-                        sensitivity?.cost_down_10?.yield_on_cost ?? sensitivity?.costDown10YieldOnCost,
-                        (base) => base / 0.9
-                      ),
-                      color: 'text-green-600'
-                    },
-                    {
-                      label: 'If revenue +10%',
-                      icon: <TrendingUp className="h-5 w-5 text-green-500" />,
-                      value: scenarioValue(
-                        sensitivity?.revenue_up_10?.yield_on_cost ?? sensitivity?.revenueUp10YieldOnCost,
-                        (base) => base * 1.1
-                      ),
-                      color: 'text-green-600'
-                    },
-                    {
-                      label: 'If revenue -10%',
-                      icon: <TrendingDown className="h-5 w-5 text-red-500" />,
-                      value: scenarioValue(
-                        sensitivity?.revenue_down_10?.yield_on_cost ?? sensitivity?.revenueDown10YieldOnCost,
-                        (base) => base * 0.9
-                      ),
-                      color: 'text-red-600'
-                    }
-                  ];
-                }
-
-                return (
-                  <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {cards.map(({ label, icon, value, color }) => (
-                        <div key={label} className="bg-white rounded-lg p-4 shadow-sm">
-                          <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">{label}</p>
-                          <div className="flex items-center justify-between">
-                            {icon}
-                            <span className={`text-lg font-bold ${color}`}>
-                              {value !== '—' ? `${value} yield` : '—'}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {isHotel && (
-                      <div className="mt-4 border-t border-slate-100 pt-4">
-                        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                          ADR &amp; Occupancy Sensitivity (Hotel)
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-600">
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="font-semibold">If ADR -$10</div>
-                            <div className="mt-1">
-                              {typeof adrMinus10Yield === 'number'
-                                ? `${formatters.percentage(adrMinus10Yield)} yield`
-                                : '—'}
-                            </div>
-                          </div>
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="font-semibold">If ADR +$10</div>
-                            <div className="mt-1">
-                              {typeof adrPlus10Yield === 'number'
-                                ? `${formatters.percentage(adrPlus10Yield)} yield`
-                                : '—'}
-                            </div>
-                          </div>
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="font-semibold">If occupancy -5 pts</div>
-                            <div className="mt-1">
-                              {typeof occMinus5Yield === 'number'
-                                ? `${formatters.percentage(occMinus5Yield)} yield`
-                                : '—'}
-                            </div>
-                          </div>
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="font-semibold">If occupancy +5 pts</div>
-                            <div className="mt-1">
-                              {typeof occPlus5Yield === 'number'
-                                ? `${formatters.percentage(occPlus5Yield)} yield`
-                                : '—'}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    <div className="p-4 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg">
-                      <p className="text-xs text-gray-600 uppercase tracking-wider mb-2">Break-even needs:</p>
-                      <span className="text-xl font-bold text-purple-700">{occLabel}</span>
-                    </div>
-                  </>
-                );
-              })()
-            )}
-          </div>
-        </div>
       </div>
       </section>
 
