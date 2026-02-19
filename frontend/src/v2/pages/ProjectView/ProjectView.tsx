@@ -91,7 +91,10 @@ export const ProjectView: React.FC = () => {
             error={dealShieldState.error}
           />
         ) : activeView === 'executive' ? (
-          <ExecutiveViewComplete project={project} />
+          <ExecutiveViewComplete
+            project={project}
+            dealShieldData={dealShieldState.data}
+          />
         ) : (
           <ConstructionView project={project} />
         )}

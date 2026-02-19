@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Project } from '../../types';
+import { DealShieldViewModel, Project } from '../../types';
 import { formatters, safeGet } from '../../utils/displayFormatters';
 import { formatPerSf } from '@/v2/utils/formatters';
 import { BackendDataMapper } from '../../utils/backendDataMapper';
@@ -24,6 +24,7 @@ const DEBUG_EXECUTIVE =
 
 interface Props {
   project: Project;
+  dealShieldData?: DealShieldViewModel | null;
 }
 
 // Local title casing to avoid depending on missing formatters.titleCase
@@ -34,6 +35,12 @@ const toTitleCase = (value?: string): string => {
     .replace(/_/g, ' ')
     .toLowerCase()
     .replace(/\b\w/g, c => c.toUpperCase());
+};
+
+const toComparableKey = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim().toLowerCase();
+  return trimmed ? trimmed.replace(/\s+/g, '_') : null;
 };
 
 type AnyRecord = Record<string, any>;
@@ -115,7 +122,7 @@ const SectionCard: React.FC<SectionCardProps> = ({ title, subtitle, className, c
   </div>
 );
 
-export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
+export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData }) => {
   const navigate = useNavigate();
   const [isScenarioOpen, setIsScenarioOpen] = useState(false);
   const [isTrustPanelOpen, setIsTrustPanelOpen] = useState(false);
@@ -161,6 +168,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     displayData?.buildingType ??
     '';
   const parsedBuildingType = rawBuildingType.toString().toLowerCase();
+  const normalizedBuildingType = parsedBuildingType.replace(/\s+/g, '_');
+  const isMultifamilyProject =
+    normalizedBuildingType === 'multifamily' ||
+    normalizedBuildingType === 'multi_family';
   const rawSubtype =
     analysis?.parsed_input?.subtype ??
     analysis?.parsed_input?.building_subtype ??
@@ -171,6 +182,42 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     .toString()
     .toLowerCase()
     .replace(/\s+/g, '_');
+  const dealShieldRecord = toRecord(dealShieldData);
+  const hasDealShieldPayload = Object.keys(dealShieldRecord).length > 0;
+  const dealShieldProvenanceRecord = coalesceRecord(
+    dealShieldRecord.decision_insurance_provenance,
+    dealShieldRecord.decisionInsuranceProvenance,
+    toRecord(dealShieldRecord.provenance).decision_insurance,
+    toRecord(dealShieldRecord.provenance).decisionInsurance
+  );
+  const flexBeforeBreakProvenanceRecord = coalesceRecord(
+    dealShieldProvenanceRecord.flex_before_break_pct,
+    dealShieldProvenanceRecord.flexBeforeBreakPct
+  );
+  const firstBreakConditionRecord = coalesceRecord(
+    dealShieldRecord.first_break_condition,
+    dealShieldRecord.firstBreakCondition
+  );
+  const hasFirstBreakCondition = Object.keys(firstBreakConditionRecord).length > 0;
+  const firstBreakScenarioId = toComparableKey(
+    firstBreakConditionRecord.scenario_id ?? firstBreakConditionRecord.scenarioId
+  );
+  const firstBreakScenarioLabel = toComparableKey(
+    firstBreakConditionRecord.scenario_label ?? firstBreakConditionRecord.scenarioLabel
+  );
+  const hasBaseBreakCondition =
+    hasFirstBreakCondition &&
+    (firstBreakScenarioId === 'base' || firstBreakScenarioLabel === 'base');
+  const flexBeforeBreakReason = toComparableKey(flexBeforeBreakProvenanceRecord.reason);
+  const hasBaseAlreadyBroken = flexBeforeBreakReason === 'base_already_broken';
+  const flexBeforeBreakBand = toComparableKey(
+    dealShieldRecord.flex_before_break_band ??
+    dealShieldRecord.flexBeforeBreakBand ??
+    flexBeforeBreakProvenanceRecord.band
+  );
+  const hasTightFlexBand =
+    typeof flexBeforeBreakBand === 'string' &&
+    flexBeforeBreakBand.includes('tight');
   const displaySubtypeLower = (displayData?.buildingSubtype || '')
     .toString()
     .toLowerCase()
@@ -830,6 +877,16 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
 
     decisionStatus = 'NO-GO';
   })();
+  const canonicalDealShieldDecisionStatus: DecisionStatus | undefined = (() => {
+    if (!isMultifamilyProject || !hasDealShieldPayload) return undefined;
+    if (hasBaseBreakCondition || hasBaseAlreadyBroken) return 'NO-GO';
+    if (hasTightFlexBand) return 'Needs Work';
+    return undefined;
+  })();
+  if (canonicalDealShieldDecisionStatus) {
+    decisionStatus = canonicalDealShieldDecisionStatus;
+  }
+  const isDealShieldCanonicalStatusActive = Boolean(canonicalDealShieldDecisionStatus);
   const decisionStatusLabel =
     decisionStatus === 'Needs Work'
       ? 'Needs Work'
@@ -1209,7 +1266,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     typeof displayData.irr === 'number' && Number.isFinite(displayData.irr)
       ? displayData.irr
       : undefined;
-  const normalizedInvestmentDecision = backendDecision ?? decisionStatus;
+  const normalizedInvestmentDecision = isDealShieldCanonicalStatusActive
+    ? decisionStatus
+    : backendDecision ?? decisionStatus;
   const irrBelowHurdle =
     normalizedInvestmentDecision === 'NO-GO' &&
     (
@@ -1890,6 +1949,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               >
                 Investment Decision: {decisionStatusLabel}
               </h3>
+              {isDealShieldCanonicalStatusActive && (
+                <p className="mt-1 text-xs text-slate-600">
+                  Decision status aligned to DealShield collapse policy.
+                </p>
+              )}
               <button
                 type="button"
                 onClick={() => openTrustPanel('lens')}

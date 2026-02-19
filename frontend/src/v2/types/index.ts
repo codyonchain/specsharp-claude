@@ -369,7 +369,18 @@ export interface DecisionInsuranceRankedLikelyWrongItem {
 export interface DecisionInsuranceProvenanceEntry {
   status?: 'available' | 'unavailable' | string;
   reason?: string | null;
+  band?: string | null;
   [key: string]: any;
+}
+
+export interface DecisionInsuranceFlexBandPolicy {
+  tight_lt?: number;
+  moderate_lt?: number;
+  labels?: {
+    tight?: string;
+    moderate?: string;
+    comfortable?: string;
+  };
 }
 
 export interface DecisionInsuranceProvenance {
@@ -378,6 +389,7 @@ export interface DecisionInsuranceProvenance {
   primary_control_variable?: DecisionInsuranceProvenanceEntry;
   first_break_condition?: DecisionInsuranceProvenanceEntry;
   flex_before_break_pct?: DecisionInsuranceProvenanceEntry;
+  flex_before_break_bands?: DecisionInsuranceFlexBandPolicy;
   exposure_concentration_pct?: DecisionInsuranceProvenanceEntry;
   ranked_likely_wrong?: DecisionInsuranceProvenanceEntry;
   [key: string]: any;
@@ -387,6 +399,7 @@ export interface DealShieldDecisionInsuranceFields {
   primary_control_variable?: DecisionInsurancePrimaryControlVariable | null;
   first_break_condition?: DecisionInsuranceFirstBreakCondition | null;
   flex_before_break_pct?: number | null;
+  flex_before_break_band?: string | null;
   exposure_concentration_pct?: number | null;
   ranked_likely_wrong?: DecisionInsuranceRankedLikelyWrongItem[];
   decision_insurance_provenance?: DecisionInsuranceProvenance;
