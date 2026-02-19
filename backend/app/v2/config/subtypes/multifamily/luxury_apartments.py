@@ -17,6 +17,7 @@ CONFIG = (
         display_name="Class A / Luxury Apartments",
         base_cost_per_sf=185,
         cost_range=(165, 205),
+        scope_items_profile="multifamily_luxury_apartments_structural_v1",
         dealshield_tile_profile="multifamily_luxury_apartments_v1",
         equipment_cost_per_sf=25,  # Appliances, fixtures
         typical_floors=4,

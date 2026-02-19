@@ -17,6 +17,7 @@ CONFIG = (
         display_name="Affordable Housing",
         base_cost_per_sf=120,
         cost_range=(110, 130),
+        scope_items_profile="multifamily_affordable_housing_structural_v1",
         dealshield_tile_profile="multifamily_affordable_housing_v1",
         equipment_cost_per_sf=10,
         typical_floors=3,
