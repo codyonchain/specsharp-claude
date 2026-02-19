@@ -190,6 +190,23 @@ const formatAssumptionPercent = (value: unknown) => {
   }).format(percentValue)}%`;
 };
 
+const normalizePercentValue = (value: number) => (Math.abs(value) <= 1.5 ? value * 100 : value);
+
+const formatAssumptionPercentFixed2 = (value: unknown) => {
+  const numeric = toFiniteNumber(value);
+  if (numeric === null) return MISSING_VALUE;
+  return `${new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(normalizePercentValue(numeric))}%`;
+};
+
+const classifyFlexBeforeBreak = (value: number): 'Structurally Tight' | 'Moderate' | 'Flexible' => {
+  if (value < 2.0) return 'Structurally Tight';
+  if (value < 5.0) return 'Moderate';
+  return 'Flexible';
+};
+
 const formatAssumptionYears = (value: unknown) => {
   const numeric = toFiniteNumber(value);
   if (numeric === null) return MISSING_VALUE;
@@ -478,6 +495,15 @@ export const DealShieldView: React.FC<Props> = ({
   const exposureConcentrationPct = toFiniteNumber(
     (viewModel as any)?.exposure_concentration_pct ?? (viewModel as any)?.exposureConcentrationPct
   );
+  const firstBreakScenarioLabel = formatValue(
+    firstBreakCondition?.scenario_label ?? firstBreakCondition?.scenario_id
+  );
+  const flexBeforeBreakDisplay = flexBeforeBreakPct !== null
+    ? `${formatAssumptionPercentFixed2(flexBeforeBreakPct)} (${classifyFlexBeforeBreak(normalizePercentValue(flexBeforeBreakPct))})`
+    : null;
+  const exposureConcentrationSentence = exposureConcentrationPct !== null
+    ? `Primary control variable contributes ${formatAssumptionPercentFixed2(exposureConcentrationPct)} of modeled downside sensitivity.`
+    : null;
 
   const rankedLikelyWrongRaw =
     (viewModel as any)?.ranked_likely_wrong ??
@@ -939,6 +965,7 @@ export const DealShieldView: React.FC<Props> = ({
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">First Break Condition</p>
                     {firstBreakCondition ? (
                       <div className="mt-2 space-y-1 text-sm text-slate-700">
+                        <p>Break occurs in {firstBreakScenarioLabel}: value gap turns negative.</p>
                         <p>
                           <span className="font-medium text-slate-600">Scenario:</span>{' '}
                           <span>{formatValue(firstBreakCondition.scenario_label ?? firstBreakCondition.scenario_id)}</span>
@@ -956,14 +983,14 @@ export const DealShieldView: React.FC<Props> = ({
                         </p>
                       </div>
                     ) : (
-                      <p className="mt-2 text-sm text-slate-700">{firstBreakUnavailableReason ?? 'Unavailable.'}</p>
+                      <p className="mt-2 text-sm text-slate-700">{firstBreakUnavailableReason ?? 'No modeled break condition.'}</p>
                     )}
                   </div>
 
                   <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Flex Before Break %</p>
                     {flexBeforeBreakPct !== null ? (
-                      <p className="mt-2 text-sm text-slate-700">{formatAssumptionPercent(flexBeforeBreakPct)}</p>
+                      <p className="mt-2 text-sm text-slate-700">{flexBeforeBreakDisplay}</p>
                     ) : (
                       <p className="mt-2 text-sm text-slate-700">{flexBeforeBreakUnavailableReason ?? 'Unavailable.'}</p>
                     )}
@@ -972,7 +999,10 @@ export const DealShieldView: React.FC<Props> = ({
                   <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Exposure Concentration %</p>
                     {exposureConcentrationPct !== null ? (
-                      <p className="mt-2 text-sm text-slate-700">{formatAssumptionPercent(exposureConcentrationPct)}</p>
+                      <div className="mt-2 space-y-1 text-sm text-slate-700">
+                        <p>{formatAssumptionPercent(exposureConcentrationPct)}</p>
+                        <p>{exposureConcentrationSentence}</p>
+                      </div>
                     ) : (
                       <p className="mt-2 text-sm text-slate-700">{exposureConcentrationUnavailableReason ?? 'Unavailable.'}</p>
                     )}
