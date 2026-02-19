@@ -1,7 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Download, ShieldCheck } from 'lucide-react';
 import { api } from '../../api/client';
-import { DealShieldControls, DealShieldViewModel } from '../../types';
+import {
+  DealShieldControls,
+  DealShieldViewModel,
+  DecisionInsuranceFirstBreakCondition,
+  DecisionInsurancePrimaryControlVariable,
+  DecisionInsuranceProvenance,
+  DecisionInsuranceRankedLikelyWrongItem,
+} from '../../types';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { ErrorMessage } from '../../components/common/ErrorMessage';
 import { pdfService } from '@/services/api';
@@ -199,6 +206,24 @@ const formatAssumptionMonths = (value: unknown) => {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(numeric)} mo`;
+};
+
+const normalizeUnavailableReason = (reason: unknown): string | null => {
+  if (typeof reason !== 'string') return null;
+  const trimmed = reason.trim();
+  if (!trimmed) return null;
+  const spaced = trimmed.replace(/_/g, ' ');
+  const sentence = spaced.charAt(0).toUpperCase() + spaced.slice(1);
+  return sentence.endsWith('.') ? sentence : `${sentence}.`;
+};
+
+const unavailableReasonFromProvenance = (entry: unknown): string | null => {
+  if (!entry || typeof entry !== 'object') return null;
+  const block = entry as Record<string, unknown>;
+  if (block.status === 'unavailable') {
+    return normalizeUnavailableReason(block.reason) ?? 'Unavailable.';
+  }
+  return null;
 };
 
 const normalizeDisclosures = (value: unknown): string[] => {
@@ -421,6 +446,87 @@ export const DealShieldView: React.FC<Props> = ({
     : redFlagsActions.map((item: any) => item?.action).filter(Boolean);
 
   const provenance = (viewModel as any)?.provenance ?? (dealShieldData as any)?.provenance ?? {};
+  const decisionInsuranceProvenanceRaw =
+    (viewModel as any)?.decision_insurance_provenance ??
+    (viewModel as any)?.decisionInsuranceProvenance ??
+    provenance?.decision_insurance ??
+    provenance?.decisionInsurance;
+  const decisionInsuranceProvenance =
+    decisionInsuranceProvenanceRaw && typeof decisionInsuranceProvenanceRaw === 'object'
+      ? (decisionInsuranceProvenanceRaw as DecisionInsuranceProvenance)
+      : null;
+
+  const primaryControlVariableRaw =
+    (viewModel as any)?.primary_control_variable ??
+    (viewModel as any)?.primaryControlVariable;
+  const primaryControlVariable =
+    primaryControlVariableRaw && typeof primaryControlVariableRaw === 'object'
+      ? (primaryControlVariableRaw as DecisionInsurancePrimaryControlVariable)
+      : null;
+
+  const firstBreakConditionRaw =
+    (viewModel as any)?.first_break_condition ??
+    (viewModel as any)?.firstBreakCondition;
+  const firstBreakCondition =
+    firstBreakConditionRaw && typeof firstBreakConditionRaw === 'object'
+      ? (firstBreakConditionRaw as DecisionInsuranceFirstBreakCondition)
+      : null;
+
+  const flexBeforeBreakPct = toFiniteNumber(
+    (viewModel as any)?.flex_before_break_pct ?? (viewModel as any)?.flexBeforeBreakPct
+  );
+  const exposureConcentrationPct = toFiniteNumber(
+    (viewModel as any)?.exposure_concentration_pct ?? (viewModel as any)?.exposureConcentrationPct
+  );
+
+  const rankedLikelyWrongRaw =
+    (viewModel as any)?.ranked_likely_wrong ??
+    (viewModel as any)?.rankedLikelyWrong ??
+    [];
+  const rankedLikelyWrong = Array.isArray(rankedLikelyWrongRaw)
+    ? (rankedLikelyWrongRaw as DecisionInsuranceRankedLikelyWrongItem[])
+    : [];
+
+  const primaryControlUnavailableReason = unavailableReasonFromProvenance(
+    decisionInsuranceProvenance?.primary_control_variable
+  );
+  const firstBreakUnavailableReason = unavailableReasonFromProvenance(
+    decisionInsuranceProvenance?.first_break_condition
+  );
+  const flexBeforeBreakUnavailableReason = unavailableReasonFromProvenance(
+    decisionInsuranceProvenance?.flex_before_break_pct
+  );
+  const exposureConcentrationUnavailableReason = unavailableReasonFromProvenance(
+    decisionInsuranceProvenance?.exposure_concentration_pct
+  );
+  const rankedLikelyWrongUnavailableReason = unavailableReasonFromProvenance(
+    decisionInsuranceProvenance?.ranked_likely_wrong
+  );
+
+  const decisionInsuranceUnavailableNotes = useMemo(
+    () => [
+      primaryControlUnavailableReason,
+      firstBreakUnavailableReason,
+      flexBeforeBreakUnavailableReason,
+      exposureConcentrationUnavailableReason,
+      rankedLikelyWrongUnavailableReason,
+    ].filter((value, index, array): value is string => !!value && array.indexOf(value) === index),
+    [
+      exposureConcentrationUnavailableReason,
+      firstBreakUnavailableReason,
+      flexBeforeBreakUnavailableReason,
+      primaryControlUnavailableReason,
+      rankedLikelyWrongUnavailableReason,
+    ]
+  );
+  const hasDecisionInsuranceData =
+    !!primaryControlVariable ||
+    !!firstBreakCondition ||
+    flexBeforeBreakPct !== null ||
+    exposureConcentrationPct !== null ||
+    rankedLikelyWrong.length > 0 ||
+    decisionInsuranceUnavailableNotes.length > 0;
+
   const financingAssumptionsRaw =
     (viewModel as any)?.financing_assumptions ??
     provenance?.financing_assumptions ??
@@ -802,6 +908,112 @@ export const DealShieldView: React.FC<Props> = ({
 
       {!dealShieldLoading && !dealShieldError && dealShieldData && (
         <>
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="mb-4 text-xl font-semibold tracking-tight text-slate-900">Decision Insurance</h3>
+            {hasDecisionInsuranceData ? (
+              <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Primary Control Variable</p>
+                    {primaryControlVariable ? (
+                      <div className="mt-2 space-y-1 text-sm text-slate-700">
+                        <p>
+                          <span className="font-medium text-slate-600">Label:</span>{' '}
+                          <span>{labelFrom(primaryControlVariable, '-')}</span>
+                        </p>
+                        <p>
+                          <span className="font-medium text-slate-600">Impact:</span>{' '}
+                          <span>{formatAssumptionPercent(primaryControlVariable.impact_pct)}</span>
+                        </p>
+                        <p>
+                          <span className="font-medium text-slate-600">Severity:</span>{' '}
+                          <span>{formatValue(primaryControlVariable.severity)}</span>
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-slate-700">{primaryControlUnavailableReason ?? 'Unavailable.'}</p>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">First Break Condition</p>
+                    {firstBreakCondition ? (
+                      <div className="mt-2 space-y-1 text-sm text-slate-700">
+                        <p>
+                          <span className="font-medium text-slate-600">Scenario:</span>{' '}
+                          <span>{formatValue(firstBreakCondition.scenario_label ?? firstBreakCondition.scenario_id)}</span>
+                        </p>
+                        <p>
+                          <span className="font-medium text-slate-600">Observed:</span>{' '}
+                          <span>{formatDecisionMetricValue(firstBreakCondition.observed_value, 'derived.value_gap')}</span>
+                        </p>
+                        <p>
+                          <span className="font-medium text-slate-600">Threshold:</span>{' '}
+                          <span>
+                            {formatValue(firstBreakCondition.operator)}{' '}
+                            {formatDecisionMetricValue(firstBreakCondition.threshold, 'derived.value_gap')}
+                          </span>
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-slate-700">{firstBreakUnavailableReason ?? 'Unavailable.'}</p>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Flex Before Break %</p>
+                    {flexBeforeBreakPct !== null ? (
+                      <p className="mt-2 text-sm text-slate-700">{formatAssumptionPercent(flexBeforeBreakPct)}</p>
+                    ) : (
+                      <p className="mt-2 text-sm text-slate-700">{flexBeforeBreakUnavailableReason ?? 'Unavailable.'}</p>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Exposure Concentration %</p>
+                    {exposureConcentrationPct !== null ? (
+                      <p className="mt-2 text-sm text-slate-700">{formatAssumptionPercent(exposureConcentrationPct)}</p>
+                    ) : (
+                      <p className="mt-2 text-sm text-slate-700">{exposureConcentrationUnavailableReason ?? 'Unavailable.'}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Ranked Most Likely Wrong</p>
+                  {rankedLikelyWrong.length > 0 ? (
+                    <ul className="mt-2 space-y-2 text-sm text-slate-700">
+                      {rankedLikelyWrong.map((entry, index) => (
+                        <li key={`${entry.id ?? 'ranked-likely-wrong'}-${index}`} className="rounded border border-slate-200 bg-white px-2.5 py-2">
+                          <p className="font-medium text-slate-800">{formatValue(entry.text ?? entry.id)}</p>
+                          <p className="mt-1 text-xs text-slate-600">
+                            Impact: {formatAssumptionPercent(entry.impact_pct)} | Severity: {formatValue(entry.severity)}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-600">Why: {formatValue(entry.why)}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-sm text-slate-700">{rankedLikelyWrongUnavailableReason ?? 'Unavailable.'}</p>
+                  )}
+                </div>
+
+                {decisionInsuranceUnavailableNotes.length > 0 && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Unavailable Reason(s)</p>
+                    <ul className="mt-2 list-disc pl-5 text-xs text-amber-800 space-y-0.5">
+                      {decisionInsuranceUnavailableNotes.map((note, index) => (
+                        <li key={`decision-insurance-unavailable-${index}`}>{note}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-700">Decision Insurance unavailable for this profile/run.</p>
+            )}
+          </section>
+
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="mb-4 text-xl font-semibold tracking-tight text-slate-900">Decision Metrics</h3>
             <div className="overflow-x-auto">
