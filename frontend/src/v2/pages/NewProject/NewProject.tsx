@@ -249,7 +249,9 @@ export const NewProject: React.FC = () => {
   type SpecialFeatureOption = {
     id: string;
     name: string;
-    cost: number;
+    cost?: number;
+    costPerSF?: number;
+    costPerSFBySubtype?: Record<string, number>;
     description: string;
     allowedSubtypes?: string[];
   };
@@ -471,35 +473,53 @@ export const NewProject: React.FC = () => {
         {
           id: 'parking_garage',
           name: 'Parking Garage',
-          cost: 4500000,
+          costPerSFBySubtype: {
+            luxury_apartments: 45,
+            market_rate_apartments: 32,
+            affordable_housing: 26,
+          },
           description: 'Structured resident and guest parking',
           allowedSubtypes: ['market_rate_apartments', 'luxury_apartments', 'affordable_housing']
         },
         {
           id: 'pool',
           name: 'Pool',
-          cost: 1750000,
+          costPerSFBySubtype: {
+            luxury_apartments: 25,
+            market_rate_apartments: 18,
+            affordable_housing: 12,
+          },
           description: 'Outdoor pool with code-compliant deck and support spaces',
           allowedSubtypes: ['market_rate_apartments', 'luxury_apartments', 'affordable_housing']
         },
         {
           id: 'fitness_center',
           name: 'Fitness Center',
-          cost: 650000,
+          costPerSFBySubtype: {
+            luxury_apartments: 20,
+            market_rate_apartments: 14,
+            affordable_housing: 10,
+          },
           description: 'Resident fitness room with specialty flooring and MEP upgrades',
           allowedSubtypes: ['market_rate_apartments', 'luxury_apartments', 'affordable_housing']
         },
         {
           id: 'rooftop_amenity',
           name: 'Rooftop Amenity',
-          cost: 1400000,
+          costPerSFBySubtype: {
+            luxury_apartments: 35,
+            market_rate_apartments: 24,
+            affordable_housing: 18,
+          },
           description: 'Rooftop gathering area with shade structures and utility tie-ins',
           allowedSubtypes: ['market_rate_apartments', 'luxury_apartments', 'affordable_housing']
         },
         {
           id: 'concierge',
           name: 'Concierge Lobby',
-          cost: 300000,
+          costPerSFBySubtype: {
+            luxury_apartments: 15,
+          },
           description: 'Enhanced staffed lobby and service desk buildout',
           allowedSubtypes: ['luxury_apartments']
         }
@@ -700,6 +720,7 @@ export const NewProject: React.FC = () => {
           location: locationValue,
           finishLevel: finishLevelForApi(finishLevel),
           projectClass: projectComplexity,
+          special_features: specialFeatures,
           signal: controller.signal,
         });
 
@@ -739,7 +760,7 @@ export const NewProject: React.FC = () => {
         previewAbortRef.current = null;
       }
     };
-  }, [normalizedDescription, squareFootageInput, normalizedLocationInput, isLocationFormatValid, finishLevel, finishLevelLocked, projectComplexity]);
+  }, [normalizedDescription, squareFootageInput, normalizedLocationInput, isLocationFormatValid, finishLevel, finishLevelLocked, projectComplexity, specialFeatures]);
   
   // Calculate total cost including features
   const handleExampleClick = (example: any) => {
@@ -779,7 +800,9 @@ export const NewProject: React.FC = () => {
     if (analysis) {
       // Auto-detect features from description
       const parsed = parseDescription(description);
-      setSpecialFeatures(parsed.specialFeatures);
+      if (specialFeatures.length === 0 && parsed.specialFeatures.length > 0) {
+        setSpecialFeatures(parsed.specialFeatures);
+      }
       if (!finishLevelLocked) {
         const engineFinish = analysis.calculations?.project_info?.finish_level;
         const normalizedEngineFinish =
@@ -953,6 +976,94 @@ export const NewProject: React.FC = () => {
     
     return `${typeDisplay} - ${subtypeDisplay}`;
   };
+
+  type FeatureDisplayPricing = {
+    amountLabel: string;
+    detailLabel?: string;
+    totalCost?: number;
+    isEstimate: boolean;
+    isPlaceholder: boolean;
+  };
+
+  const isMultifamilyProject = parsedInput?.building_type === 'multifamily';
+  const hasFeatureSquareFootage = typeof squareFootageSummary === 'number' && squareFootageSummary > 0;
+
+  const resolveFeatureCostPerSF = (feature: SpecialFeatureOption): number | undefined => {
+    const subtypeCost = currentSubtype && feature.costPerSFBySubtype
+      ? feature.costPerSFBySubtype[currentSubtype]
+      : undefined;
+    if (typeof subtypeCost === 'number' && Number.isFinite(subtypeCost)) {
+      return subtypeCost;
+    }
+    if (typeof feature.costPerSF === 'number' && Number.isFinite(feature.costPerSF)) {
+      return feature.costPerSF;
+    }
+    if (feature.costPerSFBySubtype) {
+      const fallback = Object.values(feature.costPerSFBySubtype).find(
+        (value) => typeof value === 'number' && Number.isFinite(value)
+      );
+      if (typeof fallback === 'number') {
+        return fallback;
+      }
+    }
+    return undefined;
+  };
+
+  const getFeatureDisplayPricing = (feature: SpecialFeatureOption): FeatureDisplayPricing => {
+    const costPerSF = resolveFeatureCostPerSF(feature);
+    if (isMultifamilyProject && typeof costPerSF === 'number') {
+      if (hasFeatureSquareFootage && squareFootageSummary) {
+        const totalCost = costPerSF * squareFootageSummary;
+        return {
+          amountLabel: `+${formatCurrency(totalCost)}`,
+          detailLabel: `${formatCurrency(costPerSF)}/SF × ${formatNumber(squareFootageSummary)} SF`,
+          totalCost,
+          isEstimate: false,
+          isPlaceholder: false,
+        };
+      }
+      return {
+        amountLabel: `+${formatCurrency(costPerSF)}/SF`,
+        detailLabel: 'Estimate until project SF is provided',
+        isEstimate: true,
+        isPlaceholder: false,
+      };
+    }
+
+    if (typeof feature.cost === 'number' && Number.isFinite(feature.cost)) {
+      return {
+        amountLabel: `+${formatCurrency(feature.cost)}`,
+        detailLabel: isMultifamilyProject ? 'Estimate placeholder' : 'Static placeholder value',
+        totalCost: feature.cost,
+        isEstimate: true,
+        isPlaceholder: true,
+      };
+    }
+
+    return {
+      amountLabel: '+—',
+      detailLabel: 'Pricing unavailable',
+      isEstimate: true,
+      isPlaceholder: true,
+    };
+  };
+
+  const selectedFeatureDetails = applicableSpecialFeatures
+    .filter((feature) => specialFeatures.includes(feature.id))
+    .map((feature) => ({ feature, pricing: getFeatureDisplayPricing(feature) }));
+  const selectedFeatureKnownTotal = selectedFeatureDetails.reduce(
+    (sum, item) => sum + (item.pricing.totalCost ?? 0),
+    0
+  );
+  const selectedFeatureHasUnknownTotal = selectedFeatureDetails.some(
+    (item) => item.pricing.totalCost === undefined
+  );
+  const selectedFeatureHasEstimate = selectedFeatureDetails.some(
+    (item) => item.pricing.isEstimate
+  );
+  const hasStaticFeaturePlaceholders = applicableSpecialFeatures.some(
+    (feature) => getFeatureDisplayPricing(feature).isPlaceholder
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
@@ -1397,41 +1508,82 @@ export const NewProject: React.FC = () => {
                 {/* Right Column - Special Features */}
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-3">Special Features</p>
+                  <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+                    <p className="text-[11px] text-blue-700">
+                      Feature costs are applied as $/SF × project SF in final estimate.
+                    </p>
+                    {isMultifamilyProject && !hasFeatureSquareFootage && (
+                      <p className="mt-1 text-[11px] text-blue-700">
+                        Multifamily values below are estimates until square footage is provided.
+                      </p>
+                    )}
+                    {hasStaticFeaturePlaceholders && (
+                      <p className="mt-1 text-[11px] text-blue-700">
+                        Some card values are static placeholders and may differ from backend-applied totals.
+                      </p>
+                    )}
+                  </div>
                   <div className="space-y-2 max-h-80 overflow-y-auto border border-gray-100 rounded-lg p-3">
                     {parsedInput && applicableSpecialFeatures.length > 0 ? (
-                      applicableSpecialFeatures.map(feature => (
-                        <label
-                          key={feature.id}
-                          className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer border border-transparent hover:border-gray-200 transition"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={specialFeatures.includes(feature.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSpecialFeatures([...specialFeatures, feature.id]);
-                              } else {
-                                setSpecialFeatures(specialFeatures.filter(f => f !== feature.id));
-                              }
-                            }}
-                            className="mt-1 h-4 w-4 text-blue-600 rounded"
-                          />
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-gray-900">{feature.name}</span>
-                              <span className="text-xs text-green-600 font-semibold">
-                                +{formatCurrency(feature.cost)}
-                              </span>
+                      applicableSpecialFeatures.map(feature => {
+                        const pricing = getFeatureDisplayPricing(feature);
+                        return (
+                          <label
+                            key={feature.id}
+                            className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer border border-transparent hover:border-gray-200 transition"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={specialFeatures.includes(feature.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSpecialFeatures([...specialFeatures, feature.id]);
+                                } else {
+                                  setSpecialFeatures(specialFeatures.filter(f => f !== feature.id));
+                                }
+                              }}
+                              className="mt-1 h-4 w-4 text-blue-600 rounded"
+                            />
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-900">{feature.name}</span>
+                                <span className="text-xs text-green-600 font-semibold">
+                                  {pricing.amountLabel}
+                                </span>
+                              </div>
+                              <span className="text-xs text-gray-500">{feature.description}</span>
+                              {pricing.detailLabel && (
+                                <p className="mt-1 text-[11px] text-gray-500">{pricing.detailLabel}</p>
+                              )}
                             </div>
-                            <span className="text-xs text-gray-500">{feature.description}</span>
-                          </div>
-                        </label>
-                      ))
+                          </label>
+                        );
+                      })
                     ) : (
                       <div className="text-center py-8 text-gray-400">
                         <Settings className="h-8 w-8 mx-auto mb-2 opacity-50" />
                         <p className="text-sm">No special features available for this building type</p>
                       </div>
+                    )}
+                  </div>
+                  <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                    <p className="text-[11px] uppercase tracking-wide text-gray-500">Selected Feature Impact</p>
+                    {selectedFeatureDetails.length === 0 ? (
+                      <p className="text-sm text-gray-700">No special features selected.</p>
+                    ) : selectedFeatureHasUnknownTotal ? (
+                      <p className="text-sm text-gray-700">
+                        {selectedFeatureDetails.length} selected. Impact shown as estimate.
+                      </p>
+                    ) : (
+                      <p className="text-sm font-semibold text-gray-900">
+                        +{formatCurrency(selectedFeatureKnownTotal)}
+                        {selectedFeatureHasEstimate && <span className="ml-1 text-gray-600">(estimate)</span>}
+                      </p>
+                    )}
+                    {!selectedFeatureHasUnknownTotal && hasFeatureSquareFootage && selectedFeatureKnownTotal > 0 && (
+                      <p className="text-[11px] text-gray-500">
+                        {formatCurrency(selectedFeatureKnownTotal / squareFootageSummary!)} / SF combined impact
+                      </p>
                     )}
                   </div>
                 </div>

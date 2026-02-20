@@ -522,6 +522,73 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
       ? calculations.construction_costs.special_features_total
       : 0;
 
+  const extractStringFeatureIds = (value: any): string[] => {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter((entry) => typeof entry === 'string')
+      .map((entry) => String(entry).trim())
+      .filter((entry) => entry.length > 0);
+  };
+
+  const featureLabelFromId = (rawId: string): string =>
+    rawId
+      .replace(/[_-]+/g, ' ')
+      .split(' ')
+      .filter(Boolean)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+
+  const traceFeatureBreakdown = calculationTrace.reduce(
+    (acc: Record<string, { totalCost?: number; costPerSF?: number }>, entry) => {
+      if (entry.step !== 'special_feature_applied' || !entry.payload || typeof entry.payload !== 'object') {
+        return acc;
+      }
+      const featureId =
+        typeof entry.payload.feature === 'string' ? entry.payload.feature.trim() : '';
+      if (!featureId) return acc;
+
+      const totalCost =
+        typeof entry.payload.total_cost === 'number' && Number.isFinite(entry.payload.total_cost)
+          ? entry.payload.total_cost
+          : undefined;
+      const costPerSF =
+        typeof entry.payload.cost_per_sf === 'number' && Number.isFinite(entry.payload.cost_per_sf)
+          ? entry.payload.cost_per_sf
+          : undefined;
+
+      const previous = acc[featureId];
+      acc[featureId] = {
+        totalCost:
+          totalCost !== undefined
+            ? (previous?.totalCost ?? 0) + totalCost
+            : previous?.totalCost,
+        costPerSF: costPerSF ?? previous?.costPerSF,
+      };
+      return acc;
+    },
+    {}
+  );
+
+  const selectedFeatureIds = Array.from(
+    new Set([
+      ...extractStringFeatureIds(calculations?.request_data?.special_features),
+      ...extractStringFeatureIds(calculations?.parsed_input?.special_features),
+      ...extractStringFeatureIds(parsed_input?.special_features),
+      ...extractStringFeatureIds(calculations?.cost_dna?.detected_factors),
+      ...Object.keys(traceFeatureBreakdown),
+    ])
+  );
+
+  const selectedFeatureRows = selectedFeatureIds.map((featureId) => ({
+    featureId,
+    label: featureLabelFromId(featureId),
+    totalCost: traceFeatureBreakdown[featureId]?.totalCost,
+    costPerSF: traceFeatureBreakdown[featureId]?.costPerSF,
+  }));
+  const hasPerFeatureTotals = selectedFeatureRows.some((row) => typeof row.totalCost === 'number');
+  const hasCompletePerFeatureTotals =
+    selectedFeatureRows.length > 0 && selectedFeatureRows.every((row) => typeof row.totalCost === 'number');
+
   const equipmentTotal =
     typeof calculations.construction_costs?.equipment_total === 'number'
       ? calculations.construction_costs.equipment_total
@@ -1741,10 +1808,49 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
                   <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl p-6 border border-orange-200">
                     <p className="text-sm text-orange-700 uppercase tracking-wider mb-3 font-medium">Special Features</p>
                     <p className="text-3xl font-bold text-orange-600">{formatCurrency(specialFeaturesTotal)}</p>
-                    <div className="mt-2 space-y-1">
-                      <p className="text-sm text-gray-700">Emergency Department</p>
-                      <p className="text-xs text-gray-500">$50/SF additional × 200,000 SF</p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Backend aggregate (`special_features_total`) applied to hard costs.
+                    </p>
+                    <div className="mt-3 space-y-2">
+                      {selectedFeatureRows.length > 0 ? (
+                        selectedFeatureRows.map((feature) => (
+                          <div
+                            key={feature.featureId}
+                            className="rounded-lg border border-orange-100 bg-white/70 px-3 py-2"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-sm text-gray-800">{feature.label}</p>
+                              {typeof feature.totalCost === 'number' ? (
+                                <p className="text-sm font-semibold text-gray-900">
+                                  {formatCurrency(feature.totalCost)}
+                                </p>
+                              ) : (
+                                <p className="text-xs text-gray-500">Included in aggregate total</p>
+                              )}
+                            </div>
+                            {typeof feature.costPerSF === 'number' && squareFootage > 0 && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                {formatCurrency(feature.costPerSF)}/SF × {formatNumber(squareFootage)} SF
+                              </p>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-gray-700">
+                          Selected feature IDs were not provided in project data; showing aggregate only.
+                        </p>
+                      )}
                     </div>
+                    {!hasPerFeatureTotals && (
+                      <p className="mt-2 text-xs text-gray-500">
+                        Per-feature dollar contributions were not available in calculation trace for this project.
+                      </p>
+                    )}
+                    {hasPerFeatureTotals && !hasCompletePerFeatureTotals && (
+                      <p className="mt-2 text-xs text-gray-500">
+                        Some feature rows are trace-derived without individual dollar contributions; rely on aggregate total above.
+                      </p>
+                    )}
                   </div>
                 </div>
               </>
