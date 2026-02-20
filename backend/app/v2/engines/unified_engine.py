@@ -37,6 +37,17 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+def _humanize_special_feature_label(feature_id: str) -> str:
+    """Convert config feature keys into user-facing labels."""
+    if not isinstance(feature_id, str):
+        return "Special Feature"
+    tokens = feature_id.replace("-", "_").split("_")
+    words = [token for token in tokens if token]
+    if not words:
+        return "Special Feature"
+    return " ".join(word[:1].upper() + word[1:] for word in words)
+
 # SELECTOR_REGISTRY (Phase 4)
 # - id: construction_schedule_by_building_type
 #   location: build_construction_schedule (top)
@@ -743,18 +754,34 @@ class UnifiedEngine:
         
         # Add special features if any
         special_features_cost = 0
+        special_features_breakdown: List[Dict[str, Any]] = []
+        special_features_breakdown_by_id: Dict[str, Dict[str, Any]] = {}
         if special_features and building_config.special_features:
             for feature in special_features:
                 if isinstance(feature, dict):
                     continue
                 if feature in building_config.special_features:
-                    feature_cost = building_config.special_features[feature] * square_footage
+                    cost_per_sf = float(building_config.special_features[feature])
+                    feature_cost = cost_per_sf * square_footage
                     special_features_cost += feature_cost
+                    row = special_features_breakdown_by_id.get(feature)
+                    if row is None:
+                        row = {
+                            'id': feature,
+                            'cost_per_sf': cost_per_sf,
+                            'total_cost': 0.0,
+                            'label': _humanize_special_feature_label(feature),
+                        }
+                        special_features_breakdown_by_id[feature] = row
+                        special_features_breakdown.append(row)
+                    row['total_cost'] = float(row['total_cost']) + feature_cost
                     self._log_trace("special_feature_applied", {
                         'feature': feature,
-                        'cost_per_sf': building_config.special_features[feature],
+                        'cost_per_sf': cost_per_sf,
                         'total_cost': feature_cost
                     })
+        if special_features_breakdown:
+            special_features_cost = sum(float(item.get('total_cost', 0.0) or 0.0) for item in special_features_breakdown)
         
         # Calculate trade breakdown
         trades = self._calculate_trades(construction_cost, building_config.trades)
@@ -1033,6 +1060,7 @@ class UnifiedEngine:
                 'construction_total': construction_cost,
                 'equipment_total': equipment_cost,
                 'special_features_total': special_features_cost,
+                'special_features_breakdown': special_features_breakdown,
                 'cost_build_up': fallback_cost_build_up
             },
             'cost_dna': cost_dna,  # Add cost DNA for transparency

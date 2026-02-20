@@ -141,6 +141,12 @@ export interface ConstructionCosts {
   construction_total: number;
   equipment_total: number;
   special_features_total: number;
+  special_features_breakdown?: Array<{
+    id: string;
+    cost_per_sf: number;
+    total_cost: number;
+    label: string;
+  }>;
 }
 
 export interface RegionalContext {

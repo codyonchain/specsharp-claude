@@ -232,3 +232,56 @@ def test_multifamily_special_feature_increases_total_project_cost_for_each_subty
 
         assert with_feature["construction_costs"]["special_features_total"] > baseline["construction_costs"]["special_features_total"]
         assert with_feature["totals"]["total_project_cost"] > baseline["totals"]["total_project_cost"]
+
+        config = get_building_config(BuildingType.MULTIFAMILY, subtype)
+        assert config is not None
+        expected_single_total = float(config.special_features[feature]) * 120_000.0
+
+        breakdown = with_feature["construction_costs"].get("special_features_breakdown")
+        assert isinstance(breakdown, list)
+        assert breakdown
+        breakdown_by_id = {item["id"]: item for item in breakdown if isinstance(item, dict) and item.get("id")}
+        assert feature in breakdown_by_id
+        single_entry = breakdown_by_id[feature]
+        assert single_entry.get("cost_per_sf") == float(config.special_features[feature])
+        assert abs(float(single_entry.get("total_cost", 0.0)) - expected_single_total) < 1e-6
+        assert isinstance(single_entry.get("label"), str) and single_entry["label"].strip()
+
+        breakdown_total = sum(float(item.get("total_cost", 0.0)) for item in breakdown if isinstance(item, dict))
+        assert abs(breakdown_total - float(with_feature["construction_costs"]["special_features_total"])) < 1e-6
+
+        available_features = list((config.special_features or {}).keys())
+        assert len(available_features) >= 2
+        selected_multi = available_features[:2]
+        multi_feature = unified_engine.calculate_project(
+            building_type=BuildingType.MULTIFAMILY,
+            subtype=subtype,
+            square_footage=120_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+            special_features=selected_multi,
+        )
+        multi_breakdown = multi_feature["construction_costs"].get("special_features_breakdown")
+        assert isinstance(multi_breakdown, list)
+        assert len(multi_breakdown) >= 2
+
+        multi_breakdown_by_id = {
+            item["id"]: item
+            for item in multi_breakdown
+            if isinstance(item, dict) and item.get("id")
+        }
+        for selected_feature in selected_multi:
+            assert selected_feature in multi_breakdown_by_id
+            assert abs(
+                float(multi_breakdown_by_id[selected_feature].get("total_cost", 0.0))
+                - float(config.special_features[selected_feature]) * 120_000.0
+            ) < 1e-6
+
+        expected_multi_total = sum(float(config.special_features[key]) * 120_000.0 for key in selected_multi)
+        assert abs(float(multi_feature["construction_costs"]["special_features_total"]) - expected_multi_total) < 1e-6
+        summed_multi_breakdown = sum(
+            float(item.get("total_cost", 0.0))
+            for item in multi_breakdown
+            if isinstance(item, dict)
+        )
+        assert abs(summed_multi_breakdown - float(multi_feature["construction_costs"]["special_features_total"])) < 1e-6
