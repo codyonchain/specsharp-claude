@@ -116,6 +116,31 @@ def _apply_transforms(value: float, transforms: Iterable[Dict[str, Any]]) -> flo
     return output
 
 
+def _scale_stress_band_transforms(
+    tile_id: str,
+    transforms: List[Dict[str, Any]],
+    stress_up_scalar: float,
+    stress_down_scalar: float,
+) -> List[Dict[str, Any]]:
+    if not isinstance(tile_id, str):
+        return [dict(transform) for transform in transforms]
+    if not (tile_id.endswith("_plus_10") or tile_id.endswith("_minus_10")):
+        return [dict(transform) for transform in transforms]
+
+    scaled: List[Dict[str, Any]] = []
+    for transform in transforms:
+        next_transform = dict(transform)
+        if next_transform.get("op") == "mul" and _is_number(next_transform.get("value")):
+            operand = float(next_transform["value"])
+            if tile_id.endswith("_plus_10") and math.isclose(operand, 1.10, rel_tol=0.0, abs_tol=1e-9):
+                next_transform["value"] = float(stress_up_scalar)
+            elif tile_id.endswith("_minus_10") and math.isclose(operand, 0.90, rel_tol=0.0, abs_tol=1e-9):
+                next_transform["value"] = float(stress_down_scalar)
+        scaled.append(next_transform)
+
+    return scaled
+
+
 def _scale_dict_numbers(target: Dict[str, Any], factor: float) -> None:
     for key, value in target.items():
         if _is_number(value):
@@ -451,10 +476,12 @@ def build_dealshield_scenarios(
                 raise DealShieldScenarioError(f"Scenario '{scenario_id}' references missing tile '{tile_id}'")
             metric_ref = tile.get("metric_ref")
             transforms = _normalize_transforms(tile.get("transform"))
-            if tile_id == "cost_plus_10" and metric_ref == "totals.total_project_cost":
-                transforms = [{"op": "mul", "value": stress_cost_scalar}]
-            elif tile_id == "revenue_minus_10" and metric_ref == "revenue_analysis.annual_revenue":
-                transforms = [{"op": "mul", "value": stress_revenue_scalar}]
+            transforms = _scale_stress_band_transforms(
+                tile_id=tile_id,
+                transforms=transforms,
+                stress_up_scalar=stress_cost_scalar,
+                stress_down_scalar=stress_revenue_scalar,
+            )
             if metric_ref == "totals.total_project_cost":
                 cost_transforms.extend(transforms)
                 cost_tiles.append({

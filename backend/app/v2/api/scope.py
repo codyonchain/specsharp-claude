@@ -3,6 +3,7 @@ Clean API endpoint that uses the new system
 """
 
 import os
+import json
 from fastapi import APIRouter, HTTPException, Query, Depends, Header
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict, AliasChoices
@@ -299,6 +300,14 @@ class CalculateRequest(BaseModel):
 class CompareRequest(BaseModel):
     """Request for scenario comparison"""
     scenarios: List[Dict[str, Any]] = Field(..., description="List of scenarios to compare")
+
+class DealShieldControlsUpdateRequest(BaseModel):
+    """Request for persisting DealShield control selections."""
+    stress_band_pct: int = Field(10, description="Stress band percentage (10, 7, 5, 3)")
+    anchor_total_project_cost: Optional[float] = Field(None, description="Optional cost anchor value")
+    use_cost_anchor: bool = Field(False, description="Whether to apply cost anchor")
+    anchor_annual_revenue: Optional[float] = Field(None, description="Optional revenue anchor value")
+    use_revenue_anchor: bool = Field(False, description="Whether to apply revenue anchor")
 
 class ProjectResponse(BaseModel):
     """Standard project response"""
@@ -777,6 +786,142 @@ async def get_single_project(
         success=True,
         data=formatted,
         debug_trace=_build_debug_trace_payload(formatted)
+    )
+
+
+def _normalize_dealshield_controls_payload(raw_controls: Dict[str, Any]) -> Dict[str, Any]:
+    allowed_stress_bands = {10, 7, 5, 3}
+    raw_band = raw_controls.get("stress_band_pct")
+    stress_band_pct = 10
+    if isinstance(raw_band, (int, float)) and not isinstance(raw_band, bool):
+        candidate = int(float(raw_band))
+        if candidate in allowed_stress_bands:
+            stress_band_pct = candidate
+
+    def _normalize_optional_number(value: Any) -> Optional[float]:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            parsed = float(value)
+            if parsed == parsed and parsed not in (float("inf"), float("-inf")):
+                return parsed
+        return None
+
+    normalized_cost_anchor = _normalize_optional_number(raw_controls.get("anchor_total_project_cost"))
+    normalized_revenue_anchor = _normalize_optional_number(raw_controls.get("anchor_annual_revenue"))
+
+    return {
+        "stress_band_pct": stress_band_pct,
+        "anchor_total_project_cost": normalized_cost_anchor,
+        "use_cost_anchor": bool(raw_controls.get("use_cost_anchor")) and normalized_cost_anchor is not None,
+        "anchor_annual_revenue": normalized_revenue_anchor,
+        "use_revenue_anchor": bool(raw_controls.get("use_revenue_anchor")) and normalized_revenue_anchor is not None,
+    }
+
+
+def _resolve_dealshield_building_context(
+    project: Project,
+    payload: Dict[str, Any],
+) -> tuple[Optional[str], Optional[str]]:
+    project_info = payload.get("project_info") if isinstance(payload.get("project_info"), dict) else {}
+    parsed_input = payload.get("parsed_input") if isinstance(payload.get("parsed_input"), dict) else {}
+    request_data = payload.get("request_data") if isinstance(payload.get("request_data"), dict) else {}
+
+    building_type = (
+        project_info.get("building_type")
+        or parsed_input.get("building_type")
+        or request_data.get("building_type")
+        or getattr(project, "building_type", None)
+    )
+    subtype = (
+        project_info.get("subtype")
+        or parsed_input.get("subtype")
+        or parsed_input.get("building_subtype")
+        or request_data.get("subtype")
+        or request_data.get("building_subtype")
+    )
+    if isinstance(building_type, str):
+        building_type = building_type.strip()
+    if isinstance(subtype, str):
+        subtype = subtype.strip()
+    return building_type, subtype
+
+
+@router.post("/scope/projects/{project_id}/dealshield/controls", response_model=ProjectResponse)
+async def update_dealshield_controls(
+    project_id: str,
+    request: DealShieldControlsUpdateRequest,
+    db: Session = Depends(get_db),
+):
+    """Persist DealShield controls to project calculation_data and rebuild scenario snapshots."""
+    project = db.query(Project).filter(Project.project_id == project_id).first()
+    if not project and project_id.isdigit():
+        project = db.query(Project).filter(Project.id == int(project_id)).first()
+
+    if not project:
+        return ProjectResponse(
+            success=False,
+            data={},
+            errors=["Project not found"],
+        )
+
+    try:
+        payload = _resolve_project_payload(project)
+        if not isinstance(payload, dict):
+            payload = {}
+
+        normalized_controls = _normalize_dealshield_controls_payload(request.model_dump())
+        payload["dealshield_controls"] = normalized_controls
+
+        profile_id = payload.get("dealshield_tile_profile")
+        if isinstance(profile_id, str) and profile_id.strip():
+            from app.v2.services.dealshield_scenarios import (
+                build_dealshield_scenarios,
+                DealShieldScenarioError,
+            )
+
+            building_type, subtype = _resolve_dealshield_building_context(project, payload)
+            if not building_type or not subtype:
+                raise ValueError("Unable to resolve building type/subtype for DealShield scenario rebuild")
+
+            canonical_type, canonical_subtype = validate_building_type(building_type, subtype)
+            subtype_key = canonical_subtype or subtype
+            building_type_enum = BuildingType(canonical_type)
+            building_config = MASTER_CONFIG.get(building_type_enum, {}).get(subtype_key)
+            if building_config is None:
+                raise ValueError(
+                    f"Unable to resolve building config for DealShield scenario rebuild ({canonical_type}/{subtype_key})"
+                )
+
+            try:
+                payload["dealshield_scenarios"] = build_dealshield_scenarios(
+                    payload,
+                    building_config,
+                    unified_engine,
+                )
+            except DealShieldScenarioError as exc:
+                raise ValueError(str(exc)) from exc
+
+        project.calculation_data = json.dumps(payload)
+        db.commit()
+        db.refresh(project)
+    except Exception as exc:
+        logger.error("Failed to persist DealShield controls for project %s: %s", project_id, str(exc))
+        db.rollback()
+        return ProjectResponse(
+            success=False,
+            data={},
+            errors=[str(exc)],
+        )
+
+    return ProjectResponse(
+        success=True,
+        data={
+            "project_id": project.project_id or project_id,
+            "dealshield_controls": normalized_controls,
+            "dealshield_scenarios_present": isinstance(
+                (payload.get("dealshield_scenarios") or {}).get("scenarios"),
+                dict,
+            ),
+        },
     )
 
 

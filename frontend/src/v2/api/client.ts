@@ -363,11 +363,6 @@ class V2APIClient {
    * Persist DealShield controls onto the project calculation payload.
    */
   async updateDealShieldControls(projectId: string, controls: DealShieldControls): Promise<void> {
-    const project = await this.getProject(projectId);
-    if (!project) {
-      throw new Error(`Project not found: ${projectId}`);
-    }
-
     const stressBand = [10, 7, 5, 3].includes(controls.stress_band_pct) ? controls.stress_band_pct : 10;
     const updatedControls: DealShieldControls = {
       stress_band_pct: stressBand as DealShieldControls['stress_band_pct'],
@@ -383,57 +378,10 @@ class V2APIClient {
       use_revenue_anchor: !!controls.use_revenue_anchor,
     };
 
-    const projectRecord = project as any;
-    const existingCalculations =
-      (projectRecord?.calculation_data && typeof projectRecord.calculation_data === 'object'
-        ? projectRecord.calculation_data
-        : null) ||
-      (projectRecord?.analysis?.calculations && typeof projectRecord.analysis.calculations === 'object'
-        ? projectRecord.analysis.calculations
-        : {}) ||
-      {};
-
-    const updatedCalculations = {
-      ...existingCalculations,
-      dealshield_controls: updatedControls,
-    };
-
-    const updatedProject = {
-      ...projectRecord,
-      calculation_data: updatedCalculations,
-      analysis: {
-        ...(projectRecord.analysis || {}),
-        calculations: updatedCalculations,
-      },
-    };
-    const cleanProject = this.adaptV1ToV2Structure(updatedProject);
-
-    try {
-      await this.request<any>('/scope/projects', {
-        method: 'POST',
-        body: JSON.stringify(cleanProject),
-      }, 'v1');
-    } catch (error) {
-      console.error('Failed to persist DealShield controls to backend, using local storage fallback:', error);
-    }
-
-    const stored = localStorage.getItem('specsharp_projects');
-    const projects = stored ? JSON.parse(stored) : [];
-    const upsertKey = projectRecord.id ?? projectRecord.project_id ?? projectId;
-    const nextProject = this.adaptV1ToV2Structure(cleanProject);
-    const existingIndex = projects.findIndex(
-      (item: any) =>
-        item?.id === upsertKey ||
-        item?.project_id === upsertKey ||
-        item?.id === projectId ||
-        item?.project_id === projectId
-    );
-    if (existingIndex >= 0) {
-      projects[existingIndex] = { ...projects[existingIndex], ...nextProject };
-    } else {
-      projects.push(nextProject);
-    }
-    localStorage.setItem('specsharp_projects', JSON.stringify(projects));
+    await this.request<any>(`/scope/projects/${projectId}/dealshield/controls`, {
+      method: 'POST',
+      body: JSON.stringify(updatedControls),
+    }, 'v2');
   }
 
   // ============================================================================
