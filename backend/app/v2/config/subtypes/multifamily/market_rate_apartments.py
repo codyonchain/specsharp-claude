@@ -67,6 +67,12 @@ CONFIG = (
             "New York": 1.40,
             "San Francisco": 1.45,
         },
+        special_features={
+            "rooftop_amenity": 24,
+            "pool": 18,
+            "fitness_center": 14,
+            "parking_garage": 32,
+        },
         base_revenue_per_sf_annual=28.5,
         base_revenue_per_unit_monthly=2000,
         units_per_sf=0.00125,  # ≈ 1 unit / 800 SF

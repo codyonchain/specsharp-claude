@@ -467,6 +467,43 @@ export const NewProject: React.FC = () => {
         { id: 'clubhouse', name: 'Clubhouse', cost: 1000000, description: 'Community gathering space' },
         { id: 'rooftop', name: 'Rooftop Terrace', cost: 1500000, description: 'Rooftop amenity space' }
       ],
+      multifamily: [
+        {
+          id: 'parking_garage',
+          name: 'Parking Garage',
+          cost: 4500000,
+          description: 'Structured resident and guest parking',
+          allowedSubtypes: ['market_rate_apartments', 'luxury_apartments', 'affordable_housing']
+        },
+        {
+          id: 'pool',
+          name: 'Pool',
+          cost: 1750000,
+          description: 'Outdoor pool with code-compliant deck and support spaces',
+          allowedSubtypes: ['market_rate_apartments', 'luxury_apartments', 'affordable_housing']
+        },
+        {
+          id: 'fitness_center',
+          name: 'Fitness Center',
+          cost: 650000,
+          description: 'Resident fitness room with specialty flooring and MEP upgrades',
+          allowedSubtypes: ['market_rate_apartments', 'luxury_apartments', 'affordable_housing']
+        },
+        {
+          id: 'rooftop_amenity',
+          name: 'Rooftop Amenity',
+          cost: 1400000,
+          description: 'Rooftop gathering area with shade structures and utility tie-ins',
+          allowedSubtypes: ['market_rate_apartments', 'luxury_apartments', 'affordable_housing']
+        },
+        {
+          id: 'concierge',
+          name: 'Concierge Lobby',
+          cost: 300000,
+          description: 'Enhanced staffed lobby and service desk buildout',
+          allowedSubtypes: ['luxury_apartments']
+        }
+      ],
       commercial: [
         { id: 'data_center', name: 'Data Center', cost: 5000000, description: 'Server room with redundant systems' },
         { id: 'cafeteria', name: 'Cafeteria', cost: 1000000, description: 'Employee dining facility' },

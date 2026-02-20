@@ -203,3 +203,32 @@ def test_multifamily_decision_insurance_outputs_and_provenance():
             assert "text" in entry
             assert "impact_pct" in entry
             assert entry.get("severity") in {"Low", "Med", "High", "Unknown"}
+
+
+def test_multifamily_special_feature_increases_total_project_cost_for_each_subtype():
+    subtype_feature_map = {
+        "market_rate_apartments": "parking_garage",
+        "luxury_apartments": "parking_garage",
+        "affordable_housing": "parking_garage",
+    }
+
+    for subtype, feature in subtype_feature_map.items():
+        baseline = unified_engine.calculate_project(
+            building_type=BuildingType.MULTIFAMILY,
+            subtype=subtype,
+            square_footage=120_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+            special_features=[],
+        )
+        with_feature = unified_engine.calculate_project(
+            building_type=BuildingType.MULTIFAMILY,
+            subtype=subtype,
+            square_footage=120_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+            special_features=[feature],
+        )
+
+        assert with_feature["construction_costs"]["special_features_total"] > baseline["construction_costs"]["special_features_total"]
+        assert with_feature["totals"]["total_project_cost"] > baseline["totals"]["total_project_cost"]
