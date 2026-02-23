@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useProject } from '../../hooks/useProject';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
@@ -14,7 +14,7 @@ export const ProjectView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { project, loading, error, deleteProject } = useProject(id);
-  const [activeView, setActiveView] = useState<'dealshield' | 'executive' | 'construction'>('executive');
+  const [activeView, setActiveView] = useState<'dealshield' | 'executive' | 'construction'>('dealshield');
   const [dealShieldState, setDealShieldState] = useState<{
     data: DealShieldViewModel | null;
     loading: boolean;
@@ -24,11 +24,8 @@ export const ProjectView: React.FC = () => {
     loading: false,
     error: null,
   });
-  const hasUserSelectedViewRef = useRef(false);
-
   useEffect(() => {
-    hasUserSelectedViewRef.current = false;
-    setActiveView('executive');
+    setActiveView('dealshield');
     setDealShieldState({ data: null, loading: false, error: null });
   }, [id]);
 
@@ -40,9 +37,6 @@ export const ProjectView: React.FC = () => {
       .then((response) => {
         if (!isActive) return;
         setDealShieldState({ data: response, loading: false, error: null });
-        if (!hasUserSelectedViewRef.current) {
-          setActiveView('dealshield');
-        }
       })
       .catch((err: Error) => {
         if (!isActive) return;
@@ -69,7 +63,6 @@ export const ProjectView: React.FC = () => {
   };
 
   const handleViewChange = (view: 'dealshield' | 'executive' | 'construction') => {
-    hasUserSelectedViewRef.current = true;
     setActiveView(view);
   };
 
