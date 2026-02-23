@@ -1,5 +1,3 @@
-from copy import deepcopy
-
 SCOPE_ITEM_DEFAULTS = {
     "industrial_flex_structural_shares": {
         "slab": 0.45,
@@ -812,10 +810,430 @@ SCOPE_ITEM_PROFILES = {
             },
         ],
     },
+    "industrial_manufacturing_structural_v1": {
+        "trade_profiles": [
+            {
+                "trade_key": "structural",
+                "trade_label": "Structural",
+                "items": [
+                    {
+                        "key": "heavy_duty_slab_and_foundations",
+                        "label": "Heavy-duty slab, foundations, and equipment pads",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.34,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "process_pits_and_trenches",
+                        "label": "Process pits, trenches, and housekeeping pads",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.16,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "steel_framing_and_crane_support",
+                        "label": "Structural steel framing and crane support provisions",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.20,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "reinforced_roof_and_envelope",
+                        "label": "Reinforced roof deck and shell envelope",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.18,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "loading_aprons_and_material_handling_bases",
+                        "label": "Loading aprons and material handling base scope",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.12,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                ],
+            },
+            {
+                "trade_key": "mechanical",
+                "trade_label": "Mechanical",
+                "items": [
+                    {
+                        "key": "process_hvac_and_ventilation",
+                        "label": "Process HVAC and ventilation baseline",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.26,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "process_exhaust_and_dust_collection",
+                        "label": "Process exhaust and dust collection allowance",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.20,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "compressed_air_generation_distribution",
+                        "label": "Compressed air generation and distribution",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.18,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "process_cooling_water_systems",
+                        "label": "Process cooling/chilled water systems",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.14,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "makeup_air_and_heat_recovery",
+                        "label": "Make-up air and heat recovery systems",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.12,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "process_controls_bms_integration",
+                        "label": "Process controls and BMS integration",
+                        "unit": "LS",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.10,
+                        },
+                        "quantity_rule": {
+                            "type": "constant",
+                            "params": {
+                                "value": 1,
+                            },
+                        },
+                    },
+                ],
+            },
+            {
+                "trade_key": "electrical",
+                "trade_label": "Electrical",
+                "items": [
+                    {
+                        "key": "primary_service_and_switchgear",
+                        "label": "Primary service and switchgear",
+                        "unit": "LS",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.22,
+                        },
+                        "quantity_rule": {
+                            "type": "constant",
+                            "params": {
+                                "value": 1,
+                            },
+                        },
+                    },
+                    {
+                        "key": "motor_control_centers_vfd",
+                        "label": "Motor control centers and VFD package",
+                        "unit": "LS",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.20,
+                        },
+                        "quantity_rule": {
+                            "type": "constant",
+                            "params": {
+                                "value": 1,
+                            },
+                        },
+                    },
+                    {
+                        "key": "distribution_panels_and_busway",
+                        "label": "Distribution panels, feeders, and busway",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.20,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "process_equipment_power_drops",
+                        "label": "Process equipment power drops and branch circuits",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.18,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "backup_power_critical_loads",
+                        "label": "Backup power and critical load tie-ins",
+                        "unit": "LS",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.12,
+                        },
+                        "quantity_rule": {
+                            "type": "constant",
+                            "params": {
+                                "value": 1,
+                            },
+                        },
+                    },
+                    {
+                        "key": "controls_and_low_voltage_network",
+                        "label": "Controls, low voltage, and network integration",
+                        "unit": "LS",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.08,
+                        },
+                        "quantity_rule": {
+                            "type": "constant",
+                            "params": {
+                                "value": 1,
+                            },
+                        },
+                    },
+                ],
+            },
+            {
+                "trade_key": "plumbing",
+                "trade_label": "Plumbing",
+                "items": [
+                    {
+                        "key": "restroom_groups_and_support",
+                        "label": "Restroom groups and support plumbing",
+                        "unit": "EA",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.18,
+                        },
+                        "quantity_rule": {
+                            "type": "restroom_groups",
+                            "params": {
+                                "sf_per_group": 20000.0,
+                                "minimum": 1,
+                            },
+                        },
+                    },
+                    {
+                        "key": "process_water_and_treatment",
+                        "label": "Process water, treatment, and distribution",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.26,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "condensate_and_drainage_network",
+                        "label": "Condensate and drainage network",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.16,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "process_floor_trenches_and_drains",
+                        "label": "Process floor trenches and drains",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.20,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "fire_protection_and_sprinkler_system",
+                        "label": "Fire protection and sprinkler system",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.20,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                ],
+            },
+            {
+                "trade_key": "finishes",
+                "trade_label": "Finishes",
+                "items": [
+                    {
+                        "key": "production_floor_coatings_and_sealers",
+                        "label": "Production floor coatings and sealers",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.30,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "control_room_and_qc_lab_buildout",
+                        "label": "Control room and QC lab buildout",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.18,
+                        },
+                        "quantity_rule": {
+                            "type": "office_sf",
+                            "params": {
+                                "default_percent": 0.08,
+                                "default_min_sf": 2500.0,
+                                "override_keys": [
+                                    "office_sf",
+                                    "officeSquareFeet",
+                                    "office_space_sf",
+                                ],
+                                "percent_override_keys": [
+                                    "office_percent",
+                                    "office_pct",
+                                    "officePercent",
+                                    "officePct",
+                                ],
+                            },
+                        },
+                    },
+                    {
+                        "key": "locker_breakroom_support_areas",
+                        "label": "Locker, breakroom, and support area finishes",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.14,
+                        },
+                        "quantity_rule": {
+                            "type": "office_sf",
+                            "params": {
+                                "default_percent": 0.08,
+                                "default_min_sf": 2500.0,
+                                "override_keys": [
+                                    "office_sf",
+                                    "officeSquareFeet",
+                                    "office_space_sf",
+                                ],
+                                "percent_override_keys": [
+                                    "office_percent",
+                                    "office_pct",
+                                    "officePercent",
+                                    "officePct",
+                                ],
+                            },
+                        },
+                    },
+                    {
+                        "key": "equipment_guards_and_safety_curbing",
+                        "label": "Equipment guards, bollards, and safety curbing",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.20,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                    {
+                        "key": "interior_doors_partitions_signage",
+                        "label": "Interior doors, partitions, and safety signage",
+                        "unit": "SF",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.18,
+                        },
+                        "quantity_rule": {
+                            "type": "sf",
+                            "params": {},
+                        },
+                    },
+                ],
+            },
+        ],
+    },
 }
-
-# Manufacturing currently shares the warehouse-style structural scope-item breakdown.
-# Keep a dedicated profile id so manufacturing can diverge safely in future iterations.
-SCOPE_ITEM_PROFILES["industrial_manufacturing_structural_v1"] = deepcopy(
-    SCOPE_ITEM_PROFILES["industrial_warehouse_structural_v1"]
-)

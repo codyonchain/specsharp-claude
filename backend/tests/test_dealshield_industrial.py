@@ -6,6 +6,7 @@ from app.v2.config.master_config import (
 from app.v2.config.type_profiles.dealshield_content import get_dealshield_content_profile
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.v2.config.type_profiles.dealshield_tiles import industrial as industrial_tile_profiles
+from app.v2.config.type_profiles.scope_items import industrial as industrial_scope_profiles
 from app.v2.engines.unified_engine import unified_engine
 from app.v2.services.dealshield_service import build_dealshield_view_model
 
@@ -28,6 +29,17 @@ def _resolve_metric_ref(payload, metric_ref):
     return current
 
 
+def _profile_item_keys(profile_id: str):
+    profile = industrial_scope_profiles.SCOPE_ITEM_PROFILES[profile_id]
+    keys = set()
+    for trade_profile in profile.get("trade_profiles", []):
+        for item in trade_profile.get("items", []):
+            key = item.get("key")
+            if isinstance(key, str) and key:
+                keys.add(key)
+    return keys
+
+
 def test_industrial_subtypes_define_deterministic_dealshield_profile_ids():
     for subtype, expected_profile_id in INDUSTRIAL_PROFILE_IDS.items():
         config = get_building_config(BuildingType.INDUSTRIAL, subtype)
@@ -39,6 +51,25 @@ def test_industrial_manufacturing_uses_structural_scope_items_profile():
     config = get_building_config(BuildingType.INDUSTRIAL, "manufacturing")
     assert config is not None
     assert config.scope_items_profile == "industrial_manufacturing_structural_v1"
+
+
+def test_industrial_manufacturing_scope_profile_is_not_warehouse_clone():
+    manufacturing_keys = _profile_item_keys("industrial_manufacturing_structural_v1")
+    warehouse_keys = _profile_item_keys("industrial_warehouse_structural_v1")
+
+    assert manufacturing_keys != warehouse_keys
+    assert {
+        "process_hvac_and_ventilation",
+        "process_exhaust_and_dust_collection",
+        "motor_control_centers_vfd",
+        "process_water_and_treatment",
+        "equipment_guards_and_safety_curbing",
+    }.issubset(manufacturing_keys)
+    assert {
+        "tilt_wall_shell",
+        "dock_pits_loading_aprons",
+        "warehouse_floor_sealers",
+    }.isdisjoint(manufacturing_keys)
 
 
 def test_industrial_tile_profiles_and_defaults_resolve():
@@ -105,6 +136,16 @@ def test_industrial_manufacturing_emits_scope_items():
     assert isinstance(scope_items, list)
     assert scope_items
     assert any(isinstance(item.get("systems"), list) and item.get("systems") for item in scope_items)
+
+    all_system_names = [
+        str(system.get("name", "")).lower()
+        for trade in scope_items
+        for system in (trade.get("systems") or [])
+        if isinstance(system, dict)
+    ]
+    assert any("process hvac" in name for name in all_system_names)
+    assert any("motor control centers" in name for name in all_system_names)
+    assert any("process water" in name for name in all_system_names)
 
 
 def test_industrial_emits_wave1_dealshield_scenario_snapshots_and_controls():
