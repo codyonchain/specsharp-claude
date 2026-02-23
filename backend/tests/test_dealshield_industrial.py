@@ -35,14 +35,20 @@ def test_industrial_subtypes_define_deterministic_dealshield_profile_ids():
         assert config.dealshield_tile_profile == expected_profile_id
 
 
+def test_industrial_manufacturing_uses_structural_scope_items_profile():
+    config = get_building_config(BuildingType.INDUSTRIAL, "manufacturing")
+    assert config is not None
+    assert config.scope_items_profile == "industrial_manufacturing_structural_v1"
+
+
 def test_industrial_tile_profiles_and_defaults_resolve():
     assert industrial_tile_profiles.DEALSHIELD_TILE_DEFAULTS == INDUSTRIAL_PROFILE_IDS
 
     expected_driver_tile_by_subtype = {
         "warehouse": "structural_plus_10",
-        "distribution_center": "structural_plus_10",
-        "manufacturing": "structural_plus_10",
-        "flex_space": "structural_plus_10",
+        "distribution_center": "electrical_plus_10",
+        "manufacturing": "process_mep_plus_10",
+        "flex_space": "office_finish_plus_10",
         "cold_storage": "equipment_plus_10",
     }
 
@@ -84,6 +90,21 @@ def test_industrial_engine_emits_dealshield_profile_for_all_subtypes():
             project_class=ProjectClass.GROUND_UP,
         )
         assert payload.get("dealshield_tile_profile") == expected_profile_id
+
+
+def test_industrial_manufacturing_emits_scope_items():
+    payload = unified_engine.calculate_project(
+        building_type=BuildingType.INDUSTRIAL,
+        subtype="manufacturing",
+        square_footage=120_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+    )
+
+    scope_items = payload.get("scope_items")
+    assert isinstance(scope_items, list)
+    assert scope_items
+    assert any(isinstance(item.get("systems"), list) and item.get("systems") for item in scope_items)
 
 
 def test_industrial_emits_wave1_dealshield_scenario_snapshots_and_controls():

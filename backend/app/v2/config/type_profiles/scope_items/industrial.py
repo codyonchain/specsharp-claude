@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 SCOPE_ITEM_DEFAULTS = {
     "industrial_flex_structural_shares": {
         "slab": 0.45,
@@ -811,3 +813,9 @@ SCOPE_ITEM_PROFILES = {
         ],
     },
 }
+
+# Manufacturing currently shares the warehouse-style structural scope-item breakdown.
+# Keep a dedicated profile id so manufacturing can diverge safely in future iterations.
+SCOPE_ITEM_PROFILES["industrial_manufacturing_structural_v1"] = deepcopy(
+    SCOPE_ITEM_PROFILES["industrial_warehouse_structural_v1"]
+)
