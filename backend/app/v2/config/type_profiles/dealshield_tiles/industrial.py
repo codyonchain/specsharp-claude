@@ -1,9 +1,16 @@
 """DealShield tile profiles for industrial types."""
 
-DEALSHIELD_TILE_DEFAULTS = {}
+DEALSHIELD_TILE_DEFAULTS = {
+    "warehouse": "industrial_warehouse_v1",
+    "distribution_center": "industrial_distribution_center_v1",
+    "manufacturing": "industrial_manufacturing_v1",
+    "flex_space": "industrial_flex_space_v1",
+    "cold_storage": "industrial_cold_storage_v1",
+}
 
-DEALSHIELD_TILE_PROFILES = {
-    "industrial_warehouse_v1": {
+
+def _industrial_standard_tile_profile(subtype_label: str) -> dict:
+    return {
         "version": "v1",
         "tiles": [
             {
@@ -41,9 +48,12 @@ DEALSHIELD_TILE_PROFILES = {
                 "plus_tiles": ["structural_plus_10"],
             },
         ],
-        "provenance": {"notes": "Industrial warehouse tile profile v1."},
-    },
-    "industrial_cold_storage_v1": {
+        "provenance": {"notes": f"Industrial {subtype_label} tile profile v1."},
+    }
+
+
+def _industrial_cold_storage_tile_profile() -> dict:
+    return {
         "version": "v1",
         "tiles": [
             {
@@ -82,5 +92,13 @@ DEALSHIELD_TILE_PROFILES = {
             },
         ],
         "provenance": {"notes": "Industrial cold storage tile profile v1."},
-    },
+    }
+
+
+DEALSHIELD_TILE_PROFILES = {
+    "industrial_warehouse_v1": _industrial_standard_tile_profile("warehouse"),
+    "industrial_distribution_center_v1": _industrial_standard_tile_profile("distribution center"),
+    "industrial_manufacturing_v1": _industrial_standard_tile_profile("manufacturing"),
+    "industrial_flex_space_v1": _industrial_standard_tile_profile("flex space"),
+    "industrial_cold_storage_v1": _industrial_cold_storage_tile_profile(),
 }

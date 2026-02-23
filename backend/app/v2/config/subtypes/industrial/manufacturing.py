@@ -18,6 +18,7 @@ CONFIG = (
         base_cost_per_sf=120,
         cost_range=(100, 150),
         scope_profile="industrial_manufacturing",
+        dealshield_tile_profile="industrial_manufacturing_v1",
         exclude_from_facility_opex=['labor_cost_ratio', 'raw_materials_ratio'],
         # General manufacturing allowance (fixtures, light process interfaces)
         equipment_cost_per_sf=20,
