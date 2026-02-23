@@ -586,8 +586,9 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
 
     provenance_table = ""
     profiles_controls_block = ""
-    if isinstance(provenance, dict):
-        controls = provenance.get("dealshield_controls") if isinstance(provenance.get("dealshield_controls"), dict) else {}
+    provenance_dict = provenance if isinstance(provenance, dict) else {}
+    if isinstance(provenance_dict, dict):
+        controls = provenance_dict.get("dealshield_controls") if isinstance(provenance_dict.get("dealshield_controls"), dict) else {}
         anchor_on = controls.get("use_anchor")
         if not isinstance(anchor_on, bool):
             anchor_on = controls.get("use_cost_anchor")
@@ -597,13 +598,62 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
             anchor_label = f"On ({_dealshield_format_value(anchor_value, 'totals.total_project_cost')})"
         stress_band = controls.get("stress_band_pct")
         stress_label = f"±{int(float(stress_band))}%" if _dealshield_parse_numeric(stress_band) is not None else "—"
+
+        tile_profile_id = (
+            view_model.get("tile_profile_id")
+            or provenance_dict.get("profile_id")
+            or profile_id
+            or "—"
+        )
+        content_profile_id = (
+            view_model.get("content_profile_id")
+            or provenance_dict.get("content_profile_id")
+            or "—"
+        )
+        scope_items_profile_id = (
+            view_model.get("scope_items_profile_id")
+            or provenance_dict.get("scope_items_profile_id")
+            or "—"
+        )
+        decision_status = (
+            view_model.get("decision_status")
+            or provenance_dict.get("decision_status")
+            or "—"
+        )
+        decision_reason_code = (
+            view_model.get("decision_reason_code")
+            or provenance_dict.get("decision_reason_code")
+            or "—"
+        )
+        decision_status_provenance = (
+            view_model.get("decision_status_provenance")
+            if isinstance(view_model.get("decision_status_provenance"), dict)
+            else provenance_dict.get("decision_status_provenance")
+            if isinstance(provenance_dict.get("decision_status_provenance"), dict)
+            else {}
+        )
+        decision_source = (
+            decision_status_provenance.get("status_source")
+            if isinstance(decision_status_provenance.get("status_source"), str)
+            else "—"
+        )
+        decision_policy_id = (
+            decision_status_provenance.get("policy_id")
+            if isinstance(decision_status_provenance.get("policy_id"), str)
+            else "—"
+        )
         profiles_controls_block = (
             "<div class=\"provenance-note\"><strong>Profiles &amp; Controls:</strong> "
-            f"Tile: {html_module.escape(str(provenance.get('profile_id') or profile_id or '—'))} | "
-            f"Content: {html_module.escape(str(provenance.get('content_profile_id') or '—'))} | "
-            f"Scope: {html_module.escape(str(provenance.get('scope_items_profile_id') or '—'))} | "
+            f"Tile: {html_module.escape(str(tile_profile_id))} | "
+            f"Content: {html_module.escape(str(content_profile_id))} | "
+            f"Scope: {html_module.escape(str(scope_items_profile_id))} | "
             f"Stress band: {html_module.escape(stress_label)} | "
             f"Anchor: {html_module.escape(anchor_label)}</div>"
+            "<div class=\"provenance-note\"><strong>Decision Policy:</strong> "
+            f"Status: {html_module.escape(str(decision_status))} | "
+            f"Reason: {html_module.escape(str(decision_reason_code))} | "
+            f"Source: {html_module.escape(str(decision_source))} | "
+            f"Policy ID: {html_module.escape(str(decision_policy_id))}</div>"
         )
     if provenance_rows:
         provenance_table = (
@@ -621,8 +671,8 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
         )
     else:
         metric_refs_used = []
-        if isinstance(provenance, dict):
-            metric_refs_used = provenance.get("metric_refs_used") or []
+        if isinstance(provenance_dict, dict):
+            metric_refs_used = provenance_dict.get("metric_refs_used") or []
         ref_pills = []
         if isinstance(metric_refs_used, list):
             for ref in metric_refs_used:

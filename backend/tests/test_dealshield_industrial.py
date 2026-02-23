@@ -219,6 +219,10 @@ def test_industrial_decision_insurance_outputs_and_provenance():
         assert isinstance(view_model.get("decision_reason_code"), str)
         assert view_model["decision_reason_code"].strip()
         assert isinstance(view_model.get("decision_status_provenance"), dict)
+        assert view_model.get("tile_profile_id") == expected_profile_id
+        assert isinstance(view_model.get("content_profile_id"), str)
+        assert view_model["content_profile_id"].strip()
+        assert "scope_items_profile_id" in view_model
 
         di_provenance = view_model.get("decision_insurance_provenance")
         assert isinstance(di_provenance, dict)
@@ -232,6 +236,10 @@ def test_industrial_decision_insurance_outputs_and_provenance():
         assert isinstance(model_provenance.get("decision_reason_code"), str)
         assert model_provenance.get("decision_reason_code")
         assert isinstance(model_provenance.get("decision_status_provenance"), dict)
+        assert model_provenance.get("profile_id") == expected_profile_id
+        assert isinstance(model_provenance.get("content_profile_id"), str)
+        assert model_provenance.get("content_profile_id")
+        assert "scope_items_profile_id" in model_provenance
 
         decision_summary = view_model.get("decision_summary")
         assert isinstance(decision_summary, dict)

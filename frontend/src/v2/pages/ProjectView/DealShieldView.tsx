@@ -880,9 +880,20 @@ export const DealShieldView: React.FC<Props> = ({
     (dealShieldData as any)?.profileId ??
     (viewModel as any)?.profile_id ??
     (viewModel as any)?.profileId;
-  const tileProfileId = provenance?.profile_id ?? profileId;
-  const contentProfileId = provenance?.content_profile_id ?? content?.profile_id;
-  const scopeProfileId = provenance?.scope_items_profile_id;
+  const tileProfileId =
+    (viewModel as any)?.tile_profile_id ??
+    (viewModel as any)?.tileProfileId ??
+    provenance?.profile_id ??
+    profileId;
+  const contentProfileId =
+    (viewModel as any)?.content_profile_id ??
+    (viewModel as any)?.contentProfileId ??
+    provenance?.content_profile_id ??
+    content?.profile_id;
+  const scopeProfileId =
+    (viewModel as any)?.scope_items_profile_id ??
+    (viewModel as any)?.scopeItemsProfileId ??
+    provenance?.scope_items_profile_id;
   const provenanceControls = provenanceControlsRaw && typeof provenanceControlsRaw === 'object'
     ? (provenanceControlsRaw as Record<string, unknown>)
     : {};
@@ -1453,6 +1464,10 @@ export const DealShieldView: React.FC<Props> = ({
             <p className="mb-3 text-xs text-slate-600">
               <span className="font-semibold text-slate-700">Profiles &amp; Controls:</span>{' '}
               Tile: {formatValue(tileProfileId)} | Content: {formatValue(contentProfileId)} | Scope: {formatValue(scopeProfileId)} | Stress band: {stressBandText} | Anchor: {anchorText}
+            </p>
+            <p className="mb-3 text-xs text-slate-600">
+              <span className="font-semibold text-slate-700">Decision Policy:</span>{' '}
+              Status: {decisionStatusLabel} | Reason: {formatValue(decisionReasonCode)} | Source: {formatValue(statusSource)}
             </p>
             {scenarioInputs.length > 0 ? (
               <div className="overflow-x-auto">

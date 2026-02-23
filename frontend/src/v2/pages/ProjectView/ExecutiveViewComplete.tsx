@@ -911,6 +911,12 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     decisionSummaryRecord.decision_status_provenance,
     decisionSummaryRecord.decisionStatusProvenance
   );
+  const decisionStatusSource =
+    (typeof decisionStatusProvenanceRecord.status_source === 'string' ? decisionStatusProvenanceRecord.status_source : undefined) ??
+    (typeof decisionStatusProvenanceRecord.statusSource === 'string' ? decisionStatusProvenanceRecord.statusSource : undefined);
+  const decisionPolicyId =
+    (typeof decisionStatusProvenanceRecord.policy_id === 'string' ? decisionStatusProvenanceRecord.policy_id : undefined) ??
+    (typeof decisionStatusProvenanceRecord.policyId === 'string' ? decisionStatusProvenanceRecord.policyId : undefined);
   const canonicalDealShieldDecisionStatus: DecisionStatus | undefined = (() => {
     if (!hasDealShieldPayload || !explicitDealShieldDecision) return undefined;
     return explicitDealShieldDecision;
@@ -2043,7 +2049,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
               </h3>
               {isDealShieldCanonicalStatusActive && (
                 <p className="mt-1 text-xs text-slate-600">
-                  Decision status aligned to DealShield collapse policy.
+                  Policy source: {decisionStatusSource ?? 'dealshield_policy_v1'}
+                  {decisionPolicyId ? ` (${decisionPolicyId})` : ''}
+                  {decisionReasonCode ? ` · reason: ${decisionReasonCode}` : ''}
                 </p>
               )}
               <button

@@ -1459,6 +1459,7 @@ def _resolve_canonical_decision_status(
     decision_insurance_outputs: Dict[str, Any],
     decision_insurance_provenance: Dict[str, Any],
 ) -> Tuple[str, str, Dict[str, Any]]:
+    policy_id = "dealshield_canonical_policy_v1"
     explicit_sources = [
         payload.get("decision_status"),
         payload.get("decisionStatus"),
@@ -1480,6 +1481,7 @@ def _resolve_canonical_decision_status(
             explicit_status,
             "explicit_status_signal",
             {
+                "policy_id": policy_id,
                 "status": explicit_status,
                 "reason_code": "explicit_status_signal",
                 "status_source": "payload_or_decision_summary",
@@ -1513,6 +1515,7 @@ def _resolve_canonical_decision_status(
     )
 
     provenance = {
+        "policy_id": policy_id,
         "status_source": "dealshield_policy_v1",
         "value_gap": float(value_gap) if _is_number(value_gap) else None,
         "not_modeled_reason": not_modeled_reason if isinstance(not_modeled_reason, str) else None,
@@ -1569,14 +1572,21 @@ def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profil
     provenance = view_model.get("provenance")
     if not isinstance(provenance, dict):
         provenance = {}
+    resolved_tile_profile_id: Optional[str] = None
     profile_id = profile.get("profile_id")
     if isinstance(profile_id, str) and profile_id.strip():
-        provenance["profile_id"] = profile_id.strip()
-    if content_profile_id:
-        provenance["content_profile_id"] = content_profile_id
+        resolved_tile_profile_id = profile_id.strip()
+    provenance["profile_id"] = resolved_tile_profile_id
+    view_model["tile_profile_id"] = resolved_tile_profile_id
+
+    resolved_content_profile_id = content_profile_id if isinstance(content_profile_id, str) and content_profile_id.strip() else None
+    provenance["content_profile_id"] = resolved_content_profile_id
+    view_model["content_profile_id"] = resolved_content_profile_id
+
     scope_items_profile_id = _resolve_scope_items_profile_id(payload)
-    if scope_items_profile_id:
-        provenance["scope_items_profile_id"] = scope_items_profile_id
+    resolved_scope_items_profile_id = scope_items_profile_id if isinstance(scope_items_profile_id, str) and scope_items_profile_id.strip() else None
+    provenance["scope_items_profile_id"] = resolved_scope_items_profile_id
+    view_model["scope_items_profile_id"] = resolved_scope_items_profile_id
     provenance["scenario_inputs"] = scenario_inputs
     controls = _extract_dealshield_controls(payload)
     if controls:
