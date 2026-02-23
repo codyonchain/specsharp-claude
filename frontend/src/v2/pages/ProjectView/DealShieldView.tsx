@@ -32,6 +32,7 @@ const DEFAULT_DEALSHIELD_CONTROLS: DealShieldControls = {
 };
 
 type DecisionMetricType = 'currency' | 'percent' | 'ratio' | 'number';
+type DecisionStatus = 'GO' | 'Needs Work' | 'NO-GO' | 'PENDING';
 
 const toFiniteNumber = (value: unknown): number | null => {
   if (typeof value === 'number') {
@@ -191,6 +192,22 @@ const formatAssumptionPercent = (value: unknown) => {
 };
 
 const normalizePercentValue = (value: number) => (Math.abs(value) <= 1.5 ? value * 100 : value);
+
+const toComparableKey = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim().toLowerCase();
+  return trimmed ? trimmed.replace(/\s+/g, '_') : null;
+};
+
+const normalizeBackendDecision = (value: unknown): DecisionStatus | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const lowered = value.toLowerCase();
+  if (lowered.includes('no-go') || lowered.includes('no_go')) return 'NO-GO';
+  if (lowered.includes('work') || lowered.includes('near')) return 'Needs Work';
+  if (lowered.includes('go')) return 'GO';
+  if (lowered.includes('pending') || lowered.includes('review')) return 'PENDING';
+  return undefined;
+};
 
 const formatAssumptionPercentFixed2 = (value: unknown) => {
   const numeric = toFiniteNumber(value);
@@ -691,6 +708,90 @@ export const DealShieldView: React.FC<Props> = ({
       notModeledReason,
     };
   }, [dealShieldDisclosures, rows, viewModel]);
+  const decisionSummaryRaw =
+    ((viewModel as any)?.decision_summary && typeof (viewModel as any).decision_summary === 'object'
+      ? (viewModel as any).decision_summary
+      : (viewModel as any)?.decisionSummary && typeof (viewModel as any).decisionSummary === 'object'
+        ? (viewModel as any).decisionSummary
+        : {}) as Record<string, unknown>;
+  const firstBreakScenarioIdKey = toComparableKey(
+    firstBreakCondition?.scenario_id ?? (firstBreakCondition as any)?.scenarioId
+  );
+  const firstBreakScenarioLabelKey = toComparableKey(
+    firstBreakCondition?.scenario_label ?? (firstBreakCondition as any)?.scenarioLabel
+  );
+  const hasBaseBreakCondition = Boolean(
+    firstBreakCondition && (firstBreakScenarioIdKey === 'base' || firstBreakScenarioLabelKey === 'base')
+  );
+  const flexBeforeBreakReasonKey = toComparableKey(
+    (decisionInsuranceProvenance?.flex_before_break_pct as any)?.reason
+  );
+  const hasBaseAlreadyBroken = flexBeforeBreakReasonKey === 'base_already_broken';
+  const flexBeforeBreakBandKey = toComparableKey(
+    (viewModel as any)?.flex_before_break_band ??
+    (viewModel as any)?.flexBeforeBreakBand ??
+    (decisionInsuranceProvenance?.flex_before_break_pct as any)?.band
+  );
+  const hasTightFlexBand =
+    typeof flexBeforeBreakBandKey === 'string' &&
+    flexBeforeBreakBandKey.includes('tight');
+  const explicitDecisionStatus = normalizeBackendDecision(
+    (viewModel as any)?.decision_status ??
+    (viewModel as any)?.decisionStatus ??
+    decisionSummaryRaw?.decision_status ??
+    decisionSummaryRaw?.decisionStatus ??
+    decisionSummaryRaw?.recommendation ??
+    decisionSummaryRaw?.status
+  );
+  const canonicalDecisionStatus: DecisionStatus = (() => {
+    if (explicitDecisionStatus) return explicitDecisionStatus;
+    if (decisionSummary.notModeledReason) return 'PENDING';
+    if (hasBaseBreakCondition || hasBaseAlreadyBroken) return 'NO-GO';
+    if (typeof decisionSummary.valueGap === 'number') {
+      if (decisionSummary.valueGap <= 0) return 'NO-GO';
+      if (typeof flexBeforeBreakPct === 'number' && normalizePercentValue(flexBeforeBreakPct) <= 2) {
+        return 'Needs Work';
+      }
+      return 'GO';
+    }
+    if (hasTightFlexBand) return 'Needs Work';
+    if (typeof flexBeforeBreakPct === 'number') {
+      return normalizePercentValue(flexBeforeBreakPct) <= 2 ? 'Needs Work' : 'GO';
+    }
+    return 'PENDING';
+  })();
+  const decisionStatusLabel =
+    canonicalDecisionStatus === 'PENDING' ? 'Under Review' : canonicalDecisionStatus;
+  const decisionStatusSummaryText =
+    canonicalDecisionStatus === 'GO'
+      ? 'Base case remains positive under canonical DealShield policy.'
+      : canonicalDecisionStatus === 'Needs Work'
+        ? 'Downside pressure is present; policy marks this as near-break risk.'
+        : canonicalDecisionStatus === 'NO-GO'
+          ? 'Base case has already collapsed or value gap is non-positive.'
+          : 'Canonical status is pending due to missing modeled inputs.';
+  const decisionStatusDetailText = decisionSummary.notModeledReason
+    ?? firstBreakUnavailableReason
+    ?? flexBeforeBreakUnavailableReason
+    ?? 'Status uses backend Decision Insurance and decision-summary outputs with deterministic fallback.';
+  const decisionStatusPanelClass =
+    canonicalDecisionStatus === 'GO'
+      ? 'border-green-200 bg-green-50'
+      : canonicalDecisionStatus === 'NO-GO'
+        ? 'border-rose-200 bg-rose-50'
+        : 'border-amber-200 bg-amber-50';
+  const decisionStatusTitleClass =
+    canonicalDecisionStatus === 'GO'
+      ? 'text-green-900'
+      : canonicalDecisionStatus === 'NO-GO'
+        ? 'text-rose-900'
+        : 'text-amber-900';
+  const decisionStatusTextClass =
+    canonicalDecisionStatus === 'GO'
+      ? 'text-green-800'
+      : canonicalDecisionStatus === 'NO-GO'
+        ? 'text-rose-800'
+        : 'text-amber-800';
   const scenarioInputsRaw = provenance?.scenario_inputs ?? (viewModel as any)?.scenario_inputs;
   const provenanceControlsRaw = provenance?.dealshield_controls ?? (dealShieldData as any)?.dealshield_controls;
   const scenarioInputs = useMemo(() => {
@@ -934,6 +1035,21 @@ export const DealShieldView: React.FC<Props> = ({
 
       {!dealShieldLoading && !dealShieldError && dealShieldData && (
         <>
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="mb-4 text-xl font-semibold tracking-tight text-slate-900">Decision Status</h3>
+            <div className={`rounded-lg border px-4 py-3 ${decisionStatusPanelClass}`}>
+              <p className={`text-sm font-semibold ${decisionStatusTitleClass}`}>
+                Investment Decision: {decisionStatusLabel}
+              </p>
+              <p className={`mt-1 text-sm ${decisionStatusTextClass}`}>
+                {decisionStatusSummaryText}
+              </p>
+              <p className="mt-1 text-xs text-slate-600">
+                {decisionStatusDetailText}
+              </p>
+            </div>
+          </section>
+
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="mb-4 text-xl font-semibold tracking-tight text-slate-900">Decision Insurance</h3>
             {hasDecisionInsuranceData ? (

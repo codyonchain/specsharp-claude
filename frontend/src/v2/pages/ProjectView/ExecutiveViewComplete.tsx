@@ -77,6 +77,21 @@ const isZeroLikeMetricValue = (value: unknown): boolean => {
   return false;
 };
 
+const toFiniteNumber = (value: unknown): number | null => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const normalized = trimmed.replace(/[$,%\s,]/g, '');
+    if (!normalized) return null;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
 const buildSafeAnalysis = (project?: Project | null): AnyRecord => {
   const projectRecord = toRecord(project);
   const rawAnalysis = toRecord(projectRecord.analysis);
@@ -169,9 +184,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     '';
   const parsedBuildingType = rawBuildingType.toString().toLowerCase();
   const normalizedBuildingType = parsedBuildingType.replace(/\s+/g, '_');
-  const isMultifamilyProject =
-    normalizedBuildingType === 'multifamily' ||
-    normalizedBuildingType === 'multi_family';
   const rawSubtype =
     analysis?.parsed_input?.subtype ??
     analysis?.parsed_input?.building_subtype ??
@@ -218,6 +230,26 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const hasTightFlexBand =
     typeof flexBeforeBreakBand === 'string' &&
     flexBeforeBreakBand.includes('tight');
+  const flexBeforeBreakPctValue = toFiniteNumber(
+    dealShieldRecord.flex_before_break_pct ?? dealShieldRecord.flexBeforeBreakPct
+  );
+  const normalizedFlexBeforeBreakPct =
+    typeof flexBeforeBreakPctValue === 'number'
+      ? (Math.abs(flexBeforeBreakPctValue) <= 1.5 ? flexBeforeBreakPctValue * 100 : flexBeforeBreakPctValue)
+      : null;
+  const decisionSummaryRecord = coalesceRecord(
+    dealShieldRecord.decision_summary,
+    dealShieldRecord.decisionSummary
+  );
+  const canonicalValueGap = toFiniteNumber(
+    decisionSummaryRecord.value_gap ??
+    decisionSummaryRecord.valueGap ??
+    dealShieldRecord.value_gap ??
+    dealShieldRecord.valueGap
+  );
+  const canonicalNotModeledReason = toComparableKey(
+    decisionSummaryRecord.not_modeled_reason ?? decisionSummaryRecord.notModeledReason
+  );
   const displaySubtypeLower = (displayData?.buildingSubtype || '')
     .toString()
     .toLowerCase()
@@ -838,10 +870,40 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     }
     return undefined;
   })();
-  let decisionStatus: DecisionStatus = derivedDecisionStatus ?? fallbackDecisionStatus;
-  // Industrial override: evaluate directly against target yield and DSCR so a
-  // 7+% warehouse at 1.25x+ DSCR is a clear GO.
+  const explicitDealShieldDecision = normalizeBackendDecision(
+    dealShieldRecord.decision_status ??
+      dealShieldRecord.decisionStatus ??
+      decisionSummaryRecord.decision_status ??
+      decisionSummaryRecord.decisionStatus ??
+      decisionSummaryRecord.recommendation ??
+      decisionSummaryRecord.status
+  );
+  const canonicalDealShieldDecisionStatus: DecisionStatus | undefined = (() => {
+    if (!hasDealShieldPayload) return undefined;
+    if (explicitDealShieldDecision) return explicitDealShieldDecision;
+    if (canonicalNotModeledReason) return 'PENDING';
+    if (hasBaseBreakCondition || hasBaseAlreadyBroken) return 'NO-GO';
+    if (typeof canonicalValueGap === 'number') {
+      if (canonicalValueGap <= 0) return 'NO-GO';
+      if (
+        typeof normalizedFlexBeforeBreakPct === 'number' &&
+        normalizedFlexBeforeBreakPct <= 2
+      ) {
+        return 'Needs Work';
+      }
+      return 'GO';
+    }
+    if (hasTightFlexBand) return 'Needs Work';
+    if (typeof normalizedFlexBeforeBreakPct === 'number') {
+      return normalizedFlexBeforeBreakPct <= 2 ? 'Needs Work' : 'GO';
+    }
+    return undefined;
+  })();
+  let decisionStatus: DecisionStatus =
+    canonicalDealShieldDecisionStatus ?? derivedDecisionStatus ?? fallbackDecisionStatus;
+  // Preserve historical industrial fallback when canonical DealShield status is unavailable.
   (() => {
+    if (canonicalDealShieldDecisionStatus) return;
     const bt = (buildingType || '').toLowerCase();
     if (bt !== 'industrial') return;
 
@@ -877,15 +939,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
 
     decisionStatus = 'NO-GO';
   })();
-  const canonicalDealShieldDecisionStatus: DecisionStatus | undefined = (() => {
-    if (!isMultifamilyProject || !hasDealShieldPayload) return undefined;
-    if (hasBaseBreakCondition || hasBaseAlreadyBroken) return 'NO-GO';
-    if (hasTightFlexBand) return 'Needs Work';
-    return undefined;
-  })();
-  if (canonicalDealShieldDecisionStatus) {
-    decisionStatus = canonicalDealShieldDecisionStatus;
-  }
   const isDealShieldCanonicalStatusActive = Boolean(canonicalDealShieldDecisionStatus);
   const decisionStatusLabel =
     decisionStatus === 'Needs Work'
