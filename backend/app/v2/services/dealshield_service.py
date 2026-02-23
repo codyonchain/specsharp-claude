@@ -934,6 +934,14 @@ def _is_multifamily_profile(profile_id: Any) -> bool:
     return isinstance(profile_id, str) and profile_id.startswith("multifamily_")
 
 
+def _is_industrial_profile(profile_id: Any) -> bool:
+    return isinstance(profile_id, str) and profile_id.startswith("industrial_")
+
+
+def _supports_decision_insurance_profile(profile_id: Any) -> bool:
+    return _is_multifamily_profile(profile_id) or _is_industrial_profile(profile_id)
+
+
 def _resolve_cell_map(row: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     cell_map: Dict[str, Dict[str, Any]] = {}
     cells = row.get("cells")
@@ -1056,7 +1064,7 @@ def _build_multifamily_decision_insurance(
     content: Optional[Dict[str, Any]],
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     profile_id = profile.get("profile_id")
-    if not _is_multifamily_profile(profile_id):
+    if not _supports_decision_insurance_profile(profile_id):
         return {}, {}
 
     outputs: Dict[str, Any] = {
