@@ -19,6 +19,15 @@ INDUSTRIAL_PROFILE_IDS = {
 }
 
 
+def _resolve_metric_ref(payload, metric_ref):
+    current = payload
+    for part in metric_ref.split("."):
+        if not isinstance(current, dict) or part not in current:
+            return None
+        current = current[part]
+    return current
+
+
 def test_industrial_subtypes_define_deterministic_dealshield_profile_ids():
     for subtype, expected_profile_id in INDUSTRIAL_PROFILE_IDS.items():
         config = get_building_config(BuildingType.INDUSTRIAL, subtype)
@@ -75,6 +84,50 @@ def test_industrial_engine_emits_dealshield_profile_for_all_subtypes():
             project_class=ProjectClass.GROUND_UP,
         )
         assert payload.get("dealshield_tile_profile") == expected_profile_id
+
+
+def test_industrial_emits_wave1_dealshield_scenario_snapshots_and_controls():
+    for subtype, expected_profile_id in INDUSTRIAL_PROFILE_IDS.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.INDUSTRIAL,
+            subtype=subtype,
+            square_footage=120_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        assert payload.get("dealshield_tile_profile") == expected_profile_id
+
+        scenarios_bundle = payload.get("dealshield_scenarios")
+        assert isinstance(scenarios_bundle, dict)
+        assert scenarios_bundle.get("profile_id") == expected_profile_id
+
+        profile = get_dealshield_profile(expected_profile_id)
+        expected_scenario_ids = ["base"] + [row["row_id"] for row in profile["derived_rows"]]
+
+        scenarios = scenarios_bundle.get("scenarios")
+        assert isinstance(scenarios, dict)
+        assert set(expected_scenario_ids).issubset(set(scenarios.keys()))
+
+        metric_refs = [tile["metric_ref"] for tile in profile["tiles"]]
+        for scenario_id in expected_scenario_ids:
+            snapshot = scenarios.get(scenario_id)
+            assert isinstance(snapshot, dict)
+            for metric_ref in metric_refs:
+                value = _resolve_metric_ref(snapshot, metric_ref)
+                assert isinstance(value, (int, float))
+
+        provenance = scenarios_bundle.get("provenance")
+        assert isinstance(provenance, dict)
+        assert provenance.get("profile_id") == expected_profile_id
+
+        scenario_inputs = provenance.get("scenario_inputs")
+        assert isinstance(scenario_inputs, dict)
+        for scenario_id in expected_scenario_ids:
+            scenario_input = scenario_inputs.get(scenario_id)
+            assert isinstance(scenario_input, dict)
+            assert scenario_input.get("stress_band_pct") in {3, 5, 7, 10}
+            assert scenario_input.get("cost_anchor_used") in {True, False}
+            assert scenario_input.get("revenue_anchor_used") in {True, False}
 
 
 def test_industrial_decision_insurance_outputs_and_provenance():

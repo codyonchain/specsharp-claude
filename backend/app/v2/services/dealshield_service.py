@@ -11,6 +11,9 @@ _MISSING = object()
 
 _WAVE1_PROFILE_IDS: Set[str] = {
     "industrial_warehouse_v1",
+    "industrial_distribution_center_v1",
+    "industrial_manufacturing_v1",
+    "industrial_flex_space_v1",
     "industrial_cold_storage_v1",
     "healthcare_medical_office_building_v1",
     "healthcare_urgent_care_v1",
