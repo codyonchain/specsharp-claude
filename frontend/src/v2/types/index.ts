@@ -344,6 +344,19 @@ export interface DealShieldControls {
   use_revenue_anchor: boolean;
 }
 
+export type DecisionStatus = 'GO' | 'Needs Work' | 'NO-GO' | 'PENDING';
+
+export interface DecisionStatusProvenance {
+  status_source?: string;
+  value_gap?: number | null;
+  not_modeled_reason?: string | null;
+  first_break_scenario_id?: string | null;
+  base_break_detected?: boolean;
+  flex_before_break_pct_normalized?: number | null;
+  flex_band?: string | null;
+  [key: string]: any;
+}
+
 export interface DecisionInsurancePrimaryControlVariable {
   tile_id?: string | null;
   label?: string | null;
@@ -409,6 +422,9 @@ export interface DealShieldDecisionInsuranceFields {
   exposure_concentration_pct?: number | null;
   ranked_likely_wrong?: DecisionInsuranceRankedLikelyWrongItem[];
   decision_insurance_provenance?: DecisionInsuranceProvenance;
+  decision_status?: DecisionStatus;
+  decision_reason_code?: string;
+  decision_status_provenance?: DecisionStatusProvenance;
 }
 
 export type DealShieldViewModel = Record<string, any> & Partial<DealShieldDecisionInsuranceFields>;

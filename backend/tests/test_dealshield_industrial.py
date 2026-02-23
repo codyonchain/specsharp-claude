@@ -193,6 +193,7 @@ def test_industrial_emits_wave1_dealshield_scenario_snapshots_and_controls():
 
 
 def test_industrial_decision_insurance_outputs_and_provenance():
+    allowed_statuses = {"GO", "Needs Work", "NO-GO", "PENDING"}
     for subtype, expected_profile_id in INDUSTRIAL_PROFILE_IDS.items():
         payload = unified_engine.calculate_project(
             building_type=BuildingType.INDUSTRIAL,
@@ -214,6 +215,10 @@ def test_industrial_decision_insurance_outputs_and_provenance():
         assert "exposure_concentration_pct" in view_model
         assert "ranked_likely_wrong" in view_model
         assert "decision_insurance_provenance" in view_model
+        assert view_model.get("decision_status") in allowed_statuses
+        assert isinstance(view_model.get("decision_reason_code"), str)
+        assert view_model["decision_reason_code"].strip()
+        assert isinstance(view_model.get("decision_status_provenance"), dict)
 
         di_provenance = view_model.get("decision_insurance_provenance")
         assert isinstance(di_provenance, dict)
@@ -223,6 +228,17 @@ def test_industrial_decision_insurance_outputs_and_provenance():
         model_provenance = view_model.get("provenance")
         assert isinstance(model_provenance, dict)
         assert model_provenance.get("decision_insurance") == di_provenance
+        assert model_provenance.get("decision_status") in allowed_statuses
+        assert isinstance(model_provenance.get("decision_reason_code"), str)
+        assert model_provenance.get("decision_reason_code")
+        assert isinstance(model_provenance.get("decision_status_provenance"), dict)
+
+        decision_summary = view_model.get("decision_summary")
+        assert isinstance(decision_summary, dict)
+        assert decision_summary.get("decision_status") in allowed_statuses
+        assert isinstance(decision_summary.get("decision_reason_code"), str)
+        assert decision_summary.get("decision_reason_code")
+        assert isinstance(decision_summary.get("decision_status_provenance"), dict)
 
         for key in (
             "primary_control_variable",

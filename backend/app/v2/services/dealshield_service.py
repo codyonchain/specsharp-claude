@@ -1427,6 +1427,125 @@ def _build_multifamily_decision_insurance(
     return outputs, provenance
 
 
+def _normalize_decision_status(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower().replace("_", " ")
+    if not normalized:
+        return None
+    if "no-go" in normalized or "no go" in normalized:
+        return "NO-GO"
+    if "needs work" in normalized or "near break" in normalized:
+        return "Needs Work"
+    if "pending" in normalized or "review" in normalized:
+        return "PENDING"
+    if normalized == "go" or normalized.startswith("go "):
+        return "GO"
+    return None
+
+
+def _normalize_percentish_value(value: Any) -> Optional[float]:
+    if not _is_number(value):
+        return None
+    parsed = float(value)
+    if abs(parsed) <= 1.5:
+        return parsed * 100.0
+    return parsed
+
+
+def _resolve_canonical_decision_status(
+    payload: Dict[str, Any],
+    decision_summary: Dict[str, Any],
+    decision_insurance_outputs: Dict[str, Any],
+    decision_insurance_provenance: Dict[str, Any],
+) -> Tuple[str, str, Dict[str, Any]]:
+    explicit_sources = [
+        payload.get("decision_status"),
+        payload.get("decisionStatus"),
+        decision_summary.get("decision_status"),
+        decision_summary.get("decisionStatus"),
+        decision_summary.get("recommendation"),
+        decision_summary.get("status"),
+    ]
+    explicit_status = None
+    explicit_raw_value = None
+    for source in explicit_sources:
+        normalized = _normalize_decision_status(source)
+        if normalized:
+            explicit_status = normalized
+            explicit_raw_value = source
+            break
+    if explicit_status:
+        return (
+            explicit_status,
+            "explicit_status_signal",
+            {
+                "status": explicit_status,
+                "reason_code": "explicit_status_signal",
+                "status_source": "payload_or_decision_summary",
+                "explicit_raw_value": explicit_raw_value,
+            },
+        )
+
+    not_modeled_reason = decision_summary.get("not_modeled_reason") or decision_summary.get("notModeledReason")
+    first_break = decision_insurance_outputs.get("first_break_condition")
+    first_break_scenario = None
+    if isinstance(first_break, dict):
+        first_break_scenario = first_break.get("scenario_id") or first_break.get("scenarioId")
+    first_break_is_base = isinstance(first_break_scenario, str) and first_break_scenario.strip().lower() == "base"
+    flex_provenance = (
+        decision_insurance_provenance.get("flex_before_break_pct")
+        if isinstance(decision_insurance_provenance.get("flex_before_break_pct"), dict)
+        else {}
+    )
+    flex_reason = flex_provenance.get("reason")
+    base_already_broken = isinstance(flex_reason, str) and flex_reason.strip().lower() == "base_already_broken"
+
+    value_gap = decision_summary.get("value_gap")
+    flex_before_break_pct = _normalize_percentish_value(decision_insurance_outputs.get("flex_before_break_pct"))
+    flex_band_value = (
+        decision_insurance_outputs.get("flex_before_break_band")
+        if isinstance(decision_insurance_outputs.get("flex_before_break_band"), str)
+        else flex_provenance.get("band")
+    )
+    has_tight_flex_band = (
+        isinstance(flex_band_value, str) and "tight" in flex_band_value.strip().lower()
+    )
+
+    provenance = {
+        "status_source": "dealshield_policy_v1",
+        "value_gap": float(value_gap) if _is_number(value_gap) else None,
+        "not_modeled_reason": not_modeled_reason if isinstance(not_modeled_reason, str) else None,
+        "first_break_scenario_id": first_break_scenario,
+        "base_break_detected": bool(first_break_is_base or base_already_broken),
+        "flex_before_break_pct_normalized": flex_before_break_pct,
+        "flex_band": flex_band_value if isinstance(flex_band_value, str) else None,
+    }
+
+    if isinstance(not_modeled_reason, str) and not_modeled_reason.strip():
+        return "PENDING", "not_modeled_inputs_missing", {**provenance}
+
+    if first_break_is_base or base_already_broken:
+        return "NO-GO", "base_case_break_condition", {**provenance}
+
+    if _is_number(value_gap):
+        if float(value_gap) <= 0:
+            return "NO-GO", "base_value_gap_non_positive", {**provenance}
+        if flex_before_break_pct is not None and flex_before_break_pct <= 2.0:
+            return "Needs Work", "low_flex_before_break_buffer", {**provenance}
+        return "GO", "base_value_gap_positive", {**provenance}
+
+    if has_tight_flex_band:
+        return "Needs Work", "tight_flex_band", {**provenance}
+
+    if flex_before_break_pct is not None:
+        if flex_before_break_pct <= 2.0:
+            return "Needs Work", "low_flex_before_break_buffer", {**provenance}
+        return "GO", "flex_before_break_buffer_positive", {**provenance}
+
+    return "PENDING", "insufficient_modeled_inputs", {**provenance}
+
+
 def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profile: Dict[str, Any]) -> Dict[str, Any]:
     view_model = build_dealshield_scenario_table(project_id, payload, profile)
     legacy_columns = copy.deepcopy(view_model.get("columns", []))
@@ -1498,6 +1617,31 @@ def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profil
         provenance["decision_insurance"] = copy.deepcopy(decision_insurance_provenance)
         for output_key, output_value in decision_insurance_outputs.items():
             view_model[output_key] = output_value
+
+    resolved_status, resolved_reason_code, status_provenance = _resolve_canonical_decision_status(
+        payload=payload,
+        decision_summary=decision_summary if isinstance(decision_summary, dict) else {},
+        decision_insurance_outputs=decision_insurance_outputs if isinstance(decision_insurance_outputs, dict) else {},
+        decision_insurance_provenance=decision_insurance_provenance if isinstance(decision_insurance_provenance, dict) else {},
+    )
+    view_model["decision_status"] = resolved_status
+    view_model["decision_reason_code"] = resolved_reason_code
+    view_model["decision_status_provenance"] = copy.deepcopy(status_provenance)
+    if isinstance(decision_summary, dict):
+        decision_summary["decision_status"] = resolved_status
+        decision_summary["decision_reason_code"] = resolved_reason_code
+        decision_summary["decision_status_provenance"] = copy.deepcopy(status_provenance)
+    if isinstance(view_model.get("decision_summary"), dict):
+        view_model["decision_summary"]["decision_status"] = resolved_status
+        view_model["decision_summary"]["decision_reason_code"] = resolved_reason_code
+        view_model["decision_summary"]["decision_status_provenance"] = copy.deepcopy(status_provenance)
+    if isinstance(provenance.get("decision_summary"), dict):
+        provenance["decision_summary"]["decision_status"] = resolved_status
+        provenance["decision_summary"]["decision_reason_code"] = resolved_reason_code
+        provenance["decision_summary"]["decision_status_provenance"] = copy.deepcopy(status_provenance)
+    provenance["decision_status"] = resolved_status
+    provenance["decision_reason_code"] = resolved_reason_code
+    provenance["decision_status_provenance"] = copy.deepcopy(status_provenance)
 
     view_model["provenance"] = provenance
     return view_model

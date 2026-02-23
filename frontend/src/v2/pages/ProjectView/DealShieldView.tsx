@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import {
   DealShieldControls,
   DealShieldViewModel,
+  DecisionStatus,
   DecisionInsuranceFirstBreakCondition,
   DecisionInsurancePrimaryControlVariable,
   DecisionInsuranceProvenance,
@@ -32,7 +33,6 @@ const DEFAULT_DEALSHIELD_CONTROLS: DealShieldControls = {
 };
 
 type DecisionMetricType = 'currency' | 'percent' | 'ratio' | 'number';
-type DecisionStatus = 'GO' | 'Needs Work' | 'NO-GO' | 'PENDING';
 
 const toFiniteNumber = (value: unknown): number | null => {
   if (typeof value === 'number') {
@@ -207,6 +207,26 @@ const normalizeBackendDecision = (value: unknown): DecisionStatus | undefined =>
   if (lowered.includes('go')) return 'GO';
   if (lowered.includes('pending') || lowered.includes('review')) return 'PENDING';
   return undefined;
+};
+
+const decisionReasonCopy = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const key = value.trim().toLowerCase();
+  if (!key) return null;
+  const map: Record<string, string> = {
+    explicit_status_signal: 'Status is set by an explicit backend policy signal.',
+    not_modeled_inputs_missing: 'Status is pending because required modeled inputs are missing.',
+    base_case_break_condition: 'Base scenario already trips the break condition.',
+    base_value_gap_non_positive: 'Base value gap is non-positive.',
+    low_flex_before_break_buffer: 'Status reflects low flex-before-break buffer.',
+    base_value_gap_positive: 'Base value gap is positive under current assumptions.',
+    tight_flex_band: 'Status reflects a tight flex-before-break band.',
+    flex_before_break_buffer_positive: 'Status reflects positive flex-before-break buffer.',
+    insufficient_modeled_inputs: 'Status is pending due to insufficient modeled inputs.',
+  };
+  if (map[key]) return map[key];
+  const label = key.replace(/_/g, ' ');
+  return `${label.charAt(0).toUpperCase()}${label.slice(1)}.`;
 };
 
 const formatAssumptionPercentFixed2 = (value: unknown) => {
@@ -480,6 +500,15 @@ export const DealShieldView: React.FC<Props> = ({
     : redFlagsActions.map((item: any) => item?.action).filter(Boolean);
 
   const provenance = (viewModel as any)?.provenance ?? (dealShieldData as any)?.provenance ?? {};
+  const decisionStatusProvenanceRaw =
+    (viewModel as any)?.decision_status_provenance ??
+    (viewModel as any)?.decisionStatusProvenance ??
+    provenance?.decision_status_provenance ??
+    provenance?.decisionStatusProvenance;
+  const decisionStatusProvenance =
+    decisionStatusProvenanceRaw && typeof decisionStatusProvenanceRaw === 'object'
+      ? (decisionStatusProvenanceRaw as Record<string, unknown>)
+      : null;
   const decisionInsuranceProvenanceRaw =
     (viewModel as any)?.decision_insurance_provenance ??
     (viewModel as any)?.decisionInsuranceProvenance ??
@@ -743,6 +772,25 @@ export const DealShieldView: React.FC<Props> = ({
     decisionSummaryRaw?.recommendation ??
     decisionSummaryRaw?.status
   );
+  const decisionReasonCode =
+    (viewModel as any)?.decision_reason_code ??
+    (viewModel as any)?.decisionReasonCode ??
+    decisionSummaryRaw?.decision_reason_code ??
+    decisionSummaryRaw?.decisionReasonCode ??
+    provenance?.decision_reason_code ??
+    provenance?.decisionReasonCode;
+  const statusSource =
+    typeof decisionStatusProvenance?.status_source === 'string'
+      ? decisionStatusProvenance.status_source
+      : typeof decisionStatusProvenance?.statusSource === 'string'
+        ? decisionStatusProvenance.statusSource
+        : null;
+  const provenanceNotModeledReason =
+    typeof decisionStatusProvenance?.not_modeled_reason === 'string'
+      ? decisionStatusProvenance.not_modeled_reason
+      : typeof decisionStatusProvenance?.notModeledReason === 'string'
+        ? decisionStatusProvenance.notModeledReason
+        : null;
   const canonicalDecisionStatus: DecisionStatus = (() => {
     if (explicitDecisionStatus) return explicitDecisionStatus;
     if (decisionSummary.notModeledReason) return 'PENDING';
@@ -770,9 +818,12 @@ export const DealShieldView: React.FC<Props> = ({
         : canonicalDecisionStatus === 'NO-GO'
           ? 'Base case has already collapsed or value gap is non-positive.'
           : 'Canonical status is pending due to missing modeled inputs.';
-  const decisionStatusDetailText = decisionSummary.notModeledReason
+  const decisionStatusDetailText = decisionReasonCopy(decisionReasonCode)
+    ?? provenanceNotModeledReason
+    ?? decisionSummary.notModeledReason
     ?? firstBreakUnavailableReason
     ?? flexBeforeBreakUnavailableReason
+    ?? (statusSource ? `Status source: ${statusSource}.` : null)
     ?? 'Status uses backend Decision Insurance and decision-summary outputs with deterministic fallback.';
   const decisionStatusPanelClass =
     canonicalDecisionStatus === 'GO'

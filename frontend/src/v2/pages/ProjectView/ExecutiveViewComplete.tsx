@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DealShieldViewModel, Project } from '../../types';
+import { DealShieldViewModel, DecisionStatus, Project } from '../../types';
 import { formatters, safeGet } from '../../utils/displayFormatters';
 import { formatPerSf } from '@/v2/utils/formatters';
 import { BackendDataMapper } from '../../utils/backendDataMapper';
@@ -90,6 +90,37 @@ const toFiniteNumber = (value: unknown): number | null => {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+};
+
+const normalizeBackendDecision = (value: unknown): DecisionStatus | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (normalized.includes('no-go') || normalized.includes('no_go') || normalized.includes('no go')) return 'NO-GO';
+  if (normalized.includes('needs work') || normalized.includes('near break') || normalized.includes('work')) return 'Needs Work';
+  if (normalized.includes('pending') || normalized.includes('review')) return 'PENDING';
+  if (normalized === 'go' || normalized.startsWith('go ')) return 'GO';
+  return undefined;
+};
+
+const decisionReasonCopy = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const key = value.trim().toLowerCase();
+  if (!key) return undefined;
+  const map: Record<string, string> = {
+    explicit_status_signal: 'Decision status is set directly by backend policy output.',
+    not_modeled_inputs_missing: 'Decision status is pending because required modeled inputs are missing.',
+    base_case_break_condition: 'Decision status is NO-GO because the base scenario already breaks.',
+    base_value_gap_non_positive: 'Decision status is NO-GO because base value gap is non-positive.',
+    low_flex_before_break_buffer: 'Decision status reflects low flex-before-break buffer.',
+    base_value_gap_positive: 'Decision status is GO because base value gap is positive.',
+    tight_flex_band: 'Decision status reflects a tight flex-before-break band.',
+    flex_before_break_buffer_positive: 'Decision status reflects positive flex-before-break buffer.',
+    insufficient_modeled_inputs: 'Decision status is pending due to insufficient modeled inputs.',
+  };
+  if (map[key]) return map[key];
+  const label = key.replace(/_/g, ' ');
+  return `${label.charAt(0).toUpperCase()}${label.slice(1)}.`;
 };
 
 const buildSafeAnalysis = (project?: Project | null): AnyRecord => {
@@ -822,15 +853,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     : undefined;
   const investmentDecisionFromDisplay = displayData.investmentDecision;
   const feasibilityFlag = typeof displayData.feasible === 'boolean' ? displayData.feasible : undefined;
-  type DecisionStatus = 'GO' | 'Needs Work' | 'NO-GO' | 'PENDING';
-  const normalizeBackendDecision = (value: unknown): DecisionStatus | undefined => {
-    if (typeof value === 'string') {
-      if (value.toLowerCase().includes('no-go') || value.toLowerCase().includes('no_go')) return 'NO-GO';
-      if (value.toLowerCase().includes('go')) return 'GO';
-      if (value.toLowerCase().includes('work') || value.toLowerCase().includes('near')) return 'Needs Work';
-    }
-    return undefined;
-  };
   const backendDecision = normalizeBackendDecision(
     typeof investmentDecisionFromDisplay === 'string'
       ? investmentDecisionFromDisplay
@@ -878,9 +900,23 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
       decisionSummaryRecord.recommendation ??
       decisionSummaryRecord.status
   );
+  const decisionReasonCode =
+    (typeof dealShieldRecord.decision_reason_code === 'string' ? dealShieldRecord.decision_reason_code : undefined) ??
+    (typeof dealShieldRecord.decisionReasonCode === 'string' ? dealShieldRecord.decisionReasonCode : undefined) ??
+    (typeof decisionSummaryRecord.decision_reason_code === 'string' ? decisionSummaryRecord.decision_reason_code : undefined) ??
+    (typeof decisionSummaryRecord.decisionReasonCode === 'string' ? decisionSummaryRecord.decisionReasonCode : undefined);
+  const decisionStatusProvenanceRecord = coalesceRecord(
+    dealShieldRecord.decision_status_provenance,
+    dealShieldRecord.decisionStatusProvenance,
+    decisionSummaryRecord.decision_status_provenance,
+    decisionSummaryRecord.decisionStatusProvenance
+  );
   const canonicalDealShieldDecisionStatus: DecisionStatus | undefined = (() => {
-    if (!hasDealShieldPayload) return undefined;
-    if (explicitDealShieldDecision) return explicitDealShieldDecision;
+    if (!hasDealShieldPayload || !explicitDealShieldDecision) return undefined;
+    return explicitDealShieldDecision;
+  })();
+  const fallbackDealShieldDecisionStatus: DecisionStatus | undefined = (() => {
+    if (!hasDealShieldPayload || canonicalDealShieldDecisionStatus) return undefined;
     if (canonicalNotModeledReason) return 'PENDING';
     if (hasBaseBreakCondition || hasBaseAlreadyBroken) return 'NO-GO';
     if (typeof canonicalValueGap === 'number') {
@@ -900,10 +936,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     return undefined;
   })();
   let decisionStatus: DecisionStatus =
-    canonicalDealShieldDecisionStatus ?? derivedDecisionStatus ?? fallbackDecisionStatus;
-  // Preserve historical industrial fallback when canonical DealShield status is unavailable.
+    canonicalDealShieldDecisionStatus ?? fallbackDealShieldDecisionStatus ?? derivedDecisionStatus ?? fallbackDecisionStatus;
+  // Preserve historical industrial fallback when no DealShield-based status is available.
   (() => {
-    if (canonicalDealShieldDecisionStatus) return;
+    if (canonicalDealShieldDecisionStatus || fallbackDealShieldDecisionStatus) return;
     const bt = (buildingType || '').toLowerCase();
     if (bt !== 'industrial') return;
 
@@ -956,7 +992,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
         : decisionStatus === 'GO'
           ? 'GO'
           : 'Needs Review';
-  const decisionReasonText = displayData.decisionReason || (
+  const decisionReasonText = decisionReasonCopy(decisionReasonCode)
+    || (typeof decisionStatusProvenanceRecord.not_modeled_reason === 'string' ? decisionStatusProvenanceRecord.not_modeled_reason : undefined)
+    || (typeof decisionStatusProvenanceRecord.notModeledReason === 'string' ? decisionStatusProvenanceRecord.notModeledReason : undefined)
+    || displayData.decisionReason || (
     typeof investmentDecisionFromDisplay === 'object'
       ? investmentDecisionFromDisplay?.summary
     : undefined

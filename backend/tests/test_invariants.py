@@ -376,6 +376,9 @@ def test_multifamily_decision_insurance_outputs_are_deterministic():
         "exposure_concentration_pct",
         "ranked_likely_wrong",
         "decision_insurance_provenance",
+        "decision_status",
+        "decision_reason_code",
+        "decision_status_provenance",
     ):
         assert view_a.get(key) == view_b.get(key), f"Expected deterministic equality for '{key}'"
 
@@ -413,5 +416,8 @@ def test_industrial_decision_insurance_outputs_are_deterministic():
         "exposure_concentration_pct",
         "ranked_likely_wrong",
         "decision_insurance_provenance",
+        "decision_status",
+        "decision_reason_code",
+        "decision_status_provenance",
     ):
         assert view_a.get(key) == view_b.get(key), f"Expected deterministic equality for '{key}'"
