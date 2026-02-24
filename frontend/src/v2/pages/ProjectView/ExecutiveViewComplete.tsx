@@ -389,6 +389,20 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     .join(' • ');
 
   const scenarioCalc = (analysis as AnyRecord)?.calculations || (project as AnyRecord)?.calculation_data || {};
+  const scenarioDealShieldBundle = coalesceRecord(
+    scenarioCalc?.dealshield_scenarios,
+    scenarioCalc?.dealShieldScenarios,
+    (analysis as AnyRecord)?.dealshield_scenarios,
+    (analysis as AnyRecord)?.dealShieldScenarios,
+    (project as AnyRecord)?.calculation_data?.dealshield_scenarios,
+    (project as AnyRecord)?.calculation_data?.dealShieldScenarios,
+    dealShieldRecord?.dealshield_scenarios,
+    dealShieldRecord?.dealShieldScenarios,
+    toRecord(dealShieldRecord?.view_model).dealshield_scenarios,
+    toRecord(dealShieldRecord?.view_model).dealShieldScenarios,
+    toRecord(dealShieldRecord?.viewModel).dealshield_scenarios,
+    toRecord(dealShieldRecord?.viewModel).dealShieldScenarios
+  );
   const scenarioReturn =
     scenarioCalc?.ownership_analysis?.return_metrics ||
     scenarioCalc?.ownershipAnalysis?.returnMetrics ||
@@ -4053,6 +4067,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
           open={isScenarioOpen}
           onClose={() => setIsScenarioOpen(false)}
           base={scenarioBase}
+          dealShieldScenarioBundle={scenarioDealShieldBundle}
         />
       </>
     );
