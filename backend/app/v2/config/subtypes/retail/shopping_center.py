@@ -72,6 +72,8 @@ CONFIG = (
             "drive_thru": 40,
             "storage_units": 15,
         },
+        dealshield_tile_profile="retail_shopping_center_v1",
+        scope_items_profile="retail_shopping_center_structural_v1",
         base_revenue_per_sf_annual=35,
         base_sales_per_sf_annual=350,
         occupancy_rate_base=0.92,
