@@ -9,12 +9,14 @@ import {
   detectHealthcareFeatureIdsFromDescription,
   detectHospitalityFeatureIdsFromDescription,
   detectOfficeFeatureIdsFromDescription,
+  detectRetailFeatureIdsFromDescription,
   detectRestaurantFeatureIdsFromDescription,
   detectSpecialtyFeatureIdsFromDescription,
   filterSpecialFeaturesBySubtype,
   getHealthcareSpecialFeatures,
   getHospitalitySpecialFeatures,
   getOfficeSpecialFeatures,
+  getRetailSpecialFeatures,
   getRestaurantSpecialFeatures,
   getSpecialtySpecialFeatures,
   type SpecialFeatureOption,
@@ -421,11 +423,7 @@ export const NewProject: React.FC = () => {
         { id: 'cranes', name: 'Overhead Cranes', cost: 2000000, description: 'Heavy lifting equipment' }
       ],
       office: getOfficeSpecialFeatures(),
-      retail: [
-        { id: 'food_court', name: 'Food Court', cost: 2000000, description: 'Multi-vendor dining area' },
-        { id: 'anchor_fitout', name: 'Anchor Tenant Fit-out', cost: 3000000, description: 'Major retailer customization' },
-        { id: 'parking_deck', name: 'Parking Deck', cost: 4000000, description: 'Structured parking' }
-      ],
+      retail: getRetailSpecialFeatures(),
       restaurant: getRestaurantSpecialFeatures(),
       hospitality: getHospitalitySpecialFeatures(),
       specialty: getSpecialtySpecialFeatures(),
@@ -454,6 +452,9 @@ export const NewProject: React.FC = () => {
       detectedFeatures.add(featureId);
     }
     for (const featureId of detectHospitalityFeatureIdsFromDescription(desc)) {
+      detectedFeatures.add(featureId);
+    }
+    for (const featureId of detectRetailFeatureIdsFromDescription(desc)) {
       detectedFeatures.add(featureId);
     }
     for (const featureId of detectOfficeFeatureIdsFromDescription(desc)) {
@@ -888,7 +889,7 @@ export const NewProject: React.FC = () => {
     isPlaceholder: boolean;
   };
 
-  const usesSubtypeCostPerSF = ['healthcare', 'multifamily', 'restaurant', 'specialty', 'office'].includes(
+  const usesSubtypeCostPerSF = ['healthcare', 'multifamily', 'restaurant', 'specialty', 'office', 'retail'].includes(
     parsedInput?.building_type ?? ''
   );
   const isRestaurantProject = parsedInput?.building_type === 'restaurant';

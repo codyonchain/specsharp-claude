@@ -5,21 +5,26 @@ import {
   HOSPITALITY_SUBTYPES,
   OFFICE_FEATURE_COSTS_BY_SUBTYPE,
   OFFICE_SUBTYPES,
+  RETAIL_FEATURE_COSTS_BY_SUBTYPE,
+  RETAIL_SUBTYPES,
   RESTAURANT_FEATURE_COSTS_BY_SUBTYPE,
   RESTAURANT_SUBTYPES,
   detectHealthcareFeatureIdsFromDescription,
   detectHospitalityFeatureIdsFromDescription,
   detectOfficeFeatureIdsFromDescription,
+  detectRetailFeatureIdsFromDescription,
   detectSpecialtyFeatureIdsFromDescription,
   filterSpecialFeaturesBySubtype,
   getHealthcareSpecialFeatures,
   getHospitalitySpecialFeatures,
   getOfficeSpecialFeatures,
+  getRetailSpecialFeatures,
   getRestaurantSpecialFeatures,
   getSpecialtySpecialFeatures,
   healthcareSubtypeHasSpecialFeatures,
   hospitalitySubtypeHasSpecialFeatures,
   officeSubtypeHasSpecialFeatures,
+  retailSubtypeHasSpecialFeatures,
   restaurantSubtypeHasSpecialFeatures,
 } from "../specialFeaturesCatalog";
 
@@ -79,6 +84,26 @@ const REQUIRED_HOSPITALITY_MAPPING = {
     spa: 60,
     conference_center: 45,
     rooftop_bar: 55,
+  },
+} as const;
+
+const REQUIRED_RETAIL_MAPPING = {
+  shopping_center: {
+    covered_walkway: 20,
+    loading_dock: 25,
+    monument_signage: 15,
+    outdoor_seating: 20,
+    drive_thru: 40,
+    storage_units: 15,
+  },
+  big_box: {
+    loading_dock: 20,
+    mezzanine: 25,
+    auto_center: 45,
+    garden_center: 30,
+    warehouse_racking: 15,
+    refrigerated_storage: 35,
+    curbside_pickup: 20,
   },
 } as const;
 
@@ -335,6 +360,99 @@ describe("hospitality special features catalog", () => {
         "restaurant",
       ])
     );
+  });
+});
+
+describe("retail special features catalog", () => {
+  it("is non-empty and matches backend-aligned subtype mapping keys/values", () => {
+    const retailFeatures = getRetailSpecialFeatures();
+    expect(retailFeatures.length).toBeGreaterThan(0);
+    expect(RETAIL_FEATURE_COSTS_BY_SUBTYPE).toEqual(REQUIRED_RETAIL_MAPPING);
+  });
+
+  it("resolves expected feature IDs for shopping_center and big_box with no duplicates", () => {
+    const retailFeatures = getRetailSpecialFeatures();
+
+    for (const subtype of RETAIL_SUBTYPES) {
+      const expectedIds = Object.keys(REQUIRED_RETAIL_MAPPING[subtype]).sort();
+      const resolvedIds = filterSpecialFeaturesBySubtype(retailFeatures, subtype).map(
+        (feature) => feature.id
+      );
+      const uniqueResolvedIds = Array.from(new Set(resolvedIds));
+
+      expect(uniqueResolvedIds.length).toBe(resolvedIds.length);
+      expect(uniqueResolvedIds.sort()).toEqual(expectedIds);
+    }
+  });
+
+  it("has valid cost-per-subtype entries for all allowed retail feature subtype combinations", () => {
+    const retailFeatures = getRetailSpecialFeatures();
+
+    for (const feature of retailFeatures) {
+      expect(feature.costPerSFBySubtype).toBeDefined();
+      expect(feature.allowedSubtypes && feature.allowedSubtypes.length > 0).toBe(true);
+
+      for (const subtype of feature.allowedSubtypes || []) {
+        const expectedCost = REQUIRED_RETAIL_MAPPING[
+          subtype as keyof typeof REQUIRED_RETAIL_MAPPING
+        ][feature.id as keyof (typeof REQUIRED_RETAIL_MAPPING)[keyof typeof REQUIRED_RETAIL_MAPPING]];
+
+        expect(typeof expectedCost).toBe("number");
+        expect(expectedCost).toBeGreaterThan(0);
+        expect(feature.costPerSFBySubtype?.[subtype]).toBe(expectedCost);
+      }
+    }
+  });
+
+  it("retail subtype helper returns true for shopping_center and big_box", () => {
+    expect(retailSubtypeHasSpecialFeatures("shopping_center")).toBe(true);
+    expect(retailSubtypeHasSpecialFeatures("big_box")).toBe(true);
+  });
+
+  it("detects retail feature IDs from shopping-center and big-box scope cues", () => {
+    const shoppingCenterDetected = detectRetailFeatureIdsFromDescription(
+      "Neighborhood shopping center with covered walkway, monument signage, drive thru, and outdoor seating."
+    );
+    expect(shoppingCenterDetected).toEqual(
+      expect.arrayContaining([
+        "covered_walkway",
+        "monument_signage",
+        "drive_thru",
+        "outdoor_seating",
+      ])
+    );
+
+    const bigBoxDetected = detectRetailFeatureIdsFromDescription(
+      "Big box retail shell with mezzanine, garden center, refrigerated storage, and curbside pickup lanes."
+    );
+    expect(bigBoxDetected).toEqual(
+      expect.arrayContaining([
+        "mezzanine",
+        "garden_center",
+        "refrigerated_storage",
+        "curbside_pickup",
+      ])
+    );
+  });
+
+  it("keeps subtype filtering and cost resolution consistent for shared retail features", () => {
+    const retailFeatures = getRetailSpecialFeatures();
+    const shoppingLoadingDock = filterSpecialFeaturesBySubtype(retailFeatures, "shopping_center").find(
+      (feature) => feature.id === "loading_dock"
+    );
+    const bigBoxLoadingDock = filterSpecialFeaturesBySubtype(retailFeatures, "big_box").find(
+      (feature) => feature.id === "loading_dock"
+    );
+
+    expect(shoppingLoadingDock).toBeDefined();
+    expect(bigBoxLoadingDock).toBeDefined();
+
+    const shoppingCost = resolveFeatureCostPerSF(shoppingLoadingDock!, "shopping_center");
+    const bigBoxCost = resolveFeatureCostPerSF(bigBoxLoadingDock!, "big_box");
+
+    expect(shoppingCost).toBe(25);
+    expect(bigBoxCost).toBe(20);
+    expect(shoppingCost).not.toBe(bigBoxCost);
   });
 });
 
