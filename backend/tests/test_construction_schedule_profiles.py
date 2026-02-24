@@ -5,6 +5,8 @@ from app.v2.engines.unified_engine import build_construction_schedule
 
 
 TARGET_SUBTYPE_EXPECTATIONS = [
+    (BuildingType.OFFICE, "class_a", 30),
+    (BuildingType.OFFICE, "class_b", 24),
     (BuildingType.INDUSTRIAL, "warehouse", 16),
     (BuildingType.INDUSTRIAL, "distribution_center", 20),
     (BuildingType.INDUSTRIAL, "manufacturing", 24),
@@ -67,6 +69,7 @@ def test_subtype_schedules_resolve_for_target_verticals(
 @pytest.mark.parametrize(
     "building_type,unknown_subtype,expected_total_months",
     [
+        (BuildingType.OFFICE, "class_c_reposition", 27),
         (BuildingType.INDUSTRIAL, "unknown_dc_variant", 18),
         (BuildingType.MULTIFAMILY, "student_housing_variant", 30),
         (BuildingType.RESTAURANT, "chef_counter_concept", 14),
@@ -103,12 +106,6 @@ def test_unknown_hospitality_subtype_falls_back_to_multifamily_baseline_determin
 
 
 def test_non_target_building_types_keep_existing_behavior():
-    office_schedule = build_construction_schedule(BuildingType.OFFICE, subtype="class_a")
-    assert office_schedule["building_type"] == BuildingType.OFFICE.value
-    assert office_schedule["subtype"] is None
-    assert office_schedule["schedule_source"] == "building_type"
-    assert office_schedule["total_months"] == 27
-
     parking_schedule = build_construction_schedule(BuildingType.PARKING, subtype="garage")
     industrial_default_schedule = build_construction_schedule(BuildingType.INDUSTRIAL)
 

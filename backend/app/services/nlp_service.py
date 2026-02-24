@@ -512,17 +512,18 @@ class NLPService:
             for keyword in patterns['keywords']:
                 if keyword in text_lower:
                     # Found building type, get default subtype
+                    if building_type == 'office':
+                        return building_type, None, classification
                     subtype = self._get_default_subtype(building_type)
                     return building_type, subtype, classification
 
         # Default fallback
-        return 'office', 'class_b', classification
+        return 'office', None, classification
 
     def _get_default_subtype(self, building_type: str) -> str:
         """Get default subtype for a building type"""
         defaults = {
             'multifamily': 'market_rate_apartments',
-            'office': 'class_b',
             'retail': 'shopping_center',
             'industrial': 'warehouse',
             'hospitality': 'limited_service_hotel',

@@ -281,6 +281,102 @@ CONSTRUCTION_SCHEDULE_FALLBACKS: Dict[BuildingType, BuildingType] = {
 
 
 CONSTRUCTION_SUBTYPE_SCHEDULES: Dict[BuildingType, Dict[str, ScheduleConfig]] = {
+    BuildingType.OFFICE: {
+        "class_a": {
+            "total_months": 30,
+            "phases": _phases([
+                {
+                    "id": "site_foundation",
+                    "label": "Site Prep + Deep Foundations",
+                    "start_month": 0,
+                    "duration": 6,
+                    "color": "blue",
+                },
+                {
+                    "id": "structural",
+                    "label": "High-Rise Core + Structural Frame",
+                    "start_month": 3,
+                    "duration": 12,
+                    "color": "green",
+                },
+                {
+                    "id": "exterior_envelope",
+                    "label": "Curtainwall + Exterior Performance Envelope",
+                    "start_month": 9,
+                    "duration": 10,
+                    "color": "orange",
+                },
+                {
+                    "id": "mep_rough",
+                    "label": "Central Plant + Vertical MEP Rough-In",
+                    "start_month": 9,
+                    "duration": 10,
+                    "color": "purple",
+                },
+                {
+                    "id": "interior_finishes",
+                    "label": "Premium Tenant Buildout + Amenity Floors",
+                    "start_month": 16,
+                    "duration": 12,
+                    "color": "pink",
+                },
+                {
+                    "id": "mep_finishes",
+                    "label": "Controls Integration + Commissioning",
+                    "start_month": 20,
+                    "duration": 9,
+                    "color": "teal",
+                },
+            ]),
+        },
+        "class_b": {
+            "total_months": 24,
+            "phases": _phases([
+                {
+                    "id": "site_foundation",
+                    "label": "Selective Demolition + Site Corrections",
+                    "start_month": 0,
+                    "duration": 4,
+                    "color": "blue",
+                },
+                {
+                    "id": "structural",
+                    "label": "Core Rehabilitation + Framing Repairs",
+                    "start_month": 2,
+                    "duration": 9,
+                    "color": "green",
+                },
+                {
+                    "id": "exterior_envelope",
+                    "label": "Envelope Renewal + Weatherproofing",
+                    "start_month": 7,
+                    "duration": 8,
+                    "color": "orange",
+                },
+                {
+                    "id": "mep_rough",
+                    "label": "Systems Replacement + Distribution Rework",
+                    "start_month": 7,
+                    "duration": 8,
+                    "color": "purple",
+                },
+                {
+                    "id": "interior_finishes",
+                    "label": "Tenant Turns + Common Area Refresh",
+                    "start_month": 12,
+                    "duration": 10,
+                    "color": "pink",
+                },
+                {
+                    "id": "mep_finishes",
+                    "label": "Testing, Balancing + Re-Occupancy Turnover",
+                    "start_month": 16,
+                    "duration": 7,
+                    "color": "teal",
+                },
+            ]),
+        },
+    },
     BuildingType.INDUSTRIAL: {
         "warehouse": {
             "total_months": 16,

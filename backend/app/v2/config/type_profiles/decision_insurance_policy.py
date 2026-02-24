@@ -216,6 +216,34 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         },
         "flex_calibration": {"tight_max_pct": 1.0, "moderate_max_pct": 3.2, "fallback_pct": 0.9},
     },
+    "office_class_a_v1": {
+        "primary_control_variable": {
+            "tile_id": "ti_lc_and_amenity_fitout_plus_11",
+            "metric_ref": "trade_breakdown.finishes",
+            "label": "IC-First Class A TI/LC Burn, Amenity Carry, and Anchor Lease-Up Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 12.0,
+            "scenario_priority": ["base", "anchor_tenant_roll_delay", "conservative", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.4, "moderate_max_pct": 4.0, "fallback_pct": 1.8},
+    },
+    "office_class_b_v1": {
+        "primary_control_variable": {
+            "tile_id": "renewal_downtime_and_refresh_plus_9",
+            "metric_ref": "trade_breakdown.mechanical",
+            "label": "IC-First Class B Renewal Downtime, Rollover Churn, and Refresh Scope Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap",
+            "operator": "<=",
+            "threshold": 0.0,
+            "scenario_priority": ["base", "rolling_renewal_gap", "conservative", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.8, "moderate_max_pct": 4.8, "fallback_pct": 2.2},
+    },
     "healthcare_surgical_center_v1": {
         "primary_control_variable": {
             "tile_id": "or_turnover_and_sterile_core_plus_12",

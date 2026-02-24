@@ -36,6 +36,8 @@ _WAVE1_PROFILE_IDS: Set[str] = {
     "restaurant_bar_tavern_v1",
     "hospitality_limited_service_hotel_v1",
     "hospitality_full_service_hotel_v1",
+    "office_class_a_v1",
+    "office_class_b_v1",
     "specialty_data_center_v1",
     "specialty_laboratory_v1",
     "specialty_self_storage_v1",
@@ -980,11 +982,16 @@ def _is_healthcare_profile(profile_id: Any) -> bool:
     return isinstance(profile_id, str) and profile_id.startswith("healthcare_")
 
 
+def _is_office_profile(profile_id: Any) -> bool:
+    return isinstance(profile_id, str) and profile_id.startswith("office_")
+
+
 def _supports_decision_insurance_profile(profile_id: Any) -> bool:
     return (
         _is_multifamily_profile(profile_id)
         or _is_industrial_profile(profile_id)
         or _is_healthcare_profile(profile_id)
+        or _is_office_profile(profile_id)
         or _is_restaurant_profile(profile_id)
         or _is_hospitality_profile(profile_id)
         or _is_specialty_profile(profile_id)

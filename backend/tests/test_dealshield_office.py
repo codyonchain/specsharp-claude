@@ -3,11 +3,16 @@ import math
 import pytest
 
 from app.v2.config.master_config import BuildingType, ProjectClass, get_building_config
+from app.v2.config.type_profiles.decision_insurance_policy import (
+    DECISION_INSURANCE_POLICY_BY_PROFILE_ID,
+    DECISION_INSURANCE_POLICY_ID,
+)
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.v2.config.type_profiles.dealshield_tiles import office as office_tile_profiles
 from app.v2.config.type_profiles.dealshield_content import office as office_content_profiles
 from app.v2.config.type_profiles.scope_items import office as office_scope_profiles
 from app.v2.engines.unified_engine import unified_engine
+from app.v2.services.dealshield_service import build_dealshield_view_model
 
 
 OFFICE_PROFILE_MAP = {
@@ -170,3 +175,86 @@ def test_office_runtime_scope_depth_floor_and_trade_reconciliation():
             assert isinstance(systems, list) and len(systems) >= minimum
             systems_total = sum(float(system.get("total_cost", 0.0) or 0.0) for system in systems)
             assert systems_total == pytest.approx(float(trade_breakdown.get(trade_key, 0.0) or 0.0), rel=0, abs=1e-6)
+
+
+def test_office_scenarios_emit_for_both_subtypes():
+    for subtype, expected in OFFICE_PROFILE_MAP.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.OFFICE,
+            subtype=subtype,
+            square_footage=85_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        assert payload.get("dealshield_tile_profile") == expected["tile"]
+
+        scenarios = payload.get("dealshield_scenarios")
+        assert isinstance(scenarios, dict)
+        assert scenarios.get("profile_id") == expected["tile"]
+
+        scenario_payloads = scenarios.get("scenarios")
+        assert isinstance(scenario_payloads, dict)
+        assert "base" in scenario_payloads
+
+        profile = get_dealshield_profile(expected["tile"])
+        expected_row_ids = {
+            row.get("row_id")
+            for row in profile.get("derived_rows", [])
+            if isinstance(row, dict) and isinstance(row.get("row_id"), str)
+        }
+        assert expected_row_ids
+        assert expected_row_ids.issubset(set(scenario_payloads.keys()))
+
+
+def test_office_decision_insurance_contract_and_provenance():
+    for subtype, expected in OFFICE_PROFILE_MAP.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.OFFICE,
+            subtype=subtype,
+            square_footage=85_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        profile_id = expected["tile"]
+        profile = get_dealshield_profile(profile_id)
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+
+        view_model = build_dealshield_view_model(
+            project_id=f"office-di-{subtype}",
+            payload=payload,
+            profile=profile,
+        )
+
+        di_provenance = view_model.get("decision_insurance_provenance")
+        assert isinstance(di_provenance, dict)
+
+        policy_block = di_provenance.get("decision_insurance_policy")
+        assert isinstance(policy_block, dict)
+        assert policy_block.get("status") == "available"
+        assert policy_block.get("policy_id") == DECISION_INSURANCE_POLICY_ID
+        assert policy_block.get("profile_id") == profile_id
+
+        primary_control = view_model.get("primary_control_variable")
+        assert isinstance(primary_control, dict)
+        assert primary_control.get("tile_id") == policy["primary_control_variable"]["tile_id"]
+        assert primary_control.get("metric_ref") == policy["primary_control_variable"]["metric_ref"]
+
+        first_break = view_model.get("first_break_condition")
+        first_break_provenance = di_provenance.get("first_break_condition")
+        if (
+            isinstance(first_break, dict)
+            and isinstance(first_break_provenance, dict)
+            and first_break_provenance.get("status") == "available"
+            and first_break_provenance.get("source") == "decision_insurance_policy.collapse_trigger"
+        ):
+            collapse_trigger = policy["collapse_trigger"]
+            assert first_break.get("break_metric") == collapse_trigger["metric"]
+            assert first_break.get("threshold") == collapse_trigger["threshold"]
+            assert first_break.get("operator") == collapse_trigger["operator"]
+
+        flex_band = view_model.get("flex_before_break_band")
+        flex_provenance = di_provenance.get("flex_before_break_pct")
+        assert isinstance(flex_provenance, dict)
+        assert flex_provenance.get("status") == "available"
+        assert flex_provenance.get("calibration_source") == "decision_insurance_policy.flex_calibration"
+        assert flex_band in {"tight", "moderate", "comfortable"}

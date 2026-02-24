@@ -99,6 +99,14 @@ OFFICE_SCOPE_DEPTH_FLOOR = {
     "class_b": {"structural": 5, "mechanical": 5, "electrical": 5, "plumbing": 5, "finishes": 5},
 }
 
+OFFICE_PCV_GENERIC_TERMS = {
+    "cost control",
+    "revenue control",
+    "margin control",
+    "primary control variable",
+    "generic",
+}
+
 
 def test_state_required_for_multiplier():
     """City-only handling should follow active location contract: known override/no warning, unknown city/warning."""
@@ -519,6 +527,8 @@ def test_policy_curated_decision_insurance_is_applied_for_hardened_profiles():
         (BuildingType.MULTIFAMILY, "market_rate_apartments", 120_000),
         (BuildingType.MULTIFAMILY, "luxury_apartments", 120_000),
         (BuildingType.MULTIFAMILY, "affordable_housing", 120_000),
+        (BuildingType.OFFICE, "class_a", 120_000),
+        (BuildingType.OFFICE, "class_b", 120_000),
         (BuildingType.INDUSTRIAL, "warehouse", 120_000),
         (BuildingType.INDUSTRIAL, "distribution_center", 120_000),
         (BuildingType.INDUSTRIAL, "manufacturing", 120_000),
@@ -913,6 +923,93 @@ def test_office_no_clone_invariants_across_tiles_content_and_scope():
         if isinstance(trade, dict)
     )
     assert class_a_signature != class_b_signature
+
+
+def test_office_di_policy_labels_are_ic_first_and_non_generic():
+    labels = []
+    for expected in OFFICE_PROFILE_IDS.values():
+        profile_id = expected["tile_profile"]
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+        primary_control = policy.get("primary_control_variable")
+        assert isinstance(primary_control, dict)
+        label = primary_control.get("label")
+        assert isinstance(label, str) and label.strip()
+
+        normalized_label = label.strip().lower()
+        assert normalized_label.startswith("ic-first ")
+        assert len(normalized_label) >= 35
+        for generic_term in OFFICE_PCV_GENERIC_TERMS:
+            assert generic_term not in normalized_label
+        labels.append(normalized_label)
+
+    assert len(labels) == len(set(labels))
+
+
+def test_office_policy_collapse_and_metric_semantics():
+    collapse_metric_families = set()
+
+    for subtype, expected in OFFICE_PROFILE_IDS.items():
+        profile_id = expected["tile_profile"]
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+        primary_control = policy.get("primary_control_variable")
+        collapse_trigger = policy.get("collapse_trigger")
+        flex_calibration = policy.get("flex_calibration")
+
+        assert isinstance(primary_control, dict)
+        assert isinstance(collapse_trigger, dict)
+        assert isinstance(flex_calibration, dict)
+
+        profile = get_dealshield_profile(profile_id)
+        tile_map = {
+            tile.get("tile_id"): tile
+            for tile in profile.get("tiles", [])
+            if isinstance(tile, dict) and isinstance(tile.get("tile_id"), str)
+        }
+        tile_id = primary_control.get("tile_id")
+        assert tile_id in tile_map
+        assert primary_control.get("metric_ref") == tile_map[tile_id].get("metric_ref")
+
+        metric = collapse_trigger.get("metric")
+        operator = collapse_trigger.get("operator")
+        threshold = collapse_trigger.get("threshold")
+        scenario_priority = collapse_trigger.get("scenario_priority")
+
+        assert metric in {"value_gap_pct", "value_gap"}
+        assert operator in {"<=", "<"}
+        assert isinstance(threshold, (int, float))
+        assert isinstance(scenario_priority, list) and len(scenario_priority) == 4
+        assert len(set(scenario_priority)) == 4
+        assert scenario_priority[0] == "base"
+        assert {"base", "conservative", "ugly"}.issubset(set(scenario_priority))
+
+        row_ids = {
+            row.get("row_id")
+            for row in profile.get("derived_rows", [])
+            if isinstance(row, dict) and isinstance(row.get("row_id"), str)
+        }
+        subtype_rows = [
+            scenario_id for scenario_id in scenario_priority
+            if scenario_id not in {"base", "conservative", "ugly"}
+        ]
+        assert len(subtype_rows) == 1
+        assert subtype_rows[0] in row_ids
+
+        if subtype == "class_a":
+            assert metric == "value_gap_pct"
+            assert float(threshold) >= 0.0
+        else:
+            assert metric == "value_gap"
+            assert float(threshold) <= 0.0
+
+        tight = float(flex_calibration.get("tight_max_pct"))
+        moderate = float(flex_calibration.get("moderate_max_pct"))
+        fallback = float(flex_calibration.get("fallback_pct"))
+        assert tight <= moderate
+        assert fallback >= 0.0
+
+        collapse_metric_families.add(metric)
+
+    assert collapse_metric_families == {"value_gap_pct", "value_gap"}
 
 
 def test_healthcare_profiles_are_wired_and_content_maps_to_tiles():
