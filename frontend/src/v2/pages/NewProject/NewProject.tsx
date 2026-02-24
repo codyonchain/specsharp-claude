@@ -8,9 +8,11 @@ import { BuildingTaxonomy } from '../../../core/buildingTaxonomy';
 import {
   detectHospitalityFeatureIdsFromDescription,
   detectRestaurantFeatureIdsFromDescription,
+  detectSpecialtyFeatureIdsFromDescription,
   filterSpecialFeaturesBySubtype,
   getHospitalitySpecialFeatures,
   getRestaurantSpecialFeatures,
+  getSpecialtySpecialFeatures,
   type SpecialFeatureOption,
 } from './specialFeaturesCatalog';
 
@@ -542,6 +544,7 @@ export const NewProject: React.FC = () => {
       ],
       restaurant: getRestaurantSpecialFeatures(),
       hospitality: getHospitalitySpecialFeatures(),
+      specialty: getSpecialtySpecialFeatures(),
     };
     
     return features[buildingType] || [];
@@ -566,6 +569,9 @@ export const NewProject: React.FC = () => {
       detectedFeatures.add(featureId);
     }
     for (const featureId of detectHospitalityFeatureIdsFromDescription(desc)) {
+      detectedFeatures.add(featureId);
+    }
+    for (const featureId of detectSpecialtyFeatureIdsFromDescription(desc)) {
       detectedFeatures.add(featureId);
     }
     

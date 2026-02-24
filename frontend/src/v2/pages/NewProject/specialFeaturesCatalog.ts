@@ -90,6 +90,53 @@ export const HOSPITALITY_FEATURE_COSTS_BY_SUBTYPE: Record<
   },
 };
 
+export const SPECIALTY_SUBTYPES = [
+  "data_center",
+  "laboratory",
+  "self_storage",
+  "car_dealership",
+  "broadcast_facility",
+] as const;
+
+export type SpecialtySubtype = (typeof SPECIALTY_SUBTYPES)[number];
+
+export const SPECIALTY_FEATURE_COSTS_BY_SUBTYPE: Record<
+  SpecialtySubtype,
+  Record<string, number>
+> = {
+  data_center: {
+    utility_substation: 140,
+    generator_plant: 120,
+    chilled_water_plant: 110,
+    dual_fiber_meet_me_room: 45,
+    integrated_commissioning: 55,
+  },
+  laboratory: {
+    cleanroom_suite: 95,
+    vivarium_support: 70,
+    process_gas_distribution: 65,
+    redundancy_exhaust_stack: 50,
+  },
+  self_storage: {
+    climate_control_zones: 18,
+    biometric_access_control: 12,
+    high_density_cctv: 10,
+    rv_power_pedestals: 9,
+  },
+  car_dealership: {
+    expanded_service_bays: 28,
+    ev_fast_charging_hub: 22,
+    automated_car_wash_tunnel: 18,
+    inventory_photo_bay: 8,
+  },
+  broadcast_facility: {
+    floating_studio_floors: 40,
+    control_room_signal_core: 35,
+    acoustic_shell_upgrade: 30,
+    satellite_uplink_pad: 16,
+  },
+};
+
 const RESTAURANT_FEATURE_METADATA: Record<
   string,
   { name: string; description: string }
@@ -230,6 +277,96 @@ const HOSPITALITY_FEATURE_METADATA: Record<
   },
 };
 
+const SPECIALTY_FEATURE_METADATA: Record<
+  string,
+  { name: string; description: string }
+> = {
+  utility_substation: {
+    name: "Utility Substation",
+    description: "Dedicated medium-voltage utility substation and distribution yard integration.",
+  },
+  generator_plant: {
+    name: "Generator Plant",
+    description: "N+1 generator plant with day tanks, controls, and paralleling switchgear.",
+  },
+  chilled_water_plant: {
+    name: "Chilled Water Plant",
+    description: "Central chilled-water plant with CRAH loop and redundancy-ready headers.",
+  },
+  dual_fiber_meet_me_room: {
+    name: "Dual Fiber Meet-Me Room",
+    description: "Diverse carrier entry paths with hardened meet-me room buildout.",
+  },
+  integrated_commissioning: {
+    name: "Integrated Commissioning",
+    description: "Cross-system integrated testing program for power, cooling, and controls.",
+  },
+  cleanroom_suite: {
+    name: "Cleanroom Suite",
+    description: "Validated cleanroom suite with envelope controls and specialty finishes.",
+  },
+  vivarium_support: {
+    name: "Vivarium Support",
+    description: "Vivarium support spaces with dedicated MEP zoning and pressure controls.",
+  },
+  process_gas_distribution: {
+    name: "Process Gas Distribution",
+    description: "Lab-grade process gas manifold and distribution backbone.",
+  },
+  redundancy_exhaust_stack: {
+    name: "Redundant Exhaust Stack",
+    description: "Redundant exhaust stack package with monitoring and emergency bypass controls.",
+  },
+  climate_control_zones: {
+    name: "Climate Control Zones",
+    description: "Expanded climate-controlled unit zoning and controls package.",
+  },
+  biometric_access_control: {
+    name: "Biometric Access Control",
+    description: "Biometric access control at key ingress points with audit logging.",
+  },
+  high_density_cctv: {
+    name: "High Density CCTV",
+    description: "High-density camera coverage with retention and monitoring infrastructure.",
+  },
+  rv_power_pedestals: {
+    name: "RV Power Pedestals",
+    description: "Dedicated RV storage power pedestals with billing-ready metering.",
+  },
+  expanded_service_bays: {
+    name: "Expanded Service Bays",
+    description: "Additional service bays with lifts, exhaust extraction, and tooling support.",
+  },
+  ev_fast_charging_hub: {
+    name: "EV Fast Charging Hub",
+    description: "Fast-charge hub with utility upgrade, switchgear, and customer staging.",
+  },
+  automated_car_wash_tunnel: {
+    name: "Automated Car Wash Tunnel",
+    description: "Integrated car wash tunnel with water treatment and reclaim equipment.",
+  },
+  inventory_photo_bay: {
+    name: "Inventory Photo Bay",
+    description: "Controlled lighting and backdrop bay for digital inventory merchandising.",
+  },
+  floating_studio_floors: {
+    name: "Floating Studio Floors",
+    description: "Floating studio floor assemblies for vibration and noise isolation.",
+  },
+  control_room_signal_core: {
+    name: "Control Room Signal Core",
+    description: "Core control-room signal routing and monitoring infrastructure package.",
+  },
+  acoustic_shell_upgrade: {
+    name: "Acoustic Shell Upgrade",
+    description: "Acoustic shell upgrade with high-performance isolation detailing.",
+  },
+  satellite_uplink_pad: {
+    name: "Satellite Uplink Pad",
+    description: "Hardened satellite uplink pad and conduit package for field/broadcast ops.",
+  },
+};
+
 export const filterSpecialFeaturesBySubtype = (
   features: SpecialFeatureOption[],
   subtype?: string
@@ -328,6 +465,48 @@ export const HOSPITALITY_SPECIAL_FEATURES = createHospitalitySpecialFeatures();
 
 export const getHospitalitySpecialFeatures = (): SpecialFeatureOption[] =>
   HOSPITALITY_SPECIAL_FEATURES;
+
+const createSpecialtySpecialFeatures = (): SpecialFeatureOption[] => {
+  const byFeatureId: Record<
+    string,
+    { costPerSFBySubtype: Record<string, number>; allowedSubtypes: string[] }
+  > = {};
+
+  for (const subtype of SPECIALTY_SUBTYPES) {
+    const entries = SPECIALTY_FEATURE_COSTS_BY_SUBTYPE[subtype];
+    for (const [featureId, costPerSF] of Object.entries(entries)) {
+      if (!byFeatureId[featureId]) {
+        byFeatureId[featureId] = {
+          costPerSFBySubtype: {},
+          allowedSubtypes: [],
+        };
+      }
+      byFeatureId[featureId].costPerSFBySubtype[subtype] = costPerSF;
+      byFeatureId[featureId].allowedSubtypes.push(subtype);
+    }
+  }
+
+  return Object.entries(byFeatureId)
+    .sort(([featureA], [featureB]) => featureA.localeCompare(featureB))
+    .map(([featureId, featureData]) => {
+      const metadata = SPECIALTY_FEATURE_METADATA[featureId];
+      return {
+        id: featureId,
+        name: metadata?.name ?? featureId.replace(/_/g, " "),
+        description:
+          metadata?.description ?? "Specialty subtype specific special feature.",
+        costPerSFBySubtype: featureData.costPerSFBySubtype,
+        allowedSubtypes: SPECIALTY_SUBTYPES.filter((subtype) =>
+          featureData.allowedSubtypes.includes(subtype)
+        ),
+      };
+    });
+};
+
+export const SPECIALTY_SPECIAL_FEATURES = createSpecialtySpecialFeatures();
+
+export const getSpecialtySpecialFeatures = (): SpecialFeatureOption[] =>
+  SPECIALTY_SPECIAL_FEATURES;
 
 const RESTAURANT_KEYWORD_DETECTION: Array<{
   featureId: string;
@@ -445,8 +624,85 @@ export const detectHospitalityFeatureIdsFromDescription = (
   return Array.from(detectedFeatureIds);
 };
 
+const SPECIALTY_KEYWORD_DETECTION: Array<{
+  featureId: string;
+  patterns: RegExp[];
+}> = [
+  {
+    featureId: "utility_substation",
+    patterns: [/\bsubstation\b/i, /\bmedium[-\s]?voltage\b/i],
+  },
+  {
+    featureId: "generator_plant",
+    patterns: [/\bgenerator plant\b/i, /\bbackup generators?\b/i, /\bn\+1\b/i],
+  },
+  {
+    featureId: "chilled_water_plant",
+    patterns: [/\bchilled water\b/i, /\bcooling plant\b/i, /\bcrah\b/i],
+  },
+  {
+    featureId: "dual_fiber_meet_me_room",
+    patterns: [/\bdual fiber\b/i, /\bmeet[-\s]?me room\b/i, /\bdiverse carrier\b/i],
+  },
+  {
+    featureId: "integrated_commissioning",
+    patterns: [/\bintegrated commissioning\b/i, /\bist\b/i],
+  },
+  {
+    featureId: "cleanroom_suite",
+    patterns: [/\bclean[-\s]?room\b/i],
+  },
+  {
+    featureId: "process_gas_distribution",
+    patterns: [/\bprocess gas\b/i, /\blab gases?\b/i],
+  },
+  {
+    featureId: "climate_control_zones",
+    patterns: [/\bclimate[-\s]?control(?:led)?\b/i],
+  },
+  {
+    featureId: "biometric_access_control",
+    patterns: [/\bbiometric\b/i, /\baccess control\b/i],
+  },
+  {
+    featureId: "expanded_service_bays",
+    patterns: [/\bservice bays?\b/i, /\bservice lanes?\b/i],
+  },
+  {
+    featureId: "ev_fast_charging_hub",
+    patterns: [/\bev fast charging\b/i, /\bdc fast charger\b/i],
+  },
+  {
+    featureId: "floating_studio_floors",
+    patterns: [/\bfloating floor\b/i, /\bstudio floor isolation\b/i],
+  },
+  {
+    featureId: "control_room_signal_core",
+    patterns: [/\bcontrol room\b/i, /\bsignal core\b/i],
+  },
+  {
+    featureId: "acoustic_shell_upgrade",
+    patterns: [/\bacoustic shell\b/i, /\bsound isolation\b/i],
+  },
+];
+
+export const detectSpecialtyFeatureIdsFromDescription = (
+  description: string
+): string[] => {
+  const detectedFeatureIds = new Set<string>();
+  for (const { featureId, patterns } of SPECIALTY_KEYWORD_DETECTION) {
+    if (patterns.some((pattern) => pattern.test(description))) {
+      detectedFeatureIds.add(featureId);
+    }
+  }
+  return Array.from(detectedFeatureIds);
+};
+
 export const restaurantSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
   filterSpecialFeaturesBySubtype(RESTAURANT_SPECIAL_FEATURES, subtype).length > 0;
 
 export const hospitalitySubtypeHasSpecialFeatures = (subtype?: string): boolean =>
   filterSpecialFeaturesBySubtype(HOSPITALITY_SPECIAL_FEATURES, subtype).length > 0;
+
+export const specialtySubtypeHasSpecialFeatures = (subtype?: string): boolean =>
+  filterSpecialFeaturesBySubtype(SPECIALTY_SPECIAL_FEATURES, subtype).length > 0;
