@@ -59,10 +59,10 @@ const POLICY_CONTRACT_CASES = [
     breakMetric: "value_gap",
     breakMetricRef: "decision_summary.value_gap",
     breakOperator: "<=",
-    threshold: 0.0,
-    observedValue: -85000,
-    flexBeforeBreakPct: 6.5,
-    expectedFlexLabel: "6.50% (Flexible)",
+    threshold: 250000.0,
+    observedValue: 200000,
+    flexBeforeBreakPct: 4.2,
+    expectedFlexLabel: "4.20% (Moderate)",
   },
   {
     buildingType: "industrial",
@@ -81,6 +81,57 @@ const POLICY_CONTRACT_CASES = [
     expectedFlexLabel: "1.90% (Structurally Tight)",
   },
 ] as const;
+
+const MULTIFAMILY_POLICY_CONTRACT_CASES: Array<(typeof POLICY_CONTRACT_CASES)[number]> = [
+  {
+    buildingType: "multifamily",
+    profileId: "multifamily_market_rate_apartments_v1",
+    scopeProfileId: "multifamily_market_rate_apartments_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel: "Structural Base Carry Proxy +5%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 6.0,
+    observedValue: 5.4,
+    flexBeforeBreakPct: 1.9,
+    expectedFlexLabel: "1.90% (Structurally Tight)",
+  },
+  {
+    buildingType: "multifamily",
+    profileId: "multifamily_luxury_apartments_v1",
+    scopeProfileId: "multifamily_luxury_apartments_structural_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+    primaryControlLabel: "Amenity Finishes +15%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: 250000.0,
+    observedValue: 200000,
+    flexBeforeBreakPct: 4.2,
+    expectedFlexLabel: "4.20% (Moderate)",
+  },
+  {
+    buildingType: "multifamily",
+    profileId: "multifamily_affordable_housing_v1",
+    scopeProfileId: "multifamily_affordable_housing_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel: "Compliance Electrical +8%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 8.0,
+    observedValue: 7.2,
+    flexBeforeBreakPct: 2.1,
+    expectedFlexLabel: "2.10% (Moderate)",
+  },
+];
 
 const buildRestaurantDealShieldPayload = (profileId: string) => ({
   profile_id: profileId,
@@ -775,6 +826,84 @@ describe("DealShieldView", () => {
     expect(screen.getAllByText("±10%").length).toBeGreaterThan(0);
   });
 
+  it("renders explicit multifamily policy-backed first-break semantics with metric-aware observed/threshold formatting", () => {
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_multifamily_policy_contract_0"
+        data={buildPolicyBackedDealShieldPayload(MULTIFAMILY_POLICY_CONTRACT_CASES[0]) as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    for (const testCase of MULTIFAMILY_POLICY_CONTRACT_CASES) {
+      rerender(
+        <DealShieldView
+          projectId={`proj_${testCase.profileId}`}
+          data={buildPolicyBackedDealShieldPayload(testCase) as any}
+          loading={false}
+          error={null}
+        />
+      );
+
+      expect(screen.getByText("Decision Insurance")).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
+      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+
+      if (testCase.breakMetric === "value_gap_pct") {
+        expect(
+          screen.getByText(
+            `Break occurs in ${testCase.breakScenarioLabel}: value-gap percentage crosses threshold.`
+          )
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("%");
+          })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return (
+              text.includes("Threshold:") &&
+              text.includes(testCase.breakOperator) &&
+              text.includes("%")
+            );
+          })
+        ).toBeInTheDocument();
+      } else {
+        expect(
+          screen.getByText(
+            `Break occurs in ${testCase.breakScenarioLabel}: value gap crosses threshold.`
+          )
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("$");
+          })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return (
+              text.includes("Threshold:") &&
+              text.includes(testCase.breakOperator) &&
+              text.includes("$")
+            );
+          })
+        ).toBeInTheDocument();
+      }
+
+      expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
+    }
+  });
+
   it("renders policy-backed primary-control and collapse/flex contract fields for restaurant, hospitality, multifamily, and industrial", () => {
     const { rerender } = render(
       <DealShieldView
@@ -800,9 +929,17 @@ describe("DealShieldView", () => {
       expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
 
       if (testCase.breakMetric === "value_gap") {
-        expect(
-          screen.getByText(`Break occurs in ${testCase.breakScenarioLabel}: value gap turns negative.`)
-        ).toBeInTheDocument();
+        if (testCase.threshold === 0) {
+          expect(
+            screen.getByText(`Break occurs in ${testCase.breakScenarioLabel}: value gap turns negative.`)
+          ).toBeInTheDocument();
+        } else {
+          expect(
+            screen.getByText(
+              `Break occurs in ${testCase.breakScenarioLabel}: value gap crosses threshold.`
+            )
+          ).toBeInTheDocument();
+        }
       } else if (testCase.breakMetric === "value_gap_pct") {
         expect(
           screen.getByText(

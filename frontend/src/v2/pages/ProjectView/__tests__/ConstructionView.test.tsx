@@ -14,6 +14,12 @@ const CROSS_TYPE_SCHEDULE_CASES = [
   { buildingType: "industrial", subtype: "distribution_center" },
 ] as const;
 
+const MULTIFAMILY_SCHEDULE_CASES = [
+  { subtype: "market_rate_apartments" },
+  { subtype: "luxury_apartments" },
+  { subtype: "affordable_housing" },
+] as const;
+
 const buildRestaurantProject = (scheduleSource: "subtype" | "building_type") =>
   ({
     id: "proj_restaurant_construction",
@@ -503,6 +509,54 @@ describe("ConstructionView", () => {
           "Timeline uses building-type baseline (subtype override unavailable)."
         )
       ).toBeInTheDocument();
+    }
+  });
+
+  it("renders explicit multifamily schedule provenance parity for subtype and fallback sources", () => {
+    const { rerender } = render(
+      <ConstructionView
+        project={buildCrossTypeScheduleProject(
+          "multifamily",
+          MULTIFAMILY_SCHEDULE_CASES[0].subtype,
+          "subtype"
+        )}
+      />
+    );
+
+    for (const testCase of MULTIFAMILY_SCHEDULE_CASES) {
+      rerender(
+        <ConstructionView
+          project={buildCrossTypeScheduleProject(
+            "multifamily",
+            testCase.subtype,
+            "subtype"
+          )}
+        />
+      );
+      expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
+      expect(
+        screen.getByText("Timeline is tailored for this subtype profile.")
+      ).toBeInTheDocument();
+      expect(screen.getAllByText("Subtype Site Program").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Subtype Structural Program").length).toBeGreaterThan(0);
+
+      rerender(
+        <ConstructionView
+          project={buildCrossTypeScheduleProject(
+            "multifamily",
+            testCase.subtype,
+            "building_type"
+          )}
+        />
+      );
+      expect(screen.getByText("Building-type baseline")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Timeline uses building-type baseline (subtype override unavailable)."
+        )
+      ).toBeInTheDocument();
+      expect(screen.getAllByText("Baseline Site Program").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Baseline Structural Program").length).toBeGreaterThan(0);
     }
   });
 });
