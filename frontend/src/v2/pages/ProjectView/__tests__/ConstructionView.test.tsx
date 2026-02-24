@@ -998,6 +998,57 @@ describe("ConstructionView", () => {
     expect(screen.getByText("Imaging + OR Power Conditioning")).toBeInTheDocument();
   });
 
+  it("keeps per-feature special-feature breakdown visible for imaging, urgent care, and medical-office subtype fixtures", () => {
+    const cases = [
+      {
+        subtype: "imaging_center" as const,
+        breakdown: [
+          { id: "mri_suite", label: "MRI Suite Upgrade", cost_per_sf: 3.5, total_cost: 175000 },
+          { id: "ct_suite", label: "CT Suite Buildout", cost_per_sf: 2.5, total_cost: 125000 },
+        ],
+      },
+      {
+        subtype: "urgent_care" as const,
+        breakdown: [
+          { id: "laboratory", label: "On-Site Lab Expansion", cost_per_sf: 2.0, total_cost: 100000 },
+          { id: "imaging_suite", label: "Fast-Track Imaging Pod", cost_per_sf: 1.8, total_cost: 90000 },
+        ],
+      },
+      {
+        subtype: "medical_office_building" as const,
+        breakdown: [
+          { id: "ambulatory_buildout", label: "Ambulatory Buildout Program", cost_per_sf: 2.6, total_cost: 130000 },
+          { id: "infusion_suite", label: "Infusion Suite Shell Prep", cost_per_sf: 1.4, total_cost: 70000 },
+        ],
+      },
+    ];
+
+    const { rerender } = render(
+      <ConstructionView
+        project={buildHealthcareScheduleProject(cases[0].subtype, "subtype")}
+      />
+    );
+
+    for (const fixture of cases) {
+      const project = buildHealthcareScheduleProject(fixture.subtype, "subtype");
+      project.analysis.calculations.construction_costs.special_features_total = fixture.breakdown.reduce(
+        (sum, item) => sum + item.total_cost,
+        0
+      );
+      project.analysis.calculations.construction_costs.special_features_breakdown = fixture.breakdown;
+
+      rerender(<ConstructionView project={project} />);
+
+      expect(screen.getByText("Special Features")).toBeInTheDocument();
+      for (const row of fixture.breakdown) {
+        expect(screen.getByText(row.label)).toBeInTheDocument();
+      }
+      expect(
+        screen.queryByText("Per-feature breakdown is unavailable for this project version; showing aggregate total only.")
+      ).not.toBeInTheDocument();
+    }
+  });
+
   it("renders deeper mechanical/electrical/plumbing system depth for surgical and imaging subtype paths", () => {
     const cases = [
       {

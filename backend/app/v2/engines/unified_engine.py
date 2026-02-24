@@ -202,10 +202,10 @@ HEALTHCARE_OPERATIONAL_METRIC_DEFAULTS: Dict[str, Dict[str, Any]] = {
     "hospital": {
         "throughput_per_unit_day": 0.95,
         "operating_days_per_year": 365,
-        "utilization_target": 0.85,
-        "average_length_of_stay_days": 4.2,
-        "clinical_staff_fte_per_unit": 1.65,
-        "support_staff_fte_per_unit": 0.95,
+        "utilization_target": 0.82,
+        "average_length_of_stay_days": 4.6,
+        "clinical_staff_fte_per_unit": 1.58,
+        "support_staff_fte_per_unit": 0.92,
         "throughput_label": "Average Daily Census",
         "utilization_label": "Licensed Bed Occupancy",
         "staffing_intensity_label": "FTE per Licensed Bed",
@@ -216,10 +216,10 @@ HEALTHCARE_OPERATIONAL_METRIC_DEFAULTS: Dict[str, Dict[str, Any]] = {
     "medical_center": {
         "throughput_per_unit_day": 0.92,
         "operating_days_per_year": 365,
-        "utilization_target": 0.84,
-        "average_length_of_stay_days": 3.9,
-        "clinical_staff_fte_per_unit": 1.45,
-        "support_staff_fte_per_unit": 0.85,
+        "utilization_target": 0.80,
+        "average_length_of_stay_days": 4.4,
+        "clinical_staff_fte_per_unit": 1.38,
+        "support_staff_fte_per_unit": 0.82,
         "throughput_label": "Average Daily Census",
         "utilization_label": "Service-Line Bed Occupancy",
         "staffing_intensity_label": "FTE per Licensed Bed",
@@ -230,8 +230,8 @@ HEALTHCARE_OPERATIONAL_METRIC_DEFAULTS: Dict[str, Dict[str, Any]] = {
     "nursing_home": {
         "throughput_per_unit_day": 0.97,
         "operating_days_per_year": 365,
-        "utilization_target": 0.88,
-        "average_length_of_stay_days": 24.0,
+        "utilization_target": 0.90,
+        "average_length_of_stay_days": 27.0,
         "clinical_staff_fte_per_unit": 0.62,
         "support_staff_fte_per_unit": 0.48,
         "throughput_label": "Average Daily Census",
@@ -244,8 +244,8 @@ HEALTHCARE_OPERATIONAL_METRIC_DEFAULTS: Dict[str, Dict[str, Any]] = {
     "rehabilitation": {
         "throughput_per_unit_day": 0.9,
         "operating_days_per_year": 365,
-        "utilization_target": 0.82,
-        "average_length_of_stay_days": 16.0,
+        "utilization_target": 0.84,
+        "average_length_of_stay_days": 17.0,
         "clinical_staff_fte_per_unit": 1.05,
         "support_staff_fte_per_unit": 0.55,
         "throughput_label": "Average Daily Census",
@@ -4234,13 +4234,46 @@ class UnifiedEngine:
                 revenue_per_bed = revenue_per_unit_cfg
                 if revenue_per_bed is None:
                     revenue_per_bed = self._coerce_number(getattr(subtype_config, "base_revenue_per_bed_annual", None))
+                observed_revenue_per_bed = (annual_revenue / beds) if beds and annual_revenue > 0 else None
+                target_revenue_per_bed = (
+                    annual_revenue / (beds * utilization_target)
+                    if beds and annual_revenue > 0 and utilization_target > 0
+                    else None
+                )
                 if revenue_per_bed is None:
-                    revenue_per_bed = annual_revenue / beds if beds else 0.0
+                    if target_revenue_per_bed is not None and target_revenue_per_bed > 0:
+                        revenue_per_bed = target_revenue_per_bed
+                    elif observed_revenue_per_bed is not None and observed_revenue_per_bed > 0:
+                        revenue_per_bed = observed_revenue_per_bed
+                    else:
+                        revenue_per_bed = 0.0
+                else:
+                    configured_revenue_per_bed = float(revenue_per_bed)
+                    if target_revenue_per_bed is not None and target_revenue_per_bed > 0:
+                        variance_ratio = (
+                            abs(configured_revenue_per_bed - target_revenue_per_bed) / target_revenue_per_bed
+                        )
+                        if variance_ratio > 1.0:
+                            configured_weight = 0.05
+                        elif variance_ratio > 0.5:
+                            configured_weight = 0.15
+                        elif variance_ratio > 0.25:
+                            configured_weight = 0.30
+                        else:
+                            configured_weight = 0.50
+                        revenue_per_bed = (
+                            configured_revenue_per_bed * configured_weight
+                            + target_revenue_per_bed * (1.0 - configured_weight)
+                        )
+                    elif observed_revenue_per_bed is not None and observed_revenue_per_bed > 0:
+                        revenue_per_bed = configured_revenue_per_bed * 0.6 + observed_revenue_per_bed * 0.4
+                    else:
+                        revenue_per_bed = configured_revenue_per_bed
                 revenue_per_bed = max(float(revenue_per_bed or 0.0), 1.0)
 
                 avg_daily_census = annual_revenue / revenue_per_bed if revenue_per_bed > 0 else 0.0
-                # Keep census bounded by licensed capacity to avoid impossible occupancy (>100%).
-                avg_daily_census = max(0.0, min(avg_daily_census, float(beds)))
+                max_plausible_census = float(beds) * 0.97
+                avg_daily_census = max(0.0, min(avg_daily_census, max_plausible_census))
                 occupancy_pct = (avg_daily_census / beds * 100.0) if beds > 0 else 0.0
                 occupancy_pct = max(0.0, min(occupancy_pct, 100.0))
 
@@ -4278,7 +4311,8 @@ class UnifiedEngine:
                 inpatient_efficiency = (
                     (occupancy_pct / (utilization_target * 100.0)) * 100.0 if utilization_target > 0 else 0.0
                 )
-                inpatient_efficiency = max(0.0, min(inpatient_efficiency, 120.0))
+                inpatient_efficiency = max(0.0, min(inpatient_efficiency, 115.0))
+                admissions_per_100_beds = (admissions_per_day / beds * 100.0) if beds > 0 else 0.0
                 operational_metrics['kpis'] = [
                     {
                         'label': throughput_label,
@@ -4297,7 +4331,13 @@ class UnifiedEngine:
                     {
                         'label': 'Admissions / Day',
                         'value': f'{admissions_per_day:,.1f}',
-                        'color': 'green' if admissions_per_day > 1.0 else 'yellow',
+                        'color': (
+                            'green'
+                            if admissions_per_100_beds >= 1.8
+                            else 'yellow'
+                            if admissions_per_100_beds >= 1.0
+                            else 'red'
+                        ),
                     },
                     {
                         'label': staffing_intensity_label,

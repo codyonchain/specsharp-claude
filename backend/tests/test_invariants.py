@@ -980,10 +980,10 @@ def test_healthcare_content_contract_fields_are_present_and_deterministic():
 def test_healthcare_scope_profiles_keep_depth_and_allocation_integrity():
     min_items_by_subtype = {
         "surgical_center": {"structural": 3, "mechanical": 4, "electrical": 4, "plumbing": 4, "finishes": 3},
-        "imaging_center": {"structural": 3, "mechanical": 4, "electrical": 4, "plumbing": 4, "finishes": 3},
-        "urgent_care": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+        "imaging_center": {"structural": 4, "mechanical": 5, "electrical": 5, "plumbing": 5, "finishes": 4},
+        "urgent_care": {"structural": 4, "mechanical": 4, "electrical": 4, "plumbing": 4, "finishes": 4},
         "outpatient_clinic": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
-        "medical_office_building": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+        "medical_office_building": {"structural": 4, "mechanical": 4, "electrical": 4, "plumbing": 4, "finishes": 4},
         "dental_office": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
         "hospital": {"structural": 4, "mechanical": 5, "electrical": 5, "plumbing": 4, "finishes": 4},
         "medical_center": {"structural": 4, "mechanical": 5, "electrical": 5, "plumbing": 4, "finishes": 4},

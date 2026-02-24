@@ -265,8 +265,22 @@ def test_inpatient_profiles_emit_facility_metrics_with_bed_units(subtype):
     assert metrics["revenue_per_unit"] > 0
 
 
-@pytest.mark.parametrize("subtype", ["hospital", "medical_center", "nursing_home", "rehabilitation"])
-def test_inpatient_operational_kpis_are_capped_and_emit_nonzero_units(subtype):
+@pytest.mark.parametrize(
+    "subtype,min_occupancy,max_occupancy,min_efficiency,max_efficiency",
+    [
+        ("hospital", 85.0, 97.0, 95.0, 115.0),
+        ("medical_center", 60.0, 90.0, 70.0, 110.0),
+        ("nursing_home", 82.0, 96.0, 90.0, 112.0),
+        ("rehabilitation", 75.0, 92.0, 85.0, 112.0),
+    ],
+)
+def test_inpatient_operational_kpis_are_realistic_and_emit_nonzero_units(
+    subtype,
+    min_occupancy,
+    max_occupancy,
+    min_efficiency,
+    max_efficiency,
+):
     result = _calculate_healthcare(subtype=subtype, square_footage=220000)
     operational = result.get("operational_metrics") or {}
     per_unit = operational.get("per_unit") or {}
@@ -287,5 +301,5 @@ def test_inpatient_operational_kpis_are_capped_and_emit_nonzero_units(subtype):
 
     occupancy_value = float(str(occupancy_kpi.get("value", "0")).replace("%", ""))
     efficiency_value = float(str(efficiency_kpi.get("value", "0")).replace("%", ""))
-    assert 0.0 <= occupancy_value <= 100.0
-    assert 0.0 <= efficiency_value <= 120.0
+    assert min_occupancy <= occupancy_value <= max_occupancy
+    assert min_efficiency <= efficiency_value <= max_efficiency
