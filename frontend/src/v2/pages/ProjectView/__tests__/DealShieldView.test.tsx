@@ -15,6 +15,73 @@ const HOSPITALITY_PROFILE_IDS = [
   "hospitality_full_service_hotel_v1",
 ];
 
+const POLICY_CONTRACT_CASES = [
+  {
+    buildingType: "restaurant",
+    profileId: "restaurant_bar_tavern_v1",
+    scopeProfileId: "restaurant_bar_tavern_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel: "Entertainment + Life-Safety +10%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 35.0,
+    observedValue: 34.2,
+    flexBeforeBreakPct: 1.8,
+    expectedFlexLabel: "1.80% (Structurally Tight)",
+  },
+  {
+    buildingType: "hospitality",
+    profileId: "hospitality_full_service_hotel_v1",
+    scopeProfileId: "hospitality_full_service_hotel_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel: "Ballroom and F&B Fit-Out +12%",
+    breakScenarioLabel: "Ugly",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 50.0,
+    observedValue: 49.3,
+    flexBeforeBreakPct: 3.2,
+    expectedFlexLabel: "3.20% (Moderate)",
+  },
+  {
+    buildingType: "multifamily",
+    profileId: "multifamily_luxury_apartments_v1",
+    scopeProfileId: "multifamily_luxury_apartments_structural_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+    primaryControlLabel: "Amenity Finishes +15%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: 0.0,
+    observedValue: -85000,
+    flexBeforeBreakPct: 6.5,
+    expectedFlexLabel: "6.50% (Flexible)",
+  },
+  {
+    buildingType: "industrial",
+    profileId: "industrial_distribution_center_v1",
+    scopeProfileId: "industrial_distribution_center_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+    primaryControlLabel: "Electrical +10%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: 0.0,
+    observedValue: -45000,
+    flexBeforeBreakPct: 1.9,
+    expectedFlexLabel: "1.90% (Structurally Tight)",
+  },
+] as const;
+
 const buildRestaurantDealShieldPayload = (profileId: string) => ({
   profile_id: profileId,
   view_model: {
@@ -361,6 +428,216 @@ const buildHospitalityDealShieldPayload = (profileId: string) => ({
   },
 });
 
+const buildPolicyBackedDealShieldPayload = (
+  input: (typeof POLICY_CONTRACT_CASES)[number]
+) => ({
+  profile_id: input.profileId,
+  view_model: {
+    profile_id: input.profileId,
+    tile_profile_id: input.profileId,
+    content_profile_id: input.profileId,
+    scope_items_profile_id: input.scopeProfileId,
+    decision_status: input.decisionStatus,
+    decision_reason_code: input.decisionReasonCode,
+    decision_status_provenance: {
+      status_source: "dealshield_policy_v1",
+      policy_id: "dealshield_canonical_policy_v1",
+    },
+    columns: [
+      {
+        id: "total_cost",
+        label: "Total Project Cost",
+        metric_ref: "totals.total_project_cost",
+      },
+      {
+        id: "annual_revenue",
+        label: "Annual Revenue",
+        metric_ref: "revenue_analysis.annual_revenue",
+      },
+      {
+        id: "break_metric",
+        label: "Break Metric",
+        metric_ref: input.breakMetricRef,
+      },
+    ],
+    rows: [
+      {
+        scenario_id: "base",
+        label: "Base",
+        cells: [
+          { col_id: "total_cost", value: 12000000, metric_ref: "totals.total_project_cost" },
+          { col_id: "annual_revenue", value: 3200000, metric_ref: "revenue_analysis.annual_revenue" },
+          { col_id: "break_metric", value: 62.0, metric_ref: input.breakMetricRef },
+        ],
+      },
+      {
+        scenario_id: "conservative",
+        label: "Conservative",
+        cells: [
+          { col_id: "total_cost", value: 13200000, metric_ref: "totals.total_project_cost" },
+          { col_id: "annual_revenue", value: 2880000, metric_ref: "revenue_analysis.annual_revenue" },
+          { col_id: "break_metric", value: input.observedValue, metric_ref: input.breakMetricRef },
+        ],
+      },
+      {
+        scenario_id: "ugly",
+        label: "Ugly",
+        cells: [
+          { col_id: "total_cost", value: 13800000, metric_ref: "totals.total_project_cost" },
+          { col_id: "annual_revenue", value: 2760000, metric_ref: "revenue_analysis.annual_revenue" },
+          {
+            col_id: "break_metric",
+            value: input.breakMetric === "value_gap_pct" ? input.observedValue - 1.5 : input.observedValue - 50000,
+            metric_ref: input.breakMetricRef,
+          },
+        ],
+      },
+    ],
+    content: {
+      profile_id: input.profileId,
+      fastest_change: {
+        drivers: [
+          { tile_id: "cost_plus_10", label: "Confirm hard costs +/-10%" },
+          { tile_id: "revenue_minus_10", label: "Validate demand revenue +/-10%" },
+        ],
+      },
+      most_likely_wrong: [
+        {
+          id: "mlw_1",
+          text: `${input.buildingType} downside concentration is under-modeled.`,
+          why: "Single-driver sensitivity dominates downside exposure.",
+          driver_tile_id: "cost_plus_10",
+        },
+      ],
+      question_bank: [
+        {
+          id: "qb_1",
+          driver_tile_id: "cost_plus_10",
+          questions: ["Which key assumptions still rely on placeholders?"],
+        },
+      ],
+      red_flags_actions: [
+        {
+          id: "rf_1",
+          flag: "Procurement sequencing remains partially open.",
+          action: "Lock top three risk trades before GMP validation.",
+        },
+      ],
+    },
+    primary_control_variable: {
+      tile_id: "policy_primary_tile",
+      label: input.primaryControlLabel,
+      impact_pct: 7.5,
+      delta_cost: 120000,
+      severity: "High",
+    },
+    first_break_condition: {
+      scenario_id: input.breakScenarioLabel.toLowerCase(),
+      scenario_label: input.breakScenarioLabel,
+      break_metric: input.breakMetric,
+      operator: input.breakOperator,
+      threshold: input.threshold,
+      observed_value: input.observedValue,
+      observed_value_pct: input.breakMetric === "value_gap_pct" ? input.observedValue : -1.4,
+    },
+    flex_before_break_pct: input.flexBeforeBreakPct,
+    exposure_concentration_pct: 58.4,
+    ranked_likely_wrong: [
+      {
+        id: "mlw_1",
+        text: `${input.buildingType} downside concentration is under-modeled.`,
+        why: "Single-driver sensitivity dominates downside exposure.",
+        driver_tile_id: "cost_plus_10",
+        impact_pct: 7.5,
+        severity: "High",
+      },
+    ],
+    decision_insurance_provenance: {
+      enabled: true,
+      profile_id: input.profileId,
+      decision_insurance_policy: {
+        status: "available",
+        source: "decision_insurance_policy",
+        policy_id: "decision_insurance_subtype_policy_v1",
+        profile_id: input.profileId,
+      },
+      primary_control_variable: {
+        status: "available",
+        source: "decision_insurance_policy.primary_control_variable",
+      },
+      first_break_condition: {
+        status: "available",
+        source: "decision_insurance_policy.collapse_trigger",
+        policy_metric: input.breakMetric,
+        policy_threshold: input.threshold,
+        policy_operator: input.breakOperator,
+      },
+      flex_before_break_pct: {
+        status: "available",
+        calibration_source: "decision_insurance_policy.flex_calibration",
+        band:
+          input.flexBeforeBreakPct <= 2.0
+            ? "tight"
+            : input.flexBeforeBreakPct <= 5.0
+              ? "moderate"
+              : "comfortable",
+      },
+      exposure_concentration_pct: { status: "available" },
+      ranked_likely_wrong: { status: "available" },
+    },
+    provenance: {
+      profile_id: input.profileId,
+      content_profile_id: input.profileId,
+      scope_items_profile_id: input.scopeProfileId,
+      scenario_inputs: {
+        base: {
+          scenario_label: "Base",
+          applied_tile_ids: [],
+          cost_scalar: 1.0,
+          revenue_scalar: 1.0,
+        },
+        conservative: {
+          scenario_label: "Conservative",
+          applied_tile_ids: ["cost_plus_10", "revenue_minus_10"],
+          cost_scalar: 1.1,
+          revenue_scalar: 0.9,
+        },
+        ugly: {
+          scenario_label: "Ugly",
+          applied_tile_ids: ["cost_plus_10", "revenue_minus_10"],
+          cost_scalar: 1.15,
+          revenue_scalar: 0.88,
+        },
+      },
+      metric_refs_used: [
+        "totals.total_project_cost",
+        "revenue_analysis.annual_revenue",
+        input.breakMetricRef,
+      ],
+      decision_insurance: {
+        enabled: true,
+        profile_id: input.profileId,
+        decision_insurance_policy: {
+          status: "available",
+          source: "decision_insurance_policy",
+          policy_id: "decision_insurance_subtype_policy_v1",
+          profile_id: input.profileId,
+        },
+        primary_control_variable: { status: "available" },
+        first_break_condition: { status: "available" },
+        flex_before_break_pct: { status: "available" },
+        exposure_concentration_pct: { status: "available" },
+        ranked_likely_wrong: { status: "available" },
+      },
+      dealshield_controls: {
+        stress_band_pct: 10,
+        use_cost_anchor: false,
+        use_revenue_anchor: false,
+      },
+    },
+  },
+});
+
 describe("DealShieldView", () => {
   it("renders restaurant decision status, DI provenance, and backend-shaped scenario rows", () => {
     const profileId = "restaurant_full_service_v1";
@@ -496,5 +773,76 @@ describe("DealShieldView", () => {
     expect(screen.getAllByText("Ugly").length).toBeGreaterThan(0);
     expect(screen.getAllByText("cost_plus_10, revenue_minus_10").length).toBeGreaterThan(0);
     expect(screen.getAllByText("±10%").length).toBeGreaterThan(0);
+  });
+
+  it("renders policy-backed primary-control and collapse/flex contract fields for restaurant, hospitality, multifamily, and industrial", () => {
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_policy_contract_0"
+        data={buildPolicyBackedDealShieldPayload(POLICY_CONTRACT_CASES[0]) as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    for (const testCase of POLICY_CONTRACT_CASES) {
+      rerender(
+        <DealShieldView
+          projectId={`proj_${testCase.profileId}`}
+          data={buildPolicyBackedDealShieldPayload(testCase) as any}
+          loading={false}
+          error={null}
+        />
+      );
+
+      expect(screen.getByText("Decision Insurance")).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
+      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+
+      if (testCase.breakMetric === "value_gap") {
+        expect(
+          screen.getByText(`Break occurs in ${testCase.breakScenarioLabel}: value gap turns negative.`)
+        ).toBeInTheDocument();
+      } else if (testCase.breakMetric === "value_gap_pct") {
+        expect(
+          screen.getByText(
+            `Break occurs in ${testCase.breakScenarioLabel}: value-gap percentage crosses threshold.`
+          )
+        ).toBeInTheDocument();
+      } else {
+        expect(
+          screen.getByText(
+            `Break occurs in ${testCase.breakScenarioLabel}: ${testCase.breakMetric} crosses threshold.`
+          )
+        ).toBeInTheDocument();
+      }
+
+      if (testCase.breakMetric === "value_gap") {
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Threshold:") && text.includes(testCase.breakOperator) && text.includes("$");
+          })
+        ).toBeInTheDocument();
+      } else if (testCase.breakMetric === "value_gap_pct") {
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Threshold:") && text.includes(testCase.breakOperator) && text.includes("%");
+          })
+        ).toBeInTheDocument();
+      } else {
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Threshold:") && text.includes(testCase.breakOperator);
+          })
+        ).toBeInTheDocument();
+      }
+      expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
+    }
   });
 });

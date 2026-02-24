@@ -8,6 +8,37 @@ const HOSPITALITY_PROFILE_IDS = [
   "hospitality_full_service_hotel_v1",
 ];
 
+const CROSS_TYPE_POLICY_CASES = [
+  {
+    buildingType: "restaurant",
+    subtype: "bar_tavern",
+    profileId: "restaurant_bar_tavern_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+  },
+  {
+    buildingType: "hospitality",
+    subtype: "full_service_hotel",
+    profileId: "hospitality_full_service_hotel_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+  },
+  {
+    buildingType: "multifamily",
+    subtype: "luxury_apartments",
+    profileId: "multifamily_luxury_apartments_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+  },
+  {
+    buildingType: "industrial",
+    subtype: "distribution_center",
+    profileId: "industrial_distribution_center_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+  },
+] as const;
+
 const buildRestaurantProject = () =>
   ({
     id: "proj_restaurant_exec",
@@ -280,6 +311,43 @@ const buildHospitalityDealShieldViewModel = (profileId: string) => ({
       : "hospitality_limited_service_hotel_structural_v1",
 });
 
+const buildCrossTypeProject = (
+  buildingType: string,
+  subtype: string,
+  profileId: string
+) => {
+  const project = buildRestaurantProject();
+  project.id = `proj_exec_${profileId}`;
+  project.project_id = `proj_exec_${profileId}`;
+  project.name = `${buildingType} ${subtype}`;
+  project.analysis.parsed_input.building_type = buildingType;
+  project.analysis.parsed_input.subtype = subtype;
+  project.analysis.calculations.project_info.building_type = buildingType;
+  project.analysis.calculations.project_info.subtype = subtype;
+  project.analysis.calculations.dealshield_scenarios.profile_id = profileId;
+  return project;
+};
+
+const buildCrossTypeDealShieldViewModel = (
+  profileId: string,
+  decisionStatus: string,
+  decisionReasonCode: string
+) => ({
+  decision_status: decisionStatus,
+  decision_reason_code: decisionReasonCode,
+  decision_status_provenance: {
+    status_source: "dealshield_policy_v1",
+    policy_id: "decision_insurance_subtype_policy_v1",
+  },
+  decision_insurance_provenance: {
+    enabled: true,
+    profile_id: profileId,
+  },
+  tile_profile_id: profileId,
+  content_profile_id: profileId,
+  scope_items_profile_id: `${profileId.replace(/_v1$/, "")}_structural_v1`,
+});
+
 describe("ExecutiveViewComplete", () => {
   it("renders canonical restaurant decision status and provenance source", () => {
     render(
@@ -339,6 +407,58 @@ describe("ExecutiveViewComplete", () => {
       });
       expect(policyLineMatches.length).toBeGreaterThan(0);
       expect(screen.getByRole("button", { name: "Scenario" })).toBeInTheDocument();
+    }
+  });
+
+  it("keeps canonical decision status/reason/provenance contract parity across restaurant, hospitality, multifamily, and industrial", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject(
+            CROSS_TYPE_POLICY_CASES[0].buildingType,
+            CROSS_TYPE_POLICY_CASES[0].subtype,
+            CROSS_TYPE_POLICY_CASES[0].profileId
+          )}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            CROSS_TYPE_POLICY_CASES[0].profileId,
+            CROSS_TYPE_POLICY_CASES[0].decisionStatus,
+            CROSS_TYPE_POLICY_CASES[0].decisionReasonCode
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    for (const testCase of CROSS_TYPE_POLICY_CASES) {
+      rerender(
+        <MemoryRouter>
+          <ExecutiveViewComplete
+            project={buildCrossTypeProject(
+              testCase.buildingType,
+              testCase.subtype,
+              testCase.profileId
+            )}
+            dealShieldData={buildCrossTypeDealShieldViewModel(
+              testCase.profileId,
+              testCase.decisionStatus,
+              testCase.decisionReasonCode
+            ) as any}
+          />
+        </MemoryRouter>
+      );
+
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      const policyLineMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return (
+          text.includes("Policy source: dealshield_policy_v1") &&
+          text.includes("decision_insurance_subtype_policy_v1") &&
+          text.includes(`reason: ${testCase.decisionReasonCode}`)
+        );
+      });
+      expect(policyLineMatches.length).toBeGreaterThan(0);
     }
   });
 });

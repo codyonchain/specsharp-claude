@@ -544,6 +544,34 @@ export const DealShieldView: React.FC<Props> = ({
   const firstBreakScenarioLabel = formatValue(
     firstBreakCondition?.scenario_label ?? firstBreakCondition?.scenario_id
   );
+  const firstBreakMetricRaw =
+    firstBreakCondition?.break_metric ??
+    (firstBreakCondition as any)?.breakMetric;
+  const firstBreakMetric =
+    typeof firstBreakMetricRaw === 'string' && firstBreakMetricRaw.trim()
+      ? firstBreakMetricRaw.trim().toLowerCase()
+      : 'value_gap';
+  const firstBreakSummaryText =
+    firstBreakMetric === 'value_gap'
+      ? `Break occurs in ${firstBreakScenarioLabel}: value gap turns negative.`
+      : firstBreakMetric === 'value_gap_pct'
+        ? `Break occurs in ${firstBreakScenarioLabel}: value-gap percentage crosses threshold.`
+        : `Break occurs in ${firstBreakScenarioLabel}: ${firstBreakMetricRaw} crosses threshold.`;
+  const formatFirstBreakMetricValue = (value: unknown) => {
+    if (firstBreakMetric === 'value_gap') {
+      return formatDecisionMetricValue(value, 'derived.value_gap');
+    }
+    if (firstBreakMetric === 'value_gap_pct') {
+      const numeric = toFiniteNumber(value);
+      if (numeric === null) return formatValue(value);
+      const percentValue = Math.abs(numeric) <= 1.5 ? numeric * 100 : numeric;
+      return `${new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }).format(percentValue)}%`;
+    }
+    return formatDecisionMetricValue(value, firstBreakMetricRaw);
+  };
   const flexBeforeBreakDisplay = flexBeforeBreakPct !== null
     ? `${formatAssumptionPercentFixed2(flexBeforeBreakPct)} (${classifyFlexBeforeBreak(normalizePercentValue(flexBeforeBreakPct))})`
     : null;
@@ -1147,20 +1175,20 @@ export const DealShieldView: React.FC<Props> = ({
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">First Break Condition</p>
                     {firstBreakCondition ? (
                       <div className="mt-2 space-y-1 text-sm text-slate-700">
-                        <p>Break occurs in {firstBreakScenarioLabel}: value gap turns negative.</p>
+                        <p>{firstBreakSummaryText}</p>
                         <p>
                           <span className="font-medium text-slate-600">Scenario:</span>{' '}
                           <span>{formatValue(firstBreakCondition.scenario_label ?? firstBreakCondition.scenario_id)}</span>
                         </p>
                         <p>
                           <span className="font-medium text-slate-600">Observed:</span>{' '}
-                          <span>{formatDecisionMetricValue(firstBreakCondition.observed_value, 'derived.value_gap')}</span>
+                          <span>{formatFirstBreakMetricValue(firstBreakCondition.observed_value)}</span>
                         </p>
                         <p>
                           <span className="font-medium text-slate-600">Threshold:</span>{' '}
                           <span>
                             {formatValue(firstBreakCondition.operator)}{' '}
-                            {formatDecisionMetricValue(firstBreakCondition.threshold, 'derived.value_gap')}
+                            {formatFirstBreakMetricValue(firstBreakCondition.threshold)}
                           </span>
                         </p>
                       </div>
