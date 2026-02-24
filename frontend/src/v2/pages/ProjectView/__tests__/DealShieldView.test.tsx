@@ -336,6 +336,45 @@ const OFFICE_POLICY_CONTRACT_CASES = [
   },
 ] as const;
 
+const RETAIL_POLICY_CONTRACT_CASES = [
+  {
+    subtype: "shopping_center",
+    profileId: "retail_shopping_center_v1",
+    scopeProfileId: "retail_shopping_center_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel: "IC-First Shopping Center Tenant Mix, CAM Recovery Lag, and Inline Rollover Control",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 9.0,
+    observedValue: 7.8,
+    flexBeforeBreakPct: 1.9,
+    expectedFlexLabel: "1.90% (Structurally Tight)",
+    baseDscr: 1.37,
+    stressedDscr: 1.12,
+  },
+  {
+    subtype: "big_box",
+    profileId: "retail_big_box_v1",
+    scopeProfileId: "retail_big_box_structural_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+    primaryControlLabel: "IC-First Big Box Anchor Retenanting, Back-of-House Power, and Refrigeration Retrofit Control",
+    breakScenarioLabel: "Ugly",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: 0.0,
+    observedValue: -22000,
+    flexBeforeBreakPct: 5.3,
+    expectedFlexLabel: "5.30% (Flexible)",
+    baseDscr: 1.43,
+    stressedDscr: 1.19,
+  },
+] as const;
+
 const POLICY_CONTRACT_CASES = [
   {
     buildingType: "restaurant",
@@ -1710,6 +1749,80 @@ describe("DealShieldView", () => {
               text.includes(testCase.breakOperator) &&
               text.includes("$")
             );
+          })
+        ).toBeInTheDocument();
+      }
+    }
+  });
+
+  it("renders explicit retail parity for shopping_center and big_box with canonical status/provenance and metric-aware first-break units", () => {
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_retail_policy_contract_0"
+        data={buildSubtypePolicyPayload(RETAIL_POLICY_CONTRACT_CASES[0]) as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    for (const testCase of RETAIL_POLICY_CONTRACT_CASES) {
+      rerender(
+        <DealShieldView
+          projectId={`proj_${testCase.profileId}`}
+          data={buildSubtypePolicyPayload(testCase) as any}
+          loading={false}
+          error={null}
+        />
+      );
+
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      expect(screen.getByText(DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
+      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
+      expect(screen.getByText(testCase.baseDscr.toFixed(2))).toBeInTheDocument();
+      expect(
+        screen.getByText("DSCR and Yield reflect the underwriting/debt terms in this run — see Provenance.")
+      ).toBeInTheDocument();
+
+      const decisionPolicyMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return (
+          text.includes("Decision Policy:") &&
+          text.includes(`Status: ${testCase.decisionStatus}`) &&
+          text.includes(`Reason: ${testCase.decisionReasonCode}`) &&
+          text.includes("Source: dealshield_policy_v1")
+        );
+      });
+      expect(decisionPolicyMatches.length).toBeGreaterThan(0);
+
+      if (testCase.breakMetric === "value_gap_pct") {
+        expect(
+          screen.getByText(
+            `Break occurs in ${testCase.breakScenarioLabel}: value-gap percentage crosses threshold.`
+          )
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("%") && !text.includes("$");
+          })
+        ).toBeInTheDocument();
+      } else {
+        const expectedSummary =
+          testCase.threshold === 0
+            ? `Break occurs in ${testCase.breakScenarioLabel}: value gap turns negative.`
+            : `Break occurs in ${testCase.breakScenarioLabel}: value gap crosses threshold.`;
+        expect(screen.getByText(expectedSummary)).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("$");
           })
         ).toBeInTheDocument();
       }
