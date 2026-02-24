@@ -1,9 +1,12 @@
+import pytest
+
 from app.v2.config.master_config import BuildingType, ProjectClass, get_building_config
 from app.v2.config.type_profiles.dealshield_content import get_dealshield_content_profile
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.v2.config.type_profiles.dealshield_tiles import restaurant as restaurant_tile_profiles
 from app.v2.config.type_profiles.scope_items import restaurant as restaurant_scope_profiles
 from app.v2.engines.unified_engine import unified_engine
+from app.v2.services.dealshield_scenarios import build_dealshield_scenarios
 from app.v2.services.dealshield_service import build_dealshield_view_model
 
 
@@ -21,6 +24,14 @@ RESTAURANT_SCOPE_PROFILE_IDS = {
     "fine_dining": "restaurant_fine_dining_structural_v1",
     "cafe": "restaurant_cafe_structural_v1",
     "bar_tavern": "restaurant_bar_tavern_structural_v1",
+}
+
+RESTAURANT_SPECIAL_FEATURE_CASES = {
+    "quick_service": "drive_thru",
+    "full_service": "private_dining",
+    "fine_dining": "chef_table",
+    "cafe": "bakery_display",
+    "bar_tavern": "live_music_stage",
 }
 
 
@@ -319,3 +330,113 @@ def test_restaurant_decision_insurance_outputs_and_provenance():
             if block.get("status") == "unavailable":
                 reason = block.get("reason")
                 assert isinstance(reason, str) and reason.strip()
+
+
+@pytest.mark.parametrize("stress_band_pct", [10, 7, 5, 3])
+def test_restaurant_scenario_controls_accept_allowed_stress_band_values(stress_band_pct):
+    payload = unified_engine.calculate_project(
+        building_type=BuildingType.RESTAURANT,
+        subtype="full_service",
+        square_footage=8_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+    )
+    payload["dealshield_controls"] = {
+        "stress_band_pct": stress_band_pct,
+    }
+
+    config = get_building_config(BuildingType.RESTAURANT, "full_service")
+    scenarios_bundle = build_dealshield_scenarios(
+        base_payload=payload,
+        building_config=config,
+        engine=unified_engine,
+    )
+    scenario_inputs = scenarios_bundle["provenance"]["scenario_inputs"]
+    conservative = scenario_inputs["conservative"]
+
+    assert scenario_inputs["base"]["stress_band_pct"] == stress_band_pct
+    assert conservative["stress_band_pct"] == stress_band_pct
+    assert conservative["cost_scalar"] == pytest.approx(1.0 + (stress_band_pct / 100.0))
+    assert conservative["revenue_scalar"] == pytest.approx(1.0 - (stress_band_pct / 100.0))
+
+
+def test_restaurant_scenario_controls_with_anchors_emit_expected_provenance_for_all_subtypes():
+    for subtype, expected_profile_id in RESTAURANT_PROFILE_IDS.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.RESTAURANT,
+            subtype=subtype,
+            square_footage=8_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        base_total_cost = float(payload["totals"]["total_project_cost"])
+        base_annual_revenue = float(payload["revenue_analysis"]["annual_revenue"])
+        target_cost_anchor = round(base_total_cost * 1.04, 2)
+        target_revenue_anchor = round(base_annual_revenue * 1.05, 2)
+        payload["dealshield_controls"] = {
+            "stress_band_pct": 7,
+            "use_cost_anchor": True,
+            "anchor_total_project_cost": target_cost_anchor,
+            "use_revenue_anchor": True,
+            "anchor_annual_revenue": target_revenue_anchor,
+        }
+
+        config = get_building_config(BuildingType.RESTAURANT, subtype)
+        scenarios_bundle = build_dealshield_scenarios(
+            base_payload=payload,
+            building_config=config,
+            engine=unified_engine,
+        )
+
+        assert scenarios_bundle["profile_id"] == expected_profile_id
+        scenario_inputs = scenarios_bundle["provenance"]["scenario_inputs"]
+        scenario_ids = scenarios_bundle["provenance"]["scenario_ids"]
+        assert "base" in scenario_ids
+
+        base_snapshot = scenarios_bundle["scenarios"]["base"]
+        assert base_snapshot["totals"]["total_project_cost"] == pytest.approx(target_cost_anchor)
+
+        for scenario_id in scenario_ids:
+            scenario_input = scenario_inputs[scenario_id]
+            assert scenario_input["stress_band_pct"] == 7
+            assert scenario_input["cost_anchor_used"] is True
+            assert scenario_input["cost_anchor_value"] == pytest.approx(target_cost_anchor)
+            assert scenario_input["revenue_anchor_used"] is True
+            assert scenario_input["revenue_anchor_value"] == pytest.approx(target_revenue_anchor)
+
+
+def test_restaurant_special_features_math_and_breakdown_reconcile_for_all_subtypes():
+    square_footage = 8_000
+    for subtype, feature_key in RESTAURANT_SPECIAL_FEATURE_CASES.items():
+        baseline = unified_engine.calculate_project(
+            building_type=BuildingType.RESTAURANT,
+            subtype=subtype,
+            square_footage=square_footage,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+            special_features=[],
+        )
+        with_feature = unified_engine.calculate_project(
+            building_type=BuildingType.RESTAURANT,
+            subtype=subtype,
+            square_footage=square_footage,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+            special_features=[feature_key],
+        )
+
+        config = get_building_config(BuildingType.RESTAURANT, subtype)
+        expected_delta = float(config.special_features[feature_key]) * square_footage
+
+        base_total = float(baseline["construction_costs"]["special_features_total"])
+        feature_total = float(with_feature["construction_costs"]["special_features_total"])
+        delta = feature_total - base_total
+        assert delta > 0
+        assert delta == pytest.approx(expected_delta, rel=1e-3)
+
+        breakdown = with_feature["construction_costs"]["special_features_breakdown"]
+        assert isinstance(breakdown, list) and breakdown
+        breakdown_map = {entry.get("id"): float(entry.get("total_cost", 0.0) or 0.0) for entry in breakdown}
+        assert feature_key in breakdown_map
+        assert breakdown_map[feature_key] == pytest.approx(expected_delta, rel=1e-3)
+        assert sum(breakdown_map.values()) == pytest.approx(feature_total, rel=1e-3)

@@ -229,4 +229,26 @@ describe("DealShieldView", () => {
       expect(screen.getAllByText("Conservative").length).toBeGreaterThan(0);
     }
   });
+
+  it("renders decision status provenance source when reason code is absent", () => {
+    const profileId = "restaurant_cafe_v1";
+    const payload = buildRestaurantDealShieldPayload(profileId) as any;
+    delete payload.view_model.decision_reason_code;
+    payload.view_model.decision_status_provenance = {
+      status_source: "restaurant_policy_v1",
+    };
+
+    render(
+      <DealShieldView
+        projectId="proj_restaurant_status_source"
+        data={payload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(screen.getByText("Decision Status")).toBeInTheDocument();
+    expect(screen.getByText("Investment Decision: GO")).toBeInTheDocument();
+    expect(screen.getByText("Status source: restaurant_policy_v1.")).toBeInTheDocument();
+  });
 });

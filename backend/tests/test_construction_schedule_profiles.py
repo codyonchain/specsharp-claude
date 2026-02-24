@@ -13,6 +13,11 @@ TARGET_SUBTYPE_EXPECTATIONS = [
     (BuildingType.MULTIFAMILY, "market_rate_apartments", 28),
     (BuildingType.MULTIFAMILY, "luxury_apartments", 34),
     (BuildingType.MULTIFAMILY, "affordable_housing", 26),
+    (BuildingType.RESTAURANT, "quick_service", 12),
+    (BuildingType.RESTAURANT, "full_service", 15),
+    (BuildingType.RESTAURANT, "fine_dining", 17),
+    (BuildingType.RESTAURANT, "cafe", 11),
+    (BuildingType.RESTAURANT, "bar_tavern", 16),
 ]
 
 
@@ -20,7 +25,7 @@ TARGET_SUBTYPE_EXPECTATIONS = [
     "building_type,subtype,expected_total_months",
     TARGET_SUBTYPE_EXPECTATIONS,
 )
-def test_subtype_schedules_resolve_for_industrial_and_multifamily(
+def test_subtype_schedules_resolve_for_industrial_multifamily_and_restaurant(
     building_type,
     subtype,
     expected_total_months,
@@ -47,6 +52,7 @@ def test_subtype_schedules_resolve_for_industrial_and_multifamily(
     [
         (BuildingType.INDUSTRIAL, "unknown_dc_variant", 18),
         (BuildingType.MULTIFAMILY, "student_housing_variant", 30),
+        (BuildingType.RESTAURANT, "chef_counter_concept", 14),
     ],
 )
 def test_unknown_subtype_falls_back_to_building_type_schedule(

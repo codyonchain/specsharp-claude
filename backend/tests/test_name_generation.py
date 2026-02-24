@@ -6,6 +6,8 @@ Current behavior:
 - generate_project_name() derives a deterministic "<Subtype|Type> in <Location>" label.
 """
 
+import pytest
+
 from app.services.nlp_service import NLPService
 
 
@@ -141,3 +143,45 @@ class TestProjectNameGeneration:
         assert parsed["square_footage"] is None
         assert "detail_suggestions" not in parsed
         assert name == "Warehouse in Nashville"
+
+    @pytest.mark.parametrize(
+        "description,expected_subtype,expected_name",
+        [
+            (
+                "New 3200 sf quick service restaurant with drive thru in Nashville, TN",
+                "quick_service",
+                "Quick Service in Nashville",
+            ),
+            (
+                "New 4800 sf full service restaurant with table service in Nashville, TN",
+                "full_service",
+                "Full Service in Nashville",
+            ),
+            (
+                "New 5200 sf fine dining restaurant with tasting menu in Nashville, TN",
+                "fine_dining",
+                "Fine Dining in Nashville",
+            ),
+            (
+                "New 2600 sf cafe coffee shop with bakery counter in Nashville, TN",
+                "cafe",
+                "Cafe in Nashville",
+            ),
+            (
+                "New 4500 sf tavern pub with cocktail lounge in Nashville, TN",
+                "bar_tavern",
+                "Bar Tavern in Nashville",
+            ),
+        ],
+    )
+    def test_restaurant_subtype_discoverability_all_five_profiles(
+        self,
+        description,
+        expected_subtype,
+        expected_name,
+    ):
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "restaurant"
+        assert parsed["subtype"] == expected_subtype
+        assert name == expected_name
