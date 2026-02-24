@@ -18,6 +18,8 @@ TARGET_SUBTYPE_EXPECTATIONS = [
     (BuildingType.RESTAURANT, "fine_dining", 17),
     (BuildingType.RESTAURANT, "cafe", 11),
     (BuildingType.RESTAURANT, "bar_tavern", 16),
+    (BuildingType.HOSPITALITY, "limited_service_hotel", 24),
+    (BuildingType.HOSPITALITY, "full_service_hotel", 32),
 ]
 
 
@@ -25,7 +27,7 @@ TARGET_SUBTYPE_EXPECTATIONS = [
     "building_type,subtype,expected_total_months",
     TARGET_SUBTYPE_EXPECTATIONS,
 )
-def test_subtype_schedules_resolve_for_industrial_multifamily_and_restaurant(
+def test_subtype_schedules_resolve_for_target_verticals(
     building_type,
     subtype,
     expected_total_months,
@@ -53,6 +55,7 @@ def test_subtype_schedules_resolve_for_industrial_multifamily_and_restaurant(
         (BuildingType.INDUSTRIAL, "unknown_dc_variant", 18),
         (BuildingType.MULTIFAMILY, "student_housing_variant", 30),
         (BuildingType.RESTAURANT, "chef_counter_concept", 14),
+        (BuildingType.HOSPITALITY, "unknown_hotel_variant", 30),
     ],
 )
 def test_unknown_subtype_falls_back_to_building_type_schedule(
@@ -66,6 +69,20 @@ def test_unknown_subtype_falls_back_to_building_type_schedule(
     assert schedule["subtype"] is None
     assert schedule["schedule_source"] == "building_type"
     assert schedule["total_months"] == expected_total_months
+
+
+def test_unknown_hospitality_subtype_falls_back_to_multifamily_baseline_deterministically():
+    hospitality_fallback = build_construction_schedule(
+        BuildingType.HOSPITALITY,
+        subtype="hotel_variant_not_configured",
+    )
+    multifamily_baseline = build_construction_schedule(BuildingType.MULTIFAMILY)
+
+    assert hospitality_fallback["building_type"] == BuildingType.HOSPITALITY.value
+    assert hospitality_fallback["subtype"] is None
+    assert hospitality_fallback["schedule_source"] == "building_type"
+    assert hospitality_fallback["total_months"] == multifamily_baseline["total_months"]
+    assert hospitality_fallback["phases"] == multifamily_baseline["phases"]
 
 
 def test_non_target_building_types_keep_existing_behavior():

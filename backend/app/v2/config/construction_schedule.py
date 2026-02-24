@@ -898,6 +898,102 @@ CONSTRUCTION_SUBTYPE_SCHEDULES: Dict[BuildingType, Dict[str, ScheduleConfig]] = 
             ]),
         },
     },
+    BuildingType.HOSPITALITY: {
+        "limited_service_hotel": {
+            "total_months": 24,
+            "phases": _phases([
+                {
+                    "id": "site_foundation",
+                    "label": "Site Utilities & Foundations",
+                    "start_month": 0,
+                    "duration": 4,
+                    "color": "blue",
+                },
+                {
+                    "id": "structural",
+                    "label": "Podium & Guestroom Structure",
+                    "start_month": 2,
+                    "duration": 10,
+                    "color": "green",
+                },
+                {
+                    "id": "exterior_envelope",
+                    "label": "Envelope & Weather Tight",
+                    "start_month": 7,
+                    "duration": 8,
+                    "color": "orange",
+                },
+                {
+                    "id": "mep_rough",
+                    "label": "MEP Rough-In",
+                    "start_month": 8,
+                    "duration": 8,
+                    "color": "purple",
+                },
+                {
+                    "id": "interior_finishes",
+                    "label": "Guestroom & Public Area Finishes",
+                    "start_month": 13,
+                    "duration": 9,
+                    "color": "pink",
+                },
+                {
+                    "id": "mep_finishes",
+                    "label": "FF&E Install & Commissioning",
+                    "start_month": 17,
+                    "duration": 7,
+                    "color": "teal",
+                },
+            ]),
+        },
+        "full_service_hotel": {
+            "total_months": 32,
+            "phases": _phases([
+                {
+                    "id": "site_foundation",
+                    "label": "Site, Podium & Foundations",
+                    "start_month": 0,
+                    "duration": 6,
+                    "color": "blue",
+                },
+                {
+                    "id": "structural",
+                    "label": "Structure, Core & Towers",
+                    "start_month": 4,
+                    "duration": 14,
+                    "color": "green",
+                },
+                {
+                    "id": "exterior_envelope",
+                    "label": "Envelope, Facade & Roofing",
+                    "start_month": 10,
+                    "duration": 10,
+                    "color": "orange",
+                },
+                {
+                    "id": "mep_rough",
+                    "label": "MEP Rough & Back-of-House Systems",
+                    "start_month": 12,
+                    "duration": 11,
+                    "color": "purple",
+                },
+                {
+                    "id": "interior_finishes",
+                    "label": "Guestroom, F&B & Amenity Finishes",
+                    "start_month": 19,
+                    "duration": 11,
+                    "color": "pink",
+                },
+                {
+                    "id": "mep_finishes",
+                    "label": "Systems Start-Up & Opening Readiness",
+                    "start_month": 24,
+                    "duration": 8,
+                    "color": "teal",
+                },
+            ]),
+        },
+    },
 }
 
 
