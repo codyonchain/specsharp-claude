@@ -19,7 +19,15 @@ _WAVE1_PROFILE_IDS: Set[str] = {
     "industrial_manufacturing_v1",
     "industrial_flex_space_v1",
     "industrial_cold_storage_v1",
+    "healthcare_surgical_center_v1",
+    "healthcare_imaging_center_v1",
     "healthcare_medical_office_building_v1",
+    "healthcare_outpatient_clinic_v1",
+    "healthcare_dental_office_v1",
+    "healthcare_hospital_v1",
+    "healthcare_medical_center_v1",
+    "healthcare_nursing_home_v1",
+    "healthcare_rehabilitation_v1",
     "healthcare_urgent_care_v1",
     "restaurant_quick_service_v1",
     "restaurant_full_service_v1",
@@ -968,10 +976,15 @@ def _is_specialty_profile(profile_id: Any) -> bool:
     return isinstance(profile_id, str) and profile_id.startswith("specialty_")
 
 
+def _is_healthcare_profile(profile_id: Any) -> bool:
+    return isinstance(profile_id, str) and profile_id.startswith("healthcare_")
+
+
 def _supports_decision_insurance_profile(profile_id: Any) -> bool:
     return (
         _is_multifamily_profile(profile_id)
         or _is_industrial_profile(profile_id)
+        or _is_healthcare_profile(profile_id)
         or _is_restaurant_profile(profile_id)
         or _is_hospitality_profile(profile_id)
         or _is_specialty_profile(profile_id)

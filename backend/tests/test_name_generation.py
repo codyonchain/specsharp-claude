@@ -63,9 +63,9 @@ class TestProjectNameGeneration:
         parsed, name = self._parse_and_name(description)
 
         assert parsed["building_type"] == "healthcare"
-        assert parsed["subtype"] == "medical_office"
+        assert parsed["subtype"] == "medical_office_building"
         assert parsed["square_footage"] == 75000
-        assert name == "Medical Office in Nashville"
+        assert name == "Medical Office Building in Nashville"
 
     def test_warehouse_with_docks(self):
         description = "New 150000 sf distribution warehouse with 30-foot clear height and 20 loading docks in Memphis, TN"
@@ -129,10 +129,10 @@ class TestProjectNameGeneration:
         parsed, name = self._parse_and_name(description)
 
         assert parsed["building_type"] == "healthcare"
-        assert parsed["subtype"] == "medical_office"
+        assert parsed["subtype"] == "medical_office_building"
         assert parsed["square_footage"] is None
         assert "detail_suggestions" not in parsed
-        assert name == "Medical Office in Manchester"
+        assert name == "Medical Office Building in Manchester"
 
     def test_detail_suggestions_warehouse(self):
         description = "New warehouse facility"
@@ -238,6 +238,73 @@ class TestProjectNameGeneration:
         parsed, name = self._parse_and_name(description)
 
         assert parsed["building_type"] == "specialty"
+        assert parsed["subtype"] == expected_subtype
+        assert name == expected_name
+
+    @pytest.mark.parametrize(
+        "description,expected_subtype,expected_name",
+        [
+            (
+                "New 28000 sf ambulatory surgery center with 6 OR suites in Nashville, TN",
+                "surgical_center",
+                "Surgical Center in Nashville",
+            ),
+            (
+                "New 32000 sf diagnostic imaging center with MRI and CT suites in Nashville, TN",
+                "imaging_center",
+                "Imaging Center in Nashville",
+            ),
+            (
+                "New 14000 sf urgent care center with walk-in triage in Nashville, TN",
+                "urgent_care",
+                "Urgent Care in Nashville",
+            ),
+            (
+                "New 36000 sf outpatient clinic for primary care in Nashville, TN",
+                "outpatient_clinic",
+                "Outpatient Clinic in Nashville",
+            ),
+            (
+                "New 85000 sf medical office building with physician suites in Nashville, TN",
+                "medical_office_building",
+                "Medical Office Building in Nashville",
+            ),
+            (
+                "New 9000 sf dental office with sterilization bay in Nashville, TN",
+                "dental_office",
+                "Dental Office in Nashville",
+            ),
+            (
+                "New 240000 sf acute care hospital with emergency department in Nashville, TN",
+                "hospital",
+                "Hospital in Nashville",
+            ),
+            (
+                "New 180000 sf regional medical center campus in Nashville, TN",
+                "medical_center",
+                "Medical Center in Nashville",
+            ),
+            (
+                "New 70000 sf skilled nursing facility with long-term care beds in Nashville, TN",
+                "nursing_home",
+                "Nursing Home in Nashville",
+            ),
+            (
+                "New 42000 sf rehabilitation center with therapy gym in Nashville, TN",
+                "rehabilitation",
+                "Rehabilitation in Nashville",
+            ),
+        ],
+    )
+    def test_healthcare_subtype_discoverability_all_ten_profiles(
+        self,
+        description,
+        expected_subtype,
+        expected_name,
+    ):
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "healthcare"
         assert parsed["subtype"] == expected_subtype
         assert name == expected_name
 

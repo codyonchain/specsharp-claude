@@ -99,7 +99,7 @@ class NLPService:
                     ],
 
                     # TRUE medical office building / landlord asset
-                    'medical_office': [
+                    'medical_office_building': [
                         'medical office',
                         'medical office building',
                         'mob',
@@ -418,7 +418,7 @@ class NLPService:
             'm.o.b.'
         ]
         if any(keyword in text_lower for keyword in mob_keywords):
-            return 'healthcare', 'medical_office', classification
+            return 'healthcare', 'medical_office_building', classification
 
         hospitality_intent_pattern = re.compile(
             r"\b(hotel|motel|inn|lodging|hospitality)\b",
@@ -527,7 +527,7 @@ class NLPService:
             'industrial': 'warehouse',
             'hospitality': 'limited_service_hotel',
             'restaurant': 'full_service',
-            'healthcare': 'medical_office',
+            'healthcare': 'medical_office_building',
             'educational': 'elementary_school',
             'civic': 'government_building',
             'recreation': 'recreation_center',

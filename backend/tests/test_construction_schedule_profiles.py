@@ -25,6 +25,16 @@ TARGET_SUBTYPE_EXPECTATIONS = [
     (BuildingType.SPECIALTY, "self_storage", 15),
     (BuildingType.SPECIALTY, "car_dealership", 18),
     (BuildingType.SPECIALTY, "broadcast_facility", 20),
+    (BuildingType.HEALTHCARE, "surgical_center", 15),
+    (BuildingType.HEALTHCARE, "imaging_center", 17),
+    (BuildingType.HEALTHCARE, "urgent_care", 13),
+    (BuildingType.HEALTHCARE, "outpatient_clinic", 14),
+    (BuildingType.HEALTHCARE, "medical_office_building", 18),
+    (BuildingType.HEALTHCARE, "dental_office", 12),
+    (BuildingType.HEALTHCARE, "hospital", 30),
+    (BuildingType.HEALTHCARE, "medical_center", 24),
+    (BuildingType.HEALTHCARE, "nursing_home", 20),
+    (BuildingType.HEALTHCARE, "rehabilitation", 16),
 ]
 
 
@@ -62,6 +72,7 @@ def test_subtype_schedules_resolve_for_target_verticals(
         (BuildingType.RESTAURANT, "chef_counter_concept", 14),
         (BuildingType.HOSPITALITY, "unknown_hotel_variant", 30),
         (BuildingType.SPECIALTY, "unknown_specialty_variant", 27),
+        (BuildingType.HEALTHCARE, "unknown_healthcare_variant", 16),
     ],
 )
 def test_unknown_subtype_falls_back_to_building_type_schedule(

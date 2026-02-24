@@ -216,6 +216,146 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         },
         "flex_calibration": {"tight_max_pct": 1.0, "moderate_max_pct": 3.2, "fallback_pct": 0.9},
     },
+    "healthcare_surgical_center_v1": {
+        "primary_control_variable": {
+            "tile_id": "or_turnover_and_sterile_core_plus_12",
+            "metric_ref": "trade_breakdown.mechanical",
+            "label": "OR Turnover + Sterile Core +12%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 22.0,
+            "scenario_priority": ["base", "conservative", "sterile_reprocessing_drag", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.2, "moderate_max_pct": 3.5, "fallback_pct": 1.4},
+    },
+    "healthcare_imaging_center_v1": {
+        "primary_control_variable": {
+            "tile_id": "shielding_and_power_quality_plus_11",
+            "metric_ref": "trade_breakdown.electrical",
+            "label": "Shielding + Power Quality +11%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 18.0,
+            "scenario_priority": ["base", "conservative", "magnet_commissioning_slip", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.0, "moderate_max_pct": 3.2, "fallback_pct": 1.2},
+    },
+    "healthcare_urgent_care_v1": {
+        "primary_control_variable": {
+            "tile_id": "triage_flow_and_lab_turns_plus_10",
+            "metric_ref": "trade_breakdown.finishes",
+            "label": "Triage Flow + Lab Turns +10%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 12.0,
+            "scenario_priority": ["base", "conservative", "weekend_surge_breakpoint", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.8, "moderate_max_pct": 4.6, "fallback_pct": 2.0},
+    },
+    "healthcare_outpatient_clinic_v1": {
+        "primary_control_variable": {
+            "tile_id": "exam_program_and_room_standard_plus_9",
+            "metric_ref": "trade_breakdown.finishes",
+            "label": "Exam Program + Room Standard +9%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 10.0,
+            "scenario_priority": ["base", "conservative", "care_team_growth_mismatch", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.7, "moderate_max_pct": 4.4, "fallback_pct": 1.9},
+    },
+    "healthcare_medical_office_building_v1": {
+        "primary_control_variable": {
+            "tile_id": "tenant_fitout_mep_stack_plus_10",
+            "metric_ref": "trade_breakdown.mechanical",
+            "label": "Tenant Fit-Out MEP Stack +10%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 8.0,
+            "scenario_priority": ["base", "conservative", "anchor_tenant_restack", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.5, "moderate_max_pct": 4.0, "fallback_pct": 1.6},
+    },
+    "healthcare_dental_office_v1": {
+        "primary_control_variable": {
+            "tile_id": "chairside_vacuum_and_gas_plus_11",
+            "metric_ref": "trade_breakdown.plumbing",
+            "label": "Chairside Vacuum + Gas +11%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 9.0,
+            "scenario_priority": ["base", "conservative", "sterilization_center_rework", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.6, "moderate_max_pct": 4.2, "fallback_pct": 1.7},
+    },
+    "healthcare_hospital_v1": {
+        "primary_control_variable": {
+            "tile_id": "acuity_mep_redundancy_plus_12",
+            "metric_ref": "trade_breakdown.mechanical",
+            "label": "Acuity MEP + Redundancy +12%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 28.0,
+            "scenario_priority": ["base", "conservative", "tower_commissioning_retest", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 0.8, "moderate_max_pct": 2.8, "fallback_pct": 1.0},
+    },
+    "healthcare_medical_center_v1": {
+        "primary_control_variable": {
+            "tile_id": "service_line_power_density_plus_11",
+            "metric_ref": "trade_breakdown.electrical",
+            "label": "Service-Line Power Density +11%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 20.0,
+            "scenario_priority": ["base", "conservative", "specialty_program_shift", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.0, "moderate_max_pct": 3.0, "fallback_pct": 1.2},
+    },
+    "healthcare_nursing_home_v1": {
+        "primary_control_variable": {
+            "tile_id": "resident_room_life_safety_plus_9",
+            "metric_ref": "trade_breakdown.finishes",
+            "label": "Resident Room Life-Safety +9%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 11.0,
+            "scenario_priority": ["base", "conservative", "state_survey_correction_cycle", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 2.0, "moderate_max_pct": 5.0, "fallback_pct": 2.4},
+    },
+    "healthcare_rehabilitation_v1": {
+        "primary_control_variable": {
+            "tile_id": "therapy_gym_mep_integration_plus_10",
+            "metric_ref": "trade_breakdown.mechanical",
+            "label": "Therapy Gym MEP Integration +10%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 13.0,
+            "scenario_priority": ["base", "conservative", "equipment_path_and_rehab_flow", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.9, "moderate_max_pct": 4.8, "fallback_pct": 2.1},
+    },
     "specialty_data_center_v1": {
         "primary_control_variable": {
             "tile_id": "power_train_redundancy_rework_plus_15",
