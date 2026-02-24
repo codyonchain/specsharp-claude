@@ -157,73 +157,90 @@ export const HEALTHCARE_FEATURE_COSTS_BY_SUBTYPE: Record<
   Record<string, number>
 > = {
   surgical_center: {
-    hc_asc_expanded_pacu: 115,
-    hc_asc_sterile_core_upgrade: 95,
-    hc_asc_pain_management_suite: 85,
-    hc_asc_hybrid_or_cath_lab: 165,
+    operating_room: 100,
+    pre_op: 35,
+    recovery_room: 40,
+    sterile_processing: 60,
+    hc_asc_expanded_pacu: 75,
+    hc_asc_sterile_core_upgrade: 50,
+    hc_asc_pain_management_suite: 60,
+    hc_asc_hybrid_or_cath_lab: 125,
   },
   imaging_center: {
-    hc_imaging_second_mri: 145,
-    hc_imaging_pet_ct_suite: 170,
-    hc_imaging_interventional_rad: 155,
-    imaging: 130,
+    mri_suite: 80,
+    ct_suite: 60,
+    pet_scan: 90,
+    ultrasound: 20,
+    mammography: 35,
+    hc_imaging_second_mri: 100,
+    hc_imaging_pet_ct_suite: 150,
+    hc_imaging_interventional_rad: 125,
   },
   urgent_care: {
+    x_ray: 25,
+    laboratory: 20,
+    trauma_room: 30,
+    pharmacy: 25,
     hc_urgent_on_site_lab: 38,
-    hc_urgent_imaging_suite: 62,
-    hc_urgent_observation_bays: 28,
-    lab: 30,
+    hc_urgent_imaging_suite: 75,
+    hc_urgent_observation_bays: 25,
   },
   outpatient_clinic: {
-    hc_outpatient_on_site_lab: 32,
-    hc_outpatient_imaging_pod: 55,
-    hc_outpatient_behavioral_suite: 24,
-    lab: 26,
+    exam_rooms: 15,
+    procedure_room: 25,
+    laboratory: 20,
+    pharmacy: 30,
+    hc_outpatient_on_site_lab: 30,
+    hc_outpatient_imaging_pod: 60,
+    hc_outpatient_behavioral_suite: 25,
   },
   medical_office_building: {
-    mob_imaging_ready_shell: 24,
-    mob_enhanced_mep: 18,
-    mob_procedure_suite: 22,
-    mob_pharmacy_shell: 12,
-    mob_covered_dropoff: 9,
+    tenant_improvements: 40,
+    ambulatory_imaging: 35,
+    ambulatory_buildout: 60,
+    mob_imaging_ready_shell: 40,
+    mob_enhanced_mep: 20,
+    mob_procedure_suite: 30,
+    mob_pharmacy_shell: 15,
+    mob_covered_dropoff: 15,
   },
   dental_office: {
-    hc_dental_pano_ceph: 28,
-    hc_dental_sedation_suite: 34,
-    hc_dental_sterilization_upgrade: 16,
-    hc_dental_ortho_bay_expansion: 20,
+    operatory: 15,
+    x_ray: 12,
+    sterilization: 10,
+    lab: 15,
+    hc_dental_pano_ceph: 45,
+    hc_dental_sedation_suite: 60,
+    hc_dental_sterilization_upgrade: 25,
+    hc_dental_ortho_bay_expansion: 35,
   },
   hospital: {
-    emergency: 120,
-    imaging: 95,
-    surgery: 110,
-    icu: 105,
-    lab: 52,
-    hospital_central_plant_redundancy: 68,
-    hospital_pharmacy_cleanroom: 36,
+    emergency_department: 50,
+    surgical_suite: 75,
+    imaging_suite: 40,
+    icu: 60,
+    laboratory: 25,
+    cathlab: 90,
+    pharmacy: 40,
   },
   medical_center: {
-    emergency: 102,
-    imaging: 88,
-    surgery: 98,
-    icu: 92,
-    lab: 46,
-    medical_center_infusion_suite: 41,
-    medical_center_ambulatory_tower_fitout: 54,
+    emergency: 45,
+    surgery: 60,
+    imaging: 35,
+    specialty_clinic: 30,
+    laboratory: 25,
   },
   nursing_home: {
-    nursing_memory_care_wing: 34,
-    nursing_rehab_gym: 22,
-    nursing_nurse_call_upgrade: 16,
-    nursing_wander_management_system: 14,
-    nursing_dining_household_model: 19,
+    memory_care: 30,
+    therapy_room: 20,
+    activity_room: 12,
+    dining_hall: 15,
   },
   rehabilitation: {
-    rehab_hydrotherapy_pool: 37,
-    rehab_gait_training_lab: 24,
-    rehab_adl_apartment: 18,
-    rehab_therapy_gym_expansion: 26,
-    rehab_speech_neuro_suite: 17,
+    therapy_gym: 40,
+    hydrotherapy: 50,
+    treatment_rooms: 20,
+    assessment_suite: 25,
   },
 };
 
@@ -473,6 +490,22 @@ const HEALTHCARE_FEATURE_METADATA: Record<
     name: "Surgery Center",
     description: "Procedural and operating suite program with sterile flow and recovery support.",
   },
+  operating_room: {
+    name: "Operating Room",
+    description: "Fully equipped operating-room buildout with anesthesia, med-gas, and sterile support.",
+  },
+  pre_op: {
+    name: "Pre-Op Bays",
+    description: "Pre-op intake and preparation bays with clinical utilities and nurse visibility.",
+  },
+  recovery_room: {
+    name: "Recovery Room",
+    description: "Post-procedure recovery room capacity with monitoring and patient-support infrastructure.",
+  },
+  sterile_processing: {
+    name: "Sterile Processing",
+    description: "Central sterile processing flow with clean/dirty zoning and instrument throughput support.",
+  },
   icu: {
     name: "ICU Unit",
     description: "Critical-care unit expansion with high-acuity monitoring and redundant systems.",
@@ -480,6 +513,122 @@ const HEALTHCARE_FEATURE_METADATA: Record<
   lab: {
     name: "Laboratory",
     description: "Clinical lab infrastructure including specimen flow, utilities, and support spaces.",
+  },
+  laboratory: {
+    name: "Laboratory",
+    description: "Clinical laboratory program with specimen workflow, diagnostics, and support utilities.",
+  },
+  pharmacy: {
+    name: "Pharmacy",
+    description: "On-site pharmacy space with medication storage, prep zones, and clinical support systems.",
+  },
+  trauma_room: {
+    name: "Trauma Room",
+    description: "Trauma-ready acute treatment rooms with life-safety, gases, and rapid-response fitout.",
+  },
+  x_ray: {
+    name: "X-Ray Suite",
+    description: "General radiography suite with shielding, controls, and patient support spaces.",
+  },
+  mri_suite: {
+    name: "MRI Suite",
+    description: "MRI-ready room with shielding, magnet infrastructure, and patient safety support.",
+  },
+  ct_suite: {
+    name: "CT Suite",
+    description: "Computed tomography suite with imaging controls and adjacent patient prep space.",
+  },
+  pet_scan: {
+    name: "PET Scan Suite",
+    description: "PET imaging suite with radiopharmaceutical workflow and compliant support zones.",
+  },
+  ultrasound: {
+    name: "Ultrasound Rooms",
+    description: "Ultrasound room package with targeted shielding and patient workflow support.",
+  },
+  mammography: {
+    name: "Mammography Suite",
+    description: "Dedicated mammography room buildout with imaging controls and patient privacy detailing.",
+  },
+  emergency_department: {
+    name: "Emergency Department",
+    description: "Emergency department program with acute treatment rooms and trauma-flow support.",
+  },
+  imaging_suite: {
+    name: "Imaging Suite",
+    description: "Hospital imaging suite with shielding, controls, and critical-support adjacencies.",
+  },
+  surgical_suite: {
+    name: "Surgical Suite",
+    description: "Hospital surgical suite program with OR support, sterile flow, and recovery interfaces.",
+  },
+  cathlab: {
+    name: "Cath Lab",
+    description: "Cardiac cath-lab procedure room with imaging integration and advanced support systems.",
+  },
+  exam_rooms: {
+    name: "Exam Rooms",
+    description: "Expanded outpatient exam-room capacity with standardized clinical room infrastructure.",
+  },
+  procedure_room: {
+    name: "Procedure Room",
+    description: "Minor-procedure room package with clinical utilities and procedural support zoning.",
+  },
+  tenant_improvements: {
+    name: "Tenant Improvements",
+    description: "Core tenant-improvement package for clinical buildouts and delivery readiness.",
+  },
+  ambulatory_imaging: {
+    name: "Ambulatory Imaging",
+    description: "Ambulatory imaging package with shielding, controls, and outpatient workflow support.",
+  },
+  ambulatory_buildout: {
+    name: "Ambulatory Buildout",
+    description: "Ambulatory care buildout for specialist tenants and procedure-support programs.",
+  },
+  operatory: {
+    name: "Dental Operatory",
+    description: "Clinical dental operatory rooms with suction, gas, and equipment utility support.",
+  },
+  sterilization: {
+    name: "Dental Sterilization Core",
+    description: "Dental sterilization core with clean/dirty flow and instrument-processing upgrades.",
+  },
+  specialty_clinic: {
+    name: "Specialty Clinic Wing",
+    description: "Multi-specialty clinic buildout with dedicated provider and patient support spaces.",
+  },
+  memory_care: {
+    name: "Memory Care Wing",
+    description: "Secured memory-care environment with resident-safety and caregiving infrastructure.",
+  },
+  therapy_room: {
+    name: "Therapy Rooms",
+    description: "Skilled nursing therapy rooms for restorative care and clinician support operations.",
+  },
+  activity_room: {
+    name: "Activity Room",
+    description: "Resident activity rooms for programming with life-safety and accessibility upgrades.",
+  },
+  dining_hall: {
+    name: "Dining Hall",
+    description: "Congregate dining-hall upgrades for resident services and operational flow.",
+  },
+  therapy_gym: {
+    name: "Therapy Gym",
+    description: "Rehab therapy gym expansion with PT/OT equipment zones and clinician visibility.",
+  },
+  hydrotherapy: {
+    name: "Hydrotherapy Suite",
+    description: "Hydrotherapy program with pool systems, lifts, and patient-safety infrastructure.",
+  },
+  treatment_rooms: {
+    name: "Treatment Rooms",
+    description: "Rehabilitation treatment-room package for multi-disciplinary therapy services.",
+  },
+  assessment_suite: {
+    name: "Assessment Suite",
+    description: "Clinical assessment suites for intake, evaluation, and care-plan coordination.",
   },
   hc_outpatient_on_site_lab: {
     name: "On-Site Lab",
@@ -1005,24 +1154,156 @@ const HEALTHCARE_KEYWORD_DETECTION: Array<{
   patterns: RegExp[];
 }> = [
   {
+    featureId: "emergency_department",
+    patterns: [/\bemergency department\b/i, /\btrauma center\b/i, /\bemergency services?\b/i],
+  },
+  {
     featureId: "emergency",
-    patterns: [/\bemergency department\b/i, /\ber\b/i, /\btrauma center\b/i],
+    patterns: [/\bemergency department\b/i, /\btrauma center\b/i, /\bemergency services?\b/i],
+  },
+  {
+    featureId: "imaging_suite",
+    patterns: [/\bimaging suite\b/i, /\bimaging center\b/i, /\bmri\b/i, /\bct\b/i, /\bpet\b/i],
   },
   {
     featureId: "imaging",
-    patterns: [/\bimaging center\b/i, /\bmri\b/i, /\bct\b/i, /\bpet\b/i],
+    patterns: [/\bimaging center\b/i, /\bimaging suite\b/i, /\bmri\b/i, /\bct\b/i, /\bpet\b/i],
+  },
+  {
+    featureId: "surgical_suite",
+    patterns: [/\bsurgical suite\b/i, /\boperating rooms?\b/i, /\bOR suites?\b/i, /\bOR surgical suite\b/i],
   },
   {
     featureId: "surgery",
-    patterns: [/\bsurgery center\b/i, /\boperating rooms?\b/i, /\bOR suites?\b/i],
+    patterns: [/\bsurgery center\b/i, /\bsurgical suite\b/i, /\boperating rooms?\b/i, /\bOR suites?\b/i],
   },
   {
     featureId: "icu",
     patterns: [/\bicu\b/i, /\bintensive care\b/i],
   },
   {
-    featureId: "lab",
+    featureId: "laboratory",
     patterns: [/\blaboratory\b/i, /\blab\b/i, /\bon[-\s]?site lab\b/i, /\bpathology\b/i],
+  },
+  {
+    featureId: "lab",
+    patterns: [/\bdental lab\b/i],
+  },
+  {
+    featureId: "operating_room",
+    patterns: [/\boperating room\b/i, /\bOR room\b/i],
+  },
+  {
+    featureId: "pre_op",
+    patterns: [/\bpre[-\s]?op\b/i],
+  },
+  {
+    featureId: "recovery_room",
+    patterns: [/\brecovery room\b/i, /\bpacu\b/i],
+  },
+  {
+    featureId: "sterile_processing",
+    patterns: [/\bsterile processing\b/i],
+  },
+  {
+    featureId: "mri_suite",
+    patterns: [/\bmri suite\b/i],
+  },
+  {
+    featureId: "ct_suite",
+    patterns: [/\bct suite\b/i],
+  },
+  {
+    featureId: "pet_scan",
+    patterns: [/\bpet scan\b/i],
+  },
+  {
+    featureId: "ultrasound",
+    patterns: [/\bultrasound\b/i],
+  },
+  {
+    featureId: "mammography",
+    patterns: [/\bmammography\b/i],
+  },
+  {
+    featureId: "trauma_room",
+    patterns: [/\btrauma room\b/i],
+  },
+  {
+    featureId: "x_ray",
+    patterns: [/\bx[-\s]?ray\b/i],
+  },
+  {
+    featureId: "exam_rooms",
+    patterns: [/\bexam rooms?\b/i],
+  },
+  {
+    featureId: "procedure_room",
+    patterns: [/\bprocedure rooms?\b/i],
+  },
+  {
+    featureId: "tenant_improvements",
+    patterns: [/\btenant improvements?\b/i, /\bti package\b/i],
+  },
+  {
+    featureId: "ambulatory_imaging",
+    patterns: [/\bambulatory imaging\b/i],
+  },
+  {
+    featureId: "ambulatory_buildout",
+    patterns: [/\bambulatory build(?:out)?\b/i, /\bambulatory tower\b/i, /\bambulatory fit[-\s]?out\b/i],
+  },
+  {
+    featureId: "operatory",
+    patterns: [/\bdental operator(?:y|ies)\b/i, /\boperatory\b/i],
+  },
+  {
+    featureId: "sterilization",
+    patterns: [/\bdental sterilization\b/i],
+  },
+  {
+    featureId: "cathlab",
+    patterns: [/\bcath[\s-]?lab\b/i, /\bcatheterization lab\b/i],
+  },
+  {
+    featureId: "pharmacy",
+    patterns: [/\bpharmacy\b/i, /\bsterile compounding\b/i],
+  },
+  {
+    featureId: "specialty_clinic",
+    patterns: [/\bspecialty clinic\b/i, /\binfusion suite\b/i],
+  },
+  {
+    featureId: "memory_care",
+    patterns: [/\bmemory care\b/i, /\bmemory care wing\b/i, /\bwander management\b/i],
+  },
+  {
+    featureId: "therapy_room",
+    patterns: [/\btherapy room\b/i, /\brehab gym\b/i, /\bnurse call\b/i],
+  },
+  {
+    featureId: "activity_room",
+    patterns: [/\bactivity room\b/i],
+  },
+  {
+    featureId: "dining_hall",
+    patterns: [/\bdining hall\b/i, /\bhousehold dining\b/i, /\bsmall house model\b/i],
+  },
+  {
+    featureId: "therapy_gym",
+    patterns: [/\btherapy gym\b/i],
+  },
+  {
+    featureId: "hydrotherapy",
+    patterns: [/\bhydrotherapy\b/i, /\bhydrotherapy pool\b/i],
+  },
+  {
+    featureId: "treatment_rooms",
+    patterns: [/\btreatment rooms?\b/i, /\badl apartment\b/i, /\bactivities of daily living\b/i, /\bspeech(?:\s+and)? neuro\b/i, /\bneuro rehab suite\b/i],
+  },
+  {
+    featureId: "assessment_suite",
+    patterns: [/\bassessment suite\b/i, /\bgait training\b/i],
   },
   {
     featureId: "hc_imaging_second_mri",
@@ -1075,62 +1356,6 @@ const HEALTHCARE_KEYWORD_DETECTION: Array<{
   {
     featureId: "hc_dental_ortho_bay_expansion",
     patterns: [/\borthodontic\b/i, /\bortho bay\b/i],
-  },
-  {
-    featureId: "hospital_central_plant_redundancy",
-    patterns: [/\bcentral plant redundancy\b/i, /\bredun(?:dant|dancy) chiller\b/i],
-  },
-  {
-    featureId: "hospital_pharmacy_cleanroom",
-    patterns: [/\bpharmacy cleanroom\b/i, /\bsterile compounding\b/i],
-  },
-  {
-    featureId: "medical_center_infusion_suite",
-    patterns: [/\binfusion suite\b/i],
-  },
-  {
-    featureId: "medical_center_ambulatory_tower_fitout",
-    patterns: [/\bambulatory tower\b/i, /\bambulatory fit[-\s]?out\b/i],
-  },
-  {
-    featureId: "nursing_memory_care_wing",
-    patterns: [/\bmemory care\b/i],
-  },
-  {
-    featureId: "nursing_rehab_gym",
-    patterns: [/\brehab gym\b/i, /\btherapy gym\b/i],
-  },
-  {
-    featureId: "nursing_nurse_call_upgrade",
-    patterns: [/\bnurse call\b/i],
-  },
-  {
-    featureId: "nursing_wander_management_system",
-    patterns: [/\bwander management\b/i],
-  },
-  {
-    featureId: "nursing_dining_household_model",
-    patterns: [/\bhousehold dining\b/i, /\bsmall house model\b/i],
-  },
-  {
-    featureId: "rehab_hydrotherapy_pool",
-    patterns: [/\bhydrotherapy\b/i],
-  },
-  {
-    featureId: "rehab_gait_training_lab",
-    patterns: [/\bgait training\b/i],
-  },
-  {
-    featureId: "rehab_adl_apartment",
-    patterns: [/\badl apartment\b/i, /\bactivities of daily living\b/i],
-  },
-  {
-    featureId: "rehab_therapy_gym_expansion",
-    patterns: [/\btherapy gym expansion\b/i, /\bexpanded therapy gym\b/i],
-  },
-  {
-    featureId: "rehab_speech_neuro_suite",
-    patterns: [/\bspeech(?:\s+and)? neuro\b/i, /\bneuro rehab suite\b/i],
   },
 ];
 

@@ -937,6 +937,8 @@ describe("ConstructionView", () => {
           { name: "Air-Handling Units + Filtration", quantity: 180000, unit: "SF", unit_cost: 34, total_cost: 6120000 },
           { name: "Chilled Water Distribution", quantity: 180000, unit: "SF", unit_cost: 26, total_cost: 4680000 },
           { name: "Medical Exhaust + Isolation Controls", quantity: 180000, unit: "SF", unit_cost: 23, total_cost: 4140000 },
+          { name: "Critical Care Humidity Control", quantity: 180000, unit: "SF", unit_cost: 21, total_cost: 3780000 },
+          { name: "Smoke Control + Stair Pressurization", quantity: 180000, unit: "SF", unit_cost: 18, total_cost: 3240000 },
         ],
       },
       {
@@ -945,6 +947,8 @@ describe("ConstructionView", () => {
           { name: "Redundant Switchgear + UPS", quantity: 180000, unit: "SF", unit_cost: 29, total_cost: 5220000 },
           { name: "Nurse Call + Low Voltage Backbone", quantity: 180000, unit: "SF", unit_cost: 18, total_cost: 3240000 },
           { name: "Essential Power Branch Circuits", quantity: 180000, unit: "SF", unit_cost: 16, total_cost: 2880000 },
+          { name: "Generator Paralleling + ATS Matrix", quantity: 180000, unit: "SF", unit_cost: 15, total_cost: 2700000 },
+          { name: "Imaging + OR Power Conditioning", quantity: 180000, unit: "SF", unit_cost: 13, total_cost: 2340000 },
         ],
       },
     ];
@@ -982,14 +986,100 @@ describe("ConstructionView", () => {
     };
 
     openTradeCard("Mechanical");
-    expect(screen.getByText("3 systems")).toBeInTheDocument();
+    expect(screen.getByText("5 systems")).toBeInTheDocument();
     expect(screen.getByText("Air-Handling Units + Filtration")).toBeInTheDocument();
     expect(screen.getByText("Medical Exhaust + Isolation Controls")).toBeInTheDocument();
+    expect(screen.getByText("Smoke Control + Stair Pressurization")).toBeInTheDocument();
 
     openTradeCard("Electrical");
-    expect(screen.getByText("3 systems")).toBeInTheDocument();
+    expect(screen.getByText("5 systems")).toBeInTheDocument();
     expect(screen.getByText("Redundant Switchgear + UPS")).toBeInTheDocument();
     expect(screen.getByText("Nurse Call + Low Voltage Backbone")).toBeInTheDocument();
+    expect(screen.getByText("Imaging + OR Power Conditioning")).toBeInTheDocument();
+  });
+
+  it("renders deeper mechanical/electrical/plumbing system depth for surgical and imaging subtype paths", () => {
+    const cases = [
+      {
+        subtype: "surgical_center",
+        mechanicalName: "OR AHUs + Pressure Cascade Controls",
+        electricalName: "Isolated Power Panels + UPS",
+        plumbingName: "Medical Gas Backbone + Zone Valves",
+      },
+      {
+        subtype: "imaging_center",
+        mechanicalName: "MRI Quench + Relief Air Path",
+        electricalName: "Power Quality Filtering + Harmonic Mitigation",
+        plumbingName: "Shielded-Room Drainage + Process Cooling Isolation",
+      },
+    ] as const;
+
+    const { rerender } = render(
+      <ConstructionView
+        project={buildHealthcareScheduleProject(cases[0].subtype, "subtype")}
+      />
+    );
+
+    const openTradeCard = (tradeName: string) => {
+      const tradeHeading = screen.getByText(tradeName, { selector: "h4" });
+      const tradeCard = tradeHeading.closest('[role="button"]');
+      expect(tradeCard).not.toBeNull();
+      fireEvent.click(tradeCard as HTMLElement);
+    };
+
+    for (const testCase of cases) {
+      const project = buildHealthcareScheduleProject(testCase.subtype, "subtype");
+      project.analysis.calculations.trade_breakdown = {
+        structural: 3600000,
+        mechanical: 5200000,
+        electrical: 4900000,
+        plumbing: 2800000,
+        finishes: 2600000,
+      };
+      project.analysis.calculations.scope_items = [
+        {
+          trade: "mechanical",
+          systems: [
+            { name: testCase.mechanicalName, quantity: 120000, unit: "SF", unit_cost: 31, total_cost: 3720000 },
+            { name: "Dedicated Airside Distribution", quantity: 120000, unit: "SF", unit_cost: 24, total_cost: 2880000 },
+            { name: "Temperature/Humidity Controls", quantity: 120000, unit: "SF", unit_cost: 21, total_cost: 2520000 },
+            { name: "Procedure Exhaust + Heat Recovery", quantity: 120000, unit: "SF", unit_cost: 18, total_cost: 2160000 },
+          ],
+        },
+        {
+          trade: "electrical",
+          systems: [
+            { name: testCase.electricalName, quantity: 120000, unit: "SF", unit_cost: 29, total_cost: 3480000 },
+            { name: "Dedicated Modality/Procedure Distribution", quantity: 120000, unit: "SF", unit_cost: 24, total_cost: 2880000 },
+            { name: "Clinical Lighting + Controls", quantity: 120000, unit: "SF", unit_cost: 20, total_cost: 2400000 },
+            { name: "Low Voltage + Monitoring Backbone", quantity: 120000, unit: "SF", unit_cost: 17, total_cost: 2040000 },
+          ],
+        },
+        {
+          trade: "plumbing",
+          systems: [
+            { name: testCase.plumbingName, quantity: 120000, unit: "SF", unit_cost: 22, total_cost: 2640000 },
+            { name: "Domestic + Sanitary Distribution", quantity: 120000, unit: "SF", unit_cost: 17, total_cost: 2040000 },
+            { name: "Fixture Group Rough-In", quantity: 120000, unit: "SF", unit_cost: 13, total_cost: 1560000 },
+            { name: "Special Waste + Pretreatment", quantity: 120000, unit: "SF", unit_cost: 11, total_cost: 1320000 },
+          ],
+        },
+      ];
+
+      rerender(<ConstructionView project={project} />);
+
+      openTradeCard("Mechanical");
+      expect(screen.getByText("4 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.mechanicalName)).toBeInTheDocument();
+
+      openTradeCard("Electrical");
+      expect(screen.getByText("4 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.electricalName)).toBeInTheDocument();
+
+      openTradeCard("Plumbing");
+      expect(screen.getByText("4 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.plumbingName)).toBeInTheDocument();
+    }
   });
 
   it("renders expanded data-center scope detail for dominant mechanical and electrical trades", () => {
