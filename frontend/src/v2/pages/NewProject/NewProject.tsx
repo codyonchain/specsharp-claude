@@ -8,11 +8,13 @@ import { BuildingTaxonomy } from '../../../core/buildingTaxonomy';
 import {
   detectHealthcareFeatureIdsFromDescription,
   detectHospitalityFeatureIdsFromDescription,
+  detectOfficeFeatureIdsFromDescription,
   detectRestaurantFeatureIdsFromDescription,
   detectSpecialtyFeatureIdsFromDescription,
   filterSpecialFeaturesBySubtype,
   getHealthcareSpecialFeatures,
   getHospitalitySpecialFeatures,
+  getOfficeSpecialFeatures,
   getRestaurantSpecialFeatures,
   getSpecialtySpecialFeatures,
   type SpecialFeatureOption,
@@ -418,6 +420,7 @@ export const NewProject: React.FC = () => {
         { id: 'office_buildout', name: 'Office Build-out', cost: 1000000, description: 'Administrative space' },
         { id: 'cranes', name: 'Overhead Cranes', cost: 2000000, description: 'Heavy lifting equipment' }
       ],
+      office: getOfficeSpecialFeatures(),
       retail: [
         { id: 'food_court', name: 'Food Court', cost: 2000000, description: 'Multi-vendor dining area' },
         { id: 'anchor_fitout', name: 'Anchor Tenant Fit-out', cost: 3000000, description: 'Major retailer customization' },
@@ -451,6 +454,9 @@ export const NewProject: React.FC = () => {
       detectedFeatures.add(featureId);
     }
     for (const featureId of detectHospitalityFeatureIdsFromDescription(desc)) {
+      detectedFeatures.add(featureId);
+    }
+    for (const featureId of detectOfficeFeatureIdsFromDescription(desc)) {
       detectedFeatures.add(featureId);
     }
     for (const featureId of detectSpecialtyFeatureIdsFromDescription(desc)) {
@@ -882,10 +888,11 @@ export const NewProject: React.FC = () => {
     isPlaceholder: boolean;
   };
 
-  const usesSubtypeCostPerSF = ['healthcare', 'multifamily', 'restaurant', 'specialty'].includes(
+  const usesSubtypeCostPerSF = ['healthcare', 'multifamily', 'restaurant', 'specialty', 'office'].includes(
     parsedInput?.building_type ?? ''
   );
   const isRestaurantProject = parsedInput?.building_type === 'restaurant';
+  const isOfficeProject = parsedInput?.building_type === 'office';
   const hasFeatureSquareFootage = typeof squareFootageSummary === 'number' && squareFootageSummary > 0;
 
   const resolveFeatureCostPerSF = (feature: SpecialFeatureOption): number | undefined => {
@@ -897,6 +904,9 @@ export const NewProject: React.FC = () => {
     }
     if (typeof feature.costPerSF === 'number' && Number.isFinite(feature.costPerSF)) {
       return feature.costPerSF;
+    }
+    if (isOfficeProject && !currentSubtype && feature.costPerSFBySubtype) {
+      return undefined;
     }
     if (currentSubtype && feature.costPerSFBySubtype) {
       return undefined;

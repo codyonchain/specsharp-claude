@@ -90,6 +90,35 @@ export const HOSPITALITY_FEATURE_COSTS_BY_SUBTYPE: Record<
   },
 };
 
+export const OFFICE_SUBTYPES = ["class_a", "class_b"] as const;
+
+export type OfficeSubtype = (typeof OFFICE_SUBTYPES)[number];
+
+export const OFFICE_FEATURE_COSTS_BY_SUBTYPE: Record<
+  OfficeSubtype,
+  Record<string, number>
+> = {
+  class_a: {
+    fitness_center: 35,
+    cafeteria: 30,
+    conference_center: 40,
+    structured_parking: 45,
+    green_roof: 35,
+    outdoor_terrace: 25,
+    executive_floor: 45,
+    data_center: 55,
+    concierge: 20,
+  },
+  class_b: {
+    fitness_center: 30,
+    cafeteria: 25,
+    conference_room: 20,
+    surface_parking: 15,
+    storage_space: 10,
+    security_desk: 15,
+  },
+};
+
 export const SPECIALTY_SUBTYPES = [
   "data_center",
   "laboratory",
@@ -381,6 +410,64 @@ const HOSPITALITY_FEATURE_METADATA: Record<
   rooftop_bar: {
     name: "Rooftop Bar",
     description: "Rooftop bar venue with structural, weatherproofing, and service utility upgrades.",
+  },
+};
+
+const OFFICE_FEATURE_METADATA: Record<
+  string,
+  { name: string; description: string }
+> = {
+  fitness_center: {
+    name: "Fitness Center",
+    description: "Tenant fitness center with locker support and mechanical/electrical upgrades.",
+  },
+  cafeteria: {
+    name: "Cafeteria",
+    description: "On-site cafeteria and pantry infrastructure for tenant amenities.",
+  },
+  conference_center: {
+    name: "Conference Center",
+    description: "Large conference-center program with divisible meeting and AV-ready spaces.",
+  },
+  structured_parking: {
+    name: "Structured Parking",
+    description: "Dedicated parking-structure scope with circulation, lighting, and access controls.",
+  },
+  green_roof: {
+    name: "Green Roof",
+    description: "Green-roof assembly with drainage, planting media, and access detailing.",
+  },
+  outdoor_terrace: {
+    name: "Outdoor Terrace",
+    description: "Tenant outdoor terrace program with decking, shade, and utility tie-ins.",
+  },
+  executive_floor: {
+    name: "Executive Floor",
+    description: "Executive floor fit-out with premium finishes and dedicated support spaces.",
+  },
+  data_center: {
+    name: "Data Center",
+    description: "Tenant data-center white-space and critical-support infrastructure package.",
+  },
+  concierge: {
+    name: "Concierge Lobby",
+    description: "Concierge-level lobby operations space with enhanced service desk configuration.",
+  },
+  conference_room: {
+    name: "Conference Room Suite",
+    description: "Class B conference-room package for collaborative tenant areas.",
+  },
+  surface_parking: {
+    name: "Surface Parking",
+    description: "Surface-parking improvements with circulation, striping, and lighting upgrades.",
+  },
+  storage_space: {
+    name: "Storage Space",
+    description: "Expandable tenant and building storage areas with secured access control.",
+  },
+  security_desk: {
+    name: "Security Desk",
+    description: "Ground-floor security desk and monitoring point at primary ingress.",
   },
 };
 
@@ -875,6 +962,48 @@ export const HOSPITALITY_SPECIAL_FEATURES = createHospitalitySpecialFeatures();
 export const getHospitalitySpecialFeatures = (): SpecialFeatureOption[] =>
   HOSPITALITY_SPECIAL_FEATURES;
 
+const createOfficeSpecialFeatures = (): SpecialFeatureOption[] => {
+  const byFeatureId: Record<
+    string,
+    { costPerSFBySubtype: Record<string, number>; allowedSubtypes: string[] }
+  > = {};
+
+  for (const subtype of OFFICE_SUBTYPES) {
+    const entries = OFFICE_FEATURE_COSTS_BY_SUBTYPE[subtype];
+    for (const [featureId, costPerSF] of Object.entries(entries)) {
+      if (!byFeatureId[featureId]) {
+        byFeatureId[featureId] = {
+          costPerSFBySubtype: {},
+          allowedSubtypes: [],
+        };
+      }
+      byFeatureId[featureId].costPerSFBySubtype[subtype] = costPerSF;
+      byFeatureId[featureId].allowedSubtypes.push(subtype);
+    }
+  }
+
+  return Object.entries(byFeatureId)
+    .sort(([featureA], [featureB]) => featureA.localeCompare(featureB))
+    .map(([featureId, featureData]) => {
+      const metadata = OFFICE_FEATURE_METADATA[featureId];
+      return {
+        id: featureId,
+        name: metadata?.name ?? featureId.replace(/_/g, " "),
+        description:
+          metadata?.description ?? "Office subtype specific special feature.",
+        costPerSFBySubtype: featureData.costPerSFBySubtype,
+        allowedSubtypes: OFFICE_SUBTYPES.filter((subtype) =>
+          featureData.allowedSubtypes.includes(subtype)
+        ),
+      };
+    });
+};
+
+export const OFFICE_SPECIAL_FEATURES = createOfficeSpecialFeatures();
+
+export const getOfficeSpecialFeatures = (): SpecialFeatureOption[] =>
+  OFFICE_SPECIAL_FEATURES;
+
 const createSpecialtySpecialFeatures = (): SpecialFeatureOption[] => {
   const byFeatureId: Record<
     string,
@@ -1068,6 +1197,76 @@ export const detectHospitalityFeatureIdsFromDescription = (
 ): string[] => {
   const detectedFeatureIds = new Set<string>();
   for (const { featureId, patterns } of HOSPITALITY_KEYWORD_DETECTION) {
+    if (patterns.some((pattern) => pattern.test(description))) {
+      detectedFeatureIds.add(featureId);
+    }
+  }
+  return Array.from(detectedFeatureIds);
+};
+
+const OFFICE_KEYWORD_DETECTION: Array<{
+  featureId: string;
+  patterns: RegExp[];
+}> = [
+  {
+    featureId: "executive_floor",
+    patterns: [/\bexecutive floor\b/i, /\bclass a office\b/i, /\bgrade a office\b/i],
+  },
+  {
+    featureId: "conference_center",
+    patterns: [/\bconference center\b/i, /\btenant conference center\b/i],
+  },
+  {
+    featureId: "structured_parking",
+    patterns: [/\bstructured parking\b/i, /\bparking structure\b/i, /\bparking deck\b/i],
+  },
+  {
+    featureId: "green_roof",
+    patterns: [/\bgreen roof\b/i],
+  },
+  {
+    featureId: "outdoor_terrace",
+    patterns: [/\boutdoor terrace\b/i, /\btenant terrace\b/i],
+  },
+  {
+    featureId: "data_center",
+    patterns: [/\btenant data center\b/i, /\boffice data center\b/i],
+  },
+  {
+    featureId: "concierge",
+    patterns: [/\bconcierge\b/i, /\bconcierge desk\b/i],
+  },
+  {
+    featureId: "conference_room",
+    patterns: [/\bconference room\b/i, /\bclass b office\b/i, /\bgrade b office\b/i],
+  },
+  {
+    featureId: "surface_parking",
+    patterns: [/\bsurface parking\b/i],
+  },
+  {
+    featureId: "storage_space",
+    patterns: [/\bstorage space\b/i, /\btenant storage\b/i],
+  },
+  {
+    featureId: "security_desk",
+    patterns: [/\bsecurity desk\b/i, /\bsecurity lobby\b/i],
+  },
+  {
+    featureId: "fitness_center",
+    patterns: [/\bfitness center\b/i, /\boffice gym\b/i],
+  },
+  {
+    featureId: "cafeteria",
+    patterns: [/\bcafeteria\b/i, /\btenant cafe\b/i],
+  },
+];
+
+export const detectOfficeFeatureIdsFromDescription = (
+  description: string
+): string[] => {
+  const detectedFeatureIds = new Set<string>();
+  for (const { featureId, patterns } of OFFICE_KEYWORD_DETECTION) {
     if (patterns.some((pattern) => pattern.test(description))) {
       detectedFeatureIds.add(featureId);
     }
@@ -1382,3 +1581,6 @@ export const specialtySubtypeHasSpecialFeatures = (subtype?: string): boolean =>
 
 export const healthcareSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
   filterSpecialFeaturesBySubtype(HEALTHCARE_SPECIAL_FEATURES, subtype).length > 0;
+
+export const officeSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
+  filterSpecialFeaturesBySubtype(OFFICE_SPECIAL_FEATURES, subtype).length > 0;

@@ -3,18 +3,23 @@ import {
   HEALTHCARE_SUBTYPES,
   HOSPITALITY_FEATURE_COSTS_BY_SUBTYPE,
   HOSPITALITY_SUBTYPES,
+  OFFICE_FEATURE_COSTS_BY_SUBTYPE,
+  OFFICE_SUBTYPES,
   RESTAURANT_FEATURE_COSTS_BY_SUBTYPE,
   RESTAURANT_SUBTYPES,
   detectHealthcareFeatureIdsFromDescription,
   detectHospitalityFeatureIdsFromDescription,
+  detectOfficeFeatureIdsFromDescription,
   detectSpecialtyFeatureIdsFromDescription,
   filterSpecialFeaturesBySubtype,
   getHealthcareSpecialFeatures,
   getHospitalitySpecialFeatures,
+  getOfficeSpecialFeatures,
   getRestaurantSpecialFeatures,
   getSpecialtySpecialFeatures,
   healthcareSubtypeHasSpecialFeatures,
   hospitalitySubtypeHasSpecialFeatures,
+  officeSubtypeHasSpecialFeatures,
   restaurantSubtypeHasSpecialFeatures,
 } from "../specialFeaturesCatalog";
 
@@ -74,6 +79,28 @@ const REQUIRED_HOSPITALITY_MAPPING = {
     spa: 60,
     conference_center: 45,
     rooftop_bar: 55,
+  },
+} as const;
+
+const REQUIRED_OFFICE_MAPPING = {
+  class_a: {
+    fitness_center: 35,
+    cafeteria: 30,
+    conference_center: 40,
+    structured_parking: 45,
+    green_roof: 35,
+    outdoor_terrace: 25,
+    executive_floor: 45,
+    data_center: 55,
+    concierge: 20,
+  },
+  class_b: {
+    fitness_center: 30,
+    cafeteria: 25,
+    conference_room: 20,
+    surface_parking: 15,
+    storage_space: 10,
+    security_desk: 15,
   },
 } as const;
 
@@ -308,6 +335,120 @@ describe("hospitality special features catalog", () => {
         "restaurant",
       ])
     );
+  });
+});
+
+describe("office special features catalog", () => {
+  it("is non-empty and matches backend-aligned subtype mapping keys/values", () => {
+    const officeFeatures = getOfficeSpecialFeatures();
+    expect(officeFeatures.length).toBeGreaterThan(0);
+    expect(OFFICE_FEATURE_COSTS_BY_SUBTYPE).toEqual(REQUIRED_OFFICE_MAPPING);
+  });
+
+  it("resolves expected feature IDs for class_a and class_b with no duplicates", () => {
+    const officeFeatures = getOfficeSpecialFeatures();
+
+    for (const subtype of OFFICE_SUBTYPES) {
+      const expectedIds = Object.keys(REQUIRED_OFFICE_MAPPING[subtype]).sort();
+      const resolvedIds = filterSpecialFeaturesBySubtype(officeFeatures, subtype).map(
+        (feature) => feature.id
+      );
+      const uniqueResolvedIds = Array.from(new Set(resolvedIds));
+
+      expect(uniqueResolvedIds.length).toBe(resolvedIds.length);
+      expect(uniqueResolvedIds.sort()).toEqual(expectedIds);
+    }
+  });
+
+  it("keeps unknown office subtype explicit by resolving the full inventory (no class_b fallback)", () => {
+    const officeFeatures = getOfficeSpecialFeatures();
+    const unknownSubtypeResolved = filterSpecialFeaturesBySubtype(officeFeatures, undefined).map(
+      (feature) => feature.id
+    );
+
+    const classAIds = Object.keys(REQUIRED_OFFICE_MAPPING.class_a);
+    const classBIds = Object.keys(REQUIRED_OFFICE_MAPPING.class_b);
+
+    expect(unknownSubtypeResolved).toEqual(
+      expect.arrayContaining([...classAIds, ...classBIds])
+    );
+    expect(unknownSubtypeResolved).toContain("executive_floor");
+    expect(unknownSubtypeResolved).toContain("conference_room");
+  });
+
+  it("has valid cost-per-subtype entries for all allowed office feature subtype combinations", () => {
+    const officeFeatures = getOfficeSpecialFeatures();
+
+    for (const feature of officeFeatures) {
+      expect(feature.costPerSFBySubtype).toBeDefined();
+      expect(feature.allowedSubtypes && feature.allowedSubtypes.length > 0).toBe(true);
+
+      for (const subtype of feature.allowedSubtypes || []) {
+        const expectedCost = REQUIRED_OFFICE_MAPPING[
+          subtype as keyof typeof REQUIRED_OFFICE_MAPPING
+        ][feature.id as keyof (typeof REQUIRED_OFFICE_MAPPING)[keyof typeof REQUIRED_OFFICE_MAPPING]];
+
+        expect(typeof expectedCost).toBe("number");
+        expect(expectedCost).toBeGreaterThan(0);
+        expect(feature.costPerSFBySubtype?.[subtype]).toBe(expectedCost);
+      }
+    }
+  });
+
+  it("office subtype helper returns true for class_a and class_b", () => {
+    expect(officeSubtypeHasSpecialFeatures("class_a")).toBe(true);
+    expect(officeSubtypeHasSpecialFeatures("class_b")).toBe(true);
+  });
+
+  it("detects office feature IDs from class-signaled prompts", () => {
+    const classADetected = detectOfficeFeatureIdsFromDescription(
+      "New 65000 sf class A office with executive floor, conference center, structured parking, concierge desk, and green roof."
+    );
+    expect(classADetected).toEqual(
+      expect.arrayContaining([
+        "executive_floor",
+        "conference_center",
+        "structured_parking",
+        "concierge",
+        "green_roof",
+      ])
+    );
+
+    const classBDetected = detectOfficeFeatureIdsFromDescription(
+      "Renovate 42000 sf class B office with conference room suite, surface parking, tenant storage space, and security desk."
+    );
+    expect(classBDetected).toEqual(
+      expect.arrayContaining([
+        "conference_room",
+        "surface_parking",
+        "storage_space",
+        "security_desk",
+      ])
+    );
+  });
+
+  it("keeps subtype filtering and cost resolution consistent for shared office features", () => {
+    const officeFeatures = getOfficeSpecialFeatures();
+    const squareFootage = 50_000;
+
+    const classAFitness = filterSpecialFeaturesBySubtype(officeFeatures, "class_a").find(
+      (feature) => feature.id === "fitness_center"
+    );
+    const classBFitness = filterSpecialFeaturesBySubtype(officeFeatures, "class_b").find(
+      (feature) => feature.id === "fitness_center"
+    );
+
+    expect(classAFitness).toBeDefined();
+    expect(classBFitness).toBeDefined();
+
+    const classACostPerSF = resolveFeatureCostPerSF(classAFitness!, "class_a");
+    const classBCostPerSF = resolveFeatureCostPerSF(classBFitness!, "class_b");
+    expect(classACostPerSF).toBe(35);
+    expect(classBCostPerSF).toBe(30);
+
+    const classATotal = classACostPerSF * squareFootage;
+    const classBTotal = classBCostPerSF * squareFootage;
+    expect(classATotal).toBeGreaterThan(classBTotal);
   });
 });
 
