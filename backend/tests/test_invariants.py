@@ -9,6 +9,7 @@ from app.v2.engines.unified_engine import (
 )
 from app.v2.config.master_config import (
     BuildingType,
+    OFFICE_UNDERWRITING_CONFIG,
     ProjectClass,
     OwnershipType,
     get_building_config,
@@ -1010,6 +1011,69 @@ def test_office_policy_collapse_and_metric_semantics():
         collapse_metric_families.add(metric)
 
     assert collapse_metric_families == {"value_gap_pct", "value_gap"}
+
+
+def test_office_underwriting_profiles_are_explicit_and_differentiated():
+    assert set(OFFICE_UNDERWRITING_CONFIG.keys()) >= {"class_a", "class_b"}
+    class_a_profile = OFFICE_UNDERWRITING_CONFIG["class_a"]
+    class_b_profile = OFFICE_UNDERWRITING_CONFIG["class_b"]
+    assert isinstance(class_a_profile, dict)
+    assert isinstance(class_b_profile, dict)
+
+    required_keys = {
+        "base_rent_per_sf",
+        "stabilized_occupancy",
+        "vacancy_and_credit_loss_pct",
+        "opex_pct_of_egi",
+        "ti_per_sf",
+        "ti_amort_years",
+        "lc_pct_of_lease_value",
+        "lc_amort_years",
+        "exit_cap_rate",
+        "yield_on_cost_hurdle",
+        "discount_rate",
+    }
+    assert required_keys.issubset(set(class_a_profile.keys()))
+    assert required_keys.issubset(set(class_b_profile.keys()))
+
+    assert class_a_profile != class_b_profile
+    assert class_a_profile["base_rent_per_sf"] > class_b_profile["base_rent_per_sf"]
+    assert class_a_profile["stabilized_occupancy"] > class_b_profile["stabilized_occupancy"]
+    assert class_a_profile["opex_pct_of_egi"] < class_b_profile["opex_pct_of_egi"]
+
+    class_a_cfg = get_building_config(BuildingType.OFFICE, "class_a")
+    class_b_cfg = get_building_config(BuildingType.OFFICE, "class_b")
+    assert isinstance(class_a_cfg.financial_metrics, dict)
+    assert isinstance(class_b_cfg.financial_metrics, dict)
+    assert class_a_cfg.financial_metrics == class_a_profile
+    assert class_b_cfg.financial_metrics == class_b_profile
+
+
+def test_office_subtype_underwriting_profiles_drive_differentiated_revenue_and_noi():
+    class_a_result = unified_engine.calculate_project(
+        building_type=BuildingType.OFFICE,
+        subtype="class_a",
+        square_footage=120_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+    )
+    class_b_result = unified_engine.calculate_project(
+        building_type=BuildingType.OFFICE,
+        subtype="class_b",
+        square_footage=120_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+    )
+
+    class_a_revenue = float(class_a_result["revenue_analysis"]["annual_revenue"])
+    class_b_revenue = float(class_b_result["revenue_analysis"]["annual_revenue"])
+    class_a_noi = float(class_a_result["revenue_analysis"]["net_income"])
+    class_b_noi = float(class_b_result["revenue_analysis"]["net_income"])
+
+    assert class_a_revenue > class_b_revenue
+    assert class_a_noi > class_b_noi
+    assert class_a_revenue != class_b_revenue
+    assert class_a_noi != class_b_noi
 
 
 def test_healthcare_profiles_are_wired_and_content_maps_to_tiles():

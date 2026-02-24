@@ -222,6 +222,7 @@ class BuildingConfig:
 
 from app.v2.config.type_profiles.office_underwriting import (
     class_a as office_underwriting_class_a,
+    class_b as office_underwriting_class_b,
 )
 
 # Class A office profile for strong urban markets (e.g., downtown Nashville).
@@ -231,6 +232,7 @@ OFFICE_UNDERWRITING_CONFIG: Dict[str, Dict[str, float]] = {
     profile_key: profile
     for profile_key, profile in (
         office_underwriting_class_a.CONFIG,
+        office_underwriting_class_b.CONFIG,
     )
 }
 

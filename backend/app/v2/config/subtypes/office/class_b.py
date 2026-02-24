@@ -6,6 +6,7 @@ from app.v2.config.master_config import (
     FinancingTerms,
     OwnershipType,
     NLPConfig,
+    OFFICE_UNDERWRITING_CONFIG,
 )
 
 
@@ -74,8 +75,9 @@ CONFIG = (
         base_revenue_per_sf_annual=28,
         occupancy_rate_base=0.85,
         occupancy_rate_premium=0.88,
-        operating_margin_base=0.60,
-        operating_margin_premium=0.65,
+        operating_margin_base=0.39,
+        operating_margin_premium=0.43,
+        financial_metrics=OFFICE_UNDERWRITING_CONFIG["class_b"],
         dealshield_tile_profile="office_class_b_v1",
         scope_items_profile="office_class_b_structural_v1",
         utility_cost_ratio=0.10,
