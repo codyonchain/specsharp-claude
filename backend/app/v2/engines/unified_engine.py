@@ -1481,6 +1481,17 @@ class UnifiedEngine:
                     )
                 except DealShieldScenarioError as exc:
                     raise ValueError(f"DealShield scenario build failed: {exc}") from exc
+
+        scope_items_profile_id = getattr(building_config, "scope_items_profile", None)
+        if isinstance(scope_items_profile_id, str) and scope_items_profile_id.strip():
+            resolved_scope_profile_id = scope_items_profile_id.strip()
+            result["scope_items_profile"] = resolved_scope_profile_id
+            result["scope_items_profile_id"] = resolved_scope_profile_id
+
+        scope_profile_id = getattr(building_config, "scope_profile", None)
+        if isinstance(scope_profile_id, str) and scope_profile_id.strip():
+            result["scope_profile_id"] = scope_profile_id.strip()
+
         revenue_block = result.get('revenue_analysis')
         if isinstance(revenue_block, dict):
             revenue_block.setdefault('market_factor', regional_market_factor)
@@ -1551,6 +1562,53 @@ class UnifiedEngine:
                 'unit_label': primary_unit_label,
                 'cost_per_unit': cost_per_unit,
                 'revenue_per_unit': revenue_per_unit,
+            }
+        elif building_type == BuildingType.OFFICE:
+            total_sf = float(square_footage) if square_footage else 0.0
+            revenue_block = result.get('revenue_analysis') or {}
+            return_block = result.get('return_metrics') or {}
+            totals_block = result.get('totals') or {}
+
+            annual_revenue_value = self._coerce_number(revenue_block.get('annual_revenue')) or 0.0
+            annual_noi_value = (
+                self._coerce_number(return_block.get('estimated_annual_noi'))
+                or self._coerce_number(revenue_block.get('net_income'))
+                or 0.0
+            )
+            total_cost_value = self._coerce_number(totals_block.get('total_project_cost')) or 0.0
+
+            def _per_sf_non_negative(value: Optional[float]) -> float:
+                if total_sf <= 0:
+                    return 0.0
+                try:
+                    per_sf_value = float(value or 0.0) / total_sf
+                except (TypeError, ValueError, ZeroDivisionError):
+                    return 0.0
+                return max(0.0, per_sf_value)
+
+            facility_metrics_payload = {
+                'type': 'office',
+                'metrics': [
+                    {
+                        'id': 'cost_per_sf',
+                        'label': 'All-in Cost per SF',
+                        'value': _per_sf_non_negative(total_cost_value),
+                        'unit': '$/SF',
+                    },
+                    {
+                        'id': 'revenue_per_sf',
+                        'label': 'Revenue per SF',
+                        'value': _per_sf_non_negative(annual_revenue_value),
+                        'unit': '$/SF',
+                    },
+                    {
+                        'id': 'noi_per_sf',
+                        'label': 'NOI per SF',
+                        'value': _per_sf_non_negative(annual_noi_value),
+                        'unit': '$/SF',
+                    },
+                ],
+                'total_square_feet': total_sf,
             }
 
         if facility_metrics_payload:

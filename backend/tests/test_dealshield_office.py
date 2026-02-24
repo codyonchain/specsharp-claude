@@ -219,6 +219,9 @@ def test_office_decision_insurance_contract_and_provenance():
         profile = get_dealshield_profile(profile_id)
         policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
 
+        assert payload.get("scope_items_profile_id") == expected["scope"]
+        assert payload.get("scope_items_profile") == expected["scope"]
+
         view_model = build_dealshield_view_model(
             project_id=f"office-di-{subtype}",
             payload=payload,
@@ -233,6 +236,8 @@ def test_office_decision_insurance_contract_and_provenance():
         assert policy_block.get("status") == "available"
         assert policy_block.get("policy_id") == DECISION_INSURANCE_POLICY_ID
         assert policy_block.get("profile_id") == profile_id
+
+        assert view_model.get("scope_items_profile_id") == expected["scope"]
 
         primary_control = view_model.get("primary_control_variable")
         assert isinstance(primary_control, dict)
@@ -258,3 +263,31 @@ def test_office_decision_insurance_contract_and_provenance():
         assert flex_provenance.get("status") == "available"
         assert flex_provenance.get("calibration_source") == "decision_insurance_policy.flex_calibration"
         assert flex_band in {"tight", "moderate", "comfortable"}
+
+
+def test_office_facility_metrics_emit_cost_revenue_and_noi_per_sf_for_both_subtypes():
+    for subtype in OFFICE_PROFILE_MAP:
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.OFFICE,
+            subtype=subtype,
+            square_footage=85_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        facility_metrics = payload.get("facility_metrics")
+        assert isinstance(facility_metrics, dict)
+        assert facility_metrics.get("type") == "office"
+        assert facility_metrics.get("total_square_feet") == 85_000.0
+
+        metrics = facility_metrics.get("metrics")
+        assert isinstance(metrics, list) and metrics
+        by_id = {
+            metric.get("id"): metric
+            for metric in metrics
+            if isinstance(metric, dict) and isinstance(metric.get("id"), str)
+        }
+        assert {"cost_per_sf", "revenue_per_sf", "noi_per_sf"}.issubset(set(by_id.keys()))
+        for metric_id in ("cost_per_sf", "revenue_per_sf", "noi_per_sf"):
+            value = by_id[metric_id].get("value")
+            assert isinstance(value, (int, float))
+            assert float(value) >= 0.0
