@@ -1078,6 +1078,7 @@ class UnifiedEngine:
                 "restaurant_cafe_v1",
                 "restaurant_bar_tavern_v1",
                 "hospitality_limited_service_hotel_v1",
+                "hospitality_full_service_hotel_v1",
                 "multifamily_market_rate_apartments_v1",
                 "multifamily_luxury_apartments_v1",
                 "multifamily_affordable_housing_v1",

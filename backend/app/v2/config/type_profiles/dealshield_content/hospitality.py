@@ -14,31 +14,34 @@ DEALSHIELD_CONTENT_PROFILES = {
                 },
                 {
                     "id": "driver_revenue",
-                    "label": "Validate revenue +/-10%",
+                    "label": "Validate occupancy-led revenue +/-10%",
                     "tile_id": "revenue_minus_10",
                 },
                 {
                     "id": "driver_trade",
-                    "label": "Verify finishes and FF&E coordination risk",
-                    "tile_id": "finishes_plus_10",
+                    "label": "Verify guestroom turnover and FF&E risk",
+                    "tile_id": "guestroom_turnover_and_ffe_plus_10",
                 },
             ],
         },
         "most_likely_wrong": [
             {
                 "id": "mlw_1",
-                "text": "Guestroom finish scope is exposed to late operator and brand comments before release.",
-                "why": "Finishes sensitivity is explicit, and late changes can move both cost and opening date.",
+                "driver_tile_id": "guestroom_turnover_and_ffe_plus_10",
+                "text": "Guestroom turnover sequencing is assumed stable before brand punchlist closure.",
+                "why": "Late FF&E changes can force room-out-of-service periods and accelerated procurement.",
             },
             {
                 "id": "mlw_2",
-                "text": "Revenue case assumes ADR and occupancy stabilize faster than market absorption may support.",
-                "why": "Revenue downside is a core lever and should be stress-tested against slower ramp.",
+                "driver_tile_id": "revenue_minus_10",
+                "text": "Ramp assumptions treat weekday occupancy stabilization as immediate.",
+                "why": "Select-service NOI is highly sensitive to early occupancy variance.",
             },
             {
                 "id": "mlw_3",
-                "text": "Procurement plan assumes no long-lead disruption across guestroom and public-area packages.",
-                "why": "Cost pressure compounds when schedule slippage forces substitutions or acceleration.",
+                "driver_tile_id": "cost_plus_10",
+                "text": "Utility and life-safety allowances are treated as fully defined pre-buyout.",
+                "why": "Allowance drift late in preconstruction can compress opening float and contingency.",
             },
         ],
         "question_bank": [
@@ -46,44 +49,130 @@ DEALSHIELD_CONTENT_PROFILES = {
                 "id": "qb_cost_1",
                 "driver_tile_id": "cost_plus_10",
                 "questions": [
-                    "Which hard-cost inclusions are still basis assumptions rather than finalized bids?",
-                    "Any site logistics or utility constraints still open that can impact total project cost?",
+                    "Which MEP and utility line items are still allowance-driven instead of bid-backed?",
+                    "What scope assumptions remain open across fire-life-safety approvals?",
                 ],
             },
             {
                 "id": "qb_revenue_1",
                 "driver_tile_id": "revenue_minus_10",
                 "questions": [
-                    "What ADR and occupancy assumptions need third-party support before IC sign-off?",
-                    "Which market comps back the baseline revenue case, and what has changed since that pull?",
-                    "What operating plan supports debt coverage if stabilization arrives later than underwritten?",
+                    "What market evidence supports opening-quarter occupancy assumptions?",
+                    "What operating plan protects coverage if stabilization occurs one quarter late?",
                 ],
             },
             {
                 "id": "qb_trade_1",
-                "driver_tile_id": "finishes_plus_10",
+                "driver_tile_id": "guestroom_turnover_and_ffe_plus_10",
                 "questions": [
-                    "Which finish packages are design-complete and released for buyout today?",
-                    "Any brand or operator standards still pending confirmation or waiver?",
+                    "Which FF&E packages are fully released versus still in review?",
+                    "Which guestroom mockup comments can still drive material substitutions?",
                 ],
             },
         ],
         "red_flags_actions": [
             {
                 "id": "rf_1",
-                "flag": "Finish and brand standards are not fully reconciled.",
-                "action": "Request signed design standards, finish delta log, and cost/schedule impact per open item.",
+                "flag": "Guestroom turnover milestones are not tied to approved FF&E release dates.",
+                "action": "Issue a room-turn turnover tracker with procurement gates and escalation thresholds.",
             },
             {
                 "id": "rf_2",
-                "flag": "Stabilization assumptions are optimistic relative to recent submarket performance.",
-                "action": "Ask for downside operating case with ADR and occupancy drag and confirm covenant headroom.",
+                "flag": "Opening occupancy assumptions exceed recent comp-set ramp trends.",
+                "action": "Run downside occupancy bridge and confirm covenant headroom through stabilization.",
             },
             {
                 "id": "rf_3",
-                "flag": "Long-lead procurement status lacks clear contingency paths.",
-                "action": "Require long-lead tracker with approved alternates and owner decision dates.",
+                "flag": "Allowance-backed line items remain unresolved heading into buyout.",
+                "action": "Require bid-tab variance log with cost and opening-date impact by trade.",
             },
         ],
-    }
+    },
+    "hospitality_full_service_hotel_v1": {
+        "version": "v1",
+        "profile_id": "hospitality_full_service_hotel_v1",
+        "fastest_change": {
+            "headline": "What would change this decision fastest?",
+            "drivers": [
+                {
+                    "id": "driver_cost",
+                    "label": "Confirm hard costs +/-10%",
+                    "tile_id": "cost_plus_10",
+                },
+                {
+                    "id": "driver_revenue",
+                    "label": "Validate banquet and ADR revenue +/-10%",
+                    "tile_id": "revenue_minus_10",
+                },
+                {
+                    "id": "driver_trade",
+                    "label": "Pressure-test ballroom and F&B fit-out scope",
+                    "tile_id": "ballroom_and_fnb_fitout_plus_12",
+                },
+            ],
+        },
+        "most_likely_wrong": [
+            {
+                "id": "mlw_1",
+                "driver_tile_id": "ballroom_and_fnb_fitout_plus_12",
+                "text": "Ballroom, prefunction, and F&B fit-out details are assumed frozen ahead of operator sign-off.",
+                "why": "Late fit-out refinements create compounding finishes, MEP, and commissioning pressure.",
+            },
+            {
+                "id": "mlw_2",
+                "driver_tile_id": "revenue_minus_10",
+                "text": "Banquet and group mix is treated as stable in the first operating year.",
+                "why": "Full-service underwriting is exposed to event-program timing and ADR volatility.",
+            },
+            {
+                "id": "mlw_3",
+                "driver_tile_id": "cost_plus_10",
+                "text": "Central plant and life-safety integration is underwritten with minimal commissioning drift.",
+                "why": "System integration slippage increases both carry and pre-opening burn.",
+            },
+        ],
+        "question_bank": [
+            {
+                "id": "qb_cost_1",
+                "driver_tile_id": "cost_plus_10",
+                "questions": [
+                    "Which long-lead MEP and power packages are fully bought out today?",
+                    "How much contingency is explicitly allocated to system integration and turnover risk?",
+                ],
+            },
+            {
+                "id": "qb_revenue_1",
+                "driver_tile_id": "revenue_minus_10",
+                "questions": [
+                    "What signed group pipeline supports banquet and meeting revenue assumptions?",
+                    "What downside ADR/occupancy case has been underwritten for year-one operations?",
+                ],
+            },
+            {
+                "id": "qb_trade_1",
+                "driver_tile_id": "ballroom_and_fnb_fitout_plus_12",
+                "questions": [
+                    "Which ballroom and F&B finish packages remain pending operator approval?",
+                    "What alternates are pre-approved if specialty finishes slip procurement windows?",
+                ],
+            },
+        ],
+        "red_flags_actions": [
+            {
+                "id": "rf_1",
+                "flag": "Operator-driven fit-out scope remains open late in design development.",
+                "action": "Lock final ballroom/F&B scope bulletin and map each open item to cost and schedule risk.",
+            },
+            {
+                "id": "rf_2",
+                "flag": "Group business ramp assumptions are not backed by contracted demand.",
+                "action": "Require contracted pipeline schedule and downside sensitivity for ADR and occupancy.",
+            },
+            {
+                "id": "rf_3",
+                "flag": "Commissioning sequence lacks explicit contingency and accountability milestones.",
+                "action": "Publish integrated commissioning plan with owner sign-off gates and fallback pathways.",
+            },
+        ],
+    },
 }

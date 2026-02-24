@@ -23,6 +23,7 @@ _WAVE1_PROFILE_IDS: Set[str] = {
     "restaurant_cafe_v1",
     "restaurant_bar_tavern_v1",
     "hospitality_limited_service_hotel_v1",
+    "hospitality_full_service_hotel_v1",
 }
 
 _DEFAULT_DECISION_TABLE_COLUMNS: List[Dict[str, str]] = [
@@ -949,11 +950,16 @@ def _is_restaurant_profile(profile_id: Any) -> bool:
     return isinstance(profile_id, str) and profile_id.startswith("restaurant_")
 
 
+def _is_hospitality_profile(profile_id: Any) -> bool:
+    return isinstance(profile_id, str) and profile_id.startswith("hospitality_")
+
+
 def _supports_decision_insurance_profile(profile_id: Any) -> bool:
     return (
         _is_multifamily_profile(profile_id)
         or _is_industrial_profile(profile_id)
         or _is_restaurant_profile(profile_id)
+        or _is_hospitality_profile(profile_id)
     )
 
 
