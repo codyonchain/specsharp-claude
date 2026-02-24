@@ -113,6 +113,39 @@ class TestProjectNameGeneration:
         assert parsed["building_subtype"] is None
         assert name == "Office in Nashville"
 
+    @pytest.mark.parametrize(
+        "description,expected_subtype",
+        [
+            (
+                "New 320,000 SF Class A office tower in Nashville, TN with premium amenity floors, fitness center, cafeteria, conference center, concierge lobby, executive floor, on-site data center, structured parking, green roof, and outdoor terrace.",
+                "class_a",
+            ),
+            (
+                "New 145,000 SF Class B office renovation in Memphis, TN with conference rooms, storage space, security desk, and surface parking.",
+                "class_b",
+            ),
+        ],
+    )
+    def test_office_strong_intent_guards_against_generic_amenity_reroutes(
+        self,
+        description,
+        expected_subtype,
+    ):
+        parsed, _ = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "office"
+        assert parsed["subtype"] == expected_subtype
+        assert parsed["building_subtype"] == expected_subtype
+
+    def test_office_building_without_class_signal_keeps_unknown_subtype(self):
+        description = "New 145,000 SF office building in Memphis, TN."
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "office"
+        assert parsed["subtype"] is None
+        assert parsed["building_subtype"] is None
+        assert name == "Office in Memphis"
+
     def test_school_addition(self):
         description = "Building extension adding 15000 sf of classroom space to existing high school"
         parsed, name = self._parse_and_name(description)

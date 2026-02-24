@@ -360,6 +360,28 @@ class NLPService:
                             self.building_patterns[building_type]['subtypes'][subtype]
                         ))
 
+    def _has_strong_office_intent(self, text_lower: str) -> bool:
+        """Detect high-confidence office language that should not be rerouted by generic amenities."""
+        if not isinstance(text_lower, str) or not text_lower.strip():
+            return False
+        strong_office_patterns = (
+            r"\bclass\s*a\b",
+            r"\bclass\s*b\b",
+            r"\boffice tower\b",
+            r"\boffice building\b",
+            r"\bcorporate office\b",
+            r"\bhigh[-\s]?rise office\b",
+        )
+        return any(re.search(pattern, text_lower) for pattern in strong_office_patterns)
+
+    def _resolve_office_subtype_from_intent(self, text_lower: str) -> Optional[str]:
+        """Resolve explicit office class signals when present; otherwise keep subtype unknown."""
+        if re.search(r"\bclass\s*a\b", text_lower) or re.search(r"\bgrade\s*a\b", text_lower):
+            return "class_a"
+        if re.search(r"\bclass\s*b\b", text_lower) or re.search(r"\bgrade\s*b\b", text_lower):
+            return "class_b"
+        return None
+
     def detect_building_type_with_subtype(self, text: str) -> Tuple[str, Optional[str], str]:
         """Detect building type and subtype using config-driven patterns"""
         text_lower = text.lower()
@@ -461,6 +483,11 @@ class NLPService:
                     return 'hospitality', 'limited_service_hotel', classification
 
             return 'hospitality', self._get_default_subtype('hospitality'), classification
+
+        # Preserve deterministic office routing when explicit office intent is strong.
+        # This prevents generic amenity overlap terms from rerouting to other verticals.
+        if self._has_strong_office_intent(text_lower):
+            return 'office', self._resolve_office_subtype_from_intent(text_lower), classification
 
         # High-confidence data center intent should preempt generic specialty routing.
         data_center_priority_phrases = [
