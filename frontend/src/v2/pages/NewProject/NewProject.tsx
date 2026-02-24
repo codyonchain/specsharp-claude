@@ -5,6 +5,12 @@ import { api, createProject } from '../../api/client';
 import { tracer } from '../../utils/traceSystem';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { BuildingTaxonomy } from '../../../core/buildingTaxonomy';
+import {
+  detectRestaurantFeatureIdsFromDescription,
+  filterSpecialFeaturesBySubtype,
+  getRestaurantSpecialFeatures,
+  type SpecialFeatureOption,
+} from './specialFeaturesCatalog';
 
 // Lucide icons
 import { 
@@ -246,17 +252,7 @@ export const NewProject: React.FC = () => {
   ];
   
   // Special features by building type
-  type SpecialFeatureOption = {
-    id: string;
-    name: string;
-    cost?: number;
-    costPerSF?: number;
-    costPerSFBySubtype?: Record<string, number>;
-    description: string;
-    allowedSubtypes?: string[];
-  };
-
-  const getAvailableFeatures = (buildingType: string) => {
+  const getAvailableFeatures = (buildingType: string): SpecialFeatureOption[] => {
     const features: Record<string, SpecialFeatureOption[]> = {
       healthcare: [
         {
@@ -541,7 +537,8 @@ export const NewProject: React.FC = () => {
         { id: 'food_court', name: 'Food Court', cost: 2000000, description: 'Multi-vendor dining area' },
         { id: 'anchor_fitout', name: 'Anchor Tenant Fit-out', cost: 3000000, description: 'Major retailer customization' },
         { id: 'parking_deck', name: 'Parking Deck', cost: 4000000, description: 'Structured parking' }
-      ]
+      ],
+      restaurant: getRestaurantSpecialFeatures(),
     };
     
     return features[buildingType] || [];
@@ -552,16 +549,19 @@ export const NewProject: React.FC = () => {
     const lower = desc.toLowerCase();
     
     // Detect special features in description
-    const detectedFeatures: string[] = [];
-    if (lower.includes('emergency')) detectedFeatures.push('emergency');
-    if (lower.includes('imaging')) detectedFeatures.push('imaging');
-    if (lower.includes('gymnasium') || lower.includes('gym')) detectedFeatures.push('gymnasium');
-    if (lower.includes('parking garage') || lower.includes('garage')) detectedFeatures.push('parking_garage');
-    if (lower.includes('pool')) detectedFeatures.push('pool');
-    if (lower.includes('cafeteria')) detectedFeatures.push('cafeteria');
-    if (lower.includes('loading dock')) detectedFeatures.push('loading_docks');
-    if (lower.includes('cold storage')) detectedFeatures.push('cold_storage');
-    if (lower.includes('food court')) detectedFeatures.push('food_court');
+    const detectedFeatures = new Set<string>();
+    if (lower.includes('emergency')) detectedFeatures.add('emergency');
+    if (lower.includes('imaging')) detectedFeatures.add('imaging');
+    if (lower.includes('gymnasium') || lower.includes('gym')) detectedFeatures.add('gymnasium');
+    if (lower.includes('parking garage') || lower.includes('garage')) detectedFeatures.add('parking_garage');
+    if (lower.includes('pool')) detectedFeatures.add('pool');
+    if (lower.includes('cafeteria')) detectedFeatures.add('cafeteria');
+    if (lower.includes('loading dock')) detectedFeatures.add('loading_docks');
+    if (lower.includes('cold storage')) detectedFeatures.add('cold_storage');
+    if (lower.includes('food court')) detectedFeatures.add('food_court');
+    for (const featureId of detectRestaurantFeatureIdsFromDescription(desc)) {
+      detectedFeatures.add(featureId);
+    }
     
     // Detect finish level (luxury/high-end terms map into premium)
     let detectedFinish: 'standard' | 'premium' = 'standard';
@@ -580,7 +580,7 @@ export const NewProject: React.FC = () => {
     else if (lower.includes('addition') || lower.includes('expansion') || lower.includes('expand')) detectedComplexity = 'addition';
     
     return {
-      specialFeatures: detectedFeatures,
+      specialFeatures: Array.from(detectedFeatures),
       finishLevel: detectedFinish,
       projectComplexity: detectedComplexity
     };
@@ -677,15 +677,7 @@ export const NewProject: React.FC = () => {
   }, [liveDetectedLocation, locationTouched, locationInput, locationAutoFilled]);
   const currentSubtype = parsedInput?.subtype || parsedInput?.building_subtype;
   const availableSpecialFeatures = parsedInput ? getAvailableFeatures(parsedInput.building_type) : [];
-  const applicableSpecialFeatures = availableSpecialFeatures.filter(feature => {
-    if (!feature.allowedSubtypes || feature.allowedSubtypes.length === 0) {
-      return true;
-    }
-    if (!currentSubtype) {
-      return true;
-    }
-    return feature.allowedSubtypes.includes(currentSubtype);
-  });
+  const applicableSpecialFeatures = filterSpecialFeaturesBySubtype(availableSpecialFeatures, currentSubtype);
 
   // Live preview effect
   useEffect(() => {
@@ -800,8 +792,19 @@ export const NewProject: React.FC = () => {
     if (analysis) {
       // Auto-detect features from description
       const parsed = parseDescription(description);
-      if (specialFeatures.length === 0 && parsed.specialFeatures.length > 0) {
-        setSpecialFeatures(parsed.specialFeatures);
+      const parsedBuildingType = analysis.parsed_input?.building_type;
+      const parsedSubtype = analysis.parsed_input?.subtype || analysis.parsed_input?.building_subtype;
+      const allowedFeatureIds = new Set(
+        filterSpecialFeaturesBySubtype(
+          getAvailableFeatures(parsedBuildingType || ''),
+          parsedSubtype
+        ).map((feature) => feature.id)
+      );
+      const parsedSpecialFeatures = parsed.specialFeatures.filter((featureId) =>
+        allowedFeatureIds.has(featureId)
+      );
+      if (specialFeatures.length === 0 && parsedSpecialFeatures.length > 0) {
+        setSpecialFeatures(parsedSpecialFeatures);
       }
       if (!finishLevelLocked) {
         const engineFinish = analysis.calculations?.project_info?.finish_level;
@@ -985,7 +988,10 @@ export const NewProject: React.FC = () => {
     isPlaceholder: boolean;
   };
 
-  const isMultifamilyProject = parsedInput?.building_type === 'multifamily';
+  const usesSubtypeCostPerSF = ['multifamily', 'restaurant'].includes(
+    parsedInput?.building_type ?? ''
+  );
+  const isRestaurantProject = parsedInput?.building_type === 'restaurant';
   const hasFeatureSquareFootage = typeof squareFootageSummary === 'number' && squareFootageSummary > 0;
 
   const resolveFeatureCostPerSF = (feature: SpecialFeatureOption): number | undefined => {
@@ -1011,7 +1017,7 @@ export const NewProject: React.FC = () => {
 
   const getFeatureDisplayPricing = (feature: SpecialFeatureOption): FeatureDisplayPricing => {
     const costPerSF = resolveFeatureCostPerSF(feature);
-    if (isMultifamilyProject && typeof costPerSF === 'number') {
+    if (usesSubtypeCostPerSF && typeof costPerSF === 'number') {
       if (hasFeatureSquareFootage && squareFootageSummary) {
         const totalCost = costPerSF * squareFootageSummary;
         return {
@@ -1033,7 +1039,7 @@ export const NewProject: React.FC = () => {
     if (typeof feature.cost === 'number' && Number.isFinite(feature.cost)) {
       return {
         amountLabel: `+${formatCurrency(feature.cost)}`,
-        detailLabel: isMultifamilyProject ? 'Estimate placeholder' : 'Static placeholder value',
+        detailLabel: usesSubtypeCostPerSF ? 'Estimate placeholder' : 'Static placeholder value',
         totalCost: feature.cost,
         isEstimate: true,
         isPlaceholder: true,
@@ -1512,9 +1518,11 @@ export const NewProject: React.FC = () => {
                     <p className="text-[11px] text-blue-700">
                       Feature costs are applied as $/SF × project SF in final estimate.
                     </p>
-                    {isMultifamilyProject && !hasFeatureSquareFootage && (
+                    {usesSubtypeCostPerSF && !hasFeatureSquareFootage && (
                       <p className="mt-1 text-[11px] text-blue-700">
-                        Multifamily values below are estimates until square footage is provided.
+                        {isRestaurantProject
+                          ? 'Restaurant values below are estimates until square footage is provided.'
+                          : 'Multifamily values below are estimates until square footage is provided.'}
                       </p>
                     )}
                     {hasStaticFeaturePlaceholders && (
