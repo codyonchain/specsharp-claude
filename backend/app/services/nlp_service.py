@@ -267,11 +267,24 @@ class NLPService:
                 }
             },
             'specialty': {
-                'keywords': ['data center', 'laboratory', 'self storage', 'storage facility', 'car dealership', 'broadcast'],
+                'keywords': [
+                    'data center', 'datacenter', 'server farm', 'colocation',
+                    'hyperscale', 'tier iii', 'tier iv',
+                    'laboratory', 'research lab',
+                    'self storage', 'storage facility',
+                    'car dealership', 'auto dealership', 'vehicle showroom',
+                    'broadcast', 'broadcast studio', 'production facility'
+                ],
                 'subtypes': {
                     'self_storage': ['self storage', 'storage facility', 'storage units', 'mini storage'],
-                    'data_center': ['data center', 'server farm', 'colocation facility'],
-                    'laboratory': ['laboratory', 'lab', 'research facility', 'research lab']
+                    'data_center': [
+                        'data center', 'datacenter', 'server farm', 'colocation facility',
+                        'colo facility', 'hyperscale', 'mission critical', 'data hall',
+                        'tier 3', 'tier iii', 'tier 4', 'tier iv'
+                    ],
+                    'laboratory': ['laboratory', 'lab', 'research facility', 'research lab'],
+                    'car_dealership': ['car dealership', 'auto dealership', 'vehicle showroom', 'automotive retail'],
+                    'broadcast_facility': ['broadcast studio', 'broadcast facility', 'television studio', 'soundstage']
                 }
             },
             'mixed_use': {
@@ -448,6 +461,22 @@ class NLPService:
                     return 'hospitality', 'limited_service_hotel', classification
 
             return 'hospitality', self._get_default_subtype('hospitality'), classification
+
+        # High-confidence data center intent should preempt generic specialty routing.
+        data_center_priority_phrases = [
+            'data center',
+            'datacenter',
+            'server farm',
+            'colocation',
+            'hyperscale',
+            'mission critical',
+            'data hall',
+            'redundant power',
+        ]
+        if any(phrase in text_lower for phrase in data_center_priority_phrases):
+            return 'specialty', 'data_center', classification
+        if re.search(r'\btier[\s-]?(3|iii|4|iv)\b', text_lower):
+            return 'specialty', 'data_center', classification
 
         # Priority order (check specific before general)
         PRIORITY_ORDER = [

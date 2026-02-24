@@ -1082,6 +1082,11 @@ class UnifiedEngine:
                 "multifamily_market_rate_apartments_v1",
                 "multifamily_luxury_apartments_v1",
                 "multifamily_affordable_housing_v1",
+                "specialty_data_center_v1",
+                "specialty_laboratory_v1",
+                "specialty_self_storage_v1",
+                "specialty_car_dealership_v1",
+                "specialty_broadcast_facility_v1",
             }:
                 from app.v2.services.dealshield_scenarios import (
                     build_dealshield_scenarios,
@@ -1481,6 +1486,13 @@ class UnifiedEngine:
     def _load_scope_item_profile(self, profile_id: str, building_type: BuildingType) -> Optional[Dict[str, Any]]:
         profile_sources: List[Dict[str, Dict[str, Any]]] = []
         profile_sources.extend(scope_items.SCOPE_ITEM_PROFILE_SOURCES)
+        if building_type == BuildingType.SPECIALTY:
+            try:
+                from app.v2.config.type_profiles.scope_items import specialty as specialty_scope_items
+
+                profile_sources.append(specialty_scope_items.SCOPE_ITEM_PROFILES)
+            except Exception:
+                pass
 
         for source in profile_sources:
             profile = source.get(profile_id)
@@ -1491,6 +1503,12 @@ class UnifiedEngine:
     def _resolve_scope_item_defaults(self, default_key: str) -> Dict[str, Any]:
         default_sources: List[Dict[str, Any]] = []
         default_sources.extend(scope_items.SCOPE_ITEM_DEFAULT_SOURCES)
+        try:
+            from app.v2.config.type_profiles.scope_items import specialty as specialty_scope_items
+
+            default_sources.append(specialty_scope_items.SCOPE_ITEM_DEFAULTS)
+        except Exception:
+            pass
         for source in default_sources:
             if not isinstance(source, dict):
                 continue

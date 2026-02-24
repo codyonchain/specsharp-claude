@@ -3,6 +3,9 @@ from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.v2.config.type_profiles.dealshield_tiles.specialty import DEALSHIELD_TILE_DEFAULTS
 from app.v2.config.type_profiles.dealshield_content import specialty as specialty_content
 from app.v2.config.type_profiles.scope_items import specialty as specialty_scope_items
+from app.v2.engines.unified_engine import unified_engine
+from app.v2.config.master_config import ProjectClass
+from app.v2.services.dealshield_service import build_dealshield_view_model
 
 
 SPECIALTY_PROFILE_MAP = {
@@ -129,3 +132,67 @@ def test_specialty_no_clone_invariants():
 
     assert len(primary_tile_ids) == len(set(primary_tile_ids))
     assert len(first_mlw_texts) == len(set(first_mlw_texts))
+
+
+def test_specialty_wave1_scenarios_emit_for_all_profiles():
+    for subtype, expected in SPECIALTY_PROFILE_MAP.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.SPECIALTY,
+            subtype=subtype,
+            square_footage=80_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        assert payload.get("dealshield_tile_profile") == expected["tile"]
+        scenario_block = payload.get("dealshield_scenarios")
+        assert isinstance(scenario_block, dict)
+        assert scenario_block.get("profile_id") == expected["tile"]
+        scenario_ids = scenario_block.get("scenario_ids")
+        if not isinstance(scenario_ids, list):
+            provenance = scenario_block.get("provenance")
+            scenario_ids = provenance.get("scenario_ids") if isinstance(provenance, dict) else None
+        assert isinstance(scenario_ids, list)
+        assert "base" in scenario_ids
+        assert "conservative" in scenario_ids
+        assert "ugly" in scenario_ids
+        assert expected["stress"] in scenario_ids
+
+
+def test_specialty_decision_insurance_policy_contract_outputs():
+    for subtype, expected in SPECIALTY_PROFILE_MAP.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.SPECIALTY,
+            subtype=subtype,
+            square_footage=80_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        profile = get_dealshield_profile(expected["tile"])
+        view_model = build_dealshield_view_model(
+            project_id=f"specialty-policy-{subtype}",
+            payload=payload,
+            profile=profile,
+        )
+
+        provenance = view_model.get("decision_insurance_provenance")
+        assert isinstance(provenance, dict)
+        policy_block = provenance.get("decision_insurance_policy")
+        assert isinstance(policy_block, dict)
+        assert policy_block.get("status") == "available"
+        assert policy_block.get("profile_id") == expected["tile"]
+
+        primary_control = view_model.get("primary_control_variable")
+        assert isinstance(primary_control, dict)
+        assert isinstance(primary_control.get("tile_id"), str) and primary_control.get("tile_id")
+
+        first_break = provenance.get("first_break_condition")
+        assert isinstance(first_break, dict)
+        assert first_break.get("source") in {
+            "decision_insurance_policy.collapse_trigger",
+            "decision_table.rows.stabilized_value.value_gap",
+        }
+
+        flex = provenance.get("flex_before_break_pct")
+        assert isinstance(flex, dict)
+        assert flex.get("status") == "available"
+        assert flex.get("calibration_source") == "decision_insurance_policy.flex_calibration"

@@ -199,6 +199,48 @@ class TestProjectNameGeneration:
         assert parsed["building_type"] == "hospitality"
         assert parsed["subtype"] == "limited_service_hotel"
 
+    @pytest.mark.parametrize(
+        "description,expected_subtype,expected_name",
+        [
+            (
+                "New 120000 sf tier iv data center with redundant power trains in Nashville, TN",
+                "data_center",
+                "Data Center in Nashville",
+            ),
+            (
+                "New 45000 sf biotech laboratory with clean room suites in Nashville, TN",
+                "laboratory",
+                "Laboratory in Nashville",
+            ),
+            (
+                "New 80000 sf self storage facility with climate control in Nashville, TN",
+                "self_storage",
+                "Self Storage in Nashville",
+            ),
+            (
+                "New 35000 sf auto dealership with service bays and showroom in Nashville, TN",
+                "car_dealership",
+                "Car Dealership in Nashville",
+            ),
+            (
+                "New 42000 sf broadcast studio and soundstage production facility in Nashville, TN",
+                "broadcast_facility",
+                "Broadcast Facility in Nashville",
+            ),
+        ],
+    )
+    def test_specialty_subtype_discoverability_all_five_profiles(
+        self,
+        description,
+        expected_subtype,
+        expected_name,
+    ):
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "specialty"
+        assert parsed["subtype"] == expected_subtype
+        assert name == expected_name
+
     def test_recreation_prompt_with_pool_and_fitness_remains_recreation(self):
         description = (
             "Build a 110,000 SF aquatic center and sports complex with indoor pool, "
