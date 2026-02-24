@@ -13,6 +13,10 @@ from app.v2.config.master_config import (
     validate_config,
 )
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
+from app.v2.config.type_profiles.decision_insurance_policy import (
+    DECISION_INSURANCE_POLICY_BY_PROFILE_ID,
+    DECISION_INSURANCE_POLICY_ID,
+)
 from app.v2.services.dealshield_service import build_dealshield_view_model
 
 
@@ -421,3 +425,93 @@ def test_industrial_decision_insurance_outputs_are_deterministic():
         "decision_status_provenance",
     ):
         assert view_a.get(key) == view_b.get(key), f"Expected deterministic equality for '{key}'"
+
+
+def test_policy_curated_decision_insurance_is_applied_for_hardened_profiles():
+    profile_inputs = [
+        (BuildingType.RESTAURANT, "quick_service", 8_000),
+        (BuildingType.RESTAURANT, "full_service", 8_000),
+        (BuildingType.RESTAURANT, "fine_dining", 8_000),
+        (BuildingType.RESTAURANT, "cafe", 8_000),
+        (BuildingType.RESTAURANT, "bar_tavern", 8_000),
+        (BuildingType.HOSPITALITY, "limited_service_hotel", 85_000),
+        (BuildingType.HOSPITALITY, "full_service_hotel", 85_000),
+        (BuildingType.MULTIFAMILY, "market_rate_apartments", 120_000),
+        (BuildingType.MULTIFAMILY, "luxury_apartments", 120_000),
+        (BuildingType.MULTIFAMILY, "affordable_housing", 120_000),
+        (BuildingType.INDUSTRIAL, "warehouse", 120_000),
+        (BuildingType.INDUSTRIAL, "distribution_center", 120_000),
+        (BuildingType.INDUSTRIAL, "manufacturing", 120_000),
+        (BuildingType.INDUSTRIAL, "flex_space", 120_000),
+        (BuildingType.INDUSTRIAL, "cold_storage", 120_000),
+    ]
+
+    for building_type, subtype, square_footage in profile_inputs:
+        payload = unified_engine.calculate_project(
+            building_type=building_type,
+            subtype=subtype,
+            square_footage=square_footage,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        profile_id = payload["dealshield_tile_profile"]
+        assert profile_id in DECISION_INSURANCE_POLICY_BY_PROFILE_ID
+
+        profile = get_dealshield_profile(profile_id)
+        view_model = build_dealshield_view_model(
+            project_id=f"policy-{building_type.value}-{subtype}",
+            payload=payload,
+            profile=profile,
+        )
+        di_provenance = view_model.get("decision_insurance_provenance")
+        assert isinstance(di_provenance, dict)
+
+        policy_block = di_provenance.get("decision_insurance_policy")
+        assert isinstance(policy_block, dict)
+        assert policy_block.get("status") == "available"
+        assert policy_block.get("policy_id") == DECISION_INSURANCE_POLICY_ID
+        assert policy_block.get("profile_id") == profile_id
+
+        pcv_provenance = di_provenance.get("primary_control_variable")
+        assert isinstance(pcv_provenance, dict)
+        assert pcv_provenance.get("status") == "available"
+        assert pcv_provenance.get("selection_basis") == "policy_primary_control_variable"
+        assert pcv_provenance.get("policy_id") == DECISION_INSURANCE_POLICY_ID
+        assert pcv_provenance.get("policy_source") == "decision_insurance_policy.primary_control_variable"
+
+        expected_tile_id = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]["primary_control_variable"]["tile_id"]
+        primary_control = view_model.get("primary_control_variable")
+        assert isinstance(primary_control, dict)
+        assert primary_control.get("tile_id") == expected_tile_id
+
+        first_break_provenance = di_provenance.get("first_break_condition")
+        assert isinstance(first_break_provenance, dict)
+        first_break = view_model.get("first_break_condition")
+        if (
+            isinstance(first_break, dict)
+            and first_break_provenance.get("status") == "available"
+            and first_break_provenance.get("source") == "decision_insurance_policy.collapse_trigger"
+        ):
+            collapse_trigger = policy_block.get("collapse_trigger")
+            configured_operator = (
+                collapse_trigger.get("operator")
+                if isinstance(collapse_trigger, dict)
+                else None
+            )
+            expected_operator = (
+                configured_operator.strip()
+                if isinstance(configured_operator, str) and configured_operator.strip()
+                else "<="
+            )
+            assert first_break.get("break_metric") == first_break_provenance.get("policy_metric")
+            assert first_break.get("threshold") == first_break_provenance.get("policy_threshold")
+            assert first_break.get("operator") == expected_operator
+        if first_break_provenance.get("status") == "unavailable":
+            assert first_break_provenance.get("reason") != "no_modeled_break_condition"
+
+        flex_provenance = di_provenance.get("flex_before_break_pct")
+        assert isinstance(flex_provenance, dict)
+        assert flex_provenance.get("status") == "available"
+        assert flex_provenance.get("calibration_source") == "decision_insurance_policy.flex_calibration"
+        assert flex_provenance.get("band") in {"tight", "moderate", "comfortable"}
+        assert view_model.get("flex_before_break_band") in {"tight", "moderate", "comfortable"}

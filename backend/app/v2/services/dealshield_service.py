@@ -6,6 +6,10 @@ import math
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from app.v2.config.type_profiles.dealshield_content import get_dealshield_content_profile
+from app.v2.config.type_profiles.decision_insurance_policy import (
+    DECISION_INSURANCE_POLICY_ID,
+    get_decision_insurance_policy,
+)
 
 _MISSING = object()
 
@@ -1078,6 +1082,138 @@ def _build_row_snapshots(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return snapshots
 
 
+def _resolve_row_snapshot_metric_value(row: Dict[str, Any], metric: str) -> Optional[float]:
+    if not isinstance(row, dict):
+        return None
+    metric_key = (metric or "").strip()
+    if not metric_key:
+        return None
+    raw_value = row.get(metric_key)
+    if not _is_number(raw_value):
+        return None
+    return float(raw_value)
+
+
+def _resolve_policy_primary_control_variable(
+    policy: Optional[Dict[str, Any]],
+    driver_impacts: List[Dict[str, Any]],
+    high_threshold: float,
+    med_threshold: float,
+) -> Optional[Dict[str, Any]]:
+    if not isinstance(policy, dict):
+        return None
+    primary_cfg = policy.get("primary_control_variable")
+    if not isinstance(primary_cfg, dict):
+        return None
+
+    tile_id = primary_cfg.get("tile_id")
+    if not isinstance(tile_id, str) or not tile_id.strip():
+        return None
+    resolved_tile_id = tile_id.strip()
+    expected_metric_ref = primary_cfg.get("metric_ref")
+    expected_metric_ref = expected_metric_ref.strip() if isinstance(expected_metric_ref, str) and expected_metric_ref.strip() else None
+
+    matching_entry: Optional[Dict[str, Any]] = None
+    for entry in driver_impacts:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("tile_id") != resolved_tile_id:
+            continue
+        entry_metric_ref = entry.get("metric_ref")
+        if expected_metric_ref and entry_metric_ref != expected_metric_ref:
+            continue
+        matching_entry = entry
+        break
+
+    if not isinstance(matching_entry, dict):
+        return None
+
+    impact_pct = float(matching_entry.get("impact_pct")) if _is_number(matching_entry.get("impact_pct")) else None
+    delta_cost = float(matching_entry.get("delta_cost")) if _is_number(matching_entry.get("delta_cost")) else None
+    label = primary_cfg.get("label") if isinstance(primary_cfg.get("label"), str) and primary_cfg.get("label").strip() else matching_entry.get("label")
+    metric_ref = expected_metric_ref or matching_entry.get("metric_ref")
+    if not isinstance(metric_ref, str) or not metric_ref.strip():
+        return None
+
+    return {
+        "tile_id": resolved_tile_id,
+        "label": label,
+        "metric_ref": metric_ref.strip(),
+        "impact_pct": impact_pct,
+        "delta_cost": delta_cost,
+        "severity": _classify_impact_severity(impact_pct, high_threshold, med_threshold),
+    }
+
+
+def _resolve_policy_collapse_row(
+    row_snapshots: List[Dict[str, Any]],
+    collapse_cfg: Optional[Dict[str, Any]],
+) -> Tuple[Optional[Dict[str, Any]], Optional[float], Optional[str], Optional[float]]:
+    if not isinstance(collapse_cfg, dict) or not row_snapshots:
+        return None, None, None, None
+
+    metric = collapse_cfg.get("metric")
+    metric_name = metric.strip() if isinstance(metric, str) and metric.strip() else "value_gap"
+    operator = collapse_cfg.get("operator")
+    op = operator.strip() if isinstance(operator, str) and operator.strip() else "<="
+
+    threshold_raw = collapse_cfg.get("threshold")
+    threshold = float(threshold_raw) if _is_number(threshold_raw) else 0.0
+
+    rows_by_id: Dict[str, Dict[str, Any]] = {}
+    ordered_rows: List[Dict[str, Any]] = []
+
+    for row in row_snapshots:
+        if not isinstance(row, dict):
+            continue
+        scenario_id = row.get("scenario_id")
+        if isinstance(scenario_id, str) and scenario_id and scenario_id not in rows_by_id:
+            rows_by_id[scenario_id] = row
+
+    scenario_priority = collapse_cfg.get("scenario_priority")
+    if isinstance(scenario_priority, list):
+        for scenario_id in scenario_priority:
+            if isinstance(scenario_id, str) and scenario_id in rows_by_id:
+                ordered_rows.append(rows_by_id[scenario_id])
+
+    for row in row_snapshots:
+        if not isinstance(row, dict):
+            continue
+        if row not in ordered_rows:
+            ordered_rows.append(row)
+
+    for row in ordered_rows:
+        metric_value = _resolve_row_snapshot_metric_value(row, metric_name)
+        if metric_value is None:
+            continue
+        if op == "<=" and metric_value <= threshold:
+            return row, metric_value, metric_name, threshold
+        if op == "<" and metric_value < threshold:
+            return row, metric_value, metric_name, threshold
+        if op == ">=" and metric_value >= threshold:
+            return row, metric_value, metric_name, threshold
+        if op == ">" and metric_value > threshold:
+            return row, metric_value, metric_name, threshold
+
+    return None, None, metric_name, threshold
+
+
+def _resolve_flex_band(flex_value_pct: Optional[float], calibration: Optional[Dict[str, Any]]) -> Optional[str]:
+    if flex_value_pct is None or not isinstance(calibration, dict):
+        return None
+    tight_raw = calibration.get("tight_max_pct")
+    moderate_raw = calibration.get("moderate_max_pct")
+    tight_max = float(tight_raw) if _is_number(tight_raw) else 2.0
+    moderate_max = float(moderate_raw) if _is_number(moderate_raw) else 6.0
+    if moderate_max < tight_max:
+        moderate_max = tight_max
+    if flex_value_pct <= tight_max:
+        return "tight"
+    if flex_value_pct <= moderate_max:
+        return "moderate"
+    return "comfortable"
+
+
 def _build_multifamily_decision_insurance(
     payload: Dict[str, Any],
     profile: Dict[str, Any],
@@ -1105,6 +1241,25 @@ def _build_multifamily_decision_insurance(
         "high": high_threshold,
         "med": med_threshold,
     }
+    decision_policy = get_decision_insurance_policy(profile_id)
+    if isinstance(decision_policy, dict):
+        provenance["decision_insurance_policy"] = {
+            "status": "available",
+            "policy_id": DECISION_INSURANCE_POLICY_ID,
+            "profile_id": profile_id,
+            "source": "app.v2.config.type_profiles.decision_insurance_policy",
+            "primary_control_variable": copy.deepcopy(decision_policy.get("primary_control_variable")),
+            "collapse_trigger": copy.deepcopy(decision_policy.get("collapse_trigger")),
+            "flex_calibration": copy.deepcopy(decision_policy.get("flex_calibration")),
+        }
+    else:
+        provenance["decision_insurance_policy"] = {
+            "status": "unavailable",
+            "policy_id": DECISION_INSURANCE_POLICY_ID,
+            "profile_id": profile_id,
+            "reason": "profile_policy_missing",
+            "source": "app.v2.config.type_profiles.decision_insurance_policy",
+        }
 
     fastest_change = content.get("fastest_change") if isinstance(content, dict) else None
     fastest_drivers = fastest_change.get("drivers") if isinstance(fastest_change, dict) else None
@@ -1227,7 +1382,25 @@ def _build_multifamily_decision_insurance(
     ]
     sortable_impacts.sort(key=lambda entry: (-float(entry["impact_pct"]), int(entry.get("order_index", 999))))
 
-    if sortable_impacts:
+    policy_primary_control = _resolve_policy_primary_control_variable(
+        policy=decision_policy,
+        driver_impacts=driver_impacts,
+        high_threshold=high_threshold,
+        med_threshold=med_threshold,
+    )
+    if isinstance(policy_primary_control, dict):
+        outputs["primary_control_variable"] = policy_primary_control
+        provenance["primary_control_variable"] = {
+            "status": "available",
+            "selected_tile_id": policy_primary_control.get("tile_id"),
+            "selection_basis": "policy_primary_control_variable",
+            "policy_id": DECISION_INSURANCE_POLICY_ID,
+            "policy_source": "decision_insurance_policy.primary_control_variable",
+            "base_total_cost_source": base_total_cost_source,
+            "square_footage_source": square_footage_source,
+            "driver_impacts": copy.deepcopy(driver_impacts),
+        }
+    elif sortable_impacts:
         top = sortable_impacts[0]
         outputs["primary_control_variable"] = {
             "tile_id": top.get("tile_id"),
@@ -1241,6 +1414,8 @@ def _build_multifamily_decision_insurance(
             "status": "available",
             "selected_tile_id": top.get("tile_id"),
             "selection_basis": "max_abs_cost_impact_pct",
+            "policy_id": DECISION_INSURANCE_POLICY_ID,
+            "policy_source": "fallback_sensitivity_impact",
             "base_total_cost_source": base_total_cost_source,
             "square_footage_source": square_footage_source,
             "driver_impacts": copy.deepcopy(driver_impacts),
@@ -1249,6 +1424,8 @@ def _build_multifamily_decision_insurance(
         provenance["primary_control_variable"] = {
             "status": "unavailable",
             "reason": "no_driver_impact_available",
+            "policy_id": DECISION_INSURANCE_POLICY_ID,
+            "policy_source": "fallback_sensitivity_impact",
             "base_total_cost_source": base_total_cost_source,
             "square_footage_source": square_footage_source,
             "driver_impacts": copy.deepcopy(driver_impacts),
@@ -1289,7 +1466,13 @@ def _build_multifamily_decision_insurance(
         ),
         row_snapshots[0] if row_snapshots else None,
     )
-    first_break_row = next(
+    collapse_cfg = decision_policy.get("collapse_trigger") if isinstance(decision_policy, dict) else None
+    policy_break_row, policy_break_value, policy_break_metric, policy_break_threshold = _resolve_policy_collapse_row(
+        row_snapshots=row_snapshots,
+        collapse_cfg=collapse_cfg if isinstance(collapse_cfg, dict) else None,
+    )
+
+    fallback_break_row = next(
         (
             row
             for row in row_snapshots
@@ -1297,33 +1480,152 @@ def _build_multifamily_decision_insurance(
         ),
         None,
     )
+
+    first_break_row = policy_break_row if policy_break_row is not None else fallback_break_row
     if first_break_row is not None:
-        outputs["first_break_condition"] = {
-            "scenario_id": first_break_row.get("scenario_id"),
-            "scenario_label": first_break_row.get("scenario_label"),
-            "break_metric": "value_gap",
-            "operator": "<=",
-            "threshold": 0.0,
-            "observed_value": first_break_row.get("value_gap"),
-            "observed_value_pct": first_break_row.get("value_gap_pct"),
-        }
-        provenance["first_break_condition"] = {
-            "status": "available",
-            "row_index": first_break_row.get("index"),
-            "source": "decision_table.rows.stabilized_value.value_gap",
-        }
+        if policy_break_row is not None:
+            collapse_operator = collapse_cfg.get("operator") if isinstance(collapse_cfg, dict) else "<="
+            if not isinstance(collapse_operator, str) or not collapse_operator.strip():
+                collapse_operator = "<="
+            resolved_policy_metric = policy_break_metric or "value_gap"
+            resolved_policy_threshold = policy_break_threshold if policy_break_threshold is not None else 0.0
+            outputs["first_break_condition"] = {
+                "scenario_id": first_break_row.get("scenario_id"),
+                "scenario_label": first_break_row.get("scenario_label"),
+                "break_metric": resolved_policy_metric,
+                "operator": collapse_operator,
+                "threshold": resolved_policy_threshold,
+                "observed_value": policy_break_value,
+                "observed_value_pct": first_break_row.get("value_gap_pct"),
+            }
+            provenance["first_break_condition"] = {
+                "status": "available",
+                "row_index": first_break_row.get("index"),
+                "source": "decision_insurance_policy.collapse_trigger",
+                "policy_id": DECISION_INSURANCE_POLICY_ID,
+                "policy_metric": resolved_policy_metric,
+                "policy_threshold": resolved_policy_threshold,
+                "policy_operator": collapse_operator,
+                "policy_observed_value": policy_break_value,
+            }
+        else:
+            outputs["first_break_condition"] = {
+                "scenario_id": first_break_row.get("scenario_id"),
+                "scenario_label": first_break_row.get("scenario_label"),
+                "break_metric": "value_gap",
+                "operator": "<=",
+                "threshold": 0.0,
+                "observed_value": first_break_row.get("value_gap"),
+                "observed_value_pct": first_break_row.get("value_gap_pct"),
+            }
+            provenance["first_break_condition"] = {
+                "status": "available",
+                "row_index": first_break_row.get("index"),
+                "source": "decision_table.rows.stabilized_value.value_gap",
+            }
     else:
         provenance["first_break_condition"] = {
             "status": "unavailable",
-            "reason": "no_modeled_break_condition",
-            "source": "decision_table.rows.stabilized_value.value_gap",
+            "reason": (
+                "policy_threshold_not_reached"
+                if isinstance(collapse_cfg, dict)
+                else "no_modeled_break_condition"
+            ),
+            "source": (
+                "decision_insurance_policy.collapse_trigger"
+                if isinstance(collapse_cfg, dict)
+                else "decision_table.rows.stabilized_value.value_gap"
+            ),
+            "policy_id": DECISION_INSURANCE_POLICY_ID if isinstance(collapse_cfg, dict) else None,
         }
 
     if base_row_snapshot is None:
         provenance["flex_before_break_pct"] = {
             "status": "unavailable",
             "reason": "base_row_missing",
+            "policy_id": DECISION_INSURANCE_POLICY_ID if isinstance(collapse_cfg, dict) else None,
         }
+    elif isinstance(collapse_cfg, dict):
+        base_total = base_row_snapshot.get("total_cost")
+        collapse_metric = policy_break_metric or "value_gap"
+        collapse_threshold = policy_break_threshold if policy_break_threshold is not None else 0.0
+        base_metric_value = _resolve_row_snapshot_metric_value(base_row_snapshot, collapse_metric)
+
+        if not _is_number(base_total) or float(base_total) <= 0:
+            provenance["flex_before_break_pct"] = {
+                "status": "unavailable",
+                "reason": "base_row_gap_or_total_cost_missing",
+                "base_row_index": base_row_snapshot.get("index"),
+                "policy_id": DECISION_INSURANCE_POLICY_ID,
+            }
+        elif base_metric_value is None:
+            provenance["flex_before_break_pct"] = {
+                "status": "unavailable",
+                "reason": "base_row_metric_missing_for_policy_collapse",
+                "metric": collapse_metric,
+                "base_row_index": base_row_snapshot.get("index"),
+                "policy_id": DECISION_INSURANCE_POLICY_ID,
+            }
+        elif base_metric_value <= collapse_threshold:
+            outputs["flex_before_break_pct"] = 0.0
+            provenance["flex_before_break_pct"] = {
+                "status": "available",
+                "reason": "base_already_broken_policy",
+                "metric": collapse_metric,
+                "threshold": collapse_threshold,
+                "base_row_index": base_row_snapshot.get("index"),
+                "policy_id": DECISION_INSURANCE_POLICY_ID,
+            }
+        elif first_break_row is None:
+            provenance["flex_before_break_pct"] = {
+                "status": "unavailable",
+                "reason": "policy_threshold_not_reached",
+                "metric": collapse_metric,
+                "threshold": collapse_threshold,
+                "base_row_index": base_row_snapshot.get("index"),
+                "policy_id": DECISION_INSURANCE_POLICY_ID,
+            }
+        else:
+            break_total = first_break_row.get("total_cost")
+            break_metric_value = _resolve_row_snapshot_metric_value(first_break_row, collapse_metric)
+            if not _is_number(break_total) or break_metric_value is None:
+                provenance["flex_before_break_pct"] = {
+                    "status": "unavailable",
+                    "reason": "break_row_metric_or_total_cost_missing",
+                    "metric": collapse_metric,
+                    "break_row_index": first_break_row.get("index"),
+                    "policy_id": DECISION_INSURANCE_POLICY_ID,
+                }
+            else:
+                denominator = base_metric_value - break_metric_value
+                if denominator <= 0:
+                    provenance["flex_before_break_pct"] = {
+                        "status": "unavailable",
+                        "reason": "non_positive_interpolation_denominator",
+                        "base_metric": base_metric_value,
+                        "break_metric": break_metric_value,
+                        "metric": collapse_metric,
+                        "policy_id": DECISION_INSURANCE_POLICY_ID,
+                    }
+                else:
+                    stress_break_row_pct = ((float(break_total) - float(base_total)) / float(base_total)) * 100.0
+                    interpolation_numerator = base_metric_value - collapse_threshold
+                    outputs["flex_before_break_pct"] = max(
+                        0.0,
+                        stress_break_row_pct * (interpolation_numerator / denominator),
+                    )
+                    provenance["flex_before_break_pct"] = {
+                        "status": "available",
+                        "method": "linear_interpolation_to_policy_threshold",
+                        "metric": collapse_metric,
+                        "threshold": collapse_threshold,
+                        "stress_break_row_pct": stress_break_row_pct,
+                        "base_metric": base_metric_value,
+                        "break_metric": break_metric_value,
+                        "base_row_index": base_row_snapshot.get("index"),
+                        "break_row_index": first_break_row.get("index"),
+                        "policy_id": DECISION_INSURANCE_POLICY_ID,
+                    }
     else:
         base_gap = base_row_snapshot.get("value_gap")
         base_total = base_row_snapshot.get("total_cost")
@@ -1381,6 +1683,27 @@ def _build_multifamily_decision_insurance(
                         "base_row_index": base_row_snapshot.get("index"),
                         "break_row_index": first_break_row.get("index"),
                     }
+
+    flex_calibration = decision_policy.get("flex_calibration") if isinstance(decision_policy, dict) else None
+    if isinstance(flex_calibration, dict):
+        flex_value = float(outputs.get("flex_before_break_pct")) if _is_number(outputs.get("flex_before_break_pct")) else None
+        if flex_value is None:
+            fallback_flex = flex_calibration.get("fallback_pct")
+            if _is_number(fallback_flex):
+                flex_value = float(fallback_flex)
+                outputs["flex_before_break_pct"] = flex_value
+                provenance["flex_before_break_pct"] = {
+                    "status": "available",
+                    "reason": "policy_calibrated_fallback",
+                    "policy_id": DECISION_INSURANCE_POLICY_ID,
+                    "fallback_pct": flex_value,
+                }
+        band = _resolve_flex_band(flex_value, flex_calibration)
+        if isinstance(band, str):
+            outputs["flex_before_break_band"] = band
+            if isinstance(provenance.get("flex_before_break_pct"), dict):
+                provenance["flex_before_break_pct"]["band"] = band
+                provenance["flex_before_break_pct"]["calibration_source"] = "decision_insurance_policy.flex_calibration"
 
     impact_by_tile: Dict[str, Optional[float]] = {}
     for entry in driver_impacts:
