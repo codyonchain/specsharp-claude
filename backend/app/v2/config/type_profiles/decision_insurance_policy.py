@@ -111,12 +111,12 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
             "label": "Structural Base Carry Proxy +5%",
         },
         "collapse_trigger": {
-            "metric": "value_gap",
+            "metric": "value_gap_pct",
             "operator": "<=",
-            "threshold": 0.0,
-            "scenario_priority": ["base", "conservative", "ugly", "structural_carry_proxy_stress"],
+            "threshold": 6.0,
+            "scenario_priority": ["base", "conservative", "structural_carry_proxy_stress", "ugly"],
         },
-        "flex_calibration": {"tight_max_pct": 2.5, "moderate_max_pct": 7.0, "fallback_pct": 5.0},
+        "flex_calibration": {"tight_max_pct": 2.0, "moderate_max_pct": 5.0, "fallback_pct": 3.5},
     },
     "multifamily_luxury_apartments_v1": {
         "primary_control_variable": {
@@ -127,10 +127,10 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "collapse_trigger": {
             "metric": "value_gap",
             "operator": "<=",
-            "threshold": 0.0,
+            "threshold": 250000.0,
             "scenario_priority": ["base", "conservative", "amenity_overrun", "amenity_system_stress"],
         },
-        "flex_calibration": {"tight_max_pct": 2.0, "moderate_max_pct": 5.5, "fallback_pct": 2.0},
+        "flex_calibration": {"tight_max_pct": 1.5, "moderate_max_pct": 4.5, "fallback_pct": 2.0},
     },
     "multifamily_affordable_housing_v1": {
         "primary_control_variable": {
@@ -139,12 +139,12 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
             "label": "Compliance Electrical +8%",
         },
         "collapse_trigger": {
-            "metric": "value_gap",
+            "metric": "value_gap_pct",
             "operator": "<=",
-            "threshold": 0.0,
+            "threshold": 8.0,
             "scenario_priority": ["base", "conservative", "compliance_delay", "funding_gap"],
         },
-        "flex_calibration": {"tight_max_pct": 2.5, "moderate_max_pct": 6.0, "fallback_pct": 4.0},
+        "flex_calibration": {"tight_max_pct": 2.0, "moderate_max_pct": 4.5, "fallback_pct": 3.0},
     },
     "industrial_warehouse_v1": {
         "primary_control_variable": {

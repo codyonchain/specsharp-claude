@@ -39,6 +39,27 @@ const CROSS_TYPE_POLICY_CASES = [
   },
 ] as const;
 
+const MULTIFAMILY_POLICY_CASES = [
+  {
+    subtype: "market_rate_apartments",
+    profileId: "multifamily_market_rate_apartments_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+  },
+  {
+    subtype: "luxury_apartments",
+    profileId: "multifamily_luxury_apartments_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+  },
+  {
+    subtype: "affordable_housing",
+    profileId: "multifamily_affordable_housing_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+  },
+] as const;
+
 const buildRestaurantProject = () =>
   ({
     id: "proj_restaurant_exec",
@@ -492,5 +513,58 @@ describe("ExecutiveViewComplete", () => {
     });
     expect(policyLineMatches.length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Scenario" })).toBeInTheDocument();
+  });
+
+  it("renders explicit multifamily canonical decision status/reason/provenance parity", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject(
+            "multifamily",
+            MULTIFAMILY_POLICY_CASES[0].subtype,
+            MULTIFAMILY_POLICY_CASES[0].profileId
+          )}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            MULTIFAMILY_POLICY_CASES[0].profileId,
+            MULTIFAMILY_POLICY_CASES[0].decisionStatus,
+            MULTIFAMILY_POLICY_CASES[0].decisionReasonCode
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    for (const testCase of MULTIFAMILY_POLICY_CASES) {
+      rerender(
+        <MemoryRouter>
+          <ExecutiveViewComplete
+            project={buildCrossTypeProject(
+              "multifamily",
+              testCase.subtype,
+              testCase.profileId
+            )}
+            dealShieldData={buildCrossTypeDealShieldViewModel(
+              testCase.profileId,
+              testCase.decisionStatus,
+              testCase.decisionReasonCode
+            ) as any}
+          />
+        </MemoryRouter>
+      );
+
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      const policyLineMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return (
+          text.includes("Policy source: dealshield_policy_v1") &&
+          text.includes("decision_insurance_subtype_policy_v1") &&
+          text.includes(`reason: ${testCase.decisionReasonCode}`)
+        );
+      });
+      expect(policyLineMatches.length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: "Scenario" })).toBeInTheDocument();
+    }
   });
 });

@@ -18,6 +18,57 @@ MULTIFAMILY_PROFILE_IDS = {
     "affordable_housing": "multifamily_affordable_housing_v1",
 }
 
+MULTIFAMILY_POLICY_EXPECTATIONS = {
+    "multifamily_market_rate_apartments_v1": {
+        "primary_tile_id": "structural_carry_proxy_plus_5",
+        "collapse_metric": "value_gap_pct",
+        "collapse_operator": "<=",
+        "collapse_threshold": 6.0,
+        "scenario_priority": ["base", "conservative", "structural_carry_proxy_stress", "ugly"],
+        "flex_calibration": {"tight_max_pct": 2.0, "moderate_max_pct": 5.0, "fallback_pct": 3.5},
+    },
+    "multifamily_luxury_apartments_v1": {
+        "primary_tile_id": "amenity_finish_plus_15",
+        "collapse_metric": "value_gap",
+        "collapse_operator": "<=",
+        "collapse_threshold": 250000.0,
+        "scenario_priority": ["base", "conservative", "amenity_overrun", "amenity_system_stress"],
+        "flex_calibration": {"tight_max_pct": 1.5, "moderate_max_pct": 4.5, "fallback_pct": 2.0},
+    },
+    "multifamily_affordable_housing_v1": {
+        "primary_tile_id": "compliance_electrical_plus_8",
+        "collapse_metric": "value_gap_pct",
+        "collapse_operator": "<=",
+        "collapse_threshold": 8.0,
+        "scenario_priority": ["base", "conservative", "compliance_delay", "funding_gap"],
+        "flex_calibration": {"tight_max_pct": 2.0, "moderate_max_pct": 4.5, "fallback_pct": 3.0},
+    },
+}
+
+
+def test_multifamily_policy_entries_are_explicit_and_subtype_specific():
+    assert set(MULTIFAMILY_POLICY_EXPECTATIONS.keys()) == set(MULTIFAMILY_PROFILE_IDS.values())
+    for profile_id, expected in MULTIFAMILY_POLICY_EXPECTATIONS.items():
+        assert profile_id in DECISION_INSURANCE_POLICY_BY_PROFILE_ID
+        policy_cfg = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+
+        primary_control = policy_cfg.get("primary_control_variable")
+        assert isinstance(primary_control, dict)
+        assert primary_control.get("tile_id") == expected["primary_tile_id"]
+        assert isinstance(primary_control.get("metric_ref"), str) and primary_control.get("metric_ref").strip()
+        assert isinstance(primary_control.get("label"), str) and primary_control.get("label").strip()
+
+        collapse_trigger = policy_cfg.get("collapse_trigger")
+        assert isinstance(collapse_trigger, dict)
+        assert collapse_trigger.get("metric") == expected["collapse_metric"]
+        assert collapse_trigger.get("operator") == expected["collapse_operator"]
+        assert collapse_trigger.get("threshold") == expected["collapse_threshold"]
+        assert collapse_trigger.get("scenario_priority") == expected["scenario_priority"]
+
+        flex_calibration = policy_cfg.get("flex_calibration")
+        assert flex_calibration == expected["flex_calibration"]
+        assert set(flex_calibration.keys()) == {"tight_max_pct", "moderate_max_pct", "fallback_pct"}
+
 
 def _tile_map(profile_id: str):
     profile = get_dealshield_profile(profile_id)
@@ -338,22 +389,30 @@ def test_multifamily_decision_insurance_outputs_and_provenance():
         assert di_provenance.get("profile_id") == expected_profile_id
         assert expected_profile_id in DECISION_INSURANCE_POLICY_BY_PROFILE_ID
         policy_cfg = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[expected_profile_id]
+        expected_policy = MULTIFAMILY_POLICY_EXPECTATIONS[expected_profile_id]
+        collapse_cfg = policy_cfg["collapse_trigger"]
 
         primary_control = view_model.get("primary_control_variable")
         assert isinstance(primary_control, dict)
         assert primary_control.get("tile_id") == policy_cfg["primary_control_variable"]["tile_id"]
+        assert primary_control.get("tile_id") == expected_policy["primary_tile_id"]
 
         first_break_block = di_provenance.get("first_break_condition")
         assert isinstance(first_break_block, dict)
         if first_break_block.get("status") == "available":
             if first_break_block.get("source") == "decision_insurance_policy.collapse_trigger":
-                collapse_cfg = policy_cfg["collapse_trigger"]
-                expected_operator = collapse_cfg.get("operator") if isinstance(collapse_cfg.get("operator"), str) and collapse_cfg.get("operator").strip() else "<="
+                configured_operator = collapse_cfg.get("operator")
+                expected_operator = (
+                    configured_operator.strip()
+                    if isinstance(configured_operator, str) and configured_operator.strip()
+                    else "<="
+                )
                 first_break = view_model.get("first_break_condition")
                 assert isinstance(first_break, dict)
                 assert first_break.get("break_metric") == collapse_cfg.get("metric")
                 assert first_break.get("operator") == expected_operator
                 assert first_break.get("threshold") == collapse_cfg.get("threshold")
+                assert isinstance(first_break.get("observed_value"), (int, float))
         else:
             assert first_break_block.get("reason") != "no_modeled_break_condition"
 
@@ -362,6 +421,7 @@ def test_multifamily_decision_insurance_outputs_and_provenance():
         assert flex_block.get("status") == "available"
         assert view_model.get("flex_before_break_band") in {"tight", "moderate", "comfortable"}
         assert flex_block.get("band") in {"tight", "moderate", "comfortable"}
+        assert view_model.get("flex_before_break_band") == flex_block.get("band")
 
         model_provenance = view_model.get("provenance")
         assert isinstance(model_provenance, dict)
@@ -408,11 +468,17 @@ def test_multifamily_decision_insurance_outputs_and_provenance():
         first_break = view_model.get("first_break_condition")
         if first_break is not None:
             assert isinstance(first_break, dict)
-            assert first_break.get("break_metric") == "value_gap"
-            assert first_break.get("operator") == "<="
-            assert first_break.get("threshold") == 0.0
+            if first_break_block.get("source") == "decision_insurance_policy.collapse_trigger":
+                expected_operator = collapse_cfg.get("operator")
+                expected_operator = (
+                    expected_operator.strip()
+                    if isinstance(expected_operator, str) and expected_operator.strip()
+                    else "<="
+                )
+                assert first_break.get("break_metric") == expected_policy["collapse_metric"]
+                assert first_break.get("operator") == expected_operator
+                assert first_break.get("threshold") == expected_policy["collapse_threshold"]
             assert isinstance(first_break.get("observed_value"), (int, float))
-            assert first_break["observed_value"] <= 0
 
         flex_before_break = view_model.get("flex_before_break_pct")
         if flex_before_break is not None:

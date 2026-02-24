@@ -551,9 +551,14 @@ export const DealShieldView: React.FC<Props> = ({
     typeof firstBreakMetricRaw === 'string' && firstBreakMetricRaw.trim()
       ? firstBreakMetricRaw.trim().toLowerCase()
       : 'value_gap';
+  const firstBreakOperator =
+    typeof firstBreakCondition?.operator === 'string' ? firstBreakCondition.operator.trim() : '';
+  const firstBreakThresholdNumeric = toFiniteNumber(firstBreakCondition?.threshold);
   const firstBreakSummaryText =
     firstBreakMetric === 'value_gap'
-      ? `Break occurs in ${firstBreakScenarioLabel}: value gap turns negative.`
+      ? firstBreakOperator === '<=' && firstBreakThresholdNumeric !== null && Math.abs(firstBreakThresholdNumeric) < 1e-9
+        ? `Break occurs in ${firstBreakScenarioLabel}: value gap turns negative.`
+        : `Break occurs in ${firstBreakScenarioLabel}: value gap crosses threshold.`
       : firstBreakMetric === 'value_gap_pct'
         ? `Break occurs in ${firstBreakScenarioLabel}: value-gap percentage crosses threshold.`
         : `Break occurs in ${firstBreakScenarioLabel}: ${firstBreakMetricRaw} crosses threshold.`;
