@@ -108,11 +108,194 @@ const SPECIALTY_POLICY_CONTRACT_CASES = [
   },
 ] as const;
 
-const SPECIALTY_DECISION_REASON_TEXT: Record<string, string> = {
+const DECISION_REASON_TEXT: Record<string, string> = {
   low_flex_before_break_buffer: "Status reflects low flex-before-break buffer.",
   tight_flex_band: "Status reflects a tight flex-before-break band.",
   base_value_gap_positive: "Base value gap is positive under current assumptions.",
 };
+
+const HEALTHCARE_POLICY_CONTRACT_CASES = [
+  {
+    subtype: "surgical_center",
+    profileId: "healthcare_surgical_center_v1",
+    scopeProfileId: "healthcare_surgical_center_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel: "OR Sterile Core + Infection Control +11%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 9.0,
+    observedValue: 7.8,
+    flexBeforeBreakPct: 1.7,
+    expectedFlexLabel: "1.70% (Structurally Tight)",
+    baseDscr: 1.34,
+    stressedDscr: 1.12,
+  },
+  {
+    subtype: "imaging_center",
+    profileId: "healthcare_imaging_center_v1",
+    scopeProfileId: "healthcare_imaging_center_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+    primaryControlLabel: "Shielding + Magnet Quench Infrastructure +10%",
+    breakScenarioLabel: "Ugly",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: 0.0,
+    observedValue: -185000,
+    flexBeforeBreakPct: 1.9,
+    expectedFlexLabel: "1.90% (Structurally Tight)",
+    baseDscr: 1.29,
+    stressedDscr: 1.03,
+  },
+  {
+    subtype: "urgent_care",
+    profileId: "healthcare_urgent_care_v1",
+    scopeProfileId: "healthcare_urgent_care_structural_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+    primaryControlLabel: "Rapid Turn Rooms + Front-End Throughput +8%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 5.5,
+    observedValue: 8.6,
+    flexBeforeBreakPct: 5.4,
+    expectedFlexLabel: "5.40% (Flexible)",
+    baseDscr: 1.52,
+    stressedDscr: 1.31,
+  },
+  {
+    subtype: "outpatient_clinic",
+    profileId: "healthcare_outpatient_clinic_v1",
+    scopeProfileId: "healthcare_outpatient_clinic_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel: "Clinic Pods + MEP Coordination +9%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 7.0,
+    observedValue: 6.2,
+    flexBeforeBreakPct: 1.8,
+    expectedFlexLabel: "1.80% (Structurally Tight)",
+    baseDscr: 1.36,
+    stressedDscr: 1.13,
+  },
+  {
+    subtype: "medical_office_building",
+    profileId: "healthcare_medical_office_building_v1",
+    scopeProfileId: "healthcare_medical_office_building_structural_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+    primaryControlLabel: "Tenant Improvement Velocity +8%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: 25000.0,
+    observedValue: 91000,
+    flexBeforeBreakPct: 4.6,
+    expectedFlexLabel: "4.60% (Moderate)",
+    baseDscr: 1.47,
+    stressedDscr: 1.24,
+  },
+  {
+    subtype: "dental_office",
+    profileId: "healthcare_dental_office_v1",
+    scopeProfileId: "healthcare_dental_office_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+    primaryControlLabel: "Plumbing Med-Gas Coordination +9%",
+    breakScenarioLabel: "Ugly",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: 0.0,
+    observedValue: -42000,
+    flexBeforeBreakPct: 1.6,
+    expectedFlexLabel: "1.60% (Structurally Tight)",
+    baseDscr: 1.33,
+    stressedDscr: 1.07,
+  },
+  {
+    subtype: "hospital",
+    profileId: "healthcare_hospital_v1",
+    scopeProfileId: "healthcare_hospital_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel: "Critical Care MEP + Vertical Transport +12%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 12.0,
+    observedValue: 10.5,
+    flexBeforeBreakPct: 1.5,
+    expectedFlexLabel: "1.50% (Structurally Tight)",
+    baseDscr: 1.31,
+    stressedDscr: 1.08,
+  },
+  {
+    subtype: "medical_center",
+    profileId: "healthcare_medical_center_v1",
+    scopeProfileId: "healthcare_medical_center_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel: "Diagnostic + Procedure Core +10%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 8.5,
+    observedValue: 7.1,
+    flexBeforeBreakPct: 1.9,
+    expectedFlexLabel: "1.90% (Structurally Tight)",
+    baseDscr: 1.35,
+    stressedDscr: 1.11,
+  },
+  {
+    subtype: "nursing_home",
+    profileId: "healthcare_nursing_home_v1",
+    scopeProfileId: "healthcare_nursing_home_structural_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+    primaryControlLabel: "Resident Care Pods + Nurse Call Stack +7%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: 0.0,
+    observedValue: 125000,
+    flexBeforeBreakPct: 5.1,
+    expectedFlexLabel: "5.10% (Flexible)",
+    baseDscr: 1.49,
+    stressedDscr: 1.27,
+  },
+  {
+    subtype: "rehabilitation",
+    profileId: "healthcare_rehabilitation_v1",
+    scopeProfileId: "healthcare_rehabilitation_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+    primaryControlLabel: "Therapy Gym + Hydro Systems +9%",
+    breakScenarioLabel: "Ugly",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: 50000.0,
+    observedValue: 28000,
+    flexBeforeBreakPct: 3.2,
+    expectedFlexLabel: "3.20% (Moderate)",
+    baseDscr: 1.32,
+    stressedDscr: 1.1,
+  },
+] as const;
 
 const POLICY_CONTRACT_CASES = [
   {
@@ -1384,7 +1567,92 @@ describe("DealShieldView", () => {
       expect(
         screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
       ).toBeInTheDocument();
-      expect(screen.getByText(SPECIALTY_DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
+      expect(screen.getByText(DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
+      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
+      expect(screen.getByText(testCase.baseDscr.toFixed(2))).toBeInTheDocument();
+      expect(
+        screen.getByText("DSCR and Yield reflect the underwriting/debt terms in this run — see Provenance.")
+      ).toBeInTheDocument();
+
+      if (testCase.breakMetric === "value_gap_pct") {
+        expect(
+          screen.getByText(
+            `Break occurs in ${testCase.breakScenarioLabel}: value-gap percentage crosses threshold.`
+          )
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("%") && !text.includes("$");
+          })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return (
+              text.includes("Threshold:") &&
+              text.includes(testCase.breakOperator) &&
+              text.includes("%") &&
+              !text.includes("$")
+            );
+          })
+        ).toBeInTheDocument();
+      } else {
+        const expectedSummary =
+          testCase.threshold === 0
+            ? `Break occurs in ${testCase.breakScenarioLabel}: value gap turns negative.`
+            : `Break occurs in ${testCase.breakScenarioLabel}: value gap crosses threshold.`;
+        expect(screen.getByText(expectedSummary)).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("$");
+          })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return (
+              text.includes("Threshold:") &&
+              text.includes(testCase.breakOperator) &&
+              text.includes("$")
+            );
+          })
+        ).toBeInTheDocument();
+      }
+    }
+  });
+
+  it("renders explicit healthcare parity with canonical status/reason, metric-aware first-break units, and DSCR visibility for all ten subtypes", () => {
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_healthcare_policy_contract_0"
+        data={buildSpecialtyPolicyPayload(HEALTHCARE_POLICY_CONTRACT_CASES[0] as any) as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    for (const testCase of HEALTHCARE_POLICY_CONTRACT_CASES) {
+      rerender(
+        <DealShieldView
+          projectId={`proj_${testCase.profileId}`}
+          data={buildSpecialtyPolicyPayload(testCase as any) as any}
+          loading={false}
+          error={null}
+        />
+      );
+
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      expect(screen.getByText(DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
       expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
       expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
       expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();

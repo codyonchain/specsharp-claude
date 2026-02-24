@@ -93,6 +93,69 @@ const MULTIFAMILY_POLICY_CASES = [
   },
 ] as const;
 
+const HEALTHCARE_POLICY_CASES = [
+  {
+    subtype: "surgical_center",
+    profileId: "healthcare_surgical_center_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+  },
+  {
+    subtype: "imaging_center",
+    profileId: "healthcare_imaging_center_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+  },
+  {
+    subtype: "urgent_care",
+    profileId: "healthcare_urgent_care_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+  },
+  {
+    subtype: "outpatient_clinic",
+    profileId: "healthcare_outpatient_clinic_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+  },
+  {
+    subtype: "medical_office_building",
+    profileId: "healthcare_medical_office_building_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+  },
+  {
+    subtype: "dental_office",
+    profileId: "healthcare_dental_office_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+  },
+  {
+    subtype: "hospital",
+    profileId: "healthcare_hospital_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+  },
+  {
+    subtype: "medical_center",
+    profileId: "healthcare_medical_center_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+  },
+  {
+    subtype: "nursing_home",
+    profileId: "healthcare_nursing_home_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+  },
+  {
+    subtype: "rehabilitation",
+    profileId: "healthcare_rehabilitation_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+  },
+] as const;
+
 const buildRestaurantProject = () =>
   ({
     id: "proj_restaurant_exec",
@@ -625,6 +688,59 @@ describe("ExecutiveViewComplete", () => {
           <ExecutiveViewComplete
             project={buildCrossTypeProject(
               "specialty",
+              testCase.subtype,
+              testCase.profileId
+            )}
+            dealShieldData={buildCrossTypeDealShieldViewModel(
+              testCase.profileId,
+              testCase.decisionStatus,
+              testCase.decisionReasonCode
+            ) as any}
+          />
+        </MemoryRouter>
+      );
+
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      const policyLineMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return (
+          text.includes("Policy source: dealshield_policy_v1") &&
+          text.includes("decision_insurance_subtype_policy_v1") &&
+          text.includes(`reason: ${testCase.decisionReasonCode}`)
+        );
+      });
+      expect(policyLineMatches.length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: "Scenario" })).toBeInTheDocument();
+    }
+  });
+
+  it("keeps canonical decision status/reason/provenance parity for all healthcare subtypes, including medical_office_building", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject(
+            "healthcare",
+            HEALTHCARE_POLICY_CASES[0].subtype,
+            HEALTHCARE_POLICY_CASES[0].profileId
+          )}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            HEALTHCARE_POLICY_CASES[0].profileId,
+            HEALTHCARE_POLICY_CASES[0].decisionStatus,
+            HEALTHCARE_POLICY_CASES[0].decisionReasonCode
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    for (const testCase of HEALTHCARE_POLICY_CASES) {
+      rerender(
+        <MemoryRouter>
+          <ExecutiveViewComplete
+            project={buildCrossTypeProject(
+              "healthcare",
               testCase.subtype,
               testCase.profileId
             )}

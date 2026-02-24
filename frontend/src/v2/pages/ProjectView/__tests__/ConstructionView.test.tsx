@@ -95,6 +95,59 @@ const MULTIFAMILY_SCHEDULE_CASES = [
   { subtype: "affordable_housing" },
 ] as const;
 
+const HEALTHCARE_SCHEDULE_CASES = [
+  {
+    subtype: "surgical_center",
+    sitePhaseLabel: "OR Sterile-Core Prep + Foundations",
+    structuralPhaseLabel: "Procedure Suite Build + Commissioning",
+  },
+  {
+    subtype: "imaging_center",
+    sitePhaseLabel: "Shielding + Magnet Slab Prep",
+    structuralPhaseLabel: "MRI/CT Suite Build + Integration",
+  },
+  {
+    subtype: "urgent_care",
+    sitePhaseLabel: "Fast-Track Utility Tie-Ins",
+    structuralPhaseLabel: "Exam Pod Build + Throughput Systems",
+  },
+  {
+    subtype: "outpatient_clinic",
+    sitePhaseLabel: "Clinic Utility Grid + Foundations",
+    structuralPhaseLabel: "Exam Pod Build + Nurse Core",
+  },
+  {
+    subtype: "medical_office_building",
+    sitePhaseLabel: "Tenant Utility Backbone + Podium",
+    structuralPhaseLabel: "Shell + Vertical Core Build",
+  },
+  {
+    subtype: "dental_office",
+    sitePhaseLabel: "Chair Utility Trenching + Foundations",
+    structuralPhaseLabel: "Operatory Build + Sterilization Core",
+  },
+  {
+    subtype: "hospital",
+    sitePhaseLabel: "Campus Utility Spine + Foundations",
+    structuralPhaseLabel: "Critical Care Tower + MEP Plant",
+  },
+  {
+    subtype: "medical_center",
+    sitePhaseLabel: "Diagnostic Utility Grid + Foundations",
+    structuralPhaseLabel: "Procedure Core + Ambulatory Fit-Out",
+  },
+  {
+    subtype: "nursing_home",
+    sitePhaseLabel: "Resident Wing Foundations + Utilities",
+    structuralPhaseLabel: "Resident Pods + Life-Safety Build",
+  },
+  {
+    subtype: "rehabilitation",
+    sitePhaseLabel: "Therapy Utility Prep + Foundations",
+    structuralPhaseLabel: "Rehab Gym + Hydro Suite Build",
+  },
+] as const;
+
 const buildRestaurantProject = (scheduleSource: "subtype" | "building_type") =>
   ({
     id: "proj_restaurant_construction",
@@ -552,6 +605,61 @@ const buildSpecialtyScheduleProject = (
   return project;
 };
 
+const buildHealthcareScheduleProject = (
+  subtype: (typeof HEALTHCARE_SCHEDULE_CASES)[number]["subtype"],
+  scheduleSource: "subtype" | "building_type"
+) => {
+  const fixture = HEALTHCARE_SCHEDULE_CASES.find((item) => item.subtype === subtype)!;
+  const project = buildCrossTypeScheduleProject("healthcare", subtype, scheduleSource);
+  project.analysis.calculations.construction_schedule.total_months =
+    scheduleSource === "subtype"
+      ? subtype === "hospital"
+        ? 34
+        : subtype === "medical_center"
+          ? 30
+          : subtype === "nursing_home"
+            ? 22
+            : subtype === "medical_office_building"
+              ? 24
+              : 18
+      : 20;
+  project.analysis.calculations.construction_schedule.phases =
+    scheduleSource === "subtype"
+      ? [
+          {
+            id: "site_foundation",
+            label: fixture.sitePhaseLabel,
+            start_month: 0,
+            duration_months: 6,
+            end_month: 6,
+          },
+          {
+            id: "structural",
+            label: fixture.structuralPhaseLabel,
+            start_month: 4,
+            duration_months: 12,
+            end_month: 16,
+          },
+        ]
+      : [
+          {
+            id: "site_foundation",
+            label: "Healthcare Baseline Site Program",
+            start_month: 0,
+            duration_months: 5,
+            end_month: 5,
+          },
+          {
+            id: "structural",
+            label: "Healthcare Baseline Structural Program",
+            start_month: 3,
+            duration_months: 10,
+            end_month: 13,
+          },
+        ];
+  return project;
+};
+
 describe("ConstructionView", () => {
   it("renders subtype schedule messaging for restaurant subtype schedules", () => {
     render(<ConstructionView project={buildRestaurantProject("subtype")} />);
@@ -775,6 +883,113 @@ describe("ConstructionView", () => {
       expect(screen.getAllByText("Specialty Baseline Site Program").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Specialty Baseline Structural Program").length).toBeGreaterThan(0);
     }
+  });
+
+  it("renders explicit healthcare schedule-source provenance parity for all ten subtypes, including medical_office_building", () => {
+    const { rerender } = render(
+      <ConstructionView
+        project={buildHealthcareScheduleProject(HEALTHCARE_SCHEDULE_CASES[0].subtype, "subtype")}
+      />
+    );
+
+    for (const testCase of HEALTHCARE_SCHEDULE_CASES) {
+      rerender(
+        <ConstructionView
+          project={buildHealthcareScheduleProject(testCase.subtype, "subtype")}
+        />
+      );
+      expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
+      expect(
+        screen.getByText("Timeline is tailored for this subtype profile.")
+      ).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.sitePhaseLabel).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(testCase.structuralPhaseLabel).length).toBeGreaterThan(0);
+
+      rerender(
+        <ConstructionView
+          project={buildHealthcareScheduleProject(testCase.subtype, "building_type")}
+        />
+      );
+      expect(screen.getByText("Building-type baseline")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Timeline uses building-type baseline (subtype override unavailable)."
+        )
+      ).toBeInTheDocument();
+      expect(screen.getAllByText("Healthcare Baseline Site Program").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Healthcare Baseline Structural Program").length).toBeGreaterThan(0);
+    }
+  });
+
+  it("renders healthcare dominant-trade scope depth and truthful special-feature breakdown", () => {
+    const project = buildHealthcareScheduleProject("hospital", "subtype");
+    project.analysis.calculations.trade_breakdown = {
+      structural: 4200000,
+      mechanical: 6400000,
+      electrical: 5900000,
+      plumbing: 3100000,
+      finishes: 2800000,
+    };
+    project.analysis.calculations.scope_items = [
+      {
+        trade: "mechanical",
+        systems: [
+          { name: "Air-Handling Units + Filtration", quantity: 180000, unit: "SF", unit_cost: 34, total_cost: 6120000 },
+          { name: "Chilled Water Distribution", quantity: 180000, unit: "SF", unit_cost: 26, total_cost: 4680000 },
+          { name: "Medical Exhaust + Isolation Controls", quantity: 180000, unit: "SF", unit_cost: 23, total_cost: 4140000 },
+        ],
+      },
+      {
+        trade: "electrical",
+        systems: [
+          { name: "Redundant Switchgear + UPS", quantity: 180000, unit: "SF", unit_cost: 29, total_cost: 5220000 },
+          { name: "Nurse Call + Low Voltage Backbone", quantity: 180000, unit: "SF", unit_cost: 18, total_cost: 3240000 },
+          { name: "Essential Power Branch Circuits", quantity: 180000, unit: "SF", unit_cost: 16, total_cost: 2880000 },
+        ],
+      },
+    ];
+    project.analysis.calculations.construction_costs.special_features_total = 900000;
+    project.analysis.calculations.construction_costs.special_features_breakdown = [
+      {
+        id: "negative_pressure_isolation",
+        label: "Negative Pressure Isolation Rooms",
+        cost_per_sf: 2.5,
+        total_cost: 450000,
+      },
+      {
+        id: "nurse_call_system_upgrade",
+        label: "Advanced Nurse Call System",
+        cost_per_sf: 2.5,
+        total_cost: 450000,
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+
+    expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
+    expect(screen.getByText("Special Features")).toBeInTheDocument();
+    expect(screen.getByText("Negative Pressure Isolation Rooms")).toBeInTheDocument();
+    expect(screen.getByText("Advanced Nurse Call System")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Per-feature breakdown is unavailable for this project version; showing aggregate total only.")
+    ).not.toBeInTheDocument();
+
+    const openTradeCard = (tradeName: string) => {
+      const tradeHeading = screen.getByText(tradeName, { selector: "h4" });
+      const tradeCard = tradeHeading.closest('[role="button"]');
+      expect(tradeCard).not.toBeNull();
+      fireEvent.click(tradeCard as HTMLElement);
+    };
+
+    openTradeCard("Mechanical");
+    expect(screen.getByText("3 systems")).toBeInTheDocument();
+    expect(screen.getByText("Air-Handling Units + Filtration")).toBeInTheDocument();
+    expect(screen.getByText("Medical Exhaust + Isolation Controls")).toBeInTheDocument();
+
+    openTradeCard("Electrical");
+    expect(screen.getByText("3 systems")).toBeInTheDocument();
+    expect(screen.getByText("Redundant Switchgear + UPS")).toBeInTheDocument();
+    expect(screen.getByText("Nurse Call + Low Voltage Backbone")).toBeInTheDocument();
   });
 
   it("renders expanded data-center scope detail for dominant mechanical and electrical trades", () => {
