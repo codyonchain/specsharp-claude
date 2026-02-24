@@ -137,6 +137,96 @@ export const SPECIALTY_FEATURE_COSTS_BY_SUBTYPE: Record<
   },
 };
 
+export const HEALTHCARE_SUBTYPES = [
+  "surgical_center",
+  "imaging_center",
+  "urgent_care",
+  "outpatient_clinic",
+  "medical_office_building",
+  "dental_office",
+  "hospital",
+  "medical_center",
+  "nursing_home",
+  "rehabilitation",
+] as const;
+
+export type HealthcareSubtype = (typeof HEALTHCARE_SUBTYPES)[number];
+
+export const HEALTHCARE_FEATURE_COSTS_BY_SUBTYPE: Record<
+  HealthcareSubtype,
+  Record<string, number>
+> = {
+  surgical_center: {
+    hc_asc_expanded_pacu: 115,
+    hc_asc_sterile_core_upgrade: 95,
+    hc_asc_pain_management_suite: 85,
+    hc_asc_hybrid_or_cath_lab: 165,
+  },
+  imaging_center: {
+    hc_imaging_second_mri: 145,
+    hc_imaging_pet_ct_suite: 170,
+    hc_imaging_interventional_rad: 155,
+    imaging: 130,
+  },
+  urgent_care: {
+    hc_urgent_on_site_lab: 38,
+    hc_urgent_imaging_suite: 62,
+    hc_urgent_observation_bays: 28,
+    lab: 30,
+  },
+  outpatient_clinic: {
+    hc_outpatient_on_site_lab: 32,
+    hc_outpatient_imaging_pod: 55,
+    hc_outpatient_behavioral_suite: 24,
+    lab: 26,
+  },
+  medical_office_building: {
+    mob_imaging_ready_shell: 24,
+    mob_enhanced_mep: 18,
+    mob_procedure_suite: 22,
+    mob_pharmacy_shell: 12,
+    mob_covered_dropoff: 9,
+  },
+  dental_office: {
+    hc_dental_pano_ceph: 28,
+    hc_dental_sedation_suite: 34,
+    hc_dental_sterilization_upgrade: 16,
+    hc_dental_ortho_bay_expansion: 20,
+  },
+  hospital: {
+    emergency: 120,
+    imaging: 95,
+    surgery: 110,
+    icu: 105,
+    lab: 52,
+    hospital_central_plant_redundancy: 68,
+    hospital_pharmacy_cleanroom: 36,
+  },
+  medical_center: {
+    emergency: 102,
+    imaging: 88,
+    surgery: 98,
+    icu: 92,
+    lab: 46,
+    medical_center_infusion_suite: 41,
+    medical_center_ambulatory_tower_fitout: 54,
+  },
+  nursing_home: {
+    nursing_memory_care_wing: 34,
+    nursing_rehab_gym: 22,
+    nursing_nurse_call_upgrade: 16,
+    nursing_wander_management_system: 14,
+    nursing_dining_household_model: 19,
+  },
+  rehabilitation: {
+    rehab_hydrotherapy_pool: 37,
+    rehab_gait_training_lab: 24,
+    rehab_adl_apartment: 18,
+    rehab_therapy_gym_expansion: 26,
+    rehab_speech_neuro_suite: 17,
+  },
+};
+
 const RESTAURANT_FEATURE_METADATA: Record<
   string,
   { name: string; description: string }
@@ -367,6 +457,176 @@ const SPECIALTY_FEATURE_METADATA: Record<
   },
 };
 
+const HEALTHCARE_FEATURE_METADATA: Record<
+  string,
+  { name: string; description: string }
+> = {
+  emergency: {
+    name: "Emergency Department",
+    description: "Acute-care emergency program with trauma-ready rooms and support infrastructure.",
+  },
+  imaging: {
+    name: "Imaging Center",
+    description: "Cross-modality imaging suite buildout with shielding, controls, and support spaces.",
+  },
+  surgery: {
+    name: "Surgery Center",
+    description: "Procedural and operating suite program with sterile flow and recovery support.",
+  },
+  icu: {
+    name: "ICU Unit",
+    description: "Critical-care unit expansion with high-acuity monitoring and redundant systems.",
+  },
+  lab: {
+    name: "Laboratory",
+    description: "Clinical lab infrastructure including specimen flow, utilities, and support spaces.",
+  },
+  hc_outpatient_on_site_lab: {
+    name: "On-Site Lab",
+    description: "In-clinic diagnostics lab for outpatient workflows and faster turnaround.",
+  },
+  hc_outpatient_imaging_pod: {
+    name: "Imaging Pod (X-ray/Ultrasound)",
+    description: "Targeted outpatient imaging pod with shielding, controls, and patient prep areas.",
+  },
+  hc_outpatient_behavioral_suite: {
+    name: "Behavioral Health Suite",
+    description: "Dedicated behavioral-health rooms with privacy, safety, and acoustic enhancements.",
+  },
+  hc_urgent_on_site_lab: {
+    name: "Urgent Care Lab",
+    description: "Rapid-test urgent-care lab buildout for same-visit diagnostics and throughput.",
+  },
+  hc_urgent_imaging_suite: {
+    name: "Urgent Care Imaging Suite",
+    description: "Urgent-care imaging program with X-ray/CT readiness and shielding support.",
+  },
+  hc_urgent_observation_bays: {
+    name: "Observation Bays",
+    description: "Short-stay observation bays with nurse visibility and monitoring infrastructure.",
+  },
+  hc_imaging_second_mri: {
+    name: "Second MRI Room",
+    description: "Additional MRI suite with magnet support, controls, and patient safety zoning.",
+  },
+  hc_imaging_pet_ct_suite: {
+    name: "PET/CT Suite",
+    description: "PET/CT suite with hot-lab adjacency and radiation-compliant support zones.",
+  },
+  hc_imaging_interventional_rad: {
+    name: "Interventional Radiology Room",
+    description: "Interventional imaging room with procedural support and equipment integration.",
+  },
+  hc_asc_expanded_pacu: {
+    name: "Expanded PACU",
+    description: "Post-anesthesia care expansion to handle higher outpatient procedure throughput.",
+  },
+  hc_asc_sterile_core_upgrade: {
+    name: "Sterile Core Upgrade",
+    description: "Sterile-core optimization for instrument flow, storage, and infection control.",
+  },
+  hc_asc_pain_management_suite: {
+    name: "Pain Management Suite",
+    description: "Specialized outpatient procedure suite for pain-management service lines.",
+  },
+  hc_asc_hybrid_or_cath_lab: {
+    name: "Hybrid OR / Cath Lab",
+    description: "Hybrid procedural room with imaging integration and advanced support systems.",
+  },
+  mob_imaging_ready_shell: {
+    name: "Imaging-Ready Shell",
+    description: "MOB shell upgrades for future imaging tenants, vibration control, and utilities.",
+  },
+  mob_enhanced_mep: {
+    name: "Enhanced MEP Capacity",
+    description: "Expanded MEP backbone and riser capacity for higher-acuity tenant programs.",
+  },
+  mob_procedure_suite: {
+    name: "Procedure Suite Buildout",
+    description: "Procedure-suite fitout for specialist tenants requiring Class B/C room programs.",
+  },
+  mob_pharmacy_shell: {
+    name: "Pharmacy / Retail Shell",
+    description: "Ground-floor shell package for pharmacy and ambulatory-support retail tenancy.",
+  },
+  mob_covered_dropoff: {
+    name: "Covered Drop-Off Canopy",
+    description: "Patient drop-off canopy with circulation, lighting, and accessibility upgrades.",
+  },
+  hc_dental_pano_ceph: {
+    name: "Panoramic X-ray / Ceph Suite",
+    description: "Dental imaging room with shielding and workflow-ready equipment support.",
+  },
+  hc_dental_sedation_suite: {
+    name: "Sedation / Surgery Suite",
+    description: "Sedation-capable dental operatory with med-gas, monitoring, and safety upgrades.",
+  },
+  hc_dental_sterilization_upgrade: {
+    name: "Central Sterilization Upgrade",
+    description: "Expanded dental sterilization core with clean/dirty zoning and autoclave capacity.",
+  },
+  hc_dental_ortho_bay_expansion: {
+    name: "Orthodontic Bay Expansion",
+    description: "Open-bay ortho expansion with added chairs, suction, and clinical infrastructure.",
+  },
+  hospital_central_plant_redundancy: {
+    name: "Central Plant Redundancy",
+    description: "Hospital central-plant redundancy upgrades for critical-care operational resilience.",
+  },
+  hospital_pharmacy_cleanroom: {
+    name: "Pharmacy Cleanroom",
+    description: "USP-compliant pharmacy cleanroom suite for sterile compounding operations.",
+  },
+  medical_center_infusion_suite: {
+    name: "Infusion Suite",
+    description: "Outpatient infusion program with dedicated treatment bays and support spaces.",
+  },
+  medical_center_ambulatory_tower_fitout: {
+    name: "Ambulatory Tower Fitout",
+    description: "Vertical ambulatory-care fitout program for multi-specialty medical-center growth.",
+  },
+  nursing_memory_care_wing: {
+    name: "Memory Care Wing",
+    description: "Secured memory-care neighborhood with dementia-oriented layout and support zones.",
+  },
+  nursing_rehab_gym: {
+    name: "Skilled Nursing Rehab Gym",
+    description: "SNF-focused rehab gym expansion with therapy equipment and care-team support.",
+  },
+  nursing_nurse_call_upgrade: {
+    name: "Nurse Call Upgrade",
+    description: "Enhanced nurse-call and resident monitoring infrastructure for response reliability.",
+  },
+  nursing_wander_management_system: {
+    name: "Wander Management System",
+    description: "Resident wander-management controls with secured access and monitoring integration.",
+  },
+  nursing_dining_household_model: {
+    name: "Household Dining Conversion",
+    description: "Small-house dining model conversion with decentralized serving and support areas.",
+  },
+  rehab_hydrotherapy_pool: {
+    name: "Hydrotherapy Pool",
+    description: "Hydrotherapy pool program with patient lifts, controls, and safety infrastructure.",
+  },
+  rehab_gait_training_lab: {
+    name: "Gait Training Lab",
+    description: "Technology-enabled gait training and balance lab with monitoring systems.",
+  },
+  rehab_adl_apartment: {
+    name: "ADL Training Apartment",
+    description: "Activities-of-daily-living training apartment for real-world rehab progression.",
+  },
+  rehab_therapy_gym_expansion: {
+    name: "Therapy Gym Expansion",
+    description: "Expanded PT/OT therapy gym with equipment zones and care-team visibility.",
+  },
+  rehab_speech_neuro_suite: {
+    name: "Speech + Neuro Therapy Suite",
+    description: "Dedicated speech and neuro-rehab treatment suite with specialized support rooms.",
+  },
+};
+
 export const filterSpecialFeaturesBySubtype = (
   features: SpecialFeatureOption[],
   subtype?: string
@@ -507,6 +767,48 @@ export const SPECIALTY_SPECIAL_FEATURES = createSpecialtySpecialFeatures();
 
 export const getSpecialtySpecialFeatures = (): SpecialFeatureOption[] =>
   SPECIALTY_SPECIAL_FEATURES;
+
+const createHealthcareSpecialFeatures = (): SpecialFeatureOption[] => {
+  const byFeatureId: Record<
+    string,
+    { costPerSFBySubtype: Record<string, number>; allowedSubtypes: string[] }
+  > = {};
+
+  for (const subtype of HEALTHCARE_SUBTYPES) {
+    const entries = HEALTHCARE_FEATURE_COSTS_BY_SUBTYPE[subtype];
+    for (const [featureId, costPerSF] of Object.entries(entries)) {
+      if (!byFeatureId[featureId]) {
+        byFeatureId[featureId] = {
+          costPerSFBySubtype: {},
+          allowedSubtypes: [],
+        };
+      }
+      byFeatureId[featureId].costPerSFBySubtype[subtype] = costPerSF;
+      byFeatureId[featureId].allowedSubtypes.push(subtype);
+    }
+  }
+
+  return Object.entries(byFeatureId)
+    .sort(([featureA], [featureB]) => featureA.localeCompare(featureB))
+    .map(([featureId, featureData]) => {
+      const metadata = HEALTHCARE_FEATURE_METADATA[featureId];
+      return {
+        id: featureId,
+        name: metadata?.name ?? featureId.replace(/_/g, " "),
+        description:
+          metadata?.description ?? "Healthcare subtype specific special feature.",
+        costPerSFBySubtype: featureData.costPerSFBySubtype,
+        allowedSubtypes: HEALTHCARE_SUBTYPES.filter((subtype) =>
+          featureData.allowedSubtypes.includes(subtype)
+        ),
+      };
+    });
+};
+
+export const HEALTHCARE_SPECIAL_FEATURES = createHealthcareSpecialFeatures();
+
+export const getHealthcareSpecialFeatures = (): SpecialFeatureOption[] =>
+  HEALTHCARE_SPECIAL_FEATURES;
 
 const RESTAURANT_KEYWORD_DETECTION: Array<{
   featureId: string;
@@ -698,6 +1000,152 @@ export const detectSpecialtyFeatureIdsFromDescription = (
   return Array.from(detectedFeatureIds);
 };
 
+const HEALTHCARE_KEYWORD_DETECTION: Array<{
+  featureId: string;
+  patterns: RegExp[];
+}> = [
+  {
+    featureId: "emergency",
+    patterns: [/\bemergency department\b/i, /\ber\b/i, /\btrauma center\b/i],
+  },
+  {
+    featureId: "imaging",
+    patterns: [/\bimaging center\b/i, /\bmri\b/i, /\bct\b/i, /\bpet\b/i],
+  },
+  {
+    featureId: "surgery",
+    patterns: [/\bsurgery center\b/i, /\boperating rooms?\b/i, /\bOR suites?\b/i],
+  },
+  {
+    featureId: "icu",
+    patterns: [/\bicu\b/i, /\bintensive care\b/i],
+  },
+  {
+    featureId: "lab",
+    patterns: [/\blaboratory\b/i, /\blab\b/i, /\bon[-\s]?site lab\b/i, /\bpathology\b/i],
+  },
+  {
+    featureId: "hc_imaging_second_mri",
+    patterns: [/\bsecond mri\b/i, /\badditional mri\b/i],
+  },
+  {
+    featureId: "hc_imaging_pet_ct_suite",
+    patterns: [/\bpet\/?ct\b/i, /\bpet ct\b/i],
+  },
+  {
+    featureId: "hc_imaging_interventional_rad",
+    patterns: [/\binterventional radiology\b/i, /\bangio\b/i],
+  },
+  {
+    featureId: "hc_asc_hybrid_or_cath_lab",
+    patterns: [/\bhybrid or\b/i, /\bcath lab\b/i],
+  },
+  {
+    featureId: "mob_imaging_ready_shell",
+    patterns: [/\bimaging-ready shell\b/i, /\bimaging ready shell\b/i],
+  },
+  {
+    featureId: "mob_enhanced_mep",
+    patterns: [/\benhanced mep\b/i, /\bupgraded mep\b/i],
+  },
+  {
+    featureId: "mob_procedure_suite",
+    patterns: [/\bprocedure suite\b/i],
+  },
+  {
+    featureId: "mob_pharmacy_shell",
+    patterns: [/\bpharmacy shell\b/i, /\bpharmacy space\b/i],
+  },
+  {
+    featureId: "mob_covered_dropoff",
+    patterns: [/\bcovered drop[-\s]?off\b/i, /\bpatient canopy\b/i],
+  },
+  {
+    featureId: "hc_dental_pano_ceph",
+    patterns: [/\bpano\b/i, /\bceph\b/i, /\bpanoramic x-ray\b/i],
+  },
+  {
+    featureId: "hc_dental_sedation_suite",
+    patterns: [/\bsedation suite\b/i, /\biv sedation\b/i],
+  },
+  {
+    featureId: "hc_dental_sterilization_upgrade",
+    patterns: [/\bsterilization\b/i],
+  },
+  {
+    featureId: "hc_dental_ortho_bay_expansion",
+    patterns: [/\borthodontic\b/i, /\bortho bay\b/i],
+  },
+  {
+    featureId: "hospital_central_plant_redundancy",
+    patterns: [/\bcentral plant redundancy\b/i, /\bredun(?:dant|dancy) chiller\b/i],
+  },
+  {
+    featureId: "hospital_pharmacy_cleanroom",
+    patterns: [/\bpharmacy cleanroom\b/i, /\bsterile compounding\b/i],
+  },
+  {
+    featureId: "medical_center_infusion_suite",
+    patterns: [/\binfusion suite\b/i],
+  },
+  {
+    featureId: "medical_center_ambulatory_tower_fitout",
+    patterns: [/\bambulatory tower\b/i, /\bambulatory fit[-\s]?out\b/i],
+  },
+  {
+    featureId: "nursing_memory_care_wing",
+    patterns: [/\bmemory care\b/i],
+  },
+  {
+    featureId: "nursing_rehab_gym",
+    patterns: [/\brehab gym\b/i, /\btherapy gym\b/i],
+  },
+  {
+    featureId: "nursing_nurse_call_upgrade",
+    patterns: [/\bnurse call\b/i],
+  },
+  {
+    featureId: "nursing_wander_management_system",
+    patterns: [/\bwander management\b/i],
+  },
+  {
+    featureId: "nursing_dining_household_model",
+    patterns: [/\bhousehold dining\b/i, /\bsmall house model\b/i],
+  },
+  {
+    featureId: "rehab_hydrotherapy_pool",
+    patterns: [/\bhydrotherapy\b/i],
+  },
+  {
+    featureId: "rehab_gait_training_lab",
+    patterns: [/\bgait training\b/i],
+  },
+  {
+    featureId: "rehab_adl_apartment",
+    patterns: [/\badl apartment\b/i, /\bactivities of daily living\b/i],
+  },
+  {
+    featureId: "rehab_therapy_gym_expansion",
+    patterns: [/\btherapy gym expansion\b/i, /\bexpanded therapy gym\b/i],
+  },
+  {
+    featureId: "rehab_speech_neuro_suite",
+    patterns: [/\bspeech(?:\s+and)? neuro\b/i, /\bneuro rehab suite\b/i],
+  },
+];
+
+export const detectHealthcareFeatureIdsFromDescription = (
+  description: string
+): string[] => {
+  const detectedFeatureIds = new Set<string>();
+  for (const { featureId, patterns } of HEALTHCARE_KEYWORD_DETECTION) {
+    if (patterns.some((pattern) => pattern.test(description))) {
+      detectedFeatureIds.add(featureId);
+    }
+  }
+  return Array.from(detectedFeatureIds);
+};
+
 export const restaurantSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
   filterSpecialFeaturesBySubtype(RESTAURANT_SPECIAL_FEATURES, subtype).length > 0;
 
@@ -706,3 +1154,6 @@ export const hospitalitySubtypeHasSpecialFeatures = (subtype?: string): boolean 
 
 export const specialtySubtypeHasSpecialFeatures = (subtype?: string): boolean =>
   filterSpecialFeaturesBySubtype(SPECIALTY_SPECIAL_FEATURES, subtype).length > 0;
+
+export const healthcareSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
+  filterSpecialFeaturesBySubtype(HEALTHCARE_SPECIAL_FEATURES, subtype).length > 0;

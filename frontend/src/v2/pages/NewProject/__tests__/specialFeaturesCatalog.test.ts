@@ -1,14 +1,19 @@
 import {
+  HEALTHCARE_FEATURE_COSTS_BY_SUBTYPE,
+  HEALTHCARE_SUBTYPES,
   HOSPITALITY_FEATURE_COSTS_BY_SUBTYPE,
   HOSPITALITY_SUBTYPES,
   RESTAURANT_FEATURE_COSTS_BY_SUBTYPE,
   RESTAURANT_SUBTYPES,
+  detectHealthcareFeatureIdsFromDescription,
   detectHospitalityFeatureIdsFromDescription,
   detectSpecialtyFeatureIdsFromDescription,
   filterSpecialFeaturesBySubtype,
+  getHealthcareSpecialFeatures,
   getHospitalitySpecialFeatures,
   getRestaurantSpecialFeatures,
   getSpecialtySpecialFeatures,
+  healthcareSubtypeHasSpecialFeatures,
   hospitalitySubtypeHasSpecialFeatures,
   restaurantSubtypeHasSpecialFeatures,
 } from "../specialFeaturesCatalog";
@@ -72,8 +77,83 @@ const REQUIRED_HOSPITALITY_MAPPING = {
   },
 } as const;
 
+const REQUIRED_HEALTHCARE_MAPPING = {
+  surgical_center: {
+    hc_asc_expanded_pacu: 115,
+    hc_asc_sterile_core_upgrade: 95,
+    hc_asc_pain_management_suite: 85,
+    hc_asc_hybrid_or_cath_lab: 165,
+  },
+  imaging_center: {
+    hc_imaging_second_mri: 145,
+    hc_imaging_pet_ct_suite: 170,
+    hc_imaging_interventional_rad: 155,
+    imaging: 130,
+  },
+  urgent_care: {
+    hc_urgent_on_site_lab: 38,
+    hc_urgent_imaging_suite: 62,
+    hc_urgent_observation_bays: 28,
+    lab: 30,
+  },
+  outpatient_clinic: {
+    hc_outpatient_on_site_lab: 32,
+    hc_outpatient_imaging_pod: 55,
+    hc_outpatient_behavioral_suite: 24,
+    lab: 26,
+  },
+  medical_office_building: {
+    mob_imaging_ready_shell: 24,
+    mob_enhanced_mep: 18,
+    mob_procedure_suite: 22,
+    mob_pharmacy_shell: 12,
+    mob_covered_dropoff: 9,
+  },
+  dental_office: {
+    hc_dental_pano_ceph: 28,
+    hc_dental_sedation_suite: 34,
+    hc_dental_sterilization_upgrade: 16,
+    hc_dental_ortho_bay_expansion: 20,
+  },
+  hospital: {
+    emergency: 120,
+    imaging: 95,
+    surgery: 110,
+    icu: 105,
+    lab: 52,
+    hospital_central_plant_redundancy: 68,
+    hospital_pharmacy_cleanroom: 36,
+  },
+  medical_center: {
+    emergency: 102,
+    imaging: 88,
+    surgery: 98,
+    icu: 92,
+    lab: 46,
+    medical_center_infusion_suite: 41,
+    medical_center_ambulatory_tower_fitout: 54,
+  },
+  nursing_home: {
+    nursing_memory_care_wing: 34,
+    nursing_rehab_gym: 22,
+    nursing_nurse_call_upgrade: 16,
+    nursing_wander_management_system: 14,
+    nursing_dining_household_model: 19,
+  },
+  rehabilitation: {
+    rehab_hydrotherapy_pool: 37,
+    rehab_gait_training_lab: 24,
+    rehab_adl_apartment: 18,
+    rehab_therapy_gym_expansion: 26,
+    rehab_speech_neuro_suite: 17,
+  },
+} as const;
+
 const resolveFeatureCostPerSF = (
-  feature: ReturnType<typeof getSpecialtySpecialFeatures>[number],
+  feature: {
+    costPerSFBySubtype?: Record<string, number>;
+    costPerSF?: number;
+  },
   subtype: string
 ): number => {
   const subtypeCost =
@@ -211,6 +291,95 @@ describe("hospitality special features catalog", () => {
         "restaurant",
       ])
     );
+  });
+});
+
+describe("healthcare special features catalog", () => {
+  it("is non-empty and matches required subtype mapping keys/values", () => {
+    const healthcareFeatures = getHealthcareSpecialFeatures();
+    expect(healthcareFeatures.length).toBeGreaterThan(0);
+    expect(HEALTHCARE_FEATURE_COSTS_BY_SUBTYPE).toEqual(REQUIRED_HEALTHCARE_MAPPING);
+  });
+
+  it("resolves expected feature IDs for every healthcare subtype with no duplicates", () => {
+    const healthcareFeatures = getHealthcareSpecialFeatures();
+
+    for (const subtype of HEALTHCARE_SUBTYPES) {
+      const expectedIds = Object.keys(REQUIRED_HEALTHCARE_MAPPING[subtype]).sort();
+      const resolvedIds = filterSpecialFeaturesBySubtype(healthcareFeatures, subtype).map(
+        (feature) => feature.id
+      );
+      const uniqueResolvedIds = Array.from(new Set(resolvedIds));
+
+      expect(uniqueResolvedIds.length).toBe(resolvedIds.length);
+      expect(uniqueResolvedIds.sort()).toEqual(expectedIds);
+    }
+  });
+
+  it("has valid cost-per-subtype entries for all allowed healthcare feature subtype combinations", () => {
+    const healthcareFeatures = getHealthcareSpecialFeatures();
+
+    for (const feature of healthcareFeatures) {
+      expect(feature.costPerSFBySubtype).toBeDefined();
+      expect(feature.allowedSubtypes && feature.allowedSubtypes.length > 0).toBe(true);
+
+      for (const subtype of feature.allowedSubtypes || []) {
+        const expectedCost = REQUIRED_HEALTHCARE_MAPPING[
+          subtype as keyof typeof REQUIRED_HEALTHCARE_MAPPING
+        ][feature.id as keyof (typeof REQUIRED_HEALTHCARE_MAPPING)[keyof typeof REQUIRED_HEALTHCARE_MAPPING]];
+
+        expect(typeof expectedCost).toBe("number");
+        expect(expectedCost).toBeGreaterThan(0);
+        expect(feature.costPerSFBySubtype?.[subtype]).toBe(expectedCost);
+      }
+    }
+  });
+
+  it("healthcare subtype helper returns true for all ten healthcare subtypes", () => {
+    for (const subtype of HEALTHCARE_SUBTYPES) {
+      expect(healthcareSubtypeHasSpecialFeatures(subtype)).toBe(true);
+    }
+  });
+
+  it("detects healthcare feature IDs from clinical scope cues", () => {
+    const detected = detectHealthcareFeatureIdsFromDescription(
+      "New acute care hospital with emergency department, ICU beds, OR suites, imaging center, lab, central plant redundancy, and pharmacy cleanroom."
+    );
+
+    expect(detected).toEqual(
+      expect.arrayContaining([
+        "emergency",
+        "icu",
+        "surgery",
+        "imaging",
+        "lab",
+        "hospital_central_plant_redundancy",
+        "hospital_pharmacy_cleanroom",
+      ])
+    );
+  });
+
+  it("increases total modeled special-feature cost when healthcare features are selected across all subtypes", () => {
+    const squareFootage = 60_000;
+    const allHealthcareFeatures = getHealthcareSpecialFeatures();
+
+    for (const subtype of HEALTHCARE_SUBTYPES) {
+      const applicable = filterSpecialFeaturesBySubtype(allHealthcareFeatures, subtype);
+      expect(applicable.length).toBeGreaterThan(0);
+
+      const selected = applicable.slice(0, Math.min(3, applicable.length));
+      const selectedCost = selected.reduce(
+        (sum, feature) =>
+          sum + resolveFeatureCostPerSF(feature, subtype) * squareFootage,
+        0
+      );
+
+      const baselineTotalCost = 95_000_000;
+      const totalWithFeatures = baselineTotalCost + selectedCost;
+
+      expect(selectedCost).toBeGreaterThan(0);
+      expect(totalWithFeatures).toBeGreaterThan(baselineTotalCost);
+    }
   });
 });
 
