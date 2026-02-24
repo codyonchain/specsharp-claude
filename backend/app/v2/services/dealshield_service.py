@@ -466,6 +466,9 @@ def _apply_display_guards(
             or _is_number(financing_assumptions.get("loan_term_years"))
         )
     )
+    financing_disclosure = "Not modeled: financing assumptions missing"
+    if not has_financing_assumptions and financing_disclosure not in disclosures:
+        disclosures.append(financing_disclosure)
 
     cap_rate_value = _resolve_cap_rate_used(payload)
 
@@ -499,12 +502,10 @@ def _apply_display_guards(
                 row_cell_map[cell_id] = cell
 
         dscr_cell = row_cell_map.get("dscr")
-        if isinstance(dscr_cell, dict) and _is_number(dscr_cell.get("value")) and not has_financing_assumptions:
+        if isinstance(dscr_cell, dict) and not _is_number(dscr_cell.get("value")):
             dscr_cell["value"] = None
             dscr_cell["provenance_kind"] = "missing"
             dscr_cell["scenario_source_path"] = None
-            if "Not modeled: financing assumptions missing" not in disclosures:
-                disclosures.append("Not modeled: financing assumptions missing")
 
         noi_value: Optional[float] = None
         noi_cell = row_cell_map.get("noi")

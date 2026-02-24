@@ -61,6 +61,106 @@ def _resolve_metric_ref(payload, metric_ref):
     return current
 
 
+def _base_dscr_cell(view_model):
+    rows = view_model.get("rows")
+    assert isinstance(rows, list) and rows
+    base_row = next(
+        (
+            row
+            for row in rows
+            if isinstance(row, dict)
+            and (
+                row.get("scenario_id") == "base"
+                or str(row.get("label", "")).strip().lower() == "base"
+            )
+        ),
+        None,
+    )
+    assert isinstance(base_row, dict)
+    cells = base_row.get("cells")
+    assert isinstance(cells, list)
+    dscr_cell = next(
+        (
+            cell
+            for cell in cells
+            if isinstance(cell, dict)
+            and (cell.get("col_id") or cell.get("tile_id") or cell.get("id")) == "dscr"
+        ),
+        None,
+    )
+    assert isinstance(dscr_cell, dict)
+    return dscr_cell
+
+
+def _clear_financing_assumptions_keep_dscr(payload):
+    payload.pop("financing_assumptions", None)
+    ownership_analysis = payload.get("ownership_analysis")
+    if not isinstance(ownership_analysis, dict):
+        return
+    debt_metrics = ownership_analysis.get("debt_metrics")
+    if not isinstance(debt_metrics, dict):
+        return
+    for key in (
+        "debt_pct",
+        "ltv",
+        "interest_rate_pct",
+        "amort_years",
+        "loan_term_years",
+        "interest_only_months",
+    ):
+        debt_metrics.pop(key, None)
+
+
+def _is_numeric_dscr(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def test_restaurant_dscr_visibility_policy_is_type_aware():
+    allowed_statuses = {"GO", "Needs Work", "NO-GO", "PENDING"}
+    financing_disclosure = "Not modeled: financing assumptions missing"
+    observed_numeric_with_disclosure = False
+    for subtype, expected_profile_id in RESTAURANT_PROFILE_IDS.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.RESTAURANT,
+            subtype=subtype,
+            square_footage=8_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        _clear_financing_assumptions_keep_dscr(payload)
+        scenarios = payload.get("dealshield_scenarios", {}).get("scenarios", {})
+        base_source_dscr = _resolve_metric_ref(
+            scenarios.get("base", {}),
+            "ownership_analysis.debt_metrics.calculated_dscr",
+        )
+        source_is_numeric = _is_numeric_dscr(base_source_dscr)
+        profile = get_dealshield_profile(expected_profile_id)
+        view_model = build_dealshield_view_model(
+            project_id=f"restaurant-dscr-visible-{subtype}",
+            payload=payload,
+            profile=profile,
+        )
+        base_dscr_cell = _base_dscr_cell(view_model)
+        displayed_dscr = base_dscr_cell.get("value")
+        display_is_numeric = _is_numeric_dscr(displayed_dscr)
+        assert display_is_numeric == source_is_numeric
+        if source_is_numeric:
+            observed_numeric_with_disclosure = True
+        else:
+            assert displayed_dscr is None
+            assert base_dscr_cell.get("provenance_kind") == "missing"
+        disclosures = view_model.get("dealshield_disclosures")
+        assert isinstance(disclosures, list)
+        if source_is_numeric:
+            assert financing_disclosure in disclosures
+        assert view_model.get("decision_status") in allowed_statuses
+        assert isinstance(view_model.get("decision_reason_code"), str)
+        assert view_model["decision_reason_code"].strip()
+        assert isinstance(view_model.get("decision_status_provenance"), dict)
+        assert isinstance(view_model.get("decision_insurance_provenance"), dict)
+    assert observed_numeric_with_disclosure
+
+
 def test_restaurant_subtypes_define_deterministic_scope_and_dealshield_profile_ids():
     for subtype in RESTAURANT_PROFILE_IDS:
         config = get_building_config(BuildingType.RESTAURANT, subtype)
