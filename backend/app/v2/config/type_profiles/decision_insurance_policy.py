@@ -220,7 +220,7 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "primary_control_variable": {
             "tile_id": "or_turnover_and_sterile_core_plus_12",
             "metric_ref": "trade_breakdown.mechanical",
-            "label": "OR Turnover + Sterile Core +12%",
+            "label": "IC-First OR Turnover, Sterile-Core Sequencing, and Block Utilization Control",
         },
         "collapse_trigger": {
             "metric": "value_gap_pct",
@@ -234,7 +234,7 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "primary_control_variable": {
             "tile_id": "shielding_and_power_quality_plus_11",
             "metric_ref": "trade_breakdown.electrical",
-            "label": "Shielding + Power Quality +11%",
+            "label": "IC-First Shielding/Quench Readiness, Modality Throughput, and Uptime Control",
         },
         "collapse_trigger": {
             "metric": "value_gap_pct",
@@ -248,7 +248,7 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "primary_control_variable": {
             "tile_id": "triage_flow_and_lab_turns_plus_10",
             "metric_ref": "trade_breakdown.finishes",
-            "label": "Triage Flow + Lab Turns +10%",
+            "label": "IC-First Walk-In Acuity Mix, Peak-Hour Staffing, and Visit Velocity Control",
         },
         "collapse_trigger": {
             "metric": "value_gap_pct",
@@ -262,7 +262,7 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "primary_control_variable": {
             "tile_id": "exam_program_and_room_standard_plus_9",
             "metric_ref": "trade_breakdown.finishes",
-            "label": "Exam Program + Room Standard +9%",
+            "label": "IC-First Referral Leakage, Provider Template Utilization, and No-Show Drag Control",
         },
         "collapse_trigger": {
             "metric": "value_gap_pct",
@@ -276,7 +276,7 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "primary_control_variable": {
             "tile_id": "tenant_fitout_mep_stack_plus_10",
             "metric_ref": "trade_breakdown.mechanical",
-            "label": "Tenant Fit-Out MEP Stack +10%",
+            "label": "IC-First TI/LC Burn, Lease-Up Velocity, and Rollover Stack Control",
         },
         "collapse_trigger": {
             "metric": "value_gap_pct",
@@ -290,7 +290,7 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "primary_control_variable": {
             "tile_id": "chairside_vacuum_and_gas_plus_11",
             "metric_ref": "trade_breakdown.plumbing",
-            "label": "Chairside Vacuum + Gas +11%",
+            "label": "IC-First Chair Utilization, Hygiene Mix, and Sterilization Bottleneck Control",
         },
         "collapse_trigger": {
             "metric": "value_gap_pct",
@@ -304,7 +304,7 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "primary_control_variable": {
             "tile_id": "acuity_mep_redundancy_plus_12",
             "metric_ref": "trade_breakdown.mechanical",
-            "label": "Acuity MEP + Redundancy +12%",
+            "label": "IC-First Nurse Staffing Intensity, LOS Pressure, and Service-Line Mix Control",
         },
         "collapse_trigger": {
             "metric": "value_gap_pct",
@@ -318,7 +318,7 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "primary_control_variable": {
             "tile_id": "service_line_power_density_plus_11",
             "metric_ref": "trade_breakdown.electrical",
-            "label": "Service-Line Power Density +11%",
+            "label": "IC-First Procedure Mix, Diagnostic Throughput, and Care-Path Coordination Control",
         },
         "collapse_trigger": {
             "metric": "value_gap_pct",
@@ -332,7 +332,7 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "primary_control_variable": {
             "tile_id": "resident_room_life_safety_plus_9",
             "metric_ref": "trade_breakdown.finishes",
-            "label": "Resident Room Life-Safety +9%",
+            "label": "IC-First Census Mix, Agency Labor Dependency, and Reimbursement Pressure Control",
         },
         "collapse_trigger": {
             "metric": "value_gap_pct",
@@ -346,7 +346,7 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "primary_control_variable": {
             "tile_id": "therapy_gym_mep_integration_plus_10",
             "metric_ref": "trade_breakdown.mechanical",
-            "label": "Therapy Gym MEP Integration +10%",
+            "label": "IC-First Therapy Intensity, Authorization Friction, and LOS Drift Control",
         },
         "collapse_trigger": {
             "metric": "value_gap_pct",

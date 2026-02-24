@@ -60,6 +60,27 @@ INDUSTRIAL_POLICY_EXPECTATIONS_BY_PROFILE_ID = {
     },
 }
 
+HEALTHCARE_PROFILE_IDS = {
+    "surgical_center": "healthcare_surgical_center_v1",
+    "imaging_center": "healthcare_imaging_center_v1",
+    "urgent_care": "healthcare_urgent_care_v1",
+    "outpatient_clinic": "healthcare_outpatient_clinic_v1",
+    "medical_office_building": "healthcare_medical_office_building_v1",
+    "dental_office": "healthcare_dental_office_v1",
+    "hospital": "healthcare_hospital_v1",
+    "medical_center": "healthcare_medical_center_v1",
+    "nursing_home": "healthcare_nursing_home_v1",
+    "rehabilitation": "healthcare_rehabilitation_v1",
+}
+
+HEALTHCARE_PCV_GENERIC_TERMS = {
+    "cost control",
+    "revenue control",
+    "margin control",
+    "primary control variable",
+    "generic",
+}
+
 
 def test_state_required_for_multiplier():
     """City-only handling should follow active location contract: known override/no warning, unknown city/warning."""
@@ -837,6 +858,68 @@ def test_healthcare_profiles_are_wired_and_content_maps_to_tiles():
             assert question_entry.get("driver_tile_id") in tile_ids
 
     assert len(mlw_first_texts) == len(set(mlw_first_texts))
+
+
+def test_healthcare_first_mlw_text_is_unique_across_all_subtypes():
+    first_mlw_texts = []
+    for profile_id in HEALTHCARE_PROFILE_IDS.values():
+        content = healthcare_content.DEALSHIELD_CONTENT_PROFILES[profile_id]
+        mlw_entries = content.get("most_likely_wrong")
+        assert isinstance(mlw_entries, list) and mlw_entries
+        first_entry = mlw_entries[0]
+        assert isinstance(first_entry, dict)
+        text = first_entry.get("text")
+        assert isinstance(text, str) and text.strip()
+        first_mlw_texts.append(text.strip())
+
+    assert len(first_mlw_texts) == len(set(first_mlw_texts))
+
+
+def test_healthcare_di_policy_labels_are_ic_first_and_non_generic():
+    labels = []
+    for profile_id in HEALTHCARE_PROFILE_IDS.values():
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+        primary_control = policy.get("primary_control_variable", {})
+        label = primary_control.get("label")
+        assert isinstance(label, str) and label.strip()
+        normalized_label = label.strip().lower()
+        assert normalized_label.startswith("ic-first ")
+        assert len(normalized_label) >= 30
+        for generic_term in HEALTHCARE_PCV_GENERIC_TERMS:
+            assert generic_term not in normalized_label
+        labels.append(normalized_label)
+
+    assert len(labels) == len(set(labels))
+
+
+def test_healthcare_content_contract_fields_are_present_and_deterministic():
+    required_keys = {"version", "profile_id", "fastest_change", "most_likely_wrong", "question_bank", "red_flags_actions"}
+
+    for profile_id in HEALTHCARE_PROFILE_IDS.values():
+        content_first = healthcare_content.DEALSHIELD_CONTENT_PROFILES[profile_id]
+        content_second = healthcare_content.DEALSHIELD_CONTENT_PROFILES[profile_id]
+        assert content_first == content_second
+        assert required_keys.issubset(content_first.keys())
+
+        fastest_change = content_first.get("fastest_change")
+        assert isinstance(fastest_change, dict)
+        drivers = fastest_change.get("drivers")
+        assert isinstance(drivers, list) and len(drivers) == 3
+
+        mlw_entries = content_first.get("most_likely_wrong")
+        assert isinstance(mlw_entries, list) and len(mlw_entries) >= 3
+        first_mlw = mlw_entries[0]
+        assert isinstance(first_mlw, dict)
+        assert isinstance(first_mlw.get("driver_tile_id"), str)
+        assert isinstance(first_mlw.get("text"), str) and first_mlw.get("text").strip()
+
+        question_bank = content_first.get("question_bank")
+        assert isinstance(question_bank, list) and len(question_bank) == 3
+        assert all(isinstance(entry, dict) and isinstance(entry.get("driver_tile_id"), str) for entry in question_bank)
+
+        red_flags = content_first.get("red_flags_actions")
+        assert isinstance(red_flags, list) and len(red_flags) >= 3
+        assert all(isinstance(entry, dict) and isinstance(entry.get("flag"), str) for entry in red_flags)
 
 
 def test_healthcare_scope_profiles_keep_depth_and_allocation_integrity():

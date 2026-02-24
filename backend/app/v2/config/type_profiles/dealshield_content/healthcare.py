@@ -16,7 +16,7 @@ DEALSHIELD_CONTENT_PROFILES = {
             {
                 "id": "mlw_1",
                 "driver_tile_id": "or_turnover_and_sterile_core_plus_12",
-                "text": "Sterile-core throughput is modeled against ideal block turnover rather than surgeon-specific turnover variance.",
+                "text": "OR turnover, sterile-core sequencing, and block utilization are modeled at target state instead of surgeon-specific ramp behavior.",
                 "why": "Turnover drag pushes late-day utilization down while staffing and fixed cost stay in place.",
             },
             {
@@ -91,7 +91,7 @@ DEALSHIELD_CONTENT_PROFILES = {
             {
                 "id": "mlw_1",
                 "driver_tile_id": "shielding_and_power_quality_plus_11",
-                "text": "Power quality allowances do not capture utility harmonic filtering requirements for MRI uptime.",
+                "text": "Shielding and quench risk, modality throughput, and uptime assumptions are modeled as if all OEM constraints clear on day one.",
                 "why": "Unplanned power-conditioning scope often lands after procurement and carries premium pricing.",
             },
             {
@@ -166,7 +166,7 @@ DEALSHIELD_CONTENT_PROFILES = {
             {
                 "id": "mlw_1",
                 "driver_tile_id": "triage_flow_and_lab_turns_plus_10",
-                "text": "Front-door triage and specimen handoff cycles are modeled as linear across weekday and weekend peaks.",
+                "text": "Walk-in acuity mix, peak-hour staffing, and visit velocity are treated as smooth averages instead of surge-driven variability.",
                 "why": "Queue spikes inflate labor and patient leakage faster than the base case reflects.",
             },
             {
@@ -241,7 +241,7 @@ DEALSHIELD_CONTENT_PROFILES = {
             {
                 "id": "mlw_1",
                 "driver_tile_id": "exam_program_and_room_standard_plus_9",
-                "text": "Exam-room count and support-room ratios assume final provider staffing that is not yet signed.",
+                "text": "Referral leakage, provider template utilization, and no-show drag are modeled at mature-network performance during ramp.",
                 "why": "If provider ramp lags, room utilization and throughput fall below underwritten levels.",
             },
             {
@@ -316,7 +316,7 @@ DEALSHIELD_CONTENT_PROFILES = {
             {
                 "id": "mlw_1",
                 "driver_tile_id": "tenant_fitout_mep_stack_plus_10",
-                "text": "Tenant-ready riser and electrical stack assumptions are broader than current LOI obligations.",
+                "text": "TI/LC burn, lease-up velocity, and rollover stack exposure are underwritten as linear rather than suite-by-suite risk.",
                 "why": "Overbuilding base building MEP for uncertain tenant programs compresses returns early.",
             },
             {
@@ -391,7 +391,7 @@ DEALSHIELD_CONTENT_PROFILES = {
             {
                 "id": "mlw_1",
                 "driver_tile_id": "chairside_vacuum_and_gas_plus_11",
-                "text": "Vacuum and med-gas rough-ins assume operatory count freeze before provider growth decisions are final.",
+                "text": "Chair utilization, hygiene mix, and sterilization bottlenecks are modeled at mature-practice cadence before staffing stabilizes.",
                 "why": "Late operatory expansion can trigger wall rework and utility redistribution.",
             },
             {
@@ -466,7 +466,7 @@ DEALSHIELD_CONTENT_PROFILES = {
             {
                 "id": "mlw_1",
                 "driver_tile_id": "acuity_mep_redundancy_plus_12",
-                "text": "Redundancy assumptions do not fully price integrated testing and phased turnover complexity.",
+                "text": "Nurse staffing intensity, LOS pressure, and service-line mix are modeled at steady state instead of activation-phase conditions.",
                 "why": "Commissioning and retest cycles can materially extend spend and schedule drag.",
             },
             {
@@ -541,7 +541,7 @@ DEALSHIELD_CONTENT_PROFILES = {
             {
                 "id": "mlw_1",
                 "driver_tile_id": "service_line_power_density_plus_11",
-                "text": "Power density assumptions are based on current tenant roster and not planned specialty expansion.",
+                "text": "Procedure mix, diagnostic throughput, and care-path coordination are assumed to scale in lockstep across service lines.",
                 "why": "Underbuilt power capacity creates high-cost retrofit exposure during growth.",
             },
             {
@@ -616,7 +616,7 @@ DEALSHIELD_CONTENT_PROFILES = {
             {
                 "id": "mlw_1",
                 "driver_tile_id": "resident_room_life_safety_plus_9",
-                "text": "Resident-room life-safety upgrades assume survey outcomes without accounting for correction cycles.",
+                "text": "Census mix, agency labor dependency, and reimbursement pressure are treated as independent instead of compounding risks.",
                 "why": "Survey-driven corrections can create concentrated rework late in turnover.",
             },
             {
@@ -691,7 +691,7 @@ DEALSHIELD_CONTENT_PROFILES = {
             {
                 "id": "mlw_1",
                 "driver_tile_id": "therapy_gym_mep_integration_plus_10",
-                "text": "Therapy-gym HVAC and specialty power assumptions do not reflect final equipment density.",
+                "text": "Therapy intensity, payer authorization friction, and LOS drift are underwritten at baseline rather than constrained ramp capacity.",
                 "why": "Equipment-density drift can require additional distribution and controls rework.",
             },
             {

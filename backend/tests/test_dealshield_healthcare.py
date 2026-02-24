@@ -55,6 +55,105 @@ HEALTHCARE_UNIQUE_TILE_IDS = {
     "rehabilitation": "therapy_gym_mep_integration_plus_10",
 }
 
+HEALTHCARE_PCV_LABEL_ANCHOR_TOKENS = {
+    "surgical_center": ("or turnover", "sterile-core", "block utilization"),
+    "imaging_center": ("shielding", "quench", "modality throughput", "uptime"),
+    "urgent_care": ("walk-in acuity", "peak-hour staffing", "visit velocity"),
+    "outpatient_clinic": ("referral leakage", "template utilization", "no-show drag"),
+    "medical_office_building": ("ti/lc burn", "lease-up velocity", "rollover stack"),
+    "dental_office": ("chair utilization", "hygiene mix", "sterilization"),
+    "hospital": ("nurse staffing intensity", "los pressure", "service-line mix"),
+    "medical_center": ("procedure mix", "diagnostic throughput", "care-path coordination"),
+    "nursing_home": ("census mix", "agency labor dependency", "reimbursement pressure"),
+    "rehabilitation": ("therapy intensity", "authorization friction", "los drift"),
+}
+
+HEALTHCARE_MLW_FIRST_ANCHOR_TOKENS = {
+    "surgical_center": ("or turnover", "sterile-core sequencing", "block utilization"),
+    "imaging_center": ("shielding", "quench", "modality throughput", "uptime"),
+    "urgent_care": ("walk-in acuity mix", "peak-hour staffing", "visit velocity"),
+    "outpatient_clinic": ("referral leakage", "provider template utilization", "no-show drag"),
+    "medical_office_building": ("ti/lc burn", "lease-up velocity", "rollover stack"),
+    "dental_office": ("chair utilization", "hygiene mix", "sterilization bottlenecks"),
+    "hospital": ("nurse staffing intensity", "los pressure", "service-line mix"),
+    "medical_center": ("procedure mix", "diagnostic throughput", "care-path coordination"),
+    "nursing_home": ("census mix", "agency labor dependency", "reimbursement pressure"),
+    "rehabilitation": ("therapy intensity", "authorization friction", "los drift"),
+}
+
+HEALTHCARE_SCOPE_DEPTH_MINIMUMS = {
+    "surgical_center": {
+        "structural": 3,
+        "mechanical": 4,
+        "electrical": 4,
+        "plumbing": 4,
+        "finishes": 3,
+    },
+    "imaging_center": {
+        "structural": 3,
+        "mechanical": 4,
+        "electrical": 4,
+        "plumbing": 4,
+        "finishes": 3,
+    },
+    "urgent_care": {
+        "structural": 3,
+        "mechanical": 3,
+        "electrical": 3,
+        "plumbing": 3,
+        "finishes": 3,
+    },
+    "outpatient_clinic": {
+        "structural": 3,
+        "mechanical": 3,
+        "electrical": 3,
+        "plumbing": 3,
+        "finishes": 3,
+    },
+    "medical_office_building": {
+        "structural": 3,
+        "mechanical": 3,
+        "electrical": 3,
+        "plumbing": 3,
+        "finishes": 3,
+    },
+    "dental_office": {
+        "structural": 3,
+        "mechanical": 3,
+        "electrical": 3,
+        "plumbing": 3,
+        "finishes": 3,
+    },
+    "hospital": {
+        "structural": 4,
+        "mechanical": 5,
+        "electrical": 5,
+        "plumbing": 4,
+        "finishes": 4,
+    },
+    "medical_center": {
+        "structural": 4,
+        "mechanical": 5,
+        "electrical": 5,
+        "plumbing": 4,
+        "finishes": 4,
+    },
+    "nursing_home": {
+        "structural": 3,
+        "mechanical": 3,
+        "electrical": 3,
+        "plumbing": 3,
+        "finishes": 3,
+    },
+    "rehabilitation": {
+        "structural": 3,
+        "mechanical": 3,
+        "electrical": 3,
+        "plumbing": 3,
+        "finishes": 3,
+    },
+}
+
 
 def _tile_map(profile_id: str):
     profile = get_dealshield_profile(profile_id)
@@ -68,25 +167,6 @@ def _scope_trade_map(profile_id: str):
         for trade in profile.get("trade_profiles", [])
         if isinstance(trade, dict) and isinstance(trade.get("trade_key"), str)
     }
-
-
-def _top_two_trade_keys(subtype: str):
-    cfg = get_building_config(BuildingType.HEALTHCARE, subtype)
-    assert cfg is not None
-    shares = {
-        "structural": float(cfg.trades.structural),
-        "mechanical": float(cfg.trades.mechanical),
-        "electrical": float(cfg.trades.electrical),
-        "plumbing": float(cfg.trades.plumbing),
-        "finishes": float(cfg.trades.finishes),
-    }
-    return [
-        trade_key
-        for trade_key, _share in sorted(
-            shares.items(),
-            key=lambda item: (-item[1], item[0]),
-        )[:2]
-    ]
 
 
 def _resolve_metric_ref(payload, metric_ref):
@@ -120,12 +200,11 @@ def test_healthcare_scope_profiles_have_depth_and_normalized_allocations():
         trade_map = _scope_trade_map(profile_id)
         assert set(trade_map.keys()) == {"structural", "mechanical", "electrical", "plumbing", "finishes"}
 
-        dominant_trade_keys = set(_top_two_trade_keys(subtype))
+        minimums_by_trade = HEALTHCARE_SCOPE_DEPTH_MINIMUMS[subtype]
         for trade_key, trade in trade_map.items():
             items = trade.get("items")
             assert isinstance(items, list) and items
-            min_item_count = 3 if trade_key in dominant_trade_keys else 2
-            assert len(items) >= min_item_count
+            assert len(items) >= minimums_by_trade[trade_key]
 
             total_share = sum(float(item.get("allocation", {}).get("share", 0.0)) for item in items)
             assert math.isclose(total_share, 1.0, rel_tol=1e-9, abs_tol=1e-9), (
@@ -478,3 +557,70 @@ def test_healthcare_di_contract_and_provenance_are_policy_driven_for_all_profile
         assert isinstance(view_provenance, dict)
         assert view_provenance.get("profile_id") == expected_profile_id
         assert view_provenance.get("decision_insurance") == di_provenance
+
+
+def test_healthcare_mlw_and_primary_control_language_is_subtype_authored_with_anchor_tokens():
+    for subtype, profile_id in HEALTHCARE_PROFILE_IDS.items():
+        content = get_dealshield_content_profile(profile_id)
+        policy = get_decision_insurance_policy(profile_id)
+        assert isinstance(policy, dict)
+
+        mlw_entries = content.get("most_likely_wrong", [])
+        assert isinstance(mlw_entries, list) and mlw_entries
+        first_mlw = mlw_entries[0].get("text", "")
+        assert isinstance(first_mlw, str) and first_mlw.strip()
+
+        mlw_text = first_mlw.lower()
+        for token in HEALTHCARE_MLW_FIRST_ANCHOR_TOKENS[subtype]:
+            assert token in mlw_text, f"{subtype} first MLW text missing token: {token}"
+
+        pcv_label = policy["primary_control_variable"]["label"]
+        assert isinstance(pcv_label, str) and pcv_label.strip()
+        normalized_label = pcv_label.lower()
+        assert normalized_label.startswith("ic-first ")
+        for token in HEALTHCARE_PCV_LABEL_ANCHOR_TOKENS[subtype]:
+            assert token in normalized_label, f"{subtype} PCV label missing token: {token}"
+
+
+def test_healthcare_first_break_semantics_align_with_metric_type():
+    for subtype, profile_id in HEALTHCARE_PROFILE_IDS.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.HEALTHCARE,
+            subtype=subtype,
+            square_footage=70_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        profile = get_dealshield_profile(profile_id)
+        view_model = build_dealshield_view_model(
+            project_id=f"healthcare-break-semantics-{subtype}",
+            payload=payload,
+            profile=profile,
+        )
+        policy = get_decision_insurance_policy(profile_id)
+        collapse_trigger = policy["collapse_trigger"]
+        metric = collapse_trigger.get("metric")
+        threshold = collapse_trigger.get("threshold")
+        operator = collapse_trigger.get("operator")
+
+        assert metric in {"value_gap_pct", "value_gap"}
+        assert isinstance(threshold, (int, float))
+        assert isinstance(operator, str) and operator.strip()
+
+        if metric == "value_gap_pct":
+            assert abs(float(threshold)) <= 100.0
+        else:
+            assert float(threshold) < 0.0
+            assert abs(float(threshold)) >= 1000.0
+
+        first_break = view_model.get("first_break_condition")
+        di_provenance = view_model.get("decision_insurance_provenance") or {}
+        first_break_provenance = di_provenance.get("first_break_condition") or {}
+        if first_break_provenance.get("status") == "available":
+            assert isinstance(first_break, dict)
+            assert first_break.get("break_metric") == metric
+            assert first_break.get("threshold") == threshold
+            assert first_break.get("operator") == operator
+            assert isinstance(first_break.get("observed_value"), (int, float))
+            if metric == "value_gap_pct":
+                assert isinstance(first_break.get("observed_value_pct"), (int, float))
