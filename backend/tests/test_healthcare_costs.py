@@ -13,7 +13,10 @@ from app.v2.config.master_config import (
     ProjectClass,
     get_building_config,
 )
-from app.v2.engines.unified_engine import unified_engine
+from app.v2.engines.unified_engine import (
+    HEALTHCARE_SPECIAL_FEATURE_ALIASES,
+    unified_engine,
+)
 
 
 @pytest.fixture
@@ -150,3 +153,139 @@ def test_outpatient_profile_emits_facility_metrics():
     assert metrics["unit_label"] == cfg.financial_metrics["primary_unit"]
     assert metrics["units"] >= 1
     assert metrics["revenue_per_unit"] == cfg.financial_metrics["revenue_per_unit_annual"]
+
+
+def test_healthcare_legacy_alias_ids_match_canonical_totals_by_subtype():
+    square_footage = 12000
+    for subtype, alias_map in HEALTHCARE_SPECIAL_FEATURE_ALIASES.items():
+        if not alias_map:
+            continue
+        for legacy_id, canonical_id in alias_map.items():
+            with_alias = _calculate_healthcare(
+                subtype=subtype,
+                square_footage=square_footage,
+                special_features=[legacy_id],
+            )
+            with_canonical = _calculate_healthcare(
+                subtype=subtype,
+                square_footage=square_footage,
+                special_features=[canonical_id],
+            )
+
+            alias_total = with_alias["construction_costs"]["special_features_total"]
+            canonical_total = with_canonical["construction_costs"]["special_features_total"]
+            assert alias_total == pytest.approx(canonical_total, rel=0, abs=1e-6)
+            assert alias_total > 0
+
+            alias_breakdown = with_alias["construction_costs"]["special_features_breakdown"]
+            assert any(item.get("id") == canonical_id for item in alias_breakdown)
+
+
+def test_unknown_healthcare_feature_ids_are_ignored_without_crash():
+    baseline = _calculate_healthcare(
+        subtype="hospital",
+        square_footage=10000,
+        special_features=[],
+    )
+    with_unknown = _calculate_healthcare(
+        subtype="hospital",
+        square_footage=10000,
+        special_features=["unknown_healthcare_feature_id"],
+    )
+
+    assert with_unknown["construction_costs"]["special_features_total"] == pytest.approx(
+        baseline["construction_costs"]["special_features_total"],
+        rel=0,
+        abs=1e-6,
+    )
+    assert with_unknown["construction_costs"]["special_features_breakdown"] == []
+
+
+def test_hospital_or_surgical_alias_prices_and_breaks_down_in_canonical_line_item():
+    result = _calculate_healthcare(
+        subtype="hospital",
+        square_footage=240000,
+        special_features=["surgery"],
+    )
+
+    special_features_total = result["construction_costs"]["special_features_total"]
+    breakdown = result["construction_costs"]["special_features_breakdown"]
+
+    assert special_features_total > 0
+    surgical_rows = [row for row in breakdown if row.get("id") == "surgical_suite"]
+    assert surgical_rows, "Expected canonical surgical_suite line item in breakdown"
+    assert "Surgical Suite" in surgical_rows[0].get("label", "")
+
+
+@pytest.mark.parametrize("subtype", ["urgent_care", "outpatient_clinic"])
+def test_outpatient_revenue_scales_with_square_footage_capacity(subtype):
+    compact = _calculate_healthcare(subtype=subtype, square_footage=6000)
+    expanded = _calculate_healthcare(subtype=subtype, square_footage=18000)
+
+    compact_revenue = compact["revenue_analysis"]["annual_revenue"]
+    expanded_revenue = expanded["revenue_analysis"]["annual_revenue"]
+    assert expanded_revenue > compact_revenue
+
+    compact_units = compact["facility_metrics"]["units"]
+    expanded_units = expanded["facility_metrics"]["units"]
+    assert expanded_units > compact_units
+
+
+def test_healthcare_operational_metrics_differentiate_subtypes():
+    urgent = _calculate_healthcare(subtype="urgent_care", square_footage=10000)["operational_metrics"]
+    surgical = _calculate_healthcare(subtype="surgical_center", square_footage=24000)["operational_metrics"]
+    hospital = _calculate_healthcare(subtype="hospital", square_footage=220000)["operational_metrics"]
+
+    urgent_kpi_labels = [entry.get("label") for entry in urgent.get("kpis", [])]
+    surgical_kpi_labels = [entry.get("label") for entry in surgical.get("kpis", [])]
+    hospital_kpi_labels = [entry.get("label") for entry in hospital.get("kpis", [])]
+
+    assert "Visits / Day" in urgent_kpi_labels
+    assert "Cases / Day" in surgical_kpi_labels
+    assert "Admissions / Day" in hospital_kpi_labels
+    assert urgent_kpi_labels != surgical_kpi_labels
+    assert surgical_kpi_labels != hospital_kpi_labels
+
+
+@pytest.mark.parametrize(
+    "subtype",
+    ["hospital", "medical_center", "nursing_home", "rehabilitation"],
+)
+def test_inpatient_profiles_emit_facility_metrics_with_bed_units(subtype):
+    result = _calculate_healthcare(subtype=subtype, square_footage=180000)
+    cfg = get_building_config(BuildingType.HEALTHCARE, subtype)
+    assert cfg is not None
+
+    metrics = result.get("facility_metrics")
+    assert metrics is not None
+    assert metrics["type"] == "healthcare"
+    assert metrics["unit_label"] == cfg.financial_metrics["primary_unit"]
+    assert metrics["units"] >= 1
+    assert metrics["cost_per_unit"] > 0
+    assert metrics["revenue_per_unit"] > 0
+
+
+@pytest.mark.parametrize("subtype", ["hospital", "medical_center", "nursing_home", "rehabilitation"])
+def test_inpatient_operational_kpis_are_capped_and_emit_nonzero_units(subtype):
+    result = _calculate_healthcare(subtype=subtype, square_footage=220000)
+    operational = result.get("operational_metrics") or {}
+    per_unit = operational.get("per_unit") or {}
+    kpis = operational.get("kpis") or []
+
+    assert per_unit.get("units", 0) >= 1
+    occupancy_kpi = next(
+        (entry for entry in kpis if "Occupancy" in str(entry.get("label", ""))),
+        None,
+    )
+    efficiency_kpi = next(
+        (entry for entry in kpis if "Efficiency" in str(entry.get("label", ""))),
+        None,
+    )
+
+    assert occupancy_kpi is not None
+    assert efficiency_kpi is not None
+
+    occupancy_value = float(str(occupancy_kpi.get("value", "0")).replace("%", ""))
+    efficiency_value = float(str(efficiency_kpi.get("value", "0")).replace("%", ""))
+    assert 0.0 <= occupancy_value <= 100.0
+    assert 0.0 <= efficiency_value <= 120.0

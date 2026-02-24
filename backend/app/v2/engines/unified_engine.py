@@ -47,6 +47,216 @@ def _humanize_special_feature_label(feature_id: str) -> str:
         return "Special Feature"
     return " ".join(word[:1].upper() + word[1:] for word in words)
 
+
+# Legacy frontend healthcare special-feature IDs mapped to canonical backend subtype keys.
+HEALTHCARE_SPECIAL_FEATURE_ALIASES: Dict[str, Dict[str, str]] = {
+    "surgical_center": {
+        "surgery": "operating_room",
+        "surgical_suite": "operating_room",
+        "or_suite": "operating_room",
+        "or": "operating_room",
+    },
+    "imaging_center": {
+        "imaging": "mri_suite",
+        "imaging_suite": "mri_suite",
+    },
+    "urgent_care": {
+        "lab": "laboratory",
+    },
+    "outpatient_clinic": {
+        "lab": "laboratory",
+    },
+    "medical_office_building": {
+        "medical_center_ambulatory_tower_fitout": "ambulatory_buildout",
+        "medical_center_infusion_suite": "ambulatory_buildout",
+    },
+    "dental_office": {
+        "laboratory": "lab",
+    },
+    "hospital": {
+        "emergency": "emergency_department",
+        "imaging": "imaging_suite",
+        "surgery": "surgical_suite",
+        "operating_room": "surgical_suite",
+        "or_suite": "surgical_suite",
+        "lab": "laboratory",
+        "hospital_pharmacy_cleanroom": "pharmacy",
+        "hospital_central_plant_redundancy": "cathlab",
+    },
+    "medical_center": {
+        "emergency_department": "emergency",
+        "imaging_suite": "imaging",
+        "surgical_suite": "surgery",
+        "lab": "laboratory",
+        "medical_center_infusion_suite": "specialty_clinic",
+        "medical_center_ambulatory_tower_fitout": "specialty_clinic",
+    },
+    "nursing_home": {
+        "nursing_memory_care_wing": "memory_care",
+        "nursing_rehab_gym": "therapy_room",
+        "nursing_nurse_call_upgrade": "therapy_room",
+        "nursing_wander_management_system": "memory_care",
+        "nursing_dining_household_model": "dining_hall",
+    },
+    "rehabilitation": {
+        "rehab_hydrotherapy_pool": "hydrotherapy",
+        "rehab_gait_training_lab": "assessment_suite",
+        "rehab_adl_apartment": "treatment_rooms",
+        "rehab_therapy_gym_expansion": "therapy_gym",
+        "rehab_speech_neuro_suite": "treatment_rooms",
+    },
+}
+
+HEALTHCARE_INPATIENT_SUBTYPES = {
+    "hospital",
+    "medical_center",
+    "nursing_home",
+    "rehabilitation",
+}
+
+HEALTHCARE_OPERATIONAL_METRIC_DEFAULTS: Dict[str, Dict[str, Any]] = {
+    "surgical_center": {
+        "throughput_per_unit_day": 2.4,
+        "operating_days_per_year": 250,
+        "utilization_target": 0.74,
+        "provider_fte_per_unit": 0.85,
+        "support_fte_per_provider": 2.1,
+        "specialist_fte_per_unit": 1.6,
+        "specialist_label": "Perioperative Staff FTE",
+        "throughput_label": "Cases / Day",
+        "utilization_label": "OR Utilization",
+        "efficiency_label": "Turnover Efficiency",
+        "efficiency_green_threshold": 85.0,
+        "efficiency_yellow_threshold": 70.0,
+    },
+    "imaging_center": {
+        "throughput_per_unit_day": 11.0,
+        "operating_days_per_year": 310,
+        "utilization_target": 0.76,
+        "provider_fte_per_unit": 0.22,
+        "support_fte_per_provider": 1.7,
+        "specialist_fte_per_unit": 0.95,
+        "specialist_label": "Imaging Tech FTE",
+        "throughput_label": "Scans / Day",
+        "utilization_label": "Scanner Utilization",
+        "efficiency_label": "Scan Throughput Efficiency",
+        "efficiency_green_threshold": 84.0,
+        "efficiency_yellow_threshold": 68.0,
+    },
+    "urgent_care": {
+        "throughput_per_unit_day": 13.0,
+        "operating_days_per_year": 365,
+        "utilization_target": 0.72,
+        "provider_fte_per_unit": 0.33,
+        "support_fte_per_provider": 1.2,
+        "specialist_fte_per_unit": 0.08,
+        "specialist_label": "On-Site Lab/Imaging FTE",
+        "throughput_label": "Visits / Day",
+        "utilization_label": "Exam Room Utilization",
+        "efficiency_label": "Door-to-Provider Efficiency",
+        "efficiency_green_threshold": 83.0,
+        "efficiency_yellow_threshold": 67.0,
+    },
+    "outpatient_clinic": {
+        "throughput_per_unit_day": 9.0,
+        "operating_days_per_year": 260,
+        "utilization_target": 0.78,
+        "provider_fte_per_unit": 0.3,
+        "support_fte_per_provider": 1.4,
+        "specialist_fte_per_unit": 0.05,
+        "specialist_label": "Care Coordination FTE",
+        "throughput_label": "Visits / Day",
+        "utilization_label": "Exam Room Utilization",
+        "efficiency_label": "Visit Throughput Efficiency",
+        "efficiency_green_threshold": 84.0,
+        "efficiency_yellow_threshold": 69.0,
+    },
+    "medical_office_building": {
+        "throughput_per_unit_day": 18.0,
+        "operating_days_per_year": 260,
+        "utilization_target": 0.83,
+        "provider_fte_per_unit": 1.1,
+        "support_fte_per_provider": 1.5,
+        "specialist_fte_per_unit": 0.25,
+        "specialist_label": "Specialty Suite FTE",
+        "throughput_label": "Tenant Encounters / Day",
+        "utilization_label": "Suite Utilization",
+        "efficiency_label": "Tenant Throughput Yield",
+        "efficiency_green_threshold": 86.0,
+        "efficiency_yellow_threshold": 72.0,
+    },
+    "dental_office": {
+        "throughput_per_unit_day": 8.0,
+        "operating_days_per_year": 240,
+        "utilization_target": 0.82,
+        "provider_fte_per_unit": 0.55,
+        "support_fte_per_provider": 1.3,
+        "specialist_fte_per_unit": 0.1,
+        "specialist_label": "Hygiene/Assist FTE",
+        "throughput_label": "Chair Visits / Day",
+        "utilization_label": "Operatory Utilization",
+        "efficiency_label": "Chair Turnover Efficiency",
+        "efficiency_green_threshold": 85.0,
+        "efficiency_yellow_threshold": 70.0,
+    },
+    "hospital": {
+        "throughput_per_unit_day": 0.95,
+        "operating_days_per_year": 365,
+        "utilization_target": 0.85,
+        "average_length_of_stay_days": 4.2,
+        "clinical_staff_fte_per_unit": 1.65,
+        "support_staff_fte_per_unit": 0.95,
+        "throughput_label": "Average Daily Census",
+        "utilization_label": "Licensed Bed Occupancy",
+        "staffing_intensity_label": "FTE per Licensed Bed",
+        "efficiency_label": "LOS Throughput Efficiency",
+        "efficiency_green_threshold": 84.0,
+        "efficiency_yellow_threshold": 70.0,
+    },
+    "medical_center": {
+        "throughput_per_unit_day": 0.92,
+        "operating_days_per_year": 365,
+        "utilization_target": 0.84,
+        "average_length_of_stay_days": 3.9,
+        "clinical_staff_fte_per_unit": 1.45,
+        "support_staff_fte_per_unit": 0.85,
+        "throughput_label": "Average Daily Census",
+        "utilization_label": "Service-Line Bed Occupancy",
+        "staffing_intensity_label": "FTE per Licensed Bed",
+        "efficiency_label": "Clinical Throughput Efficiency",
+        "efficiency_green_threshold": 83.0,
+        "efficiency_yellow_threshold": 69.0,
+    },
+    "nursing_home": {
+        "throughput_per_unit_day": 0.97,
+        "operating_days_per_year": 365,
+        "utilization_target": 0.88,
+        "average_length_of_stay_days": 24.0,
+        "clinical_staff_fte_per_unit": 0.62,
+        "support_staff_fte_per_unit": 0.48,
+        "throughput_label": "Average Daily Census",
+        "utilization_label": "Resident Bed Occupancy",
+        "staffing_intensity_label": "FTE per Licensed Bed",
+        "efficiency_label": "Resident Throughput Efficiency",
+        "efficiency_green_threshold": 82.0,
+        "efficiency_yellow_threshold": 68.0,
+    },
+    "rehabilitation": {
+        "throughput_per_unit_day": 0.9,
+        "operating_days_per_year": 365,
+        "utilization_target": 0.82,
+        "average_length_of_stay_days": 16.0,
+        "clinical_staff_fte_per_unit": 1.05,
+        "support_staff_fte_per_unit": 0.55,
+        "throughput_label": "Average Daily Census",
+        "utilization_label": "Program Bed Occupancy",
+        "staffing_intensity_label": "FTE per Licensed Bed",
+        "efficiency_label": "Therapy Throughput Efficiency",
+        "efficiency_green_threshold": 82.0,
+        "efficiency_yellow_threshold": 67.0,
+    },
+}
+
 # SELECTOR_REGISTRY (Phase 4)
 # - id: construction_schedule_by_building_type
 #   location: build_construction_schedule (top)
@@ -495,6 +705,40 @@ class UnifiedEngine:
         if s in ("tenant_improvement", "tenant", "ti"):
             return "tenant_improvement"
         return "ground_up"
+
+    @staticmethod
+    def _normalize_special_feature_key(value: Any) -> str:
+        if not isinstance(value, str):
+            return ""
+        return value.strip().lower().replace("-", "_").replace(" ", "_")
+
+    def _normalize_healthcare_special_feature_id(
+        self,
+        subtype: Any,
+        feature_id: Any,
+        available_feature_keys: List[str],
+    ) -> Optional[str]:
+        normalized_feature = self._normalize_special_feature_key(feature_id)
+        if not normalized_feature:
+            return None
+
+        available_by_normalized: Dict[str, str] = {}
+        for raw_key in available_feature_keys:
+            normalized_key = self._normalize_special_feature_key(raw_key)
+            if normalized_key:
+                available_by_normalized[normalized_key] = raw_key
+
+        if normalized_feature in available_by_normalized:
+            return available_by_normalized[normalized_feature]
+
+        subtype_key = self._normalize_special_feature_key(subtype)
+        subtype_aliases = HEALTHCARE_SPECIAL_FEATURE_ALIASES.get(subtype_key, {})
+        canonical_candidate = subtype_aliases.get(normalized_feature)
+        if not canonical_candidate:
+            return None
+
+        canonical_normalized = self._normalize_special_feature_key(canonical_candidate)
+        return available_by_normalized.get(canonical_normalized)
     """
     One engine to rule them all.
     Single source of truth for all cost calculations.
@@ -727,26 +971,48 @@ class UnifiedEngine:
         special_features_breakdown: List[Dict[str, Any]] = []
         special_features_breakdown_by_id: Dict[str, Dict[str, Any]] = {}
         if special_features and building_config.special_features:
+            healthcare_applied_feature_ids: set = set()
+            available_feature_keys = list(building_config.special_features.keys())
             for feature in special_features:
                 if isinstance(feature, dict):
                     continue
-                if feature in building_config.special_features:
-                    cost_per_sf = float(building_config.special_features[feature])
+                raw_feature_key = self._normalize_special_feature_key(feature)
+                canonical_feature_key = feature
+                if building_type == BuildingType.HEALTHCARE:
+                    canonical_feature_key = self._normalize_healthcare_special_feature_id(
+                        subtype=subtype,
+                        feature_id=feature,
+                        available_feature_keys=available_feature_keys,
+                    )
+                    if canonical_feature_key is None:
+                        continue
+                    if canonical_feature_key in healthcare_applied_feature_ids:
+                        continue
+                    healthcare_applied_feature_ids.add(canonical_feature_key)
+                    if raw_feature_key and raw_feature_key != self._normalize_special_feature_key(canonical_feature_key):
+                        self._log_trace("special_feature_alias_normalized", {
+                            'feature': feature,
+                            'canonical_feature': canonical_feature_key,
+                            'subtype': subtype,
+                        })
+
+                if canonical_feature_key in building_config.special_features:
+                    cost_per_sf = float(building_config.special_features[canonical_feature_key])
                     feature_cost = cost_per_sf * square_footage
                     special_features_cost += feature_cost
-                    row = special_features_breakdown_by_id.get(feature)
+                    row = special_features_breakdown_by_id.get(canonical_feature_key)
                     if row is None:
                         row = {
-                            'id': feature,
+                            'id': canonical_feature_key,
                             'cost_per_sf': cost_per_sf,
                             'total_cost': 0.0,
-                            'label': _humanize_special_feature_label(feature),
+                            'label': _humanize_special_feature_label(canonical_feature_key),
                         }
-                        special_features_breakdown_by_id[feature] = row
+                        special_features_breakdown_by_id[canonical_feature_key] = row
                         special_features_breakdown.append(row)
                     row['total_cost'] = float(row['total_cost']) + feature_cost
                     self._log_trace("special_feature_applied", {
-                        'feature': feature,
+                        'feature': canonical_feature_key,
                         'cost_per_sf': cost_per_sf,
                         'total_cost': feature_cost
                     })
@@ -1158,32 +1424,26 @@ class UnifiedEngine:
                 ],
                 'total_square_feet': total_sf
             }
-        elif (
-            building_type == BuildingType.HEALTHCARE
-            and getattr(building_config, "facility_metrics_profile", None) == "healthcare_outpatient"
-        ):
-            financial_metrics_cfg = getattr(building_config, 'financial_metrics', {}) or {}
-            units_per_sf_value = financial_metrics_cfg.get('units_per_sf')
+        elif building_type == BuildingType.HEALTHCARE:
+            financial_metrics_cfg = self._get_healthcare_financial_metrics(building_config)
             primary_unit_label = financial_metrics_cfg.get('primary_unit', 'Units')
-            revenue_per_unit_cfg = financial_metrics_cfg.get('revenue_per_unit_annual')
-            computed_units = 0
-            if units_per_sf_value and square_footage:
-                try:
-                    computed_units = max(1, int(round(float(square_footage) * float(units_per_sf_value))))
-                except (TypeError, ValueError):
-                    computed_units = 1
-            if computed_units <= 0:
-                computed_units = 1
+            facility_profile = getattr(building_config, "facility_metrics_profile", None)
+            computed_units = self._resolve_healthcare_units(building_config, square_footage)
             cost_per_unit = total_project_cost / computed_units if computed_units else 0
-            revenue_per_unit = revenue_per_unit_cfg if revenue_per_unit_cfg else (
-                annual_revenue / computed_units if computed_units else 0
-            )
+            annual_revenue_value = self._coerce_number((result.get('revenue_analysis') or {}).get('annual_revenue')) or 0.0
+
+            revenue_per_unit_cfg = self._coerce_number(financial_metrics_cfg.get('revenue_per_unit_annual'))
+            if revenue_per_unit_cfg is not None and facility_profile == "healthcare_outpatient":
+                revenue_per_unit = revenue_per_unit_cfg
+            else:
+                revenue_per_unit = annual_revenue_value / computed_units if computed_units else 0
+
             facility_metrics_payload = {
                 'type': 'healthcare',
                 'units': computed_units,
                 'unit_label': primary_unit_label,
                 'cost_per_unit': cost_per_unit,
-                'revenue_per_unit': revenue_per_unit
+                'revenue_per_unit': revenue_per_unit,
             }
 
         if facility_metrics_payload:
@@ -1368,6 +1628,53 @@ class UnifiedEngine:
         if percent > 1.0:
             percent = percent / 100.0
         return max(percent, 0.0)
+
+    def _get_healthcare_financial_metrics(self, subtype_config: Any) -> Dict[str, Any]:
+        if subtype_config is None:
+            return {}
+        financial_metrics = getattr(subtype_config, "financial_metrics", None)
+        return dict(financial_metrics) if isinstance(financial_metrics, dict) else {}
+
+    def _resolve_healthcare_units(
+        self,
+        subtype_config: Any,
+        square_footage: float,
+        *,
+        fallback_units: Optional[int] = None,
+    ) -> int:
+        if isinstance(fallback_units, int) and fallback_units > 0:
+            return fallback_units
+
+        sf_value = self._coerce_number(square_footage) or 0.0
+        if sf_value <= 0:
+            return 1
+
+        financial_metrics = self._get_healthcare_financial_metrics(subtype_config)
+        units_per_sf = self._coerce_number(financial_metrics.get("units_per_sf"))
+        if units_per_sf is None:
+            units_per_sf = self._coerce_number(getattr(subtype_config, "units_per_sf", None))
+        if units_per_sf is None:
+            units_per_sf = self._coerce_number(getattr(subtype_config, "beds_per_sf", None))
+        if units_per_sf is None or units_per_sf <= 0:
+            return 1
+
+        derived_units = int(round(sf_value * float(units_per_sf)))
+        return max(1, derived_units)
+
+    def _resolve_healthcare_operational_profile(
+        self,
+        subtype_key: str,
+        subtype_config: Any,
+    ) -> Dict[str, Any]:
+        subtype_normalized = (subtype_key or "").strip().lower()
+        profile = dict(HEALTHCARE_OPERATIONAL_METRIC_DEFAULTS.get(subtype_normalized, {}))
+        financial_metrics = self._get_healthcare_financial_metrics(subtype_config)
+        configured_profile = financial_metrics.get("operational_metrics")
+        if isinstance(configured_profile, dict):
+            for key, value in configured_profile.items():
+                if value is not None:
+                    profile[key] = value
+        return profile
 
     def _resolve_office_sf(
         self,
@@ -2642,8 +2949,9 @@ class UnifiedEngine:
         # Calculate payback period
         payback_period = round(total_cost / net_income, 1) if net_income > 0 else 999
 
+        healthcare_profile = building_enum == BuildingType.HEALTHCARE
         healthcare_outpatient_profile = (
-            building_enum == BuildingType.HEALTHCARE
+            healthcare_profile
             and getattr(subtype_config, "facility_metrics_profile", None) == "healthcare_outpatient"
         )
         
@@ -2661,23 +2969,18 @@ class UnifiedEngine:
                     units = max(1, int(round(units_estimate)))
                 except (TypeError, ValueError):
                     units = 0
-            elif (
-                healthcare_outpatient_profile
-                and hasattr(subtype_config, 'financial_metrics')
-                and isinstance(subtype_config.financial_metrics, dict)
-            ):
-                fm = subtype_config.financial_metrics
-                units_per_sf = fm.get('units_per_sf') or 0
-                if square_footage and units_per_sf:
-                    try:
-                        units = max(1, int(round(float(square_footage) * float(units_per_sf))))
-                    except (TypeError, ValueError):
-                        units = 0
+            elif healthcare_profile:
+                units = self._resolve_healthcare_units(
+                    subtype_config,
+                    square_footage,
+                    fallback_units=None,
+                )
                 if units:
                     calculations['units'] = units
+                    fm = self._get_healthcare_financial_metrics(subtype_config)
                     unit_label_value = fm.get('primary_unit', 'units')
-                    calculations['unit_label'] = unit_label_value
-                    calculations['unit_type'] = unit_label_value
+                    calculations.setdefault('unit_label', unit_label_value)
+                    calculations.setdefault('unit_type', unit_label_value)
             if (
                 units
                 and healthcare_outpatient_profile
@@ -2706,6 +3009,12 @@ class UnifiedEngine:
         
         # Surface per-unit data for downstream cards (MF heavy).
         operational_metrics.setdefault('per_unit', {})
+        if healthcare_profile and (not units or units <= 0):
+            units = self._resolve_healthcare_units(
+                subtype_config,
+                square_footage,
+                fallback_units=None,
+            )
         operational_metrics['per_unit'].setdefault('units', units or 0)
         if units and units > 0:
             cost_per_unit = total_cost / units
@@ -2931,7 +3240,45 @@ class UnifiedEngine:
         
         # Healthcare - uses beds, visits, procedures, or scans
         if building_enum == BuildingType.HEALTHCARE:
-            if hasattr(config, 'base_revenue_per_bed_annual') and config.base_revenue_per_bed_annual and hasattr(config, 'beds_per_sf') and config.beds_per_sf:
+            financial_metrics_cfg = self._get_healthcare_financial_metrics(config)
+            facility_profile = getattr(config, "facility_metrics_profile", None)
+            market_rate_type = str(financial_metrics_cfg.get("market_rate_type") or "").strip().lower()
+
+            outpatient_capacity_revenue = None
+            if facility_profile == "healthcare_outpatient" and market_rate_type == "revenue_per_visit":
+                units = self._resolve_healthcare_units(config, square_footage)
+                throughput_profile = self._resolve_healthcare_operational_profile(subtype_key, config)
+                throughput_per_unit_day = self._coerce_number(throughput_profile.get("throughput_per_unit_day"))
+                operating_days = self._coerce_number(throughput_profile.get("operating_days_per_year"))
+                if operating_days is None:
+                    operating_days = self._coerce_number(financial_metrics_cfg.get("operating_days_per_year"))
+                if operating_days is None:
+                    operating_days = self._coerce_number(getattr(config, "days_per_year", None))
+                operating_days = max(1.0, float(operating_days or 260.0))
+                reimbursement_per_visit = self._coerce_number(financial_metrics_cfg.get("market_rate_default"))
+                if reimbursement_per_visit is None:
+                    reimbursement_per_visit = self._coerce_number(getattr(config, "base_revenue_per_visit", None))
+
+                if (
+                    throughput_per_unit_day is not None
+                    and throughput_per_unit_day > 0
+                    and reimbursement_per_visit is not None
+                    and reimbursement_per_visit > 0
+                    and units > 0
+                ):
+                    annual_visit_capacity = float(units) * float(throughput_per_unit_day) * float(operating_days)
+                    outpatient_capacity_revenue = annual_visit_capacity * float(reimbursement_per_visit)
+                    context["healthcare_capacity_revenue"] = {
+                        "mode": "outpatient_visit_capacity",
+                        "units": units,
+                        "throughput_per_unit_day": float(throughput_per_unit_day),
+                        "operating_days_per_year": float(operating_days),
+                        "annual_visit_capacity": annual_visit_capacity,
+                        "reimbursement_per_visit": float(reimbursement_per_visit),
+                    }
+            if outpatient_capacity_revenue is not None:
+                base_revenue = outpatient_capacity_revenue
+            elif hasattr(config, 'base_revenue_per_bed_annual') and config.base_revenue_per_bed_annual and hasattr(config, 'beds_per_sf') and config.beds_per_sf:
                 beds = square_footage * config.beds_per_sf
                 base_revenue = beds * config.base_revenue_per_bed_annual
             elif hasattr(config, 'base_revenue_per_visit') and config.base_revenue_per_visit and hasattr(config, 'visits_per_day') and config.visits_per_day and hasattr(config, 'days_per_year') and config.days_per_year:
@@ -3705,96 +4052,267 @@ class UnifiedEngine:
                 or operational_efficiency.get('subtype')
                 or subtype
             )
+            subtype_normalized = str(subtype_value or "").strip().lower()
+            subtype_config = None
             facility_metrics_profile = None
             building_enum = self._get_building_enum(building_type)
             if building_enum:
-                subtype_key = subtype_value if isinstance(subtype_value, str) else subtype
+                subtype_key = subtype_value if isinstance(subtype_value, str) else subtype_normalized
                 subtype_key = subtype_key if isinstance(subtype_key, str) else str(subtype_key or "")
-                subtype_config = get_building_config(building_enum, subtype_key)
+                subtype_config = get_building_config(building_enum, subtype_key.strip().lower())
                 facility_metrics_profile = (
                     getattr(subtype_config, "facility_metrics_profile", None) if subtype_config else None
                 )
-            if facility_metrics_profile == "healthcare_outpatient":
-                is_urgent_care = subtype_value == 'urgent_care'
-                exam_rooms = units
-                if not exam_rooms:
-                    if square_footage and square_footage > 0:
-                        if is_urgent_care:
-                            exam_rooms = max(1, round(square_footage / 450))
-                        else:
-                            exam_rooms = max(1, round(square_footage / 650))
-                    else:
-                        exam_rooms = 1
-                avg_reimbursement = 150.0 if is_urgent_care else 120.0
-                visits_per_year = annual_revenue / avg_reimbursement if annual_revenue and avg_reimbursement else 0
-                visits_per_day = visits_per_year / 260 if visits_per_year else 0
-                providers = max(1, round(visits_per_day / 20)) if visits_per_day else 1
-                support_staff = providers
-                room_capacity_per_day = 14.0 if is_urgent_care else 10.0
-                max_visits_capacity = exam_rooms * room_capacity_per_day if exam_rooms else 0
-                utilization_pct = (visits_per_day / max_visits_capacity * 100.0) if max_visits_capacity else 0
-                
-                operational_metrics['staffing'] = [
-                    {'label': 'Providers (MD/DO/NP/PA)', 'value': str(providers)},
-                    {'label': 'Support Staff (MAs)', 'value': str(support_staff)},
-                    {'label': 'Exam Rooms', 'value': str(exam_rooms)}
+            financial_metrics_cfg = self._get_healthcare_financial_metrics(subtype_config)
+            operational_profile = self._resolve_healthcare_operational_profile(subtype_normalized, subtype_config)
+            resolved_units = self._resolve_healthcare_units(
+                subtype_config,
+                square_footage,
+                fallback_units=units if units > 0 else None,
+            )
+            unit_label = str(financial_metrics_cfg.get("primary_unit") or "units")
+            revenue_per_unit_cfg = self._coerce_number(financial_metrics_cfg.get("revenue_per_unit_annual"))
+            operational_metrics.setdefault("per_unit", {})
+            operational_metrics["per_unit"].update(
+                {
+                    "units": max(1, int(resolved_units)),
+                    "unit_label": unit_label,
+                    "unit_type": unit_label,
+                }
+            )
+
+            is_inpatient = (
+                subtype_normalized in HEALTHCARE_INPATIENT_SUBTYPES
+                or facility_metrics_profile != "healthcare_outpatient"
+            )
+            is_outpatient = not is_inpatient
+
+            def _threshold_color(value: float, green_threshold: float, yellow_threshold: float) -> str:
+                if value >= green_threshold:
+                    return "green"
+                if value >= yellow_threshold:
+                    return "yellow"
+                return "red"
+
+            operating_days = self._coerce_number(operational_profile.get("operating_days_per_year"))
+            if operating_days is None:
+                operating_days = self._coerce_number(financial_metrics_cfg.get("operating_days_per_year"))
+            if operating_days is None:
+                operating_days = self._coerce_number(getattr(subtype_config, "days_per_year", None))
+            if operating_days is None:
+                operating_days = 365.0 if is_inpatient else 260.0
+            operating_days = max(1.0, float(operating_days))
+
+            throughput_per_unit_day = self._coerce_number(operational_profile.get("throughput_per_unit_day"))
+            if throughput_per_unit_day is None:
+                throughput_per_unit_day = 1.0 if is_inpatient else 8.0
+            throughput_per_unit_day = max(0.1, float(throughput_per_unit_day))
+
+            utilization_target = self._coerce_number(operational_profile.get("utilization_target"))
+            if utilization_target is None:
+                utilization_target = self._coerce_number(financial_metrics_cfg.get("target_occupancy"))
+            if utilization_target is None:
+                utilization_target = self._coerce_number(getattr(subtype_config, "occupancy_rate_base", None))
+            if utilization_target is None:
+                utilization_target = 0.85 if is_inpatient else 0.75
+            utilization_target = max(0.35, min(float(utilization_target), 0.98))
+
+            efficiency_label = str(operational_profile.get("efficiency_label") or "Operational Efficiency")
+            efficiency_green = self._coerce_number(operational_profile.get("efficiency_green_threshold"))
+            efficiency_yellow = self._coerce_number(operational_profile.get("efficiency_yellow_threshold"))
+            efficiency_green = float(efficiency_green) if efficiency_green is not None else 84.0
+            efficiency_yellow = float(efficiency_yellow) if efficiency_yellow is not None else 70.0
+
+            if is_outpatient:
+                reimbursement_per_visit = self._coerce_number(financial_metrics_cfg.get("market_rate_default"))
+                if reimbursement_per_visit is None:
+                    reimbursement_per_visit = self._coerce_number(getattr(subtype_config, "base_revenue_per_visit", None))
+                if reimbursement_per_visit is None and revenue_per_unit_cfg is not None and resolved_units > 0:
+                    reimbursement_per_visit = max(
+                        1.0,
+                        float(revenue_per_unit_cfg) / max(1.0, throughput_per_unit_day * operating_days),
+                    )
+                if reimbursement_per_visit is None:
+                    reimbursement_per_visit = 120.0
+
+                throughput_capacity_per_day = float(resolved_units) * throughput_per_unit_day
+                annual_throughput = annual_revenue / float(reimbursement_per_visit) if reimbursement_per_visit > 0 else 0.0
+                throughput_per_day = annual_throughput / operating_days if operating_days > 0 else 0.0
+                utilization_pct = (
+                    (throughput_per_day / throughput_capacity_per_day) * 100.0
+                    if throughput_capacity_per_day > 0
+                    else 0.0
+                )
+                utilization_pct = max(0.0, min(utilization_pct, 100.0))
+
+                provider_fte_per_unit = self._coerce_number(operational_profile.get("provider_fte_per_unit"))
+                if provider_fte_per_unit is None:
+                    provider_fte_per_unit = 0.35
+                support_fte_per_provider = self._coerce_number(operational_profile.get("support_fte_per_provider"))
+                if support_fte_per_provider is None:
+                    support_fte_per_provider = 1.2
+                specialist_fte_per_unit = self._coerce_number(operational_profile.get("specialist_fte_per_unit"))
+                specialist_fte_per_unit = float(specialist_fte_per_unit or 0.0)
+                specialist_label = str(operational_profile.get("specialist_label") or "Specialty Staff FTE")
+
+                providers = max(1, int(round(float(resolved_units) * float(provider_fte_per_unit))))
+                support_staff = max(1, int(round(float(providers) * float(support_fte_per_provider))))
+                specialist_staff = max(0, int(round(float(resolved_units) * specialist_fte_per_unit)))
+                total_fte = providers + support_staff + specialist_staff
+                staffing_intensity = float(total_fte) / float(resolved_units) if resolved_units > 0 else 0.0
+
+                staffing_rows = [
+                    {'label': 'Providers (MD/DO/NP/PA FTE)', 'value': str(providers)},
+                    {'label': 'Support Staff (FTE)', 'value': str(support_staff)},
+                    {'label': f'{unit_label.title()}', 'value': str(resolved_units)},
                 ]
-                
+                if specialist_staff > 0:
+                    staffing_rows.append({'label': specialist_label, 'value': str(specialist_staff)})
+                operational_metrics['staffing'] = staffing_rows
+
                 revenue_per_provider = annual_revenue / providers if providers else None
-                revenue_per_room = annual_revenue / exam_rooms if exam_rooms else None
+                revenue_per_unit = annual_revenue / resolved_units if resolved_units else None
                 revenue_per_sf = annual_revenue / square_footage if square_footage else None
                 labor_ratio_pct = (labor_cost / annual_revenue * 100.0) if annual_revenue else None
                 revenue_block = {}
                 if revenue_per_provider is not None:
                     revenue_block['Revenue per Provider'] = f'${revenue_per_provider:,.0f}'
-                if revenue_per_room is not None:
-                    revenue_block['Revenue per Exam Room'] = f'${revenue_per_room:,.0f}'
+                if revenue_per_unit is not None:
+                    revenue_block[f'Revenue per {unit_label.title()}'] = f'${revenue_per_unit:,.0f}'
                 if revenue_per_sf is not None:
                     revenue_block['Revenue per SF'] = f'${revenue_per_sf:,.0f}'
                 if labor_ratio_pct is not None:
                     revenue_block['Labor Cost Ratio'] = f'{labor_ratio_pct:.0f}%'
                 revenue_block['Operating Margin'] = f'{operating_margin * 100:.1f}%'
                 operational_metrics['revenue'] = revenue_block
-                
-                kpis = []
-                if visits_per_day:
-                    kpis.append({
-                        'label': 'Total Visits / Day',
-                        'value': f'{visits_per_day:,.1f}',
-                        'color': 'green' if visits_per_day > 60 else 'yellow'
-                    })
-                if providers and visits_per_day:
-                    visits_per_provider = visits_per_day / providers
-                    kpis.append({
-                        'label': 'Visits / Provider / Day',
-                        'value': f'{visits_per_provider:,.1f}',
-                        'color': 'green' if 18 <= visits_per_provider <= 24 else 'yellow'
-                    })
-                kpis.append({
-                    'label': 'Exam Room Utilization',
-                    'value': f'{utilization_pct:.0f}%',
-                    'color': 'green' if utilization_pct >= 75 else 'yellow' if utilization_pct >= 60 else 'red'
-                })
-                operational_metrics['kpis'] = kpis
+
+                throughput_label = str(operational_profile.get("throughput_label") or "Visits / Day")
+                utilization_label = str(operational_profile.get("utilization_label") or "Capacity Utilization")
+                throughput_efficiency = (
+                    (utilization_pct / (utilization_target * 100.0)) * 100.0 if utilization_target > 0 else 0.0
+                )
+                throughput_efficiency = max(0.0, min(throughput_efficiency, 120.0))
+                staffing_intensity_green = float(operational_profile.get("staffing_intensity_green_threshold") or 3.0)
+                staffing_intensity_yellow = float(operational_profile.get("staffing_intensity_yellow_threshold") or 2.0)
+
+                operational_metrics['kpis'] = [
+                    {
+                        'label': throughput_label,
+                        'value': f'{throughput_per_day:,.1f}',
+                        'color': 'green' if throughput_per_day >= throughput_capacity_per_day * 0.7 else 'yellow',
+                    },
+                    {
+                        'label': utilization_label,
+                        'value': f'{utilization_pct:.0f}%',
+                        'color': _threshold_color(
+                            utilization_pct,
+                            utilization_target * 100.0,
+                            utilization_target * 85.0,
+                        ),
+                    },
+                    {
+                        'label': 'Staffing Intensity',
+                        'value': f'{staffing_intensity:.2f} FTE/{unit_label}',
+                        'color': _threshold_color(
+                            staffing_intensity,
+                            staffing_intensity_green,
+                            staffing_intensity_yellow,
+                        ),
+                    },
+                    {
+                        'label': efficiency_label,
+                        'value': f'{throughput_efficiency:.0f}%',
+                        'color': _threshold_color(
+                            throughput_efficiency,
+                            efficiency_green,
+                            efficiency_yellow,
+                        ),
+                    },
+                ]
             else:
-                beds = round(square_footage / 600)
-                nursing_fte = round(labor_cost * 0.4 / 75000) if labor_cost > 0 else 1
-                total_fte = round(labor_cost / 60000) if labor_cost > 0 else 1
+                beds = max(1, resolved_units)
+                revenue_per_bed = revenue_per_unit_cfg
+                if revenue_per_bed is None:
+                    revenue_per_bed = self._coerce_number(getattr(subtype_config, "base_revenue_per_bed_annual", None))
+                if revenue_per_bed is None:
+                    revenue_per_bed = annual_revenue / beds if beds else 0.0
+                revenue_per_bed = max(float(revenue_per_bed or 0.0), 1.0)
+
+                avg_daily_census = annual_revenue / revenue_per_bed if revenue_per_bed > 0 else 0.0
+                # Keep census bounded by licensed capacity to avoid impossible occupancy (>100%).
+                avg_daily_census = max(0.0, min(avg_daily_census, float(beds)))
+                occupancy_pct = (avg_daily_census / beds * 100.0) if beds > 0 else 0.0
+                occupancy_pct = max(0.0, min(occupancy_pct, 100.0))
+
+                average_los_days = self._coerce_number(operational_profile.get("average_length_of_stay_days"))
+                average_los_days = max(float(average_los_days or 4.5), 1.0)
+                admissions_per_day = avg_daily_census / average_los_days
+
+                clinical_staff_per_unit = self._coerce_number(operational_profile.get("clinical_staff_fte_per_unit"))
+                support_staff_per_unit = self._coerce_number(operational_profile.get("support_staff_fte_per_unit"))
+                clinical_staff_per_unit = float(clinical_staff_per_unit if clinical_staff_per_unit is not None else 1.2)
+                support_staff_per_unit = float(support_staff_per_unit if support_staff_per_unit is not None else 0.7)
+                clinical_fte = max(1, int(round(beds * clinical_staff_per_unit)))
+                support_fte = max(1, int(round(beds * support_staff_per_unit)))
+                total_fte = clinical_fte + support_fte
+                staffing_intensity = float(total_fte) / float(beds) if beds else 0.0
+
+                staffing_intensity_label = str(
+                    operational_profile.get("staffing_intensity_label") or "FTE per Licensed Bed"
+                )
+                throughput_label = str(operational_profile.get("throughput_label") or "Average Daily Census")
+                utilization_label = str(operational_profile.get("utilization_label") or "Bed Occupancy")
+
                 operational_metrics['staffing'] = [
-                    {'label': 'Total FTEs Required', 'value': str(total_fte)},
-                    {'label': 'Beds per Nurse', 'value': f'{beds / nursing_fte:.1f}' if nursing_fte > 0 else 'N/A'}
+                    {'label': 'Clinical Staff (FTE)', 'value': str(clinical_fte)},
+                    {'label': 'Support Staff (FTE)', 'value': str(support_fte)},
+                    {'label': f'{unit_label.title()}', 'value': str(beds)},
                 ]
                 operational_metrics['revenue'] = {
                     'Revenue per Employee': f'${annual_revenue / total_fte:,.0f}' if total_fte > 0 else 'N/A',
-                    'Revenue per Bed': f'${annual_revenue / beds:,.0f}' if beds > 0 else 'N/A',
+                    f'Revenue per {unit_label.title()}': f'${annual_revenue / beds:,.0f}' if beds > 0 else 'N/A',
                     'Labor Cost Ratio': f'{(labor_cost / annual_revenue * 100):.0f}%' if annual_revenue > 0 else 'N/A',
                     'Operating Margin': f'{operating_margin * 100:.1f}%'
                 }
+
+                inpatient_efficiency = (
+                    (occupancy_pct / (utilization_target * 100.0)) * 100.0 if utilization_target > 0 else 0.0
+                )
+                inpatient_efficiency = max(0.0, min(inpatient_efficiency, 120.0))
                 operational_metrics['kpis'] = [
-                    {'label': 'ALOS Target', 'value': '3.8 days', 'color': 'green'},
-                    {'label': 'Occupancy', 'value': '85%', 'color': 'green'},
-                    {'label': 'Efficiency', 'value': f'{efficiency_score:.0f}%',
-                     'color': 'green' if (efficiency_score or 0) > 20 else 'yellow' if (efficiency_score or 0) > 15 else 'red'}
+                    {
+                        'label': throughput_label,
+                        'value': f'{avg_daily_census:,.1f}',
+                        'color': 'green' if avg_daily_census >= beds * 0.75 else 'yellow',
+                    },
+                    {
+                        'label': utilization_label,
+                        'value': f'{occupancy_pct:.0f}%',
+                        'color': _threshold_color(
+                            occupancy_pct,
+                            utilization_target * 100.0,
+                            utilization_target * 85.0,
+                        ),
+                    },
+                    {
+                        'label': 'Admissions / Day',
+                        'value': f'{admissions_per_day:,.1f}',
+                        'color': 'green' if admissions_per_day > 1.0 else 'yellow',
+                    },
+                    {
+                        'label': staffing_intensity_label,
+                        'value': f'{staffing_intensity:.2f}',
+                        'color': 'green' if staffing_intensity >= 1.2 else 'yellow' if staffing_intensity >= 0.8 else 'red',
+                    },
+                    {
+                        'label': efficiency_label,
+                        'value': f'{inpatient_efficiency:.0f}%',
+                        'color': _threshold_color(
+                            inpatient_efficiency,
+                            efficiency_green,
+                            efficiency_yellow,
+                        ),
+                    },
                 ]
             
         elif building_type == 'multifamily':

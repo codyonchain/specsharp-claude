@@ -2,7 +2,11 @@ import math
 
 import pytest
 
-from app.v2.engines.unified_engine import unified_engine
+from app.v2.engines.unified_engine import (
+    HEALTHCARE_INPATIENT_SUBTYPES,
+    HEALTHCARE_SPECIAL_FEATURE_ALIASES,
+    unified_engine,
+)
 from app.v2.config.master_config import (
     BuildingType,
     ProjectClass,
@@ -836,6 +840,19 @@ def test_healthcare_profiles_are_wired_and_content_maps_to_tiles():
 
 
 def test_healthcare_scope_profiles_keep_depth_and_allocation_integrity():
+    min_items_by_subtype = {
+        "surgical_center": {"structural": 3, "mechanical": 4, "electrical": 4, "plumbing": 4, "finishes": 3},
+        "imaging_center": {"structural": 3, "mechanical": 4, "electrical": 4, "plumbing": 4, "finishes": 3},
+        "urgent_care": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+        "outpatient_clinic": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+        "medical_office_building": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+        "dental_office": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+        "hospital": {"structural": 4, "mechanical": 5, "electrical": 5, "plumbing": 4, "finishes": 4},
+        "medical_center": {"structural": 4, "mechanical": 5, "electrical": 5, "plumbing": 4, "finishes": 4},
+        "nursing_home": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+        "rehabilitation": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    }
+
     for subtype, profile_id in healthcare_scope_profiles.SCOPE_ITEM_DEFAULTS.items():
         cfg = get_building_config(BuildingType.HEALTHCARE, subtype)
         assert cfg is not None
@@ -855,11 +872,130 @@ def test_healthcare_scope_profiles_keep_depth_and_allocation_integrity():
         for trade_key, trade in by_trade.items():
             items = trade.get("items")
             assert isinstance(items, list)
-            assert len(items) >= 2
+            assert len(items) >= min_items_by_subtype[subtype][trade_key]
             total_share = sum(
                 float(item.get("allocation", {}).get("share", 0.0))
                 for item in items
             )
             assert math.isclose(total_share, 1.0, rel_tol=1e-9, abs_tol=1e-9), (
                 f"{profile_id}::{trade_key} share total expected 1.0, got {total_share}"
+            )
+
+
+def test_healthcare_special_feature_alias_targets_exist_in_subtype_configs():
+    for subtype, alias_map in HEALTHCARE_SPECIAL_FEATURE_ALIASES.items():
+        cfg = get_building_config(BuildingType.HEALTHCARE, subtype)
+        assert cfg is not None
+        available_feature_ids = set((cfg.special_features or {}).keys())
+        assert available_feature_ids
+
+        for legacy_id, canonical_id in alias_map.items():
+            assert isinstance(legacy_id, str) and legacy_id
+            assert isinstance(canonical_id, str) and canonical_id
+            assert canonical_id in available_feature_ids, (
+                f"Alias target '{canonical_id}' for subtype '{subtype}' "
+                "must exist in the backend special_features config."
+            )
+
+
+def test_healthcare_operational_metric_contract_by_subtype_class():
+    outpatient_subtypes = {
+        "surgical_center",
+        "imaging_center",
+        "urgent_care",
+        "outpatient_clinic",
+        "medical_office_building",
+        "dental_office",
+    }
+    inpatient_subtypes = {
+        "hospital",
+        "medical_center",
+        "nursing_home",
+        "rehabilitation",
+    }
+
+    for subtype in sorted(outpatient_subtypes | inpatient_subtypes):
+        config = get_building_config(BuildingType.HEALTHCARE, subtype)
+        assert config is not None
+        financial_metrics = config.financial_metrics or {}
+        assert financial_metrics.get("primary_unit"), f"{subtype} must define a healthcare primary unit"
+
+        if subtype in outpatient_subtypes:
+            assert (
+                financial_metrics.get("units_per_sf")
+                or getattr(config, "units_per_sf", None)
+                or getattr(config, "beds_per_sf", None)
+            ), f"{subtype} must define unit density for capacity math"
+
+            if subtype != "dental_office":
+                profile = financial_metrics.get("operational_metrics") or {}
+                for required_key in (
+                    "throughput_per_unit_day",
+                    "utilization_target",
+                    "provider_fte_per_unit",
+                    "support_fte_per_provider",
+                ):
+                    assert required_key in profile, f"{subtype} missing operational key: {required_key}"
+        else:
+            assert subtype in HEALTHCARE_INPATIENT_SUBTYPES
+            profile = financial_metrics.get("operational_metrics") or {}
+            for required_key in (
+                "throughput_per_unit_day",
+                "utilization_target",
+                "average_length_of_stay_days",
+                "clinical_staff_fte_per_unit",
+                "support_staff_fte_per_unit",
+            ):
+                assert required_key in profile, f"{subtype} missing inpatient operational key: {required_key}"
+
+
+def test_healthcare_runtime_emits_utilization_and_efficiency_metrics_for_all_subtypes():
+    healthcare_subtypes = [
+        "surgical_center",
+        "imaging_center",
+        "urgent_care",
+        "outpatient_clinic",
+        "medical_office_building",
+        "dental_office",
+        "hospital",
+        "medical_center",
+        "nursing_home",
+        "rehabilitation",
+    ]
+
+    for subtype in healthcare_subtypes:
+        result = unified_engine.calculate_project(
+            building_type=BuildingType.HEALTHCARE,
+            subtype=subtype,
+            square_footage=120_000 if subtype in HEALTHCARE_INPATIENT_SUBTYPES else 12_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        metrics = result.get("operational_metrics") or {}
+        staffing = metrics.get("staffing") or []
+        kpis = metrics.get("kpis") or []
+        per_unit = metrics.get("per_unit") or {}
+        facility_metrics = result.get("facility_metrics") or {}
+
+        assert staffing, f"{subtype} must emit staffing metrics"
+        assert kpis, f"{subtype} must emit KPI metrics"
+        assert per_unit.get("units", 0) >= 1, f"{subtype} must emit non-zero unit count"
+        assert facility_metrics.get("type") == "healthcare", f"{subtype} must emit healthcare facility metrics"
+
+        kpi_labels = [str(entry.get("label", "")) for entry in kpis if isinstance(entry, dict)]
+        assert any("Utilization" in label or "Occupancy" in label for label in kpi_labels), (
+            f"{subtype} must emit utilization/occupancy KPI"
+        )
+        assert any(("Efficiency" in label) or ("Yield" in label) for label in kpi_labels), (
+            f"{subtype} must emit efficiency KPI"
+        )
+        if subtype in HEALTHCARE_INPATIENT_SUBTYPES:
+            occupancy_entry = next(
+                (entry for entry in kpis if "Occupancy" in str(entry.get("label", ""))),
+                None,
+            )
+            assert occupancy_entry is not None, f"{subtype} must emit occupancy KPI value"
+            occupancy_pct = float(str(occupancy_entry.get("value", "0")).replace("%", ""))
+            assert 0.0 <= occupancy_pct <= 100.0, (
+                f"{subtype} occupancy must be bounded to 0-100, got {occupancy_pct}"
             )
