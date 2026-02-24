@@ -608,10 +608,11 @@ def test_healthcare_first_break_semantics_align_with_metric_type():
         assert isinstance(operator, str) and operator.strip()
 
         if metric == "value_gap_pct":
-            assert abs(float(threshold)) <= 100.0
+            assert operator in {"<=", "<"}
+            assert abs(float(threshold)) <= 1000.0
         else:
-            assert float(threshold) < 0.0
-            assert abs(float(threshold)) >= 1000.0
+            assert operator in {"<=", "<"}
+            assert float(threshold) <= 0.0 or abs(float(threshold)) >= 100000.0
 
         first_break = view_model.get("first_break_condition")
         di_provenance = view_model.get("decision_insurance_provenance") or {}
@@ -624,3 +625,84 @@ def test_healthcare_first_break_semantics_align_with_metric_type():
             assert isinstance(first_break.get("observed_value"), (int, float))
             if metric == "value_gap_pct":
                 assert isinstance(first_break.get("observed_value_pct"), (int, float))
+
+
+def test_healthcare_policy_collapse_contracts_are_subtype_diverse_and_structural():
+    collapse_metric_families = set()
+    flex_signatures = set()
+
+    for subtype, profile_id in HEALTHCARE_PROFILE_IDS.items():
+        policy = get_decision_insurance_policy(profile_id)
+        assert isinstance(policy, dict)
+
+        collapse_trigger = policy.get("collapse_trigger")
+        assert isinstance(collapse_trigger, dict)
+
+        metric = collapse_trigger.get("metric")
+        assert metric in {"value_gap_pct", "value_gap"}
+        collapse_metric_families.add(metric)
+
+        scenario_priority = collapse_trigger.get("scenario_priority")
+        assert isinstance(scenario_priority, list) and len(scenario_priority) == 4
+        assert len(set(scenario_priority)) == 4
+        assert scenario_priority[0] == "base"
+        assert {"base", "conservative", "ugly"}.issubset(set(scenario_priority))
+
+        profile = get_dealshield_profile(profile_id)
+        row_ids = {
+            row.get("row_id")
+            for row in profile.get("derived_rows", [])
+            if isinstance(row, dict) and isinstance(row.get("row_id"), str)
+        }
+        subtype_rows = [
+            scenario_id for scenario_id in scenario_priority
+            if scenario_id not in {"base", "conservative", "ugly"}
+        ]
+        assert len(subtype_rows) == 1
+        assert subtype_rows[0] in row_ids
+
+        flex = policy.get("flex_calibration")
+        assert isinstance(flex, dict)
+        tight = float(flex.get("tight_max_pct"))
+        moderate = float(flex.get("moderate_max_pct"))
+        fallback = float(flex.get("fallback_pct"))
+        assert tight <= moderate
+        assert fallback >= 0.0
+        flex_signatures.add((tight, moderate, fallback))
+
+    assert collapse_metric_families == {"value_gap_pct", "value_gap"}
+    assert len(flex_signatures) == len(HEALTHCARE_PROFILE_IDS)
+
+
+def test_healthcare_policy_break_and_flex_outputs_remain_deterministic():
+    for subtype, profile_id in HEALTHCARE_PROFILE_IDS.items():
+        kwargs = dict(
+            building_type=BuildingType.HEALTHCARE,
+            subtype=subtype,
+            square_footage=70_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        payload_a = unified_engine.calculate_project(**kwargs)
+        payload_b = unified_engine.calculate_project(**kwargs)
+
+        profile = get_dealshield_profile(profile_id)
+        view_a = build_dealshield_view_model(
+            project_id=f"healthcare-break-deterministic-a-{subtype}",
+            payload=payload_a,
+            profile=profile,
+        )
+        view_b = build_dealshield_view_model(
+            project_id=f"healthcare-break-deterministic-b-{subtype}",
+            payload=payload_b,
+            profile=profile,
+        )
+
+        assert view_a.get("first_break_condition") == view_b.get("first_break_condition")
+        assert view_a.get("flex_before_break_pct") == view_b.get("flex_before_break_pct")
+        assert view_a.get("flex_before_break_band") == view_b.get("flex_before_break_band")
+
+        provenance_a = view_a.get("decision_insurance_provenance") or {}
+        provenance_b = view_b.get("decision_insurance_provenance") or {}
+        assert provenance_a.get("first_break_condition") == provenance_b.get("first_break_condition")
+        assert provenance_a.get("flex_before_break_pct") == provenance_b.get("flex_before_break_pct")

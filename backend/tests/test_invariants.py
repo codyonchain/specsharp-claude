@@ -892,6 +892,61 @@ def test_healthcare_di_policy_labels_are_ic_first_and_non_generic():
     assert len(labels) == len(set(labels))
 
 
+def test_healthcare_policy_collapse_metrics_are_mixed_and_semantically_wired():
+    collapse_metric_families = set()
+    flex_signatures = set()
+
+    for profile_id in HEALTHCARE_PROFILE_IDS.values():
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+        collapse_trigger = policy.get("collapse_trigger")
+        assert isinstance(collapse_trigger, dict)
+
+        metric = collapse_trigger.get("metric")
+        operator = collapse_trigger.get("operator")
+        threshold = collapse_trigger.get("threshold")
+        scenario_priority = collapse_trigger.get("scenario_priority")
+
+        assert metric in {"value_gap_pct", "value_gap"}
+        assert operator in {"<=", "<"}
+        assert isinstance(threshold, (int, float))
+        assert isinstance(scenario_priority, list) and len(scenario_priority) == 4
+        assert len(set(scenario_priority)) == 4
+        assert scenario_priority[0] == "base"
+        assert {"base", "conservative", "ugly"}.issubset(set(scenario_priority))
+
+        profile = get_dealshield_profile(profile_id)
+        row_ids = {
+            row.get("row_id")
+            for row in profile.get("derived_rows", [])
+            if isinstance(row, dict) and isinstance(row.get("row_id"), str)
+        }
+        subtype_rows = [
+            scenario_id for scenario_id in scenario_priority
+            if scenario_id not in {"base", "conservative", "ugly"}
+        ]
+        assert len(subtype_rows) == 1
+        assert subtype_rows[0] in row_ids
+
+        if metric == "value_gap_pct":
+            assert abs(float(threshold)) <= 1000.0
+        else:
+            assert float(threshold) <= 0.0 or abs(float(threshold)) >= 100000.0
+
+        flex_calibration = policy.get("flex_calibration")
+        assert isinstance(flex_calibration, dict)
+        tight = float(flex_calibration.get("tight_max_pct"))
+        moderate = float(flex_calibration.get("moderate_max_pct"))
+        fallback = float(flex_calibration.get("fallback_pct"))
+        assert tight <= moderate
+        assert fallback >= 0.0
+
+        collapse_metric_families.add(metric)
+        flex_signatures.add((tight, moderate, fallback))
+
+    assert collapse_metric_families == {"value_gap_pct", "value_gap"}
+    assert len(flex_signatures) == len(HEALTHCARE_PROFILE_IDS)
+
+
 def test_healthcare_content_contract_fields_are_present_and_deterministic():
     required_keys = {"version", "profile_id", "fastest_change", "most_likely_wrong", "question_bank", "red_flags_actions"}
 

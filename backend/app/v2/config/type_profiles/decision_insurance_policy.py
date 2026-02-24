@@ -225,10 +225,10 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "collapse_trigger": {
             "metric": "value_gap_pct",
             "operator": "<=",
-            "threshold": 22.0,
-            "scenario_priority": ["base", "conservative", "sterile_reprocessing_drag", "ugly"],
+            "threshold": 95.0,
+            "scenario_priority": ["base", "sterile_reprocessing_drag", "conservative", "ugly"],
         },
-        "flex_calibration": {"tight_max_pct": 1.2, "moderate_max_pct": 3.5, "fallback_pct": 1.4},
+        "flex_calibration": {"tight_max_pct": 1.4, "moderate_max_pct": 3.8, "fallback_pct": 1.6},
     },
     "healthcare_imaging_center_v1": {
         "primary_control_variable": {
@@ -239,10 +239,10 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "collapse_trigger": {
             "metric": "value_gap_pct",
             "operator": "<=",
-            "threshold": 18.0,
-            "scenario_priority": ["base", "conservative", "magnet_commissioning_slip", "ugly"],
+            "threshold": 78.0,
+            "scenario_priority": ["base", "magnet_commissioning_slip", "conservative", "ugly"],
         },
-        "flex_calibration": {"tight_max_pct": 1.0, "moderate_max_pct": 3.2, "fallback_pct": 1.2},
+        "flex_calibration": {"tight_max_pct": 1.2, "moderate_max_pct": 3.4, "fallback_pct": 1.4},
     },
     "healthcare_urgent_care_v1": {
         "primary_control_variable": {
@@ -253,10 +253,10 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "collapse_trigger": {
             "metric": "value_gap_pct",
             "operator": "<=",
-            "threshold": 12.0,
-            "scenario_priority": ["base", "conservative", "weekend_surge_breakpoint", "ugly"],
+            "threshold": 560.0,
+            "scenario_priority": ["base", "weekend_surge_breakpoint", "conservative", "ugly"],
         },
-        "flex_calibration": {"tight_max_pct": 1.8, "moderate_max_pct": 4.6, "fallback_pct": 2.0},
+        "flex_calibration": {"tight_max_pct": 2.0, "moderate_max_pct": 5.2, "fallback_pct": 2.3},
     },
     "healthcare_outpatient_clinic_v1": {
         "primary_control_variable": {
@@ -267,10 +267,10 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "collapse_trigger": {
             "metric": "value_gap_pct",
             "operator": "<=",
-            "threshold": 10.0,
-            "scenario_priority": ["base", "conservative", "care_team_growth_mismatch", "ugly"],
+            "threshold": 45.0,
+            "scenario_priority": ["base", "care_team_growth_mismatch", "conservative", "ugly"],
         },
-        "flex_calibration": {"tight_max_pct": 1.7, "moderate_max_pct": 4.4, "fallback_pct": 1.9},
+        "flex_calibration": {"tight_max_pct": 1.9, "moderate_max_pct": 4.9, "fallback_pct": 2.1},
     },
     "healthcare_medical_office_building_v1": {
         "primary_control_variable": {
@@ -279,12 +279,12 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
             "label": "IC-First TI/LC Burn, Lease-Up Velocity, and Rollover Stack Control",
         },
         "collapse_trigger": {
-            "metric": "value_gap_pct",
+            "metric": "value_gap",
             "operator": "<=",
-            "threshold": 8.0,
-            "scenario_priority": ["base", "conservative", "anchor_tenant_restack", "ugly"],
+            "threshold": 0.0,
+            "scenario_priority": ["base", "anchor_tenant_restack", "conservative", "ugly"],
         },
-        "flex_calibration": {"tight_max_pct": 1.5, "moderate_max_pct": 4.0, "fallback_pct": 1.6},
+        "flex_calibration": {"tight_max_pct": 1.3, "moderate_max_pct": 3.4, "fallback_pct": 1.4},
     },
     "healthcare_dental_office_v1": {
         "primary_control_variable": {
@@ -295,10 +295,10 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "collapse_trigger": {
             "metric": "value_gap_pct",
             "operator": "<=",
-            "threshold": 9.0,
-            "scenario_priority": ["base", "conservative", "sterilization_center_rework", "ugly"],
+            "threshold": 300.0,
+            "scenario_priority": ["base", "sterilization_center_rework", "conservative", "ugly"],
         },
-        "flex_calibration": {"tight_max_pct": 1.6, "moderate_max_pct": 4.2, "fallback_pct": 1.7},
+        "flex_calibration": {"tight_max_pct": 1.8, "moderate_max_pct": 4.5, "fallback_pct": 2.0},
     },
     "healthcare_hospital_v1": {
         "primary_control_variable": {
@@ -307,12 +307,12 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
             "label": "IC-First Nurse Staffing Intensity, LOS Pressure, and Service-Line Mix Control",
         },
         "collapse_trigger": {
-            "metric": "value_gap_pct",
+            "metric": "value_gap",
             "operator": "<=",
-            "threshold": 28.0,
-            "scenario_priority": ["base", "conservative", "tower_commissioning_retest", "ugly"],
+            "threshold": -10000000.0,
+            "scenario_priority": ["base", "tower_commissioning_retest", "conservative", "ugly"],
         },
-        "flex_calibration": {"tight_max_pct": 0.8, "moderate_max_pct": 2.8, "fallback_pct": 1.0},
+        "flex_calibration": {"tight_max_pct": 0.7, "moderate_max_pct": 2.2, "fallback_pct": 0.8},
     },
     "healthcare_medical_center_v1": {
         "primary_control_variable": {
@@ -321,12 +321,12 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
             "label": "IC-First Procedure Mix, Diagnostic Throughput, and Care-Path Coordination Control",
         },
         "collapse_trigger": {
-            "metric": "value_gap_pct",
+            "metric": "value_gap",
             "operator": "<=",
-            "threshold": 20.0,
-            "scenario_priority": ["base", "conservative", "specialty_program_shift", "ugly"],
+            "threshold": -75000000.0,
+            "scenario_priority": ["base", "specialty_program_shift", "conservative", "ugly"],
         },
-        "flex_calibration": {"tight_max_pct": 1.0, "moderate_max_pct": 3.0, "fallback_pct": 1.2},
+        "flex_calibration": {"tight_max_pct": 0.6, "moderate_max_pct": 1.8, "fallback_pct": 0.7},
     },
     "healthcare_nursing_home_v1": {
         "primary_control_variable": {
@@ -335,12 +335,12 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
             "label": "IC-First Census Mix, Agency Labor Dependency, and Reimbursement Pressure Control",
         },
         "collapse_trigger": {
-            "metric": "value_gap_pct",
+            "metric": "value_gap",
             "operator": "<=",
-            "threshold": 11.0,
-            "scenario_priority": ["base", "conservative", "state_survey_correction_cycle", "ugly"],
+            "threshold": -12000000.0,
+            "scenario_priority": ["base", "state_survey_correction_cycle", "conservative", "ugly"],
         },
-        "flex_calibration": {"tight_max_pct": 2.0, "moderate_max_pct": 5.0, "fallback_pct": 2.4},
+        "flex_calibration": {"tight_max_pct": 1.1, "moderate_max_pct": 3.0, "fallback_pct": 1.2},
     },
     "healthcare_rehabilitation_v1": {
         "primary_control_variable": {
@@ -351,10 +351,10 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "collapse_trigger": {
             "metric": "value_gap_pct",
             "operator": "<=",
-            "threshold": 13.0,
-            "scenario_priority": ["base", "conservative", "equipment_path_and_rehab_flow", "ugly"],
+            "threshold": 5.0,
+            "scenario_priority": ["base", "equipment_path_and_rehab_flow", "conservative", "ugly"],
         },
-        "flex_calibration": {"tight_max_pct": 1.9, "moderate_max_pct": 4.8, "fallback_pct": 2.1},
+        "flex_calibration": {"tight_max_pct": 1.7, "moderate_max_pct": 4.3, "fallback_pct": 1.9},
     },
     "specialty_data_center_v1": {
         "primary_control_variable": {
