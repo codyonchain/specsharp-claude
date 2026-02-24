@@ -3,6 +3,11 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ExecutiveViewComplete } from "../ExecutiveViewComplete";
 
+const HOSPITALITY_PROFILE_IDS = [
+  "hospitality_limited_service_hotel_v1",
+  "hospitality_full_service_hotel_v1",
+];
+
 const buildRestaurantProject = () =>
   ({
     id: "proj_restaurant_exec",
@@ -126,6 +131,120 @@ const buildRestaurantProject = () =>
     },
   }) as any;
 
+const buildHospitalityProject = (profileId: string) =>
+  ({
+    id: `proj_hospitality_exec_${profileId}`,
+    project_id: `proj_hospitality_exec_${profileId}`,
+    name: "Hospitality Full Service",
+    description: "Hospitality parity test fixture",
+    created_at: "2026-02-24T00:00:00Z",
+    updated_at: "2026-02-24T00:00:00Z",
+    user_id: "test-user",
+    is_shared: false,
+    analysis: {
+      parsed_input: {
+        building_type: "hospitality",
+        subtype:
+          profileId === "hospitality_full_service_hotel_v1"
+            ? "full_service_hotel"
+            : "limited_service_hotel",
+        square_footage: 85000,
+        location: "Nashville, TN",
+        project_classification: "ground_up",
+        display_name:
+          profileId === "hospitality_full_service_hotel_v1"
+            ? "Full Service Hotel"
+            : "Select Service Hotel",
+      },
+      calculations: {
+        project_info: {
+          building_type: "hospitality",
+          subtype:
+            profileId === "hospitality_full_service_hotel_v1"
+              ? "full_service_hotel"
+              : "limited_service_hotel",
+          display_name:
+            profileId === "hospitality_full_service_hotel_v1"
+              ? "Full Service Hotel"
+              : "Select Service Hotel",
+          project_class: "ground_up",
+          square_footage: 85000,
+          location: "Nashville, TN",
+          floors: 8,
+          typical_floors: 8,
+        },
+        construction_costs: {
+          base_cost_per_sf: 325,
+          class_multiplier: 1,
+          regional_multiplier: 1.03,
+          final_cost_per_sf: 334.75,
+          construction_total: 28500000,
+          equipment_total: 3200000,
+          special_features_total: 0,
+          cost_build_up: [],
+        },
+        totals: {
+          hard_costs: 31700000,
+          soft_costs: 4200000,
+          total_project_cost: 35900000,
+          cost_per_sf: 422.35,
+        },
+        hospitality_financials: {
+          adr: 212,
+          occupancy: 0.74,
+          revpar: 156.88,
+          noi_margin: 0.33,
+          annual_noi: 2980000,
+        },
+        revenue_analysis: {
+          annual_revenue: 9020000,
+          net_income: 2980000,
+        },
+        return_metrics: {
+          estimated_annual_noi: 2980000,
+          market_cap_rate: 0.075,
+          property_value: 39733333.33,
+        },
+        ownership_analysis: {
+          debt_metrics: {
+            annual_debt_service: 2100000,
+            target_dscr: 1.35,
+            calculated_dscr: 1.42,
+          },
+          return_metrics: {
+            estimated_annual_noi: 2980000,
+            market_cap_rate: 0.075,
+            property_value: 39733333.33,
+          },
+          yield_on_cost: 0.083,
+        },
+        dealshield_scenarios: {
+          profile_id: profileId,
+          scenarios: {
+            base: {
+              totals: { total_project_cost: 35900000 },
+              revenue_analysis: { annual_revenue: 9020000 },
+              ownership_analysis: {
+                debt_metrics: { calculated_dscr: 1.42 },
+                yield_on_cost: 0.083,
+              },
+            },
+          },
+          provenance: {
+            scenario_ids: ["base"],
+            scenario_inputs: {
+              base: {
+                scenario_label: "Base",
+                applied_tile_ids: [],
+              },
+            },
+          },
+        },
+        calculation_trace: [],
+      },
+    },
+  }) as any;
+
 const restaurantDealShieldViewModel = {
   decision_status: "GO",
   decision_reason_code: "explicit_status_signal",
@@ -141,6 +260,25 @@ const restaurantDealShieldViewModel = {
   content_profile_id: "restaurant_full_service_v1",
   scope_items_profile_id: "restaurant_full_service_structural_v1",
 };
+
+const buildHospitalityDealShieldViewModel = (profileId: string) => ({
+  decision_status: "Needs Work",
+  decision_reason_code: "low_flex_before_break_buffer",
+  decision_status_provenance: {
+    status_source: "dealshield_policy_v1",
+    policy_id: "dealshield_canonical_policy_v1",
+  },
+  decision_insurance_provenance: {
+    enabled: true,
+    profile_id: profileId,
+  },
+  tile_profile_id: profileId,
+  content_profile_id: profileId,
+  scope_items_profile_id:
+    profileId === "hospitality_full_service_hotel_v1"
+      ? "hospitality_full_service_hotel_structural_v1"
+      : "hospitality_limited_service_hotel_structural_v1",
+});
 
 describe("ExecutiveViewComplete", () => {
   it("renders canonical restaurant decision status and provenance source", () => {
@@ -165,5 +303,42 @@ describe("ExecutiveViewComplete", () => {
     });
     expect(policyLineMatches.length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Scenario" })).toBeInTheDocument();
+  });
+
+  it("renders canonical hospitality decision contract fields for both hotel profiles", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildHospitalityProject(HOSPITALITY_PROFILE_IDS[0])}
+          dealShieldData={buildHospitalityDealShieldViewModel(
+            HOSPITALITY_PROFILE_IDS[0]
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    for (const profileId of HOSPITALITY_PROFILE_IDS) {
+      rerender(
+        <MemoryRouter>
+          <ExecutiveViewComplete
+            project={buildHospitalityProject(profileId)}
+            dealShieldData={buildHospitalityDealShieldViewModel(profileId) as any}
+          />
+        </MemoryRouter>
+      );
+
+      expect(screen.getByText("Investment Decision: Needs Work")).toBeInTheDocument();
+      const policyLineMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return (
+          text.includes("Policy source: dealshield_policy_v1") &&
+          text.includes("dealshield_canonical_policy_v1") &&
+          text.includes("reason: low_flex_before_break_buffer")
+        );
+      });
+      expect(policyLineMatches.length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: "Scenario" })).toBeInTheDocument();
+    }
   });
 });
