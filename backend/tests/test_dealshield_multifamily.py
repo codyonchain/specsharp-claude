@@ -4,6 +4,7 @@ from app.v2.config.master_config import (
     get_building_config,
 )
 from app.v2.config.type_profiles.dealshield_content import get_dealshield_content_profile
+from app.v2.config.type_profiles.dealshield_content import multifamily as multifamily_content_profiles
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.v2.config.type_profiles.dealshield_tiles import multifamily as multifamily_tile_profiles
 from app.v2.engines.unified_engine import unified_engine
@@ -15,6 +16,23 @@ MULTIFAMILY_PROFILE_IDS = {
     "luxury_apartments": "multifamily_luxury_apartments_v1",
     "affordable_housing": "multifamily_affordable_housing_v1",
 }
+
+
+def _tile_map(profile_id: str):
+    profile = get_dealshield_profile(profile_id)
+    return {tile["tile_id"]: tile for tile in profile.get("tiles", []) if isinstance(tile, dict)}
+
+
+def _is_revenue_like_metric(metric_ref: str) -> bool:
+    metric = (metric_ref or "").strip().lower()
+    return metric.startswith("revenue_analysis.") or any(
+        keyword in metric for keyword in ("revenue", "rent", "occupancy", "absorption")
+    )
+
+
+def _row_implies_revenue(row_id: str, row_label: str) -> bool:
+    text = f"{row_id} {row_label}".lower()
+    return any(keyword in text for keyword in ("lease", "rent", "revenue", "absorption", "occupancy", "demand"))
 
 
 def test_multifamily_subtypes_define_deterministic_dealshield_profile_ids():
@@ -36,6 +54,40 @@ def test_multifamily_tile_profiles_and_defaults_resolve():
         assert {"cost_plus_10", "cost_per_sf_plus_10", "finishes_plus_10"}.issubset(tile_ids)
 
 
+def test_multifamily_tile_profiles_are_subtype_authored_not_clones():
+    market_profile = get_dealshield_profile("multifamily_market_rate_apartments_v1")
+    luxury_profile = get_dealshield_profile("multifamily_luxury_apartments_v1")
+    affordable_profile = get_dealshield_profile("multifamily_affordable_housing_v1")
+
+    assert market_profile != luxury_profile
+    assert market_profile != affordable_profile
+    assert luxury_profile != affordable_profile
+
+    market_tile_ids = {tile["tile_id"] for tile in market_profile["tiles"]}
+    luxury_tile_ids = {tile["tile_id"] for tile in luxury_profile["tiles"]}
+    affordable_tile_ids = {tile["tile_id"] for tile in affordable_profile["tiles"]}
+
+    assert "structural_carry_proxy_plus_5" in market_tile_ids
+    assert "amenity_finish_plus_15" in luxury_tile_ids
+    assert "compliance_electrical_plus_8" in affordable_tile_ids
+
+    assert "amenity_finish_plus_15" not in market_tile_ids
+    assert "compliance_electrical_plus_8" not in market_tile_ids
+    assert "structural_carry_proxy_plus_5" not in luxury_tile_ids
+    assert "compliance_electrical_plus_8" not in luxury_tile_ids
+    assert "structural_carry_proxy_plus_5" not in affordable_tile_ids
+    assert "amenity_finish_plus_15" not in affordable_tile_ids
+
+    market_rows = {row["row_id"] for row in market_profile["derived_rows"]}
+    luxury_rows = {row["row_id"] for row in luxury_profile["derived_rows"]}
+    affordable_rows = {row["row_id"] for row in affordable_profile["derived_rows"]}
+
+    assert "structural_carry_proxy_stress" in market_rows
+    assert "amenity_overrun" in luxury_rows
+    assert "compliance_delay" in affordable_rows
+    assert "amenity_system_stress" in luxury_rows
+
+
 def test_multifamily_content_profiles_resolve_and_align_with_tiles():
     for profile_id in MULTIFAMILY_PROFILE_IDS.values():
         tile_profile = get_dealshield_profile(profile_id)
@@ -50,6 +102,132 @@ def test_multifamily_content_profiles_resolve_and_align_with_tiles():
         assert isinstance(drivers, list) and drivers
         for driver in drivers:
             assert driver["tile_id"] in tile_ids
+
+
+def test_multifamily_content_profiles_are_subtype_authored_not_clones():
+    market_content = get_dealshield_content_profile("multifamily_market_rate_apartments_v1")
+    luxury_content = get_dealshield_content_profile("multifamily_luxury_apartments_v1")
+    affordable_content = get_dealshield_content_profile("multifamily_affordable_housing_v1")
+
+    assert market_content != luxury_content
+    assert market_content != affordable_content
+    assert luxury_content != affordable_content
+
+    market_driver_tile_ids = {
+        driver["tile_id"]
+        for driver in market_content.get("fastest_change", {}).get("drivers", [])
+    }
+    luxury_driver_tile_ids = {
+        driver["tile_id"]
+        for driver in luxury_content.get("fastest_change", {}).get("drivers", [])
+    }
+    affordable_driver_tile_ids = {
+        driver["tile_id"]
+        for driver in affordable_content.get("fastest_change", {}).get("drivers", [])
+    }
+
+    assert "structural_carry_proxy_plus_5" in market_driver_tile_ids
+    assert "amenity_finish_plus_15" in luxury_driver_tile_ids
+    assert "compliance_electrical_plus_8" in affordable_driver_tile_ids
+
+    market_question_ids = {q["id"] for q in market_content.get("question_bank", [])}
+    luxury_question_ids = {q["id"] for q in luxury_content.get("question_bank", [])}
+    affordable_question_ids = {q["id"] for q in affordable_content.get("question_bank", [])}
+    assert market_question_ids != luxury_question_ids
+    assert market_question_ids != affordable_question_ids
+    assert luxury_question_ids != affordable_question_ids
+
+    assert (
+        multifamily_content_profiles.DEALSHIELD_CONTENT_PROFILES[
+            "multifamily_market_rate_apartments_v1"
+        ]["profile_id"]
+        == "multifamily_market_rate_apartments_v1"
+    )
+    assert (
+        multifamily_content_profiles.DEALSHIELD_CONTENT_PROFILES[
+            "multifamily_luxury_apartments_v1"
+        ]["profile_id"]
+        == "multifamily_luxury_apartments_v1"
+    )
+    assert (
+        multifamily_content_profiles.DEALSHIELD_CONTENT_PROFILES[
+            "multifamily_affordable_housing_v1"
+        ]["profile_id"]
+        == "multifamily_affordable_housing_v1"
+    )
+
+
+def test_multifamily_content_driver_tile_ids_exist_in_tile_profiles():
+    for profile_id in MULTIFAMILY_PROFILE_IDS.values():
+        tile_ids = set(_tile_map(profile_id).keys())
+        content_profile = get_dealshield_content_profile(profile_id)
+
+        referenced_tile_ids = set()
+        referenced_tile_ids.update(
+            driver.get("tile_id")
+            for driver in content_profile.get("fastest_change", {}).get("drivers", [])
+            if isinstance(driver, dict)
+        )
+        referenced_tile_ids.update(
+            entry.get("driver_tile_id")
+            for entry in content_profile.get("most_likely_wrong", [])
+            if isinstance(entry, dict)
+        )
+        referenced_tile_ids.update(
+            entry.get("driver_tile_id")
+            for entry in content_profile.get("question_bank", [])
+            if isinstance(entry, dict)
+        )
+        referenced_tile_ids.discard(None)
+        assert referenced_tile_ids.issubset(tile_ids)
+
+
+def test_multifamily_tile_labels_align_with_metric_ref_class():
+    trade_keyword_map = {
+        "structural": {"structural", "shell", "frame", "site", "carry"},
+        "mechanical": {"mechanical", "mep", "system"},
+        "electrical": {"electrical", "power", "life-safety", "compliance"},
+        "plumbing": {"plumbing", "water", "utility", "compliance"},
+        "finishes": {"finish", "interior", "amenity", "fit-out"},
+    }
+
+    for profile_id in MULTIFAMILY_PROFILE_IDS.values():
+        for tile in _tile_map(profile_id).values():
+            label = str(tile.get("label", "")).lower()
+            metric_ref = str(tile.get("metric_ref", "")).lower()
+            assert label
+            assert metric_ref
+
+            if metric_ref.startswith("totals.") or metric_ref.startswith("construction_costs."):
+                assert any(token in label for token in ("cost", "sf", "project", "total"))
+            elif metric_ref.startswith("trade_breakdown."):
+                trade_key = metric_ref.split(".", 1)[1]
+                expected_tokens = trade_keyword_map.get(trade_key, {trade_key})
+                assert any(token in label for token in expected_tokens)
+            elif _is_revenue_like_metric(metric_ref):
+                assert any(token in label for token in ("revenue", "rent", "occupancy", "lease"))
+            else:
+                raise AssertionError(f"Unexpected metric_ref class for tile: {metric_ref}")
+
+
+def test_multifamily_row_labels_do_not_imply_revenue_without_revenue_metric():
+    for profile_id in MULTIFAMILY_PROFILE_IDS.values():
+        profile = get_dealshield_profile(profile_id)
+        tile_by_id = _tile_map(profile_id)
+
+        for row in profile.get("derived_rows", []):
+            assert isinstance(row, dict)
+            row_id = str(row.get("row_id", ""))
+            row_label = str(row.get("label", ""))
+            tile_ids = list(row.get("apply_tiles", [])) + list(row.get("plus_tiles", []))
+            row_has_revenue_metric = any(
+                _is_revenue_like_metric(str(tile_by_id[tile_id].get("metric_ref", "")))
+                for tile_id in tile_ids
+                if tile_id in tile_by_id
+            )
+
+            if _row_implies_revenue(row_id, row_label):
+                assert row_has_revenue_metric
 
 
 def test_multifamily_dealshield_view_model_is_available():
