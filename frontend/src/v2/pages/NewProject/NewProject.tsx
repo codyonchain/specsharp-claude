@@ -129,7 +129,7 @@ export const NewProject: React.FC = () => {
     const cityKeywordDetected = /(nashville|franklin|brentwood|murfreesboro|manchester|nashua|concord|bedford|salem)/i.test(input);
     setDetectedFeatures({
       size: /\d+[\s,]*(?:sf|square|feet|unit|key|bed|room)/i.test(description),
-      type: /(apartment|office|hospital|school|retail|industrial|hotel|restaurant|warehouse|medical|clinic|surgery|emergency|distribution|strip\s*mall)/i.test(input),
+      type: /(apartment|office|hospital|school|retail|industrial|hotel|restaurant|warehouse|medical|clinic|surgery|emergency|distribution|strip\s*mall|data\s*center|datacenter|server\s*farm|colocation|laboratory|self\s*storage|car\s*dealership|auto\s*dealership|broadcast|studio)/i.test(input),
       location: Boolean(liveDetectedLocation || cityKeywordDetected)
     });
   }, [description, liveDetectedLocation]);
@@ -1000,7 +1000,7 @@ export const NewProject: React.FC = () => {
     isPlaceholder: boolean;
   };
 
-  const usesSubtypeCostPerSF = ['multifamily', 'restaurant'].includes(
+  const usesSubtypeCostPerSF = ['multifamily', 'restaurant', 'specialty'].includes(
     parsedInput?.building_type ?? ''
   );
   const isRestaurantProject = parsedInput?.building_type === 'restaurant';
