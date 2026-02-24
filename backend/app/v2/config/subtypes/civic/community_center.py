@@ -1,0 +1,98 @@
+from app.v2.config.master_config import (
+    BuildingType,
+    BuildingConfig,
+    TradeBreakdown,
+    SoftCosts,
+    FinancingTerms,
+    OwnershipType,
+    NLPConfig,
+    ProjectClass,
+)
+
+
+CONFIG = (
+    BuildingType.CIVIC,
+    "community_center",
+    BuildingConfig(
+        display_name="Community Center",
+        base_cost_per_sf=245,
+        cost_range=(220, 270),
+        dealshield_tile_profile="civic_baseline_v1",
+        scope_items_profile="civic_baseline_structural_v1",
+        equipment_cost_per_sf=20,
+        typical_floors=1,
+        trades=TradeBreakdown(
+            structural=0.27,
+            mechanical=0.23,
+            electrical=0.13,
+            plumbing=0.15,
+            finishes=0.22,
+        ),
+        soft_costs=SoftCosts(
+            design_fees=0.06,
+            permits=0.015,
+            legal=0.015,
+            financing=0.02,
+            contingency=0.07,
+            testing=0.008,
+            construction_management=0.025,
+            startup=0.01,
+        ),
+        ownership_types={
+            OwnershipType.GOVERNMENT: FinancingTerms(
+                debt_ratio=0.70,
+                debt_rate=0.038,
+                equity_ratio=0.20,
+                grants_ratio=0.10,
+                target_dscr=1.15,
+                target_roi=0.0,
+            ),
+            OwnershipType.NON_PROFIT: FinancingTerms(
+                debt_ratio=0.60,
+                debt_rate=0.045,
+                equity_ratio=0.15,
+                philanthropy_ratio=0.15,
+                grants_ratio=0.10,
+                target_dscr=1.10,
+                target_roi=0.0,
+            ),
+        },
+        nlp=NLPConfig(
+            keywords=[
+                "community center",
+                "rec center",
+                "senior center",
+                "youth center",
+                "cultural center",
+                "civic center",
+                "activity center",
+            ],
+            priority=39,
+            incompatible_classes=[],
+        ),
+        regional_multipliers={
+            "Nashville": 1.03,
+            "Franklin": 1.03,
+            "Manchester": 0.92,
+            "Memphis": 0.90,
+            "New York": 1.35,
+            "San Francisco": 1.40,
+            "Chicago": 1.18,
+            "Miami": 1.08,
+        },
+        special_features={
+            "gymnasium": 35,
+            "kitchen": 25,
+            "multipurpose_room": 20,
+            "fitness_center": 20,
+            "outdoor_pavilion": 15,
+        },
+        base_revenue_per_sf_annual=0,
+        occupancy_rate_base=1.0,
+        occupancy_rate_premium=1.0,
+        operating_margin_base=0,
+        operating_margin_premium=0,
+    ),
+)
+
+# BuildingConfig does not yet declare this field, so we attach it explicitly.

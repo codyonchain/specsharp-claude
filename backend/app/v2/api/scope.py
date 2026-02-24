@@ -2,6 +2,8 @@
 Clean API endpoint that uses the new system
 """
 
+import os
+import json
 from fastapi import APIRouter, HTTPException, Query, Depends, Header
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict, AliasChoices
@@ -22,6 +24,9 @@ from app.v2.config.master_config import (
     OwnershipType,
     MASTER_CONFIG
 )
+from app.v2.services.industrial_override_extractor import extract_industrial_overrides
+from app.v2.services.dealshield_service import build_dealshield_view_model, DealShieldResolutionError
+from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.core.building_taxonomy import normalize_building_type, validate_building_type
 from app.db.models import Project
 from app.db.database import get_db
@@ -32,6 +37,164 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["v2"])
+DEBUG_TRACE_ENABLED = os.getenv("SPECSHARP_DEBUG_TRACE", "0").lower() in {"1", "true", "yes", "on"}
+
+
+def _infer_revenue_driver(building_type: Optional[str]) -> str:
+    mapping = {
+        "restaurant": "sales_per_sf",
+        "hospitality": "adr_x_occupancy",
+        "multifamily": "rent_per_unit",
+        "healthcare": "per_bed_or_procedure",
+        "office": "rent_profile_sf",
+        "industrial": "flex_mix_sf",
+        "retail": "sales_per_sf",
+    }
+    normalized = (building_type or "").strip().lower()
+    return mapping.get(normalized, "per_sf")
+
+
+def _collect_trace_assertions(calculation_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    assertions: List[Dict[str, Any]] = []
+    totals = calculation_data.get("totals") or {}
+    for key in ("hard_costs", "soft_costs", "total_project_cost"):
+        value = totals.get(key)
+        if isinstance(value, (int, float)):
+            assertions.append({
+                "check": f"{key}_non_negative",
+                "value": value,
+                "status": "pass" if value >= 0 else "fail"
+            })
+    trades = calculation_data.get("trade_breakdown")
+    construction_total = (calculation_data.get("construction_costs") or {}).get("construction_total")
+    if isinstance(trades, dict) and isinstance(construction_total, (int, float)):
+        trade_sum = sum(float(v or 0) for v in trades.values())
+        variance = abs(trade_sum - construction_total)
+        status = "pass"
+        if construction_total:
+            ratio = variance / max(abs(construction_total), 1.0)
+            status = "pass" if ratio <= 0.02 else "warn"
+        assertions.append({
+            "check": "trade_breakdown_matches_construction_total",
+            "value": {"trade_sum": trade_sum, "construction_total": construction_total},
+            "status": status
+        })
+    departments = calculation_data.get("department_allocation")
+    if isinstance(departments, list) and departments:
+        total_pct = sum(float(item.get("percent") or 0) for item in departments if isinstance(item, dict))
+        assertions.append({
+            "check": "department_allocation_sum",
+            "value": total_pct,
+            "status": "pass" if 0.95 <= total_pct <= 1.05 else "warn"
+        })
+    scope_items = calculation_data.get("scope_items")
+    if isinstance(scope_items, list) and scope_items:
+        seen = set()
+        duplicates = []
+        for item in scope_items:
+            trade_name = item.get("trade") if isinstance(item, dict) else None
+            systems = item.get("systems") if isinstance(item, dict) else None
+            if not isinstance(trade_name, str) or not isinstance(systems, list):
+                continue
+            for system in systems:
+                system_name = system.get("name") if isinstance(system, dict) else None
+                if not isinstance(system_name, str):
+                    continue
+                key = (trade_name.strip().lower(), system_name.strip().lower())
+                if key in seen:
+                    duplicates.append({"trade": trade_name, "system": system_name})
+                else:
+                    seen.add(key)
+        assertions.append({
+            "check": "scope_item_duplicates",
+            "value": duplicates,
+            "status": "pass" if not duplicates else "warn"
+        })
+    return assertions
+
+
+def _build_debug_trace_payload(payload: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not DEBUG_TRACE_ENABLED or not isinstance(payload, dict):
+        return None
+
+    calculations = payload.get("calculation_data")
+    if isinstance(calculations, dict):
+        calc_context = calculations
+    else:
+        calc_context = payload
+
+    project_info = calc_context.get("project_info")
+    if not isinstance(project_info, dict):
+        return None
+
+    modifiers = calc_context.get("modifiers") or {}
+    revenue_block = (
+        calc_context.get("revenue_analysis")
+        or (calc_context.get("ownership_analysis") or {}).get("revenue_analysis")
+        or {}
+    )
+    return_metrics = (
+        calc_context.get("return_metrics")
+        or (calc_context.get("ownership_analysis") or {}).get("return_metrics")
+        or {}
+    )
+    profile = calc_context.get("profile") or {}
+    construction_costs = calc_context.get("construction_costs") or {}
+    trace_entries = calc_context.get("calculation_trace") or []
+
+    fallback_entries: List[Dict[str, Any]] = []
+    for entry in trace_entries:
+        if not isinstance(entry, dict):
+            continue
+        step = entry.get("step")
+        if not isinstance(step, str):
+            continue
+        lowered = step.lower()
+        if any(keyword in lowered for keyword in ("warning", "fallback", "clamp", "adjusted")):
+            fallback_entries.append({
+                "step": step,
+                "data": entry.get("data")
+            })
+
+    debug_trace = {
+        "engine_used": "unified_engine.calculate_project",
+        "config": {
+            "building_type": project_info.get("building_type"),
+            "subtype": project_info.get("subtype"),
+            "project_class": project_info.get("project_class"),
+            "square_footage": project_info.get("square_footage"),
+            "finish_level": project_info.get("finish_level"),
+            "finish_level_source": project_info.get("finish_level_source"),
+            "floors": project_info.get("floors"),
+        },
+        "multipliers": {
+            "cost_factor": modifiers.get("cost_factor"),
+            "finish_cost_factor": modifiers.get("finish_cost_factor"),
+            "cost_region_factor": modifiers.get("regional_cost_factor"),
+            "revenue_factor": modifiers.get("revenue_factor"),
+            "finish_revenue_factor": modifiers.get("finish_revenue_factor"),
+            "revenue_region_factor": modifiers.get("market_factor"),
+            "quality_factor": construction_costs.get("quality_factor"),
+        },
+        "revenue_model": {
+            "driver": _infer_revenue_driver(project_info.get("building_type")),
+            "annual_revenue": revenue_block.get("annual_revenue"),
+            "revenue_per_sf": revenue_block.get("revenue_per_sf"),
+            "operating_margin": revenue_block.get("operating_margin"),
+            "occupancy_rate": revenue_block.get("occupancy_rate"),
+            "market_factor": modifiers.get("market_factor"),
+        },
+        "valuation_model": {
+            "method": "cap_rate" if return_metrics.get("property_value") else "yield_on_cost",
+            "property_value": return_metrics.get("property_value"),
+            "market_cap_rate": return_metrics.get("market_cap_rate") or profile.get("market_cap_rate"),
+            "target_yield": profile.get("target_yield"),
+            "yield_on_cost": calc_context.get("yield_on_cost"),
+        },
+        "fallbacks_used": fallback_entries,
+        "assertions": _collect_trace_assertions(calc_context),
+    }
+    return debug_trace
 
 
 def _ensure_city_state_format(location: Optional[str]) -> None:
@@ -138,12 +301,21 @@ class CompareRequest(BaseModel):
     """Request for scenario comparison"""
     scenarios: List[Dict[str, Any]] = Field(..., description="List of scenarios to compare")
 
+class DealShieldControlsUpdateRequest(BaseModel):
+    """Request for persisting DealShield control selections."""
+    stress_band_pct: int = Field(10, description="Stress band percentage (10, 7, 5, 3)")
+    anchor_total_project_cost: Optional[float] = Field(None, description="Optional cost anchor value")
+    use_cost_anchor: bool = Field(False, description="Whether to apply cost anchor")
+    anchor_annual_revenue: Optional[float] = Field(None, description="Optional revenue anchor value")
+    use_revenue_anchor: bool = Field(False, description="Whether to apply revenue anchor")
+
 class ProjectResponse(BaseModel):
     """Standard project response"""
     success: bool
     data: Dict[str, Any]
     errors: Optional[List[str]] = None
     warnings: Optional[List[str]] = None
+    debug_trace: Optional[Dict[str, Any]] = None
 
 # ============================================================================
 # ENDPOINTS
@@ -168,6 +340,22 @@ async def analyze_project(request: AnalyzeRequest):
         # Parse the description using phrase-first parser
         parsed = nlp_service.extract_project_details(request.description)
         parsed['special_features'] = request.special_features or []
+        overrides = extract_industrial_overrides(request.description)
+        if overrides:
+            parsed.update(overrides)
+        override_keys = [
+            "dock_doors", "dock_count",
+            "office_sf", "office_percent", "office_pct",
+            "mezzanine_sf", "mezzanine_percent",
+            "clear_height", "clear_height_ft",
+            "finish_level", "finish_level_source",
+        ]
+        sf_list = parsed.get('special_features') or []
+        if not isinstance(sf_list, list):
+            sf_list = list(sf_list) if sf_list else []
+        parsed_overrides = {k: parsed.get(k) for k in override_keys if k in parsed}
+        sf_list.append({"__parsed_input__": parsed_overrides})
+        parsed['special_features'] = sf_list
         
         # Normalize building type using taxonomy
         if parsed.get('building_type'):
@@ -245,6 +433,14 @@ async def analyze_project(request: AnalyzeRequest):
         _ensure_city_state_format(final_location)
         parsed['location'] = final_location
 
+        logger.info(
+            "[SUBTYPE_TRACE][scope_api] building_type=%s subtype=%s building_subtype=%s location=%s raw_prompt=%s",
+            parsed.get('building_type'),
+            parsed.get('subtype'),
+            parsed.get('building_subtype'),
+            parsed.get('location'),
+            request.description,
+        )
         result = unified_engine.calculate_project(
             building_type=building_type,
             subtype=parsed.get('subtype'),  # Use .get() to handle missing subtype
@@ -255,7 +451,8 @@ async def analyze_project(request: AnalyzeRequest):
             ownership_type=ownership_type,
             finish_level=finish_level_value,
             finish_level_source=finish_level_source,
-            special_features=parsed.get('special_features', [])
+            special_features=parsed.get('special_features', []),
+            parsed_input_overrides=parsed
         )
         
         # Add building_subtype for frontend compatibility
@@ -264,20 +461,20 @@ async def analyze_project(request: AnalyzeRequest):
         parsed_with_compat['finish_level'] = parsed.get('finish_level', 'standard')
         parsed_with_compat['finish_level_source'] = finish_level_source
         
-        # Return comprehensive result
-        # Wrap the flattened result as 'calculations' to match frontend expectations
+        response_data = {
+            'parsed_input': parsed_with_compat,
+            'calculations': result,  # Now properly structured without double nesting
+            'confidence': parsed.get('confidence', 0),
+            'debug': {
+                'engine_version': 'unified_v2',
+                'config_version': '2.0',
+                'trace_count': len(result.get('calculation_trace', []))
+            }
+        }
         return ProjectResponse(
             success=True,
-            data={
-                'parsed_input': parsed_with_compat,
-                'calculations': result,  # Now properly structured without double nesting
-                'confidence': parsed.get('confidence', 0),
-                'debug': {
-                    'engine_version': 'unified_v2',
-                    'config_version': '2.0',
-                    'trace_count': len(result.get('calculation_trace', []))
-                }
-            }
+            data=response_data,
+            debug_trace=_build_debug_trace_payload(result)
         )
         
     except Exception as e:
@@ -330,7 +527,8 @@ async def calculate_project(request: CalculateRequest):
         
         return ProjectResponse(
             success=True,
-            data=result
+            data=result,
+            debug_trace=_build_debug_trace_payload(result)
         )
         
     except ValueError as e:
@@ -583,9 +781,197 @@ async def get_single_project(
             errors=["Project not found"]
         )
     
+    formatted = format_project_response(project)
     return ProjectResponse(
         success=True,
-        data=format_project_response(project)
+        data=formatted,
+        debug_trace=_build_debug_trace_payload(formatted)
+    )
+
+
+def _normalize_dealshield_controls_payload(raw_controls: Dict[str, Any]) -> Dict[str, Any]:
+    allowed_stress_bands = {10, 7, 5, 3}
+    raw_band = raw_controls.get("stress_band_pct")
+    stress_band_pct = 10
+    if isinstance(raw_band, (int, float)) and not isinstance(raw_band, bool):
+        candidate = int(float(raw_band))
+        if candidate in allowed_stress_bands:
+            stress_band_pct = candidate
+
+    def _normalize_optional_number(value: Any) -> Optional[float]:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            parsed = float(value)
+            if parsed == parsed and parsed not in (float("inf"), float("-inf")):
+                return parsed
+        return None
+
+    normalized_cost_anchor = _normalize_optional_number(raw_controls.get("anchor_total_project_cost"))
+    normalized_revenue_anchor = _normalize_optional_number(raw_controls.get("anchor_annual_revenue"))
+
+    return {
+        "stress_band_pct": stress_band_pct,
+        "anchor_total_project_cost": normalized_cost_anchor,
+        "use_cost_anchor": bool(raw_controls.get("use_cost_anchor")) and normalized_cost_anchor is not None,
+        "anchor_annual_revenue": normalized_revenue_anchor,
+        "use_revenue_anchor": bool(raw_controls.get("use_revenue_anchor")) and normalized_revenue_anchor is not None,
+    }
+
+
+def _resolve_dealshield_building_context(
+    project: Project,
+    payload: Dict[str, Any],
+) -> tuple[Optional[str], Optional[str]]:
+    project_info = payload.get("project_info") if isinstance(payload.get("project_info"), dict) else {}
+    parsed_input = payload.get("parsed_input") if isinstance(payload.get("parsed_input"), dict) else {}
+    request_data = payload.get("request_data") if isinstance(payload.get("request_data"), dict) else {}
+
+    building_type = (
+        project_info.get("building_type")
+        or parsed_input.get("building_type")
+        or request_data.get("building_type")
+        or getattr(project, "building_type", None)
+    )
+    subtype = (
+        project_info.get("subtype")
+        or parsed_input.get("subtype")
+        or parsed_input.get("building_subtype")
+        or request_data.get("subtype")
+        or request_data.get("building_subtype")
+    )
+    if isinstance(building_type, str):
+        building_type = building_type.strip()
+    if isinstance(subtype, str):
+        subtype = subtype.strip()
+    return building_type, subtype
+
+
+@router.post("/scope/projects/{project_id}/dealshield/controls", response_model=ProjectResponse)
+async def update_dealshield_controls(
+    project_id: str,
+    request: DealShieldControlsUpdateRequest,
+    db: Session = Depends(get_db),
+):
+    """Persist DealShield controls to project calculation_data and rebuild scenario snapshots."""
+    project = db.query(Project).filter(Project.project_id == project_id).first()
+    if not project and project_id.isdigit():
+        project = db.query(Project).filter(Project.id == int(project_id)).first()
+
+    if not project:
+        return ProjectResponse(
+            success=False,
+            data={},
+            errors=["Project not found"],
+        )
+
+    try:
+        payload = _resolve_project_payload(project)
+        if not isinstance(payload, dict):
+            payload = {}
+
+        normalized_controls = _normalize_dealshield_controls_payload(request.model_dump())
+        payload["dealshield_controls"] = normalized_controls
+
+        profile_id = payload.get("dealshield_tile_profile")
+        if isinstance(profile_id, str) and profile_id.strip():
+            from app.v2.services.dealshield_scenarios import (
+                build_dealshield_scenarios,
+                DealShieldScenarioError,
+            )
+
+            building_type, subtype = _resolve_dealshield_building_context(project, payload)
+            if not building_type or not subtype:
+                raise ValueError("Unable to resolve building type/subtype for DealShield scenario rebuild")
+
+            canonical_type, canonical_subtype = validate_building_type(building_type, subtype)
+            subtype_key = canonical_subtype or subtype
+            building_type_enum = BuildingType(canonical_type)
+            building_config = MASTER_CONFIG.get(building_type_enum, {}).get(subtype_key)
+            if building_config is None:
+                raise ValueError(
+                    f"Unable to resolve building config for DealShield scenario rebuild ({canonical_type}/{subtype_key})"
+                )
+
+            try:
+                payload["dealshield_scenarios"] = build_dealshield_scenarios(
+                    payload,
+                    building_config,
+                    unified_engine,
+                )
+            except DealShieldScenarioError as exc:
+                raise ValueError(str(exc)) from exc
+
+        project.calculation_data = json.dumps(payload)
+        db.commit()
+        db.refresh(project)
+    except Exception as exc:
+        logger.error("Failed to persist DealShield controls for project %s: %s", project_id, str(exc))
+        db.rollback()
+        return ProjectResponse(
+            success=False,
+            data={},
+            errors=[str(exc)],
+        )
+
+    return ProjectResponse(
+        success=True,
+        data={
+            "project_id": project.project_id or project_id,
+            "dealshield_controls": normalized_controls,
+            "dealshield_scenarios_present": isinstance(
+                (payload.get("dealshield_scenarios") or {}).get("scenarios"),
+                dict,
+            ),
+        },
+    )
+
+
+@router.get("/scope/projects/{project_id}/dealshield", response_model=ProjectResponse)
+async def get_dealshield_view(
+    project_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get DealShield scenario table view model for a project."""
+    project = db.query(Project).filter(Project.project_id == project_id).first()
+    if not project and project_id.isdigit():
+        project = db.query(Project).filter(Project.id == int(project_id)).first()
+
+    if not project:
+        return ProjectResponse(
+            success=False,
+            data={},
+            errors=["Project not found"]
+        )
+
+    payload = _resolve_project_payload(project)
+    profile_id = payload.get("dealshield_tile_profile")
+    if not isinstance(profile_id, str) or not profile_id.strip():
+        return ProjectResponse(
+            success=False,
+            data={},
+            errors=["DealShield not available for this project"]
+        )
+
+    try:
+        profile = get_dealshield_profile(profile_id)
+    except Exception as exc:
+        return ProjectResponse(
+            success=False,
+            data={},
+            errors=[str(exc)]
+        )
+
+    try:
+        view_model = build_dealshield_view_model(project.project_id or project_id, payload, profile)
+    except DealShieldResolutionError as exc:
+        return ProjectResponse(
+            success=False,
+            data={},
+            errors=[str(exc)]
+        )
+
+    return ProjectResponse(
+        success=True,
+        data=view_model
     )
 
 @router.delete("/scope/projects/{project_id}")
@@ -620,6 +1006,21 @@ async def generate_scope(
         # Parse the description using NLP
         parsed = nlp_service.extract_project_details(request.description)
         parsed['special_features'] = request.special_features or []
+        overrides = extract_industrial_overrides(request.description)
+        if overrides:
+            parsed.update(overrides)
+        sf_list = parsed.get('special_features') or []
+        if not isinstance(sf_list, list):
+            sf_list = list(sf_list) if sf_list else []
+        override_keys = [
+            "dock_doors", "dock_count",
+            "office_sf", "office_percent", "office_pct",
+            "mezzanine_sf", "mezzanine_percent",
+            "finish_level", "finish_level_source",
+        ]
+        parsed_overrides = {k: parsed.get(k) for k in override_keys if k in parsed}
+        sf_list.append({"__parsed_input__": parsed_overrides})
+        parsed['special_features'] = sf_list
         
         # Add any missing fields from request
         if request.location:
@@ -700,7 +1101,8 @@ async def generate_scope(
             ownership_type=OwnershipType(parsed.get('ownership_type', 'for_profit')),
             finish_level=finish_level_value,
             finish_level_source=finish_level_source,
-            special_features=parsed.get('special_features', [])
+            special_features=parsed.get('special_features', []),
+            parsed_input_overrides=parsed
         )
 
         # Embed request metadata into stored result so downstream consumers can hydrate it
@@ -738,7 +1140,10 @@ async def generate_scope(
         # Create project with new schema
         import json
         project_timeline = build_project_timeline(building_type_enum, None)
-        construction_schedule = build_construction_schedule(building_type_enum)
+        construction_schedule = build_construction_schedule(
+            building_type_enum,
+            subtype=parsed.get('subtype'),
+        )
         calculations_block = None
         if isinstance(result, dict) and 'calculations' in result:
             calculations_block = result['calculations']
@@ -795,9 +1200,11 @@ async def generate_scope(
         db.refresh(project)
         
         # Return formatted response
+        formatted = format_project_response(project)
         return ProjectResponse(
             success=True,
-            data=format_project_response(project)
+            data=formatted,
+            debug_trace=_build_debug_trace_payload(formatted)
         )
         
     except Exception as e:
@@ -903,6 +1310,48 @@ async def export_project_pdf(
 
     safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in project_name).strip() or "SpecSharp_Project"
     filename = f"{safe_name.replace(' ', '_')}_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
+    pdf_bytes = pdf_buffer.getvalue()
+
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@router.get("/scope/projects/{project_id}/dealshield/pdf")
+async def export_dealshield_pdf(
+    project_id: str,
+    db: Session = Depends(get_db)
+):
+    """Generate a DealShield PDF report for a project."""
+    project = db.query(Project).filter(Project.project_id == project_id).first()
+    if not project and project_id.isdigit():
+        project = db.query(Project).filter(Project.id == int(project_id)).first()
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    payload = _resolve_project_payload(project)
+    profile_id = payload.get("dealshield_tile_profile")
+    if not isinstance(profile_id, str) or not profile_id.strip():
+        raise HTTPException(status_code=400, detail="DealShield not available for this project")
+
+    try:
+        profile = get_dealshield_profile(profile_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    try:
+        view_model = build_dealshield_view_model(project.project_id or project_id, payload, profile)
+        pdf_buffer = pdf_export_service.generate_dealshield_pdf(view_model)
+    except DealShieldResolutionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error(f"Failed to generate DealShield PDF for project {project_id}: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to generate DealShield PDF report") from exc
+
+    filename = f"DealShield_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
     pdf_bytes = pdf_buffer.getvalue()
 
     return StreamingResponse(
@@ -1020,6 +1469,21 @@ async def _process_owner_view_data(project):
             data={},
             errors=[str(e)]
         )
+
+
+def _resolve_project_payload(project: Project) -> Dict[str, Any]:
+    project_payload = format_project_response(project)
+    calculation_data = project_payload.get("calculation_data")
+    if isinstance(calculation_data, dict) and calculation_data:
+        return calculation_data
+    scope_data = project_payload.get("scope_data")
+    if isinstance(scope_data, dict) and scope_data:
+        return scope_data
+    cost_data = project_payload.get("cost_data")
+    if isinstance(cost_data, dict) and cost_data:
+        return cost_data
+    return {}
+
 
 def format_project_response(project: Project) -> dict:
     """

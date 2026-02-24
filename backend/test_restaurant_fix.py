@@ -8,7 +8,7 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from app.core.engine import DeterministicScopeEngine
-from app.models.scope import ScopeRequest, ProjectType
+from app.models.scope import ScopeRequest
 
 def test_nashville_restaurant():
     """Test restaurant project in Nashville with corrected multiplier"""
@@ -19,7 +19,7 @@ def test_nashville_restaurant():
     # Create test request for Nashville restaurant
     request = ScopeRequest(
         project_name="Test Nashville Restaurant",
-        project_type=ProjectType.COMMERCIAL,
+        project_type="commercial",
         square_footage=4200,
         location="Nashville, TN",
         num_floors=1,

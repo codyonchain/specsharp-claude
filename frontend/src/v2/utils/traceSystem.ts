@@ -2,6 +2,10 @@
  * Comprehensive tracing system to debug data flow
  */
 
+const DEBUG_TRACE =
+  typeof window !== 'undefined' &&
+  (window as any).__SPECSHARP_DEBUG_FLAGS__?.includes('trace') === true;
+
 class TraceSystem {
   private traces: any[] = [];
   
@@ -16,20 +20,22 @@ class TraceSystem {
     
     this.traces.push(trace);
     
-    // Color-coded console output
-    const colors: Record<string, string> = {
-      'FORM': 'color: blue',
-      'API': 'color: green', 
-      'STORAGE': 'color: purple',
-      'VIEW': 'color: orange',
-      'BACKEND': 'color: red'
-    };
-    
-    const prefix = location.split('_')[0];
-    console.group(`%c[${prefix}] ${location} - ${action}`, colors[prefix] || 'color: gray');
-    console.log('Data:', data);
-    console.log('Timestamp:', trace.timestamp);
-    console.groupEnd();
+    if (DEBUG_TRACE) {
+      // Color-coded console output
+      const colors: Record<string, string> = {
+        'FORM': 'color: blue',
+        'API': 'color: green', 
+        'STORAGE': 'color: purple',
+        'VIEW': 'color: orange',
+        'BACKEND': 'color: red'
+      };
+      
+      const prefix = location.split('_')[0];
+      console.group(`%c[${prefix}] ${location} - ${action}`, colors[prefix] || 'color: gray');
+      console.log('Data:', data);
+      console.log('Timestamp:', trace.timestamp);
+      console.groupEnd();
+    }
     
     // Save to window for debugging
     if (typeof window !== 'undefined') {
@@ -42,6 +48,9 @@ class TraceSystem {
   }
   
   findBreakpoint() {
+    if (!DEBUG_TRACE) {
+      return;
+    }
     console.group('🔍 FINDING BREAKPOINT');
     
     // Check where building_type changes or gets lost
@@ -81,7 +90,9 @@ class TraceSystem {
   
   clear() {
     this.traces = [];
-    console.log('✅ Traces cleared');
+    if (DEBUG_TRACE) {
+      console.log('✅ Traces cleared');
+    }
   }
 }
 

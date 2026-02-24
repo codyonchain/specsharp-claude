@@ -93,3 +93,10 @@ venv.bak/
 # But allow examples
 !.env.example
 !.env.production.example
+scripts/audit/output/
+
+# Local/AI artifacts
+-u
+docs/audits/
+test-results/
+tests/screenshots/

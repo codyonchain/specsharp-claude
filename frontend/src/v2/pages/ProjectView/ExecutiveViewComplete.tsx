@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Project } from '../../types';
+import { DealShieldViewModel, DecisionStatus, Project } from '../../types';
 import { formatters, safeGet } from '../../utils/displayFormatters';
 import { formatPerSf } from '@/v2/utils/formatters';
 import { BackendDataMapper } from '../../utils/backendDataMapper';
@@ -8,17 +8,23 @@ import { BackendDataMapper } from '../../utils/backendDataMapper';
 import { pdfService } from '@/services/api';
 import { generateExportFilename } from '@/utils/filenameGenerator';
 import { ScenarioModal } from '@/v2/components/ScenarioModal';
+import { TrustPanel } from '@/v2/components/trust/TrustPanel';
 import { 
   TrendingUp, DollarSign, Building, Clock, AlertCircle,
   Heart, Headphones, Cpu, MapPin, Calendar, ChevronRight,
   BarChart3, Users, Building2, Home, Briefcase, Target,
   GraduationCap, CheckCircle, Info, ArrowUpRight, XCircle,
   Activity, Shield, Wrench, Zap, Droplet, PaintBucket,
-  TrendingDown, AlertTriangle, Lightbulb, Download
+  AlertTriangle, Lightbulb, Download
 } from 'lucide-react';
+
+const DEBUG_EXECUTIVE =
+  typeof window !== 'undefined' &&
+  (window as any).__SPECSHARP_DEBUG_FLAGS__?.includes('executive') === true;
 
 interface Props {
   project: Project;
+  dealShieldData?: DealShieldViewModel | null;
 }
 
 // Local title casing to avoid depending on missing formatters.titleCase
@@ -29,6 +35,12 @@ const toTitleCase = (value?: string): string => {
     .replace(/_/g, ' ')
     .toLowerCase()
     .replace(/\b\w/g, c => c.toUpperCase());
+};
+
+const toComparableKey = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim().toLowerCase();
+  return trimmed ? trimmed.replace(/\s+/g, '_') : null;
 };
 
 type AnyRecord = Record<string, any>;
@@ -45,6 +57,70 @@ const coalesceRecord = (...candidates: unknown[]): AnyRecord => {
     }
   }
   return {};
+};
+
+const isZeroLikeMetricValue = (value: unknown): boolean => {
+  if (value === null || value === undefined) {
+    return true;
+  }
+  if (typeof value === 'number') {
+    return !Number.isFinite(value) || value === 0;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === '—' || trimmed.toLowerCase() === 'n/a') {
+      return true;
+    }
+    const numeric = Number(trimmed.replace(/[^0-9.-]/g, ''));
+    return Number.isFinite(numeric) && numeric === 0;
+  }
+  return false;
+};
+
+const toFiniteNumber = (value: unknown): number | null => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const normalized = trimmed.replace(/[$,%\s,]/g, '');
+    if (!normalized) return null;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const normalizeBackendDecision = (value: unknown): DecisionStatus | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (normalized.includes('no-go') || normalized.includes('no_go') || normalized.includes('no go')) return 'NO-GO';
+  if (normalized.includes('needs work') || normalized.includes('near break') || normalized.includes('work')) return 'Needs Work';
+  if (normalized.includes('pending') || normalized.includes('review')) return 'PENDING';
+  if (normalized === 'go' || normalized.startsWith('go ')) return 'GO';
+  return undefined;
+};
+
+const decisionReasonCopy = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const key = value.trim().toLowerCase();
+  if (!key) return undefined;
+  const map: Record<string, string> = {
+    explicit_status_signal: 'Decision status is set directly by backend policy output.',
+    not_modeled_inputs_missing: 'Decision status is pending because required modeled inputs are missing.',
+    base_case_break_condition: 'Decision status is NO-GO because the base scenario already breaks.',
+    base_value_gap_non_positive: 'Decision status is NO-GO because base value gap is non-positive.',
+    low_flex_before_break_buffer: 'Decision status reflects low flex-before-break buffer.',
+    base_value_gap_positive: 'Decision status is GO because base value gap is positive.',
+    tight_flex_band: 'Decision status reflects a tight flex-before-break band.',
+    flex_before_break_buffer_positive: 'Decision status reflects positive flex-before-break buffer.',
+    insufficient_modeled_inputs: 'Decision status is pending due to insufficient modeled inputs.',
+  };
+  if (map[key]) return map[key];
+  const label = key.replace(/_/g, ' ');
+  return `${label.charAt(0).toUpperCase()}${label.slice(1)}.`;
 };
 
 const buildSafeAnalysis = (project?: Project | null): AnyRecord => {
@@ -92,9 +168,20 @@ const SectionCard: React.FC<SectionCardProps> = ({ title, subtitle, className, c
   </div>
 );
 
-export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
+export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData }) => {
   const navigate = useNavigate();
   const [isScenarioOpen, setIsScenarioOpen] = useState(false);
+  const [isTrustPanelOpen, setIsTrustPanelOpen] = useState(false);
+  const [trustPanelSection, setTrustPanelSection] = useState<string | undefined>();
+  const openTrustPanel = (sectionId?: string) => {
+    setTrustPanelSection(sectionId);
+    setIsTrustPanelOpen(true);
+  };
+  useEffect(() => {
+    if (!isTrustPanelOpen) {
+      setTrustPanelSection(undefined);
+    }
+  }, [isTrustPanelOpen]);
   
   // Early return if no project data - check multiple paths for data
   if (!project?.analysis && !project?.calculation_data) {
@@ -127,6 +214,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     displayData?.buildingType ??
     '';
   const parsedBuildingType = rawBuildingType.toString().toLowerCase();
+  const normalizedBuildingType = parsedBuildingType.replace(/\s+/g, '_');
   const rawSubtype =
     analysis?.parsed_input?.subtype ??
     analysis?.parsed_input?.building_subtype ??
@@ -137,10 +225,68 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     .toString()
     .toLowerCase()
     .replace(/\s+/g, '_');
+  const dealShieldRecord = toRecord(dealShieldData);
+  const hasDealShieldPayload = Object.keys(dealShieldRecord).length > 0;
+  const dealShieldProvenanceRecord = coalesceRecord(
+    dealShieldRecord.decision_insurance_provenance,
+    dealShieldRecord.decisionInsuranceProvenance,
+    toRecord(dealShieldRecord.provenance).decision_insurance,
+    toRecord(dealShieldRecord.provenance).decisionInsurance
+  );
+  const flexBeforeBreakProvenanceRecord = coalesceRecord(
+    dealShieldProvenanceRecord.flex_before_break_pct,
+    dealShieldProvenanceRecord.flexBeforeBreakPct
+  );
+  const firstBreakConditionRecord = coalesceRecord(
+    dealShieldRecord.first_break_condition,
+    dealShieldRecord.firstBreakCondition
+  );
+  const hasFirstBreakCondition = Object.keys(firstBreakConditionRecord).length > 0;
+  const firstBreakScenarioId = toComparableKey(
+    firstBreakConditionRecord.scenario_id ?? firstBreakConditionRecord.scenarioId
+  );
+  const firstBreakScenarioLabel = toComparableKey(
+    firstBreakConditionRecord.scenario_label ?? firstBreakConditionRecord.scenarioLabel
+  );
+  const hasBaseBreakCondition =
+    hasFirstBreakCondition &&
+    (firstBreakScenarioId === 'base' || firstBreakScenarioLabel === 'base');
+  const flexBeforeBreakReason = toComparableKey(flexBeforeBreakProvenanceRecord.reason);
+  const hasBaseAlreadyBroken = flexBeforeBreakReason === 'base_already_broken';
+  const flexBeforeBreakBand = toComparableKey(
+    dealShieldRecord.flex_before_break_band ??
+    dealShieldRecord.flexBeforeBreakBand ??
+    flexBeforeBreakProvenanceRecord.band
+  );
+  const hasTightFlexBand =
+    typeof flexBeforeBreakBand === 'string' &&
+    flexBeforeBreakBand.includes('tight');
+  const flexBeforeBreakPctValue = toFiniteNumber(
+    dealShieldRecord.flex_before_break_pct ?? dealShieldRecord.flexBeforeBreakPct
+  );
+  const normalizedFlexBeforeBreakPct =
+    typeof flexBeforeBreakPctValue === 'number'
+      ? (Math.abs(flexBeforeBreakPctValue) <= 1.5 ? flexBeforeBreakPctValue * 100 : flexBeforeBreakPctValue)
+      : null;
+  const decisionSummaryRecord = coalesceRecord(
+    dealShieldRecord.decision_summary,
+    dealShieldRecord.decisionSummary
+  );
+  const canonicalValueGap = toFiniteNumber(
+    decisionSummaryRecord.value_gap ??
+    decisionSummaryRecord.valueGap ??
+    dealShieldRecord.value_gap ??
+    dealShieldRecord.valueGap
+  );
+  const canonicalNotModeledReason = toComparableKey(
+    decisionSummaryRecord.not_modeled_reason ?? decisionSummaryRecord.notModeledReason
+  );
   const displaySubtypeLower = (displayData?.buildingSubtype || '')
     .toString()
     .toLowerCase()
     .replace(/\s+/g, '_');
+  const isFlexIndustrial = parsedSubtype === 'flex_space';
+  const subtypeLabelOverride = displaySubtypeLower === 'flex_space' ? 'Flex Industrial' : null;
   const displayUnitLabelRaw =
     typeof displayData?.unitLabel === 'string' ? displayData.unitLabel : undefined;
   const facilityUnitLabel =
@@ -175,7 +321,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     displaySubtypeLower === 'dental_office' ||
     unitLabelIndicatesDental;
 
-  if (process.env.NODE_ENV !== 'production') {
+  if (DEBUG_EXECUTIVE) {
     console.log('[SpecSharp][OE Debug]', {
       parsedSubtype: analysis?.parsed_input?.subtype,
       displaySubtype: displaySubtypeLower,
@@ -201,12 +347,36 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         facilityUnitLabel.toLowerCase().includes('tenant suite'))
     );
   // Scenario modal base metrics (v1 universal multipliers)
-  const scenarioProjectTitle =
+  const projectInfo = calculations?.project_info || {};
+  const isDistributionCenterProject =
+    typeof projectInfo?.subtype === 'string' &&
+    projectInfo.subtype.toLowerCase() === 'distribution_center';
+  const distributionCenterLabel = 'Class A Distribution Center';
+  const sanitizeDistributionCopy = (value?: string | null): string | undefined => {
+    if (!isDistributionCenterProject) {
+      return typeof value === 'string' ? value : undefined;
+    }
+    if (typeof value !== 'string' || !value.trim()) {
+      return distributionCenterLabel;
+    }
+    return value.replace(/warehouse/gi, 'Distribution Center');
+  };
+  const scenarioProjectTitleRaw =
     (analysis?.parsed_input?.display_name as string) ||
     (analysis?.parsed_input?.project_name as string) ||
     (project as AnyRecord)?.project_name ||
     project?.name ||
     'Project';
+  const scenarioProjectTitle = (() => {
+    const sanitized = sanitizeDistributionCopy(scenarioProjectTitleRaw) ?? scenarioProjectTitleRaw;
+    if (!sanitized) {
+      return sanitized;
+    }
+    if (subtypeLabelOverride) {
+      return sanitized.replace(/flex[\s-]+space/gi, subtypeLabelOverride);
+    }
+    return sanitized;
+  })();
 
   const scenarioLocationLine = [
     (analysis?.parsed_input?.location as string) || project?.location || '',
@@ -219,6 +389,20 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     .join(' • ');
 
   const scenarioCalc = (analysis as AnyRecord)?.calculations || (project as AnyRecord)?.calculation_data || {};
+  const scenarioDealShieldBundle = coalesceRecord(
+    scenarioCalc?.dealshield_scenarios,
+    scenarioCalc?.dealShieldScenarios,
+    (analysis as AnyRecord)?.dealshield_scenarios,
+    (analysis as AnyRecord)?.dealShieldScenarios,
+    (project as AnyRecord)?.calculation_data?.dealshield_scenarios,
+    (project as AnyRecord)?.calculation_data?.dealShieldScenarios,
+    dealShieldRecord?.dealshield_scenarios,
+    dealShieldRecord?.dealShieldScenarios,
+    toRecord(dealShieldRecord?.view_model).dealshield_scenarios,
+    toRecord(dealShieldRecord?.view_model).dealShieldScenarios,
+    toRecord(dealShieldRecord?.viewModel).dealshield_scenarios,
+    toRecord(dealShieldRecord?.viewModel).dealShieldScenarios
+  );
   const scenarioReturn =
     scenarioCalc?.ownership_analysis?.return_metrics ||
     scenarioCalc?.ownershipAnalysis?.returnMetrics ||
@@ -406,7 +590,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       ? (dentalOperatoriesValue / dentalProviderCount).toFixed(1)
       : null;
 
-  if (process.env.NODE_ENV !== 'production') {
+  if (DEBUG_EXECUTIVE && isDentalOffice) {
     console.log('[SpecSharp][OE Dental Metrics]', {
       revenueAnalysis,
       staffingRecord: backendStaffing,
@@ -420,7 +604,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       dentalOpsPerProviderValue
     });
   }
-  const quickSensitivity = displayData?.sensitivity || {};
   const revenueRequired = {
     impliedAdrForTargetRevpar: displayData.impliedAdrForTargetRevpar,
     impliedOccupancyForTargetRevpar: displayData.impliedOccupancyForTargetRevpar,
@@ -651,6 +834,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   const dscr = dscrFromDisplay ?? dscrFromOwnership;
   const targetDscr = targetDscrFromOwnership;
   const resolvedTargetDscr = typeof targetDscr === 'number' && Number.isFinite(targetDscr) ? targetDscr : 1.25;
+  const dscrTargetDisplay = Number.isFinite(resolvedTargetDscr)
+    ? `${resolvedTargetDscr.toFixed(2)}×`
+    : '—';
   const yieldOnCost = typeof displayData.yieldOnCost === 'number' && Number.isFinite(displayData.yieldOnCost)
     ? displayData.yieldOnCost
     : undefined;
@@ -681,19 +867,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     : undefined;
   const investmentDecisionFromDisplay = displayData.investmentDecision;
   const feasibilityFlag = typeof displayData.feasible === 'boolean' ? displayData.feasible : undefined;
-  type DecisionStatus = 'GO' | 'Needs Work' | 'NO-GO' | 'PENDING';
-  const normalizeBackendDecision = (value: unknown): DecisionStatus | undefined => {
-    if (typeof value === 'string') {
-      if (value.toLowerCase().includes('go')) return 'GO';
-      if (value.toLowerCase().includes('no-go') || value.toLowerCase().includes('no_go')) return 'NO-GO';
-      if (value.toLowerCase().includes('work') || value.toLowerCase().includes('near')) return 'Needs Work';
-    }
-    return undefined;
-  };
   const backendDecision = normalizeBackendDecision(
     typeof investmentDecisionFromDisplay === 'string'
       ? investmentDecisionFromDisplay
-      : investmentDecisionFromDisplay?.recommendation
+      : investmentDecisionFromDisplay?.recommendation ?? investmentDecisionFromDisplay?.status
   );
   const fallbackDecisionStatus: DecisionStatus =
     backendDecision ??
@@ -729,10 +906,60 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     }
     return undefined;
   })();
-  let decisionStatus: DecisionStatus = derivedDecisionStatus ?? fallbackDecisionStatus;
-  // Industrial override: evaluate directly against target yield and DSCR so a
-  // 7+% warehouse at 1.25x+ DSCR is a clear GO.
+  const explicitDealShieldDecision = normalizeBackendDecision(
+    dealShieldRecord.decision_status ??
+      dealShieldRecord.decisionStatus ??
+      decisionSummaryRecord.decision_status ??
+      decisionSummaryRecord.decisionStatus ??
+      decisionSummaryRecord.recommendation ??
+      decisionSummaryRecord.status
+  );
+  const decisionReasonCode =
+    (typeof dealShieldRecord.decision_reason_code === 'string' ? dealShieldRecord.decision_reason_code : undefined) ??
+    (typeof dealShieldRecord.decisionReasonCode === 'string' ? dealShieldRecord.decisionReasonCode : undefined) ??
+    (typeof decisionSummaryRecord.decision_reason_code === 'string' ? decisionSummaryRecord.decision_reason_code : undefined) ??
+    (typeof decisionSummaryRecord.decisionReasonCode === 'string' ? decisionSummaryRecord.decisionReasonCode : undefined);
+  const decisionStatusProvenanceRecord = coalesceRecord(
+    dealShieldRecord.decision_status_provenance,
+    dealShieldRecord.decisionStatusProvenance,
+    decisionSummaryRecord.decision_status_provenance,
+    decisionSummaryRecord.decisionStatusProvenance
+  );
+  const decisionStatusSource =
+    (typeof decisionStatusProvenanceRecord.status_source === 'string' ? decisionStatusProvenanceRecord.status_source : undefined) ??
+    (typeof decisionStatusProvenanceRecord.statusSource === 'string' ? decisionStatusProvenanceRecord.statusSource : undefined);
+  const decisionPolicyId =
+    (typeof decisionStatusProvenanceRecord.policy_id === 'string' ? decisionStatusProvenanceRecord.policy_id : undefined) ??
+    (typeof decisionStatusProvenanceRecord.policyId === 'string' ? decisionStatusProvenanceRecord.policyId : undefined);
+  const canonicalDealShieldDecisionStatus: DecisionStatus | undefined = (() => {
+    if (!hasDealShieldPayload || !explicitDealShieldDecision) return undefined;
+    return explicitDealShieldDecision;
+  })();
+  const fallbackDealShieldDecisionStatus: DecisionStatus | undefined = (() => {
+    if (!hasDealShieldPayload || canonicalDealShieldDecisionStatus) return undefined;
+    if (canonicalNotModeledReason) return 'PENDING';
+    if (hasBaseBreakCondition || hasBaseAlreadyBroken) return 'NO-GO';
+    if (typeof canonicalValueGap === 'number') {
+      if (canonicalValueGap <= 0) return 'NO-GO';
+      if (
+        typeof normalizedFlexBeforeBreakPct === 'number' &&
+        normalizedFlexBeforeBreakPct <= 2
+      ) {
+        return 'Needs Work';
+      }
+      return 'GO';
+    }
+    if (hasTightFlexBand) return 'Needs Work';
+    if (typeof normalizedFlexBeforeBreakPct === 'number') {
+      return normalizedFlexBeforeBreakPct <= 2 ? 'Needs Work' : 'GO';
+    }
+    return undefined;
+  })();
+  let decisionStatus: DecisionStatus =
+    canonicalDealShieldDecisionStatus ?? fallbackDealShieldDecisionStatus ?? derivedDecisionStatus ?? fallbackDecisionStatus;
+  // Preserve historical industrial fallback when no DealShield-based status is available.
   (() => {
+    if (canonicalDealShieldDecisionStatus || fallbackDealShieldDecisionStatus) return;
     const bt = (buildingType || '').toLowerCase();
     if (bt !== 'industrial') return;
 
@@ -768,6 +995,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
 
     decisionStatus = 'NO-GO';
   })();
+  const isDealShieldCanonicalStatusActive = Boolean(canonicalDealShieldDecisionStatus);
   const decisionStatusLabel =
     decisionStatus === 'Needs Work'
       ? 'Needs Work'
@@ -784,7 +1012,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         : decisionStatus === 'GO'
           ? 'GO'
           : 'Needs Review';
-  const decisionReasonText = displayData.decisionReason || (
+  const decisionReasonText = decisionReasonCopy(decisionReasonCode)
+    || (typeof decisionStatusProvenanceRecord.not_modeled_reason === 'string' ? decisionStatusProvenanceRecord.not_modeled_reason : undefined)
+    || (typeof decisionStatusProvenanceRecord.notModeledReason === 'string' ? decisionStatusProvenanceRecord.notModeledReason : undefined)
+    || displayData.decisionReason || (
     typeof investmentDecisionFromDisplay === 'object'
       ? investmentDecisionFromDisplay?.summary
     : undefined
@@ -838,23 +1069,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   // Extract additional raw data we need - check multiple paths for data
   const parsed = analysis?.parsed_input || {};
   const ownership = calculations?.ownership_analysis || {};
-  const backendSensitivity =
-    ownership?.sensitivity_analysis ||
-    calculations?.sensitivity_analysis ||
-    calculations?.quick_sensitivity ||
-    null;
-  const backendSensitivityScenarios = Array.isArray(backendSensitivity?.scenarios)
-    ? backendSensitivity.scenarios
-    : null;
-  // TEMP: debug Quick Sensitivity wiring
-  if (process.env.NODE_ENV === 'development') {
-    // eslint-disable-next-line no-console
-    console.log('QS debug – backendSensitivity:', backendSensitivity);
-    // eslint-disable-next-line no-console
-    console.log('QS debug – backendSensitivityScenarios:', backendSensitivityScenarios);
-  }
   const rawConstructionSchedule = calculations?.construction_schedule;
-  const projectInfo = calculations?.project_info || {};
   const totals = calculations?.totals || {};
   const construction_costs = calculations?.construction_costs || {};
   const soft_costs = calculations?.soft_costs || {};
@@ -907,10 +1122,19 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         ? finishSourceRaw
         : 'default';
 
+  const regionalContext = toRecord(
+    calculations?.regional ||
+    analysis?.regional ||
+    project?.analysis?.regional ||
+    displayData?.regional
+  );
   const costFactorFromDisplay = typeof displayData.costFactor === 'number' ? displayData.costFactor : undefined;
-  const revenueFactorFromDisplay = typeof displayData.revenueFactor === 'number' ? displayData.revenueFactor : undefined;
-  const costFactor = costFactorFromDisplay ?? (typeof modifiersTrace?.data?.cost_factor === 'number' ? modifiersTrace.data.cost_factor : undefined);
-  const revenueFactor = revenueFactorFromDisplay ?? (typeof modifiersTrace?.data?.revenue_factor === 'number' ? modifiersTrace.data.revenue_factor : undefined);
+  const costFactorFromRegional = typeof regionalContext.cost_factor === 'number' ? regionalContext.cost_factor : undefined;
+  const marketFactorFromRegional = typeof regionalContext.market_factor === 'number' ? regionalContext.market_factor : undefined;
+  const modifierCostFactor = typeof modifiersTrace?.data?.cost_factor === 'number' ? modifiersTrace.data.cost_factor : undefined;
+  const modifierMarketFactor = typeof modifiersTrace?.data?.market_factor === 'number' ? modifiersTrace.data.market_factor : undefined;
+  const costFactor = costFactorFromRegional ?? modifierCostFactor ?? costFactorFromDisplay ?? 1.0;
+  const marketFactor = marketFactorFromRegional ?? modifierMarketFactor ?? 1.0;
 
   const costPerSFValue = typeof displayData.costPerSF === 'number' && Number.isFinite(displayData.costPerSF)
     ? displayData.costPerSF
@@ -946,9 +1170,15 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     }
     return value.toFixed(3).replace(/(?:\.0+|(\.\d+?)0+)$/, '$1');
   };
+  const formatChipMultiplier = (value?: number) => {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      return undefined;
+    }
+    return value.toFixed(2);
+  };
 
-  const costFactorText = formatMultiplier(costFactor);
-  const revenueFactorText = formatMultiplier(revenueFactor);
+  const costFactorText = formatChipMultiplier(costFactor);
+  const marketFactorText = formatChipMultiplier(marketFactor);
 
   const finishChipTooltip = finishSource === 'explicit'
     ? 'Source: Selected in form'
@@ -956,10 +1186,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       ? 'Source: Inferred from description'
       : 'Source: Default (Standard)';
 
-  const hasFinishPayload = Boolean(finishLevel || costFactor || revenueFactor);
+  const hasFinishPayload = Boolean(finishLevel || costFactor || marketFactor);
   const finishChipDetail = hasFinishPayload
-    ? `Finish: ${finishLevel || 'Standard'} ${costFactorText && revenueFactorText
-      ? `(Cost ×${costFactorText} · Rev ×${revenueFactorText})`
+    ? `Finish: ${finishLevel || 'Standard'} ${costFactorText && marketFactorText
+      ? `(Cost ×${costFactorText} · Market ×${marketFactorText})`
       : '(applied)'}`.trim()
     : 'MISSING';
 
@@ -973,15 +1203,17 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     if (!isDev || finishDevLogRef.current) {
       return;
     }
-    console.log('[SpecSharp DEV] Finish chip payload', {
-      finishLevel: finishLevel || 'Standard',
-      costFactor,
-      revenueFactor,
-      modifiersTrace: modifiersTrace?.data || null,
-      finishSource
-    });
-    finishDevLogRef.current = true;
-  }, [isDev, finishLevel, modifiersTrace, finishSource, costFactor, revenueFactor]);
+    if (DEBUG_EXECUTIVE) {
+      console.log('[SpecSharp DEV] Finish chip payload', {
+        finishLevel: finishLevel || 'Standard',
+        costFactor,
+        marketFactor,
+        modifiersTrace: modifiersTrace?.data || null,
+        finishSource
+      });
+      finishDevLogRef.current = true;
+    }
+  }, [isDev, finishLevel, modifiersTrace, finishSource, costFactor, marketFactor]);
   
   // Basic project info
   const enrichedParsed: any = analysis?.parsed_input || {};
@@ -995,7 +1227,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   }
   const buildingSubtype = parsed?.building_subtype || parsed?.subtype || 'general';
   const location = parsed?.location || 'Nashville';
-  const friendlyType =
+  let friendlyType =
     (enrichedParsed?.__display_type as string) ||
     toTitleCase(
       (projectInfo?.subtype as string) ||
@@ -1005,18 +1237,39 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       'general'
     ) ||
     'General';
+  if (isDistributionCenterProject) {
+    friendlyType = distributionCenterLabel;
+  }
   // For multifamily and other building types, use typical_floors if available (more accurate)
   const floors = projectInfo?.typical_floors || parsed?.floors || 1;
   const headerSquareFootage =
     Number(projectInfo?.square_footage) ||
     Number(totals?.square_footage) ||
     squareFootage;
-  const headerFriendlyType =
+  let headerFriendlyType =
     toTitleCase(
       (projectInfo?.subtype as string) ||
       (projectInfo?.display_name as string) ||
       friendlyType
     ) || friendlyType;
+  if (isDistributionCenterProject) {
+    headerFriendlyType = distributionCenterLabel;
+  }
+  const canonicalSubtype = String(
+    (enrichedParsed?.subtype as string) ||
+    (parsed?.subtype as string) ||
+    (parsed?.building_subtype as string) ||
+    (projectInfo?.subtype as string) ||
+    buildingSubtype ||
+    ''
+  ).toLowerCase();
+  const isFlexSpaceCanonical = canonicalSubtype === 'flex_space';
+  if (isFlexSpaceCanonical) {
+    friendlyType = 'Flex Industrial';
+    headerFriendlyType = 'Flex Industrial';
+  } else if (subtypeLabelOverride) {
+    headerFriendlyType = headerFriendlyType.replace(/flex[\s-]+space/gi, subtypeLabelOverride);
+  }
   const heroTitle =
     headerSquareFootage > 0
       ? `${formatters.squareFeet(headerSquareFootage)} ${headerFriendlyType}`
@@ -1030,40 +1283,44 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   const constructionTotal = totals.hard_costs || 0;
   const softCostsTotal = totals.soft_costs || 0;
   
-  // TRACE CONSTRUCTION COST ISSUE
-  console.log('=== CONSTRUCTION COST TRACE ===');
-  console.log('1. Raw project data:', project);
-  console.log('2. Analysis object:', project?.analysis);
-  console.log('3. Calculations object:', calculations);
-  console.log('4. Totals object:', totals);
-  console.log('5. Hard costs value from totals:', totals?.hard_costs);
-  console.log('6. DisplayData object:', displayData);
-  console.log('7. DisplayData construction cost:', displayData?.constructionCost);
-  console.log('8. ConstructionTotal variable:', constructionTotal);
-  console.log('9. TotalProjectCost:', totalProjectCost);
-  console.log('10. SoftCostsTotal:', softCostsTotal);
-  console.log('=== END TRACE ===');
+  if (DEBUG_EXECUTIVE) {
+    // TRACE CONSTRUCTION COST ISSUE
+    console.log('=== CONSTRUCTION COST TRACE ===');
+    console.log('1. Raw project data:', project);
+    console.log('2. Analysis object:', project?.analysis);
+    console.log('3. Calculations object:', calculations);
+    console.log('4. Totals object:', totals);
+    console.log('5. Hard costs value from totals:', totals?.hard_costs);
+    console.log('6. DisplayData object:', displayData);
+    console.log('7. DisplayData construction cost:', displayData?.constructionCost);
+    console.log('8. ConstructionTotal variable:', constructionTotal);
+    console.log('9. TotalProjectCost:', totalProjectCost);
+    console.log('10. SoftCostsTotal:', softCostsTotal);
+    console.log('=== END TRACE ===');
+  }
   
-  // DETAILED REVENUE DEBUG
-  console.log('=== DETAILED REVENUE DEBUG ===');
-  console.log('Full project prop:', project);
-  console.log('project.calculation_data:', project?.calculation_data);
-  console.log('project.roi_analysis:', project?.roi_analysis);
-  console.log('project.revenue_analysis:', project?.revenue_analysis);
-  console.log('analysis object:', analysis);
-  console.log('analysis.calculations:', analysis?.calculations);
-  console.log('calculations object (merged):', calculations);
-  console.log('calculations keys:', Object.keys(calculations || {}));
-  
-  // Check all possible revenue paths
-  console.log('Path checks:');
-  console.log('  roi_analysis exists:', !!calculations?.roi_analysis);
-  console.log('  financial_metrics exists:', !!calculations?.roi_analysis?.financial_metrics);
-  console.log('  annual_revenue in financial_metrics:', calculations?.roi_analysis?.financial_metrics?.annual_revenue);
-  console.log('  revenue_analysis exists:', !!calculations?.revenue_analysis);
-  console.log('  annual_revenue in revenue_analysis:', calculations?.revenue_analysis?.annual_revenue);
-  console.log('  direct annual_revenue:', calculations?.annual_revenue);
-  console.log('=== END REVENUE DEBUG ===');
+  if (DEBUG_EXECUTIVE) {
+    // DETAILED REVENUE DEBUG
+    console.log('=== DETAILED REVENUE DEBUG ===');
+    console.log('Full project prop:', project);
+    console.log('project.calculation_data:', project?.calculation_data);
+    console.log('project.roi_analysis:', project?.roi_analysis);
+    console.log('project.revenue_analysis:', project?.revenue_analysis);
+    console.log('analysis object:', analysis);
+    console.log('analysis.calculations:', analysis?.calculations);
+    console.log('calculations object (merged):', calculations);
+    console.log('calculations keys:', Object.keys(calculations || {}));
+    
+    // Check all possible revenue paths
+    console.log('Path checks:');
+    console.log('  roi_analysis exists:', !!calculations?.roi_analysis);
+    console.log('  financial_metrics exists:', !!calculations?.roi_analysis?.financial_metrics);
+    console.log('  annual_revenue in financial_metrics:', calculations?.roi_analysis?.financial_metrics?.annual_revenue);
+    console.log('  revenue_analysis exists:', !!calculations?.revenue_analysis);
+    console.log('  annual_revenue in revenue_analysis:', calculations?.revenue_analysis?.annual_revenue);
+    console.log('  direct annual_revenue:', calculations?.annual_revenue);
+    console.log('=== END REVENUE DEBUG ===');
+  }
   
   // Get values from backend calculations using correct data paths
   const annualRevenue = 
@@ -1073,9 +1330,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     calculations?.annual_revenue ||
     0; // No hardcoded value, just 0 if missing
     
-  console.log('=== FINAL REVENUE VALUES ===');
-  console.log('annualRevenue calculated as:', annualRevenue);
-  console.log('operatingMargin will be calculated from paths...');
+  if (DEBUG_EXECUTIVE) {
+    console.log('=== FINAL REVENUE VALUES ===');
+    console.log('annualRevenue calculated as:', annualRevenue);
+    console.log('operatingMargin will be calculated from paths...');
+  }
   const noi = 
     calculations?.roi_analysis?.financial_metrics?.net_income ||
     calculations?.revenue_analysis?.net_income ||
@@ -1090,9 +1349,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     calculations?.operating_margin ||
     0.08; // Default 8% for unknown types
     
-  console.log('operatingMargin calculated as:', operatingMargin);
-  console.log('noi calculated as:', noi);
-  console.log('=== END FINAL VALUES ===');
+  if (DEBUG_EXECUTIVE) {
+    console.log('operatingMargin calculated as:', operatingMargin);
+    console.log('noi calculated as:', noi);
+    console.log('=== END FINAL VALUES ===');
+  }
   
   // Revenue Requirements data
   const revenueReq = calculations?.revenue_requirements || 
@@ -1113,6 +1374,32 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     normalizeRate((displayData as AnyRecord)?.targetYieldPct) ||
     normalizeRate((displayData as AnyRecord)?.yieldTarget) ||
     0.08;
+  const irrValue =
+    typeof displayData.irr === 'number' && Number.isFinite(displayData.irr)
+      ? displayData.irr
+      : undefined;
+  const normalizedInvestmentDecision = isDealShieldCanonicalStatusActive
+    ? decisionStatus
+    : backendDecision ?? decisionStatus;
+  const irrBelowHurdle =
+    normalizedInvestmentDecision === 'NO-GO' &&
+    (
+      (typeof dscrValue === 'number' && dscrValue < resolvedTargetDscr) ||
+      (
+        typeof yieldOnCost === 'number' &&
+        typeof targetYieldRate === 'number' &&
+        Number.isFinite(targetYieldRate) &&
+        targetYieldRate > 0 &&
+        yieldOnCost < targetYieldRate
+      )
+    );
+  const irrDisplayLabel = irrBelowHurdle ? 'IRR (Below Hurdle)' : 'IRR';
+  const irrDisplayValue = irrBelowHurdle
+    ? '—'
+    : typeof irrValue === 'number'
+      ? formatters.percentage(irrValue)
+      : '—';
+  const irrHelperText = irrBelowHurdle ? 'Not meaningful prior to stabilization' : undefined;
   const requiredNoi = typeof totalProjectCost === 'number' && Number.isFinite(totalProjectCost)
     ? totalProjectCost * targetYieldRate
     : (typeof revenueReq?.required_value === 'number' ? revenueReq.required_value : undefined);
@@ -1214,94 +1501,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   const salesPerSfText = hasRestaurantSalesPerSf ? formatPerSf(restaurantSalesPerSf) : '—';
   const noiPerSfText = hasRestaurantNoiPerSf ? formatPerSf(restaurantNoiPerSf) : '—';
   const costPerSfText = hasRestaurantCostPerSf ? formatPerSf(restaurantCostPerSf) : '—';
-  const baselineRevenue = typeof annualRevenue === 'number' && Number.isFinite(annualRevenue) ? annualRevenue : undefined;
-  const baselineNoi = typeof noi === 'number' && Number.isFinite(noi) ? noi : undefined;
-  const baselineTotalCost =
-    typeof totalProjectCost === 'number' && Number.isFinite(totalProjectCost) && totalProjectCost > 0
-      ? totalProjectCost
-      : undefined;
-  const baselineYieldOnCost =
-    typeof baselineNoi === 'number' && typeof baselineTotalCost === 'number' && baselineTotalCost > 0
-      ? baselineNoi / baselineTotalCost
-      : undefined;
-  const baselineDscr = typeof dscrValue === 'number' ? dscrValue : undefined;
-  const baselineOperatingMargin =
-    typeof baselineRevenue === 'number' &&
-    baselineRevenue > 0 &&
-    typeof baselineNoi === 'number'
-      ? baselineNoi / baselineRevenue
-      : undefined;
-  type RestaurantSensitivityScenario = {
-    id: string;
-    label: string;
-    subtitle: string;
-    yieldOnCost?: number;
-    dscr?: number;
-  };
-  let restaurantSensitivityScenarios: RestaurantSensitivityScenario[] | undefined;
-  if (
-    isRestaurantProject &&
-    typeof baselineRevenue === 'number' &&
-    typeof baselineNoi === 'number' &&
-    typeof baselineTotalCost === 'number' &&
-    baselineTotalCost > 0
-  ) {
-    const baseYield = typeof baselineYieldOnCost === 'number' ? baselineYieldOnCost : undefined;
-    const baseDscr = typeof baselineDscr === 'number' ? baselineDscr : undefined;
-    const margin = baselineOperatingMargin;
-    const scaleDscr = (noiMultiplier: number): number | undefined =>
-      typeof baseDscr === 'number' ? baseDscr * noiMultiplier : undefined;
-
-    restaurantSensitivityScenarios = [];
-
-    const pushScenario = (
-      id: string,
-      label: string,
-      subtitle: string,
-      noiMultiplier: number | undefined
-    ) => {
-      const scenarioYield =
-        typeof baseYield === 'number' && typeof noiMultiplier === 'number'
-          ? baseYield * noiMultiplier
-          : undefined;
-      const scenarioDscr =
-        typeof noiMultiplier === 'number' ? scaleDscr(noiMultiplier) : undefined;
-      restaurantSensitivityScenarios?.push({
-        id,
-        label,
-        subtitle,
-        yieldOnCost: scenarioYield,
-        dscr: scenarioDscr,
-      });
-    };
-
-    pushScenario('sales_plus_5', 'Sales +5%', 'Top-line sales increase by 5%.', 1.05);
-    pushScenario('sales_minus_5', 'Sales –5%', 'Top-line sales decrease by 5%.', 0.95);
-
-    if (typeof margin === 'number') {
-      const adjustForMargin = (deltaPts: number): number | undefined => {
-        const newMargin = Math.max(0, margin - deltaPts);
-        if (!baselineRevenue || !baselineNoi || baselineNoi === 0) {
-          return undefined;
-        }
-        return (baselineRevenue * newMargin) / baselineNoi;
-      };
-
-      pushScenario(
-        'cogs_plus_2',
-        'COGS +2 pts',
-        'Food & beverage cost ratio increases by 2 percentage points.',
-        adjustForMargin(0.02)
-      );
-
-      pushScenario(
-        'labor_plus_2',
-        'Labor +2 pts',
-        'Labor cost ratio increases by 2 percentage points.',
-        adjustForMargin(0.02)
-      );
-    }
-  }
   const officeNoiGapValue =
     typeof requiredNoi === 'number' && typeof currentNoi === 'number'
       ? requiredNoi - currentNoi
@@ -1320,77 +1519,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
     requiredRevenuePerSf !== 0
       ? (officeRentGapValue / requiredRevenuePerSf) * 100
       : undefined;
-  const quickSensitivityBaseYield = (() => {
-    const candidates = [
-      quickSensitivity?.currentYield,
-      quickSensitivity?.yieldBase,
-      quickSensitivity?.yieldOnCost,
-      quickSensitivity?.baseYieldOnCost,
-      displayData?.yieldOnCost,
-    ];
-    for (const value of candidates) {
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        return value;
-      }
-    }
-    return undefined;
-  })();
-  const breakEvenOccupancyValue =
-    typeof displayData.breakEvenOccupancyForTargetYield === 'number'
-      ? displayData.breakEvenOccupancyForTargetYield
-      : typeof displayData.breakEvenOccupancy === 'number'
-        ? displayData.breakEvenOccupancy
-        : undefined;
-  const breakEvenLabel =
-    typeof breakEvenOccupancyValue === 'number'
-      ? breakEvenOccupancyValue > 1.02
-        ? '> 100% (not achievable)'
-        : formatters.percentage(breakEvenOccupancyValue)
-      : 'N/A';
-  const isHotel = isHospitalityProject;
-  let adrMinus10Yield: number | undefined;
-  let adrPlus10Yield: number | undefined;
-  let occMinus5Yield: number | undefined;
-  let occPlus5Yield: number | undefined;
-  const adrForSensitivity = typeof hospitalityAdr === 'number' ? hospitalityAdr : undefined;
-  const occForSensitivity = typeof hospitalityOccupancy === 'number' ? hospitalityOccupancy : undefined;
-  if (
-    isHotel &&
-    typeof quickSensitivityBaseYield === 'number' &&
-    typeof adrForSensitivity === 'number' &&
-    adrForSensitivity > 0 &&
-    typeof occForSensitivity === 'number' &&
-    occForSensitivity > 0
-  ) {
-    const revparBase = adrForSensitivity * occForSensitivity;
-    if (revparBase > 0) {
-      const adrMinus10 = adrForSensitivity - 10;
-      const adrPlus10 = adrForSensitivity + 10;
-      const occMinus5 = occForSensitivity - 0.05;
-      const occPlus5 = occForSensitivity + 0.05;
-
-      if (adrMinus10 > 0) {
-        const revparAdrMinus10 = adrMinus10 * occForSensitivity;
-        adrMinus10Yield = quickSensitivityBaseYield * (revparAdrMinus10 / revparBase);
-      }
-
-      if (adrPlus10 > 0) {
-        const revparAdrPlus10 = adrPlus10 * occForSensitivity;
-        adrPlus10Yield = quickSensitivityBaseYield * (revparAdrPlus10 / revparBase);
-      }
-
-      if (occMinus5 > 0) {
-        const revparOccMinus5 = adrForSensitivity * occMinus5;
-        occMinus5Yield = quickSensitivityBaseYield * (revparOccMinus5 / revparBase);
-      }
-
-      if (occPlus5 < 1.0) {
-        const revparOccPlus5 = adrForSensitivity * occPlus5;
-        occPlus5Yield = quickSensitivityBaseYield * (revparOccPlus5 / revparBase);
-      }
-    }
-  }
-
   const hospitalityRequiredNoiPerKeyValue =
     displayData.requiredNoiPerKey ??
     (isHospitalityProject &&
@@ -1454,6 +1582,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
   })();
 
   const isIndustrialProject = (buildingType || '').toLowerCase() === 'industrial';
+  const decisionYieldDisplay =
+    typeof yieldOnCost === 'number' && Number.isFinite(yieldOnCost)
+      ? `${(yieldOnCost * 100).toFixed(1)}%`
+      : undefined;
   // Enhanced, context-aware Executive Decision Points
   const decisionBullets: string[] = (() => {
     const bullets: string[] = [];
@@ -1566,9 +1698,15 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       }
 
       let returnsText = `Returns: ${parts.join('; ')}.`;
-      returnsText += isIndustrialProject
-        ? ' For industrial, this signals whether the rent roll, dock configuration, and truck flow can clear both equity and lender hurdles.'
-        : ' Together these determine whether the project clears both equity and lender hurdles.';
+      if (isIndustrialProject && isFlexIndustrial) {
+        returnsText +=
+          ' For flex industrial, this reflects the balance between office and warehouse lease mix, tenant flexibility, and achievable blended rents.';
+      } else if (isIndustrialProject) {
+        returnsText +=
+          ' For industrial, this signals whether the rent roll, dock configuration, and truck flow can clear both equity and lender hurdles.';
+      } else {
+        returnsText += ' Together these determine whether the project clears both equity and lender hurdles.';
+      }
       bullets.push(returnsText);
     } else {
       bullets.push('Returns: yield and DSCR metrics are still populating from the latest underwriting run.');
@@ -1745,55 +1883,73 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       alert('Failed to export PDF report. Please try again.');
     }
   };
+  const sectionShell = 'rounded-2xl border border-slate-200 bg-white shadow-sm';
+  const sectionPadding = 'p-4 sm:p-6';
+  const sectionCardClasses = `${sectionShell} ${sectionPadding}`;
 
   return (
     <>
-      <div className="space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-16 pb-[env(safe-area-inset-bottom)]">
         {/* Executive Investment Dashboard Header */}
-        <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 rounded-2xl p-8 text-white shadow-2xl">
-        <div className="flex justify-between items-start mb-8">
-          <div>
-            <h2 className="text-3xl font-bold mb-3">
+        <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 rounded-2xl p-6 sm:p-8 text-white shadow-2xl">
+        <div className="flex flex-col gap-6 lg:flex-row lg:justify-between">
+          <div className="space-y-4">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold break-words">
               {heroTitle}
             </h2>
-            <div className="flex items-center gap-6 text-sm text-blue-200">
-              <span className="flex items-center gap-1.5">
+            <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs sm:text-sm text-blue-200">
+              <span className="flex items-center gap-1.5 min-w-0">
                 <MapPin className="h-4 w-4" />
                 {location}
               </span>
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5 min-w-0">
                 <Building className="h-4 w-4" />
                 {floors} {floors === 1 ? 'Floor' : 'Floors'}
               </span>
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5 min-w-0">
                 <Calendar className="h-4 w-4" />
                 Ground-Up
               </span>
             </div>
             
-            <div className="flex gap-3 mt-4">
+            <div className="flex flex-col sm:flex-row gap-3 w-full">
               <button 
                 onClick={handleExportPdf}
-                className="px-4 py-2 bg-white/10 backdrop-blur border border-white/20 text-white rounded-lg hover:bg-white/20 transition flex items-center gap-2"
+                className="w-full sm:w-auto px-4 py-2 bg-white/10 backdrop-blur border border-white/20 text-white rounded-lg hover:bg-white/20 transition flex items-center justify-center gap-2"
               >
                 <Download className="h-4 w-4" />
                 Export PDF
               </button>
                 <button
                   onClick={() => setIsScenarioOpen(true)}
-                  className="px-4 py-2 border border-white/30 text-white rounded-lg hover:bg-white/10 transition flex items-center gap-2"
+                  className="w-full sm:w-auto px-4 py-2 border border-white/30 text-white rounded-lg hover:bg-white/10 transition flex items-center justify-center gap-2"
                 >
                   <Target className="h-4 w-4" />
                   Scenario
                 </button>
+                <button
+                  type="button"
+                  onClick={() => openTrustPanel('uncertainty')}
+                  className="w-full sm:w-auto px-4 py-2 border border-white/0 text-white/80 rounded-lg hover:bg-white/10 transition flex items-center justify-center gap-2 text-sm"
+                >
+                  <span role="img" aria-hidden="true">🔒</span>
+                  Trust &amp; Assumptions
+                </button>
             </div>
           </div>
           
-          <div className="text-right">
-            <p className="text-xs text-blue-200 uppercase tracking-wider mb-2 font-medium">TOTAL INVESTMENT REQUIRED</p>
-            <p className="text-5xl font-bold">{formatters.currency(totalProjectCost)}</p>
-            <p className="text-lg text-blue-200">{formatters.costPerSF(totals.cost_per_sf)}</p>
-            <div className="mt-3 flex justify-end gap-2 flex-wrap">
+          <div className="text-left lg:text-right space-y-2 w-full lg:w-auto">
+            <p className="text-xs text-blue-200 uppercase tracking-wider font-medium">TOTAL INVESTMENT REQUIRED</p>
+            <p className="text-4xl sm:text-5xl font-bold break-words">{formatters.currency(totalProjectCost)}</p>
+            <p className="text-base sm:text-lg text-blue-200">{formatters.costPerSF(totals.cost_per_sf)}</p>
+            <button
+              type="button"
+              onClick={() => openTrustPanel('assumptions')}
+              className="text-[11px] font-semibold text-blue-100/80 underline decoration-dotted underline-offset-2 hover:text-white transition"
+            >
+              Why this estimate
+            </button>
+            <div className="mt-3 flex flex-wrap gap-2 justify-start lg:justify-end">
               <span
                 className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${decisionStatus === 'GO'
                   ? 'bg-green-500/15 text-green-100 border-green-400/40'
@@ -1820,18 +1976,32 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           </div>
         </div>
         
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6 pt-6 mt-6 border-t border-white/20">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 pt-6 mt-6 border-t border-white/20">
           <div>
-            <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">CONSTRUCTION</p>
-            <p className="text-3xl font-bold">{formatters.currency(constructionTotal)}</p>
+            <p className="text-blue-200 text-xs uppercase tracking-wider mb-1 font-medium">CONSTRUCTION</p>
+            <p className="text-2xl sm:text-3xl font-bold">{formatters.currency(constructionTotal)}</p>
+            <button
+              type="button"
+              onClick={() => openTrustPanel('conservative')}
+              className="mt-1 text-[11px] text-blue-100/80 underline decoration-dotted underline-offset-2 hover:text-white transition"
+            >
+              How we model construction
+            </button>
           </div>
           <div>
-            <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">SOFT COSTS</p>
-            <p className="text-3xl font-bold">{formatters.currency(softCostsTotal)}</p>
+            <p className="text-blue-200 text-xs uppercase tracking-wider mb-1 font-medium">SOFT COSTS</p>
+            <p className="text-2xl sm:text-3xl font-bold">{formatters.currency(softCostsTotal)}</p>
+            <button
+              type="button"
+              onClick={() => openTrustPanel('assumptions')}
+              className="mt-1 text-[11px] text-blue-100/80 underline decoration-dotted underline-offset-2 hover:text-white transition"
+            >
+              What’s assumed here
+            </button>
           </div>
           <div>
-            <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">STABILIZED YIELD (NOI / COST)</p>
-            <p className="text-3xl font-bold">
+            <p className="text-blue-200 text-xs uppercase tracking-wider mb-1 font-medium">STABILIZED YIELD (NOI / COST)</p>
+            <p className="text-2xl sm:text-3xl font-bold">
               {formatters.percentage(stabilizedYield)}
             </p>
             {typeof yieldOnCost === 'number' && typeof marketCapRateDisplay === 'number' && (
@@ -1845,11 +2015,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           </div>
           <div>
             <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">DSCR VS TARGET</p>
-            <p className="text-3xl font-bold">
+            <p className="text-2xl sm:text-3xl font-bold">
               {typeof dscr === 'number' ? `${dscr.toFixed(2)}×` : '—'}
             </p>
             <p className="text-xs text-blue-200 mt-1">
-              target {resolvedTargetDscr.toFixed(2)}×
+              target {dscrTargetDisplay}
             </p>
             <p className="text-[11px] text-blue-200/80 mt-1">
               Lender sizing based on NOI and annual debt service.
@@ -1857,14 +2027,14 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           </div>
           <div>
             <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">Simple Payback (yrs)</p>
-            <p className="text-3xl font-bold">{formatters.years(displayData.paybackPeriod)}</p>
+            <p className="text-2xl sm:text-3xl font-bold">{formatters.years(displayData.paybackPeriod)}</p>
           </div>
         </div>
       </div>
 
       {/* Investment Decision Section with Enhanced Feedback */}
       {/* Patch 12F: legacy static NO-GO banner removed; the dynamic 3-state component below now owns all decision copy. */}
-      <div className="space-y-4">
+      <section className={`${sectionCardClasses} space-y-4`}>
         {/* Decision Header */}
         <div
           className={`${decisionStatus === 'GO'
@@ -1891,6 +2061,20 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               >
                 Investment Decision: {decisionStatusLabel}
               </h3>
+              {isDealShieldCanonicalStatusActive && (
+                <p className="mt-1 text-xs text-slate-600">
+                  Policy source: {decisionStatusSource ?? 'dealshield_policy_v1'}
+                  {decisionPolicyId ? ` (${decisionPolicyId})` : ''}
+                  {decisionReasonCode ? ` · reason: ${decisionReasonCode}` : ''}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => openTrustPanel('lens')}
+                className="mt-1 text-xs font-semibold text-slate-600 underline decoration-dotted underline-offset-2 hover:text-slate-900 transition"
+              >
+                How to interpret this recommendation
+              </button>
               {isHospitalityProject ? (
                 <>
                   <p className={decisionBodyClass}>
@@ -1972,36 +2156,60 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
               <h4 className="font-semibold text-gray-900">Investment Criteria Assessment</h4>
             </div>
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Metric</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Required</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {displayData.metricsTable.map((metric, idx) => (
-                  <tr key={idx}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{metric.metric}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{metric.current}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{metric.required}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {metric.status === 'pass' ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          <CheckCircle className="h-3 w-3 mr-1" /> Pass
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                          <XCircle className="h-3 w-3 mr-1" /> Fail
-                        </span>
-                      )}
-                    </td>
+            <div className="hidden md:block">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Metric</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Required</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {displayData.metricsTable.map((metric, idx) => (
+                    <tr key={idx}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{metric.metric}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{metric.current}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{metric.required}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {metric.status === 'pass' ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <CheckCircle className="h-3 w-3 mr-1" /> Pass
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            <XCircle className="h-3 w-3 mr-1" /> Fail
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="md:hidden p-4 space-y-4">
+              {displayData.metricsTable.map((metric, idx) => (
+                <div key={idx} className="border border-gray-200 rounded-lg p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-gray-900">{metric.metric}</span>
+                    {metric.status === 'pass' ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <CheckCircle className="h-3 w-3 mr-1" /> Pass
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        <XCircle className="h-3 w-3 mr-1" /> Fail
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm text-gray-700">
+                    <p className="flex justify-between"><span>Current:</span><span className="font-medium">{metric.current}</span></p>
+                    <p className="flex justify-between"><span>Required:</span><span className="font-medium text-gray-600">{metric.required}</span></p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
         
@@ -2092,24 +2300,32 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               </div>
             )}
             
-            <div className="flex items-center gap-6 mt-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6 mt-3">
               <span className="flex items-center gap-2">
                 <span className={`w-2 h-2 ${displayData.roi >= 0.08 ? 'bg-green-500' : 'bg-red-500'} rounded-full`}></span>
                 <span className="text-sm">ROI: <strong>{formatters.percentage(displayData.roi)}</strong></span>
               </span>
-              <span className="flex items-center gap-2">
-                <span className={`w-2 h-2 ${displayData.dscr >= 1.25 ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></span>
-                <span className="text-sm">DSCR: <strong>{formatters.multiplier(displayData.dscr)}</strong></span>
+            <span className="flex items-center gap-2">
+              <span className={`w-2 h-2 ${displayData.dscr >= 1.25 ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></span>
+              <span className="text-sm">DSCR: <strong>{formatters.multiplier(displayData.dscr)}</strong></span>
+            </span>
+            <span className="flex items-center gap-2">
+              <span className={`w-2 h-2 ${irrDisplayValue !== '—' ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></span>
+              <span className="text-sm">
+                {irrDisplayLabel}: <strong>{irrDisplayValue}</strong>
+                {irrHelperText ? <span className="ml-2 text-xs text-gray-500">{irrHelperText}</span> : null}
               </span>
-              <span className="flex items-center gap-2">
-                <span className={`w-2 h-2 ${displayData.paybackPeriod <= 20 ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></span>
-                <span className="text-sm">Payback: <strong>{formatters.years(displayData.paybackPeriod)}</strong></span>
-              </span>
-            </div>
-      </div>
+            </span>
+            <span className="flex items-center gap-2">
+              <span className={`w-2 h-2 ${displayData.paybackPeriod <= 20 ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></span>
+              <span className="text-sm">Payback: <strong>{formatters.years(displayData.paybackPeriod)}</strong></span>
+            </span>
+          </div>
+      </section>
 
       {/* Three Key Metrics Cards */}
-      <div className="grid grid-cols-3 gap-6">
+      <section className={sectionCardClasses}>
+        <div className="grid grid-cols-1 gap-6">
         {/* Revenue Projections */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
           <div className="h-1 bg-gradient-to-r from-green-500 to-green-600"></div>
@@ -2124,6 +2340,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               {formatters.currency(annualRevenue)}
             </p>
             <p className="text-sm text-gray-500 mb-4">Annual Revenue</p>
+            {isFlexIndustrial ? (
+              <p className="text-xs text-gray-500 mb-4 -mt-2">
+                Includes blended rents across warehouse and office/showroom space.
+              </p>
+            ) : null}
             <div className="space-y-2 pt-4 border-t">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Operating Margin</span>
@@ -2148,7 +2369,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               <h3 className="font-semibold text-gray-900">Facility Metrics</h3>
             </div>
             {showHotelFacilityMetrics ? (
-              <div className="grid gap-4 md:grid-cols-3 text-xs text-slate-700">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs text-slate-700">
                 <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                     Rooms
@@ -2206,7 +2427,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                 </div>
               </div>
             ) : showIndustrialFacilityMetrics ? (
-              <div className="grid gap-4 md:grid-cols-3 text-xs text-slate-700">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs text-slate-700">
                 <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                     Building Size
@@ -2254,7 +2475,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                 </div>
               </div>
             ) : showRestaurantFacilityMetrics ? (
-              <div className="grid gap-4 md:grid-cols-3 text-xs text-slate-700">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs text-slate-700">
                 {/* --- SALES PER SF --- */}
                 <div className="rounded-2xl border border-slate-100 bg-white/90 p-5 shadow-md shadow-slate-100/80 space-y-3">
                   <div className="flex items-center justify-between">
@@ -2310,7 +2531,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                 </div>
               </div>
             ) : isOfficeProject ? (
-              <div className="grid gap-4 md:grid-cols-3 text-xs text-slate-700">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs text-slate-700">
                 <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                     Building Size
@@ -2495,12 +2716,13 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
 
         {/* Investment Mix */}
       </div>
+      </section>
 
       {/* Department Cost Allocation */}
       {displayData.departments.length > 0 && (
-        <div>
+        <section className={`${sectionCardClasses} space-y-6`}>
           <h3 className="text-xl font-bold text-gray-900 mb-6">Department Cost Allocation</h3>
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {displayData.departments.map((dept, idx) => {
               const Icon = getDepartmentIcon(dept.name);
               const gradient = getDepartmentGradient(idx);
@@ -2533,19 +2755,19 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               );
             })}
           </div>
-        </div>
+        </section>
       )}
 
       {/* Target Yield Prescription */}
-      <div className="bg-white rounded-xl border border-slate-200/70 shadow-lg shadow-slate-200/50 mb-8">
-        <div className="px-6 py-5 border-b border-slate-100">
+      <section className={`${sectionShell} shadow-lg shadow-slate-200/50`}>
+        <div className="px-4 py-4 sm:px-6 sm:py-5 border-b border-slate-100">
           <div className="inline-flex items-center text-[11px] font-semibold uppercase mb-4 px-3 py-1 rounded-full bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-700 tracking-wide shadow-sm border border-indigo-200/50">
             Prescriptive Playbook
           </div>
           <h3 className="text-xl font-semibold text-slate-900">What It Would Take to Hit Target Yield</h3>
           <p className="text-sm text-slate-500 mt-1">See how much NOI or cost needs to move for this project to hit its underwriting hurdle.</p>
         </div>
-        <div className="p-6 md:p-8">
+        <div className="p-4 sm:p-6 md:p-8">
         {isOffice ? (
           <div className="space-y-3 text-sm text-slate-700">
             <p className="text-xs uppercase tracking-wide text-slate-400">
@@ -2617,7 +2839,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             </div>
           </div>
         ) : isRestaurantProject ? (
-          <div className="grid gap-6 md:gap-8 md:grid-cols-3 text-sm text-slate-700">
+          <div className="grid gap-6 md:gap-8 sm:grid-cols-2 lg:grid-cols-3 text-sm text-slate-700">
             <div className="space-y-1">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
                 Path 1 · Increase Sales per SF
@@ -2730,7 +2952,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             }
 
           return (
-              <div className="grid gap-6 md:gap-8 md:grid-cols-3 text-sm text-slate-700">
+              <div className="grid gap-6 md:gap-8 sm:grid-cols-2 lg:grid-cols-3 text-sm text-slate-700">
                 <div className="space-y-3">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-[0.2em]">Path 1 · Increase NOI</p>
                     <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2 shadow-md shadow-slate-100">
@@ -2801,12 +3023,12 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         })()
         )}
         </div>
-      </div>
+      </section>
 
       {/* Revenue Requirements Card */}
       {revenueReq && (
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-          <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4">
+        <section className={`${sectionShell} overflow-hidden`}>
+          <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-4 sm:px-6">
             <h3 className="text-lg font-bold text-white">Revenue Required to Hit Target Yield</h3>
             <p className="text-sm text-emerald-100">
               {isHospitalityProject
@@ -2816,7 +3038,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                   : 'Compare required NOI and revenue per SF against current performance.'}
             </p>
           </div>
-          <div className="p-6 space-y-5">
+          <div className="p-4 sm:p-6 space-y-5">
             {isHospitalityProject ? (
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="p-4 bg-gray-50 rounded-lg">
@@ -2996,19 +3218,19 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               )}
             </div>
             
-            <div className="flex justify-between items-center pt-4 border-t">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pt-4 border-t">
               <span className="text-sm text-gray-600">Simple Payback (yrs)</span>
               <span className="text-lg font-bold">{formatters.years(displayData.paybackPeriod)}</span>
             </div>
           </div>
-        </div>
+        </section>
       )}
 
       {/* Financial Requirements removed - was only implemented for hospital */}
 
       {/* Major Soft Cost Categories */}
       {softCostCategories.length > 0 && (
-        <div className="bg-white rounded-xl shadow-lg p-6">
+        <section className={sectionCardClasses}>
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-xl font-bold text-gray-900">Major Soft Cost Categories</h3>
             <div className="text-sm text-gray-500">
@@ -3057,43 +3279,21 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               </div>
             </div>
           </div>
-        </div>
+        </section>
       )}
 
-      {/* Key Financial Indicators */}
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-8 text-white shadow-xl">
-        <h3 className="text-2xl font-bold mb-6">Key Financial Indicators</h3>
-        <div className="grid grid-cols-2 gap-8">
-          <div>
-            <p className="text-indigo-200 text-sm uppercase tracking-wider mb-2">BREAK-EVEN OCCUPANCY</p>
-            <p className="text-4xl font-bold">{formatters.percentage(displayData.breakEvenOccupancy)}</p>
-          </div>
-          <div>
-            <p className="text-indigo-200 text-sm uppercase tracking-wider mb-2">10-YEAR NPV</p>
-            <p className="text-4xl font-bold">{formatters.currency(displayData.npv)}</p>
-          </div>
-          <div className="mt-6">
-            <p className="text-indigo-200 text-sm uppercase tracking-wider mb-2">IRR</p>
-            <p className="text-3xl font-bold">{formatters.percentage(displayData.irr)}</p>
-          </div>
-          <div className="mt-6">
-            <p className="text-indigo-200 text-sm uppercase tracking-wider mb-2">PAYBACK PERIOD</p>
-            <p className="text-3xl font-bold">{formatters.years(displayData.paybackPeriod)}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Market Position & Quick Sensitivity */}
-      <div className="grid grid-cols-2 gap-6">
+      {/* Market Position */}
+      <section className={`${sectionCardClasses} border-0 bg-transparent shadow-none p-0`}>
+      <div className="grid grid-cols-1 gap-6">
         {/* Market Position */}
         <div className="bg-gradient-to-br from-white to-blue-50 rounded-xl shadow-lg border border-blue-100 overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3">
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 sm:px-6">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <TrendingUp className="h-5 w-5" />
               Market Position
             </h3>
           </div>
-          <div className="p-6 space-y-4 text-sm">
+          <div className="p-4 sm:p-6 space-y-4 text-sm">
             {(() => {
               const formatCost = (value?: number) =>
                 typeof value === 'number' && Number.isFinite(value)
@@ -3111,12 +3311,21 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500">Market benchmark</span>
+                    <span className="text-sm text-gray-500">
+                      {isFlexIndustrial
+                        ? 'Warehouse benchmark (excludes office/showroom component)'
+                        : 'Market benchmark'}
+                    </span>
                     <span className="font-medium text-gray-700">
                       {formatCost(marketCostPerSF)}
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 mt-2">{basisCopy}</p>
+                  {isFlexIndustrial ? (
+                    <p className="text-xs text-gray-400">
+                      Flex industrial projects with office components typically carry a higher cost basis than bulk warehouse assets.
+                    </p>
+                  ) : null}
                 </div>
               );
             })()}
@@ -3170,256 +3379,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           </div>
         </div>
 
-        {/* Quick Sensitivity */}
-        <div className="bg-gradient-to-br from-white to-purple-50 rounded-xl shadow-lg border border-purple-100 overflow-hidden">
-          <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-3">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Quick Sensitivity
-            </h3>
-          </div>
-          <div className="p-6 space-y-4">
-            {isRestaurantProject && restaurantSensitivityScenarios ? (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {restaurantSensitivityScenarios.map((scenario) => (
-                    <div
-                      key={scenario.id}
-                      className="bg-white rounded-lg p-4 shadow-sm border border-slate-200 space-y-2"
-                    >
-                      <p className="text-xs text-gray-500 uppercase tracking-wider">{scenario.label}</p>
-                      <p className="text-[11px] text-slate-500">{scenario.subtitle}</p>
-                      <div className="mt-2 text-xs text-slate-600 space-y-1">
-                        <div className="flex justify-between">
-                          <span>Yield on cost</span>
-                          <span className="font-semibold text-slate-900">
-                            {typeof scenario.yieldOnCost === 'number'
-                              ? `${(scenario.yieldOnCost * 100).toFixed(1)}%`
-                              : '—'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>DSCR</span>
-                          <span className="font-semibold text-slate-900">
-                            {typeof scenario.dscr === 'number' ? `${scenario.dscr.toFixed(2)}×` : '—'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="p-4 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg">
-                  <p className="text-xs text-gray-600 uppercase tracking-wider mb-2">Break-even needs:</p>
-                  <span className="text-xl font-bold text-purple-700">{breakEvenLabel}</span>
-                </div>
-              </>
-            ) : (
-              (() => {
-                const sensitivity = backendSensitivity ?? quickSensitivity ?? {};
-                const baseYOC = quickSensitivityBaseYield;
-
-                const fmt = (value?: number) =>
-                  typeof value === 'number' && Number.isFinite(value)
-                    ? formatters.percentage(value)
-                    : '—';
-                const occLabel = breakEvenLabel;
-
-                // Return backend scenario metric when present; otherwise fall back to naive +/-10% adjustments.
-                const scenarioValue = (
-                  backendValue: number | undefined,
-                  fallbackFn: (base: number) => number
-                ): string => {
-                  if (typeof backendValue === 'number' && Number.isFinite(backendValue)) {
-                    return fmt(backendValue);
-                  }
-                  if (typeof baseYOC === 'number') {
-                    return fmt(fallbackFn(baseYOC));
-                  }
-                  return '—';
-                };
-
-                const scenarioCards = Array.isArray(backendSensitivityScenarios)
-                  ? backendSensitivityScenarios.map((scenario: any, index: number) => {
-                      const scenarioYield = typeof scenario?.yield_on_cost === 'number'
-                        ? scenario.yield_on_cost
-                        : typeof scenario?.yield === 'number'
-                          ? scenario.yield
-                          : undefined;
-                      const delta = typeof scenario?.yield_delta === 'number'
-                        ? scenario.yield_delta
-                        : typeof scenario?.yieldDelta === 'number'
-                          ? scenario.yieldDelta
-                          : null;
-                      const isPositive = typeof delta === 'number'
-                        ? delta >= 0
-                        : (typeof scenarioYield === 'number' && typeof baseYOC === 'number'
-                            ? scenarioYield >= baseYOC
-                            : true);
-                      const iconElement = isPositive ? (
-                        <TrendingUp className="h-5 w-5 text-green-500" />
-                      ) : (
-                        <TrendingDown className="h-5 w-5 text-red-500" />
-                      );
-                      return {
-                        key: scenario?.label || `scenario-${index}`,
-                        label: scenario?.label || 'Scenario',
-                        icon: iconElement,
-                        value: scenarioYield !== undefined ? fmt(scenarioYield) : '—',
-                        color: isPositive ? 'text-green-600' : 'text-red-600'
-                      };
-                    })
-                  : null;
-
-                let cards;
-                if (scenarioCards && scenarioCards.length > 0) {
-                  cards = scenarioCards;
-                } else if (isDentalOffice) {
-                  cards = [
-                    {
-                      label: 'If build cost / SF +10%',
-                      icon: <TrendingDown className="h-5 w-5 text-red-500" />,
-                      value: scenarioValue(
-                        sensitivity?.cost_up_10?.yield_on_cost ?? sensitivity?.costUp10YieldOnCost,
-                        (base) => base / 1.1
-                      ),
-                      color: 'text-red-600'
-                    },
-                    {
-                      label: 'If build cost / SF -10%',
-                      icon: <TrendingUp className="h-5 w-5 text-green-500" />,
-                      value: scenarioValue(
-                        sensitivity?.cost_down_10?.yield_on_cost ?? sensitivity?.costDown10YieldOnCost,
-                        (base) => base / 0.9
-                      ),
-                      color: 'text-green-600'
-                    },
-                    {
-                      label: 'If production +10%',
-                      icon: <TrendingUp className="h-5 w-5 text-green-500" />,
-                      value: scenarioValue(
-                        sensitivity?.revenue_up_10?.yield_on_cost ?? sensitivity?.revenueUp10YieldOnCost,
-                        (base) => base * 1.1
-                      ),
-                      color: 'text-green-600'
-                    },
-                    {
-                      label: 'If production -10%',
-                      icon: <TrendingDown className="h-5 w-5 text-red-500" />,
-                      value: scenarioValue(
-                        sensitivity?.revenue_down_10?.yield_on_cost ?? sensitivity?.revenueDown10YieldOnCost,
-                        (base) => base * 0.9
-                      ),
-                      color: 'text-red-600'
-                    }
-                  ];
-                } else {
-                  cards = [
-                    {
-                      label: 'If costs +10%',
-                      icon: <TrendingDown className="h-5 w-5 text-red-500" />,
-                      value: scenarioValue(
-                        sensitivity?.cost_up_10?.yield_on_cost ?? sensitivity?.costUp10YieldOnCost,
-                        (base) => base / 1.1
-                      ),
-                      color: 'text-red-600'
-                    },
-                    {
-                      label: 'If costs -10%',
-                      icon: <TrendingUp className="h-5 w-5 text-green-500" />,
-                      value: scenarioValue(
-                        sensitivity?.cost_down_10?.yield_on_cost ?? sensitivity?.costDown10YieldOnCost,
-                        (base) => base / 0.9
-                      ),
-                      color: 'text-green-600'
-                    },
-                    {
-                      label: 'If revenue +10%',
-                      icon: <TrendingUp className="h-5 w-5 text-green-500" />,
-                      value: scenarioValue(
-                        sensitivity?.revenue_up_10?.yield_on_cost ?? sensitivity?.revenueUp10YieldOnCost,
-                        (base) => base * 1.1
-                      ),
-                      color: 'text-green-600'
-                    },
-                    {
-                      label: 'If revenue -10%',
-                      icon: <TrendingDown className="h-5 w-5 text-red-500" />,
-                      value: scenarioValue(
-                        sensitivity?.revenue_down_10?.yield_on_cost ?? sensitivity?.revenueDown10YieldOnCost,
-                        (base) => base * 0.9
-                      ),
-                      color: 'text-red-600'
-                    }
-                  ];
-                }
-
-                return (
-                  <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {cards.map(({ label, icon, value, color }) => (
-                        <div key={label} className="bg-white rounded-lg p-4 shadow-sm">
-                          <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">{label}</p>
-                          <div className="flex items-center justify-between">
-                            {icon}
-                            <span className={`text-lg font-bold ${color}`}>
-                              {value !== '—' ? `${value} yield` : '—'}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {isHotel && (
-                      <div className="mt-4 border-t border-slate-100 pt-4">
-                        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                          ADR &amp; Occupancy Sensitivity (Hotel)
-                        </div>
-                        <div className="grid grid-cols-2 gap-3 text-xs text-slate-600">
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="font-semibold">If ADR -$10</div>
-                            <div className="mt-1">
-                              {typeof adrMinus10Yield === 'number'
-                                ? `${formatters.percentage(adrMinus10Yield)} yield`
-                                : '—'}
-                            </div>
-                          </div>
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="font-semibold">If ADR +$10</div>
-                            <div className="mt-1">
-                              {typeof adrPlus10Yield === 'number'
-                                ? `${formatters.percentage(adrPlus10Yield)} yield`
-                                : '—'}
-                            </div>
-                          </div>
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="font-semibold">If occupancy -5 pts</div>
-                            <div className="mt-1">
-                              {typeof occMinus5Yield === 'number'
-                                ? `${formatters.percentage(occMinus5Yield)} yield`
-                                : '—'}
-                            </div>
-                          </div>
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="font-semibold">If occupancy +5 pts</div>
-                            <div className="mt-1">
-                              {typeof occPlus5Yield === 'number'
-                                ? `${formatters.percentage(occPlus5Yield)} yield`
-                                : '—'}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    <div className="p-4 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg">
-                      <p className="text-xs text-gray-600 uppercase tracking-wider mb-2">Break-even needs:</p>
-                      <span className="text-xl font-bold text-purple-700">{occLabel}</span>
-                    </div>
-                  </>
-                );
-              })()
-            )}
-          </div>
-        </div>
       </div>
+      </section>
 
       {(() => {
         type SchedulePhase = {
@@ -3534,6 +3495,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               <Calendar className="h-6 w-6 text-blue-600" />
               Key Milestones
             </h3>
+            <p className="text-sm text-gray-600 mb-6">
+              Milestones are baseline planning assumptions. Yield, DSCR, and NOI metrics do not currently include schedule-delay or acceleration effects.
+            </p>
             <div className="relative">
               <div className="absolute left-10 top-10 bottom-0 w-0.5 bg-gradient-to-b from-blue-400 via-purple-400 to-pink-400"></div>
               <div className="space-y-8">
@@ -3560,16 +3524,17 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
       })()}
 
       {/* Financing Structure & Operational Efficiency */}
-      <div className="grid grid-cols-2 gap-6">
+      <section className={`${sectionCardClasses} border-0 bg-transparent shadow-none p-0`}>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Financing Structure */}
         <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl shadow-lg border border-green-100 overflow-hidden">
-          <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4">
+          <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-4 py-4 sm:px-6">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <DollarSign className="h-5 w-5" />
               Financing Structure
             </h3>
           </div>
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             <div className="space-y-4">
               {[
                 { name: 'Senior Debt', percent: 0.65, color: 'blue' },
@@ -3607,7 +3572,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               <div className="bg-green-100 rounded-lg p-3 mt-3">
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium text-green-700">DSCR Target</span>
-                  <span className="font-bold text-green-800">1.25x</span>
+                  <span className="font-bold text-green-800">{dscrTargetDisplay}</span>
                 </div>
               </div>
             </div>
@@ -3617,16 +3582,16 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
         {/* Operational Efficiency */}
         {isDentalOffice ? (
           <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl shadow-lg border border-purple-100 overflow-hidden">
-            <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4">
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-4 sm:px-6">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
                 <Activity className="h-5 w-5" />
                 Operational Efficiency
               </h3>
             </div>
-            <div className="p-6 space-y-6">
+            <div className="p-4 sm:p-6 space-y-6">
               <div>
                 <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Staffing Metrics</h4>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {[
                     {
                       label: 'Operatories',
@@ -3684,7 +3649,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
 
               <div>
                 <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Target KPIs</h4>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   {[
                     {
                       label: 'Production / Provider',
@@ -3727,15 +3692,38 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               {normalizedStaffingMetrics.length > 0 && (
                 <div className="mb-4">
                   <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Staffing Metrics</h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    {normalizedStaffingMetrics.slice(0, 2).map((metric, idx) => (
-                      <div key={idx} className="bg-white text-center p-4 rounded-lg shadow-sm">
-                        <p className={`text-3xl font-bold ${idx === 0 ? 'text-purple-600' : 'text-pink-600'}`}>
-                          {metric.value}
-                        </p>
-                        <p className="text-xs text-gray-600">{metric.label}</p>
-                      </div>
-                    ))}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {normalizedStaffingMetrics.slice(0, 2).map((metric, idx) => {
+                      const rawLabel =
+                        typeof metric?.label === 'string' && metric.label.trim()
+                          ? metric.label
+                          : `Metric ${idx + 1}`;
+                      const labelLower = rawLabel.toLowerCase();
+                      const isLaborMetric = labelLower.includes('labor');
+                      const isManagementMetric = labelLower.includes('management');
+                      const displayLabel = isLaborMetric ? 'Facility Ops Labor' : rawLabel;
+                      const rawValue = metric?.value;
+                      const zeroLike = (isLaborMetric || isManagementMetric) && isZeroLikeMetricValue(rawValue);
+                      const normalizedValue =
+                        rawValue === null || rawValue === undefined
+                          ? '—'
+                          : typeof rawValue === 'number'
+                            ? (Number.isFinite(rawValue) ? rawValue.toLocaleString() : '—')
+                            : rawValue;
+                      const displayValue = zeroLike ? 'Not modeled' : normalizedValue;
+                      const helperText = isLaborMetric ? 'Production labor excluded (tenant business).' : undefined;
+                      return (
+                        <div key={idx} className="bg-white text-center p-4 rounded-lg shadow-sm">
+                          <p className={`text-3xl font-bold ${idx === 0 ? 'text-purple-600' : 'text-pink-600'}`}>
+                            {displayValue}
+                          </p>
+                          <p className="text-xs text-gray-600">{displayLabel}</p>
+                          {helperText ? (
+                            <p className="text-[10px] text-gray-500 mt-1">{helperText}</p>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -3779,7 +3767,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
               {operationalKpis.length > 0 && (
                 <div>
                   <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Target KPIs</h4>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                     {operationalKpis.slice(0, 3).map((kpi, idx) => (
                       <div key={idx} className={`bg-gradient-to-br from-${kpi.color}-100 to-${kpi.color}-200 p-3 rounded-lg text-center`}>
                         <p className={`text-xl font-bold text-${kpi.color}-700`}>{kpi.value}</p>
@@ -3793,15 +3781,21 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           </div>
         )}
       </div>
+      </section>
 
       {/* Executive Decision Points */}
-      <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-l-4 border-amber-500 rounded-xl shadow-lg p-6">
+      <section className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-l-4 border-amber-500 rounded-xl shadow-lg p-4 sm:p-6">
         <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-3">
           <div className="p-2 bg-amber-100 rounded-lg">
             <Lightbulb className="h-6 w-6 text-amber-600" />
           </div>
           Executive Decision Points
         </h3>
+        {decisionYieldDisplay && (
+          <p className="text-sm text-amber-700 mb-4">
+            Current yield on cost: <span className="font-semibold">{decisionYieldDisplay}</span>
+          </p>
+        )}
         <div className="space-y-3">
           {isOffice ? (
             <ol className="space-y-2 text-sm text-slate-700">
@@ -3835,10 +3829,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             <p className="text-sm text-gray-700">Cost, yield, and soft cost metrics are loading.</p>
           )}
         </div>
-      </div>
+      </section>
 
       {/* Executive Financial Summary Footer */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 rounded-xl p-8 shadow-2xl">
+      <section className="rounded-2xl overflow-hidden shadow-2xl">
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 p-5 sm:p-8">
           <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
             <div className="text-center">
               <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">TOTAL CAPITAL REQUIRED</p>
@@ -3862,7 +3857,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
             <div className="text-center">
               <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">DEBT COVERAGE</p>
               <p className="text-3xl font-bold text-white">{formatters.multiplier(displayData.dscr)}</p>
-              <p className="text-sm text-slate-500">DSCR (Target: 1.25x)</p>
+              <p className="text-sm text-slate-500">DSCR (Target: {dscrTargetDisplay})</p>
             </div>
           {(() => {
             const showTotalUnitsFooter =
@@ -3897,6 +3892,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           })()}
           </div>
         </div>
+      </section>
+
       </div>
 
       {/* Scenario Comparison Modal */}
@@ -4061,10 +4058,16 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project }) => {
           </div>
         </div>
       )}
+        <TrustPanel
+          open={isTrustPanelOpen}
+          onOpenChange={setIsTrustPanelOpen}
+          initialSectionId={trustPanelSection}
+        />
         <ScenarioModal
           open={isScenarioOpen}
           onClose={() => setIsScenarioOpen(false)}
           base={scenarioBase}
+          dealShieldScenarioBundle={scenarioDealShieldBundle}
         />
       </>
     );

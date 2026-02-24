@@ -95,6 +95,60 @@ METRO_OVERRIDES: Dict[Tuple[str, str], float] = {
     ("manchester", "NH"): 1.07,
 }
 
+MARKET_METRO_OVERRIDES: Dict[Tuple[str, str], float] = {
+    # Tier A — strongest/most expensive demand markets
+    ("new york", "NY"): 1.20,
+    ("san francisco", "CA"): 1.18,
+    ("san jose", "CA"): 1.16,
+    ("boston", "MA"): 1.12,
+    ("seattle", "WA"): 1.10,
+    ("washington", "DC"): 1.12,
+    ("los angeles", "CA"): 1.10,
+    ("san diego", "CA"): 1.07,
+
+    # Tier B — strong markets
+    ("miami", "FL"): 1.10,
+    ("denver", "CO"): 1.06,
+    ("chicago", "IL"): 1.05,
+    ("philadelphia", "PA"): 1.04,
+    ("portland", "OR"): 1.03,
+
+    # Tier C — high-volume baseline-ish
+    ("nashville", "TN"): 1.03,
+    ("atlanta", "GA"): 1.02,
+    ("charlotte", "NC"): 1.02,
+    ("raleigh", "NC"): 1.02,
+    ("orlando", "FL"): 1.02,
+    ("tampa", "FL"): 1.02,
+
+    # Tier D — large Sunbelt / lower-cost but strong growth
+    ("dallas", "TX"): 1.03,
+    ("austin", "TX"): 1.05,
+    ("houston", "TX"): 1.00,
+    ("phoenix", "AZ"): 1.02,
+    ("las vegas", "NV"): 1.02,
+
+    # Additional
+    ("minneapolis", "MN"): 1.01,
+    ("baltimore", "MD"): 1.02,
+    ("sacramento", "CA"): 1.03,
+    ("jacksonville", "FL"): 1.01,
+    ("richmond", "VA"): 1.01,
+    ("hartford", "CT"): 1.01,
+    ("pittsburgh", "PA"): 1.00,
+    ("st. louis", "MO"): 1.00,
+    ("kansas city", "MO"): 1.00,
+    ("indianapolis", "IN"): 1.00,
+    ("columbus", "OH"): 1.00,
+    ("cincinnati", "OH"): 1.00,
+    ("cleveland", "OH"): 0.99,
+    ("detroit", "MI"): 0.99,
+    ("salt lake city", "UT"): 1.02,
+
+    # New England anchor
+    ("manchester", "NH"): 1.01,
+}
+
 # Optional: city-only inference for cities that are unambiguous in your app.
 # This is the key to making NLP "city only" still work.
 UNAMBIGUOUS_CITY_TO_STATE: Dict[str, str] = {
@@ -180,6 +234,25 @@ STATE_DEFAULTS: Dict[str, float] = {
     "ID": 0.98, "MT": 0.99, "WY": 0.98,
 }
 
+MARKET_STATE_DEFAULTS: Dict[str, float] = {
+    # Higher-demand coastal
+    "CA": 1.06, "NY": 1.08, "MA": 1.05, "WA": 1.04, "OR": 1.02, "NJ": 1.03, "CT": 1.02,
+    "FL": 1.03, "DC": 1.05,
+
+    # Baseline-ish
+    "TN": 1.02, "GA": 1.02, "NC": 1.02, "SC": 1.01, "VA": 1.01, "PA": 1.01, "IL": 1.01,
+    "CO": 1.02, "AZ": 1.01, "NV": 1.01, "UT": 1.01, "TX": 1.02,
+
+    # Slightly lower demand
+    "OH": 0.99, "MI": 0.99, "IN": 0.99, "WI": 0.99, "MN": 1.00, "MO": 0.99, "KS": 0.99,
+    "AL": 0.98, "MS": 0.98, "AR": 0.98, "OK": 0.98, "LA": 0.98, "KY": 0.99, "WV": 0.98,
+    "NM": 0.99, "ID": 0.99, "MT": 0.99, "WY": 0.99, "ND": 0.99, "SD": 0.99, "NE": 0.99, "IA": 0.99,
+    "ME": 0.99, "NH": 1.00, "VT": 0.99, "RI": 1.01, "MD": 1.01, "DE": 1.00,
+
+    # Remote / special
+    "AK": 1.00, "HI": 1.05,
+}
+
 
 # ---------------------------------------------------------------------------
 # Backward-compatible dict export (kept for any UI / display usage)
@@ -259,6 +332,23 @@ def resolve_multiplier(city: Optional[str], state: Optional[str]) -> float:
     return BASELINE_MULTIPLIER
 
 
+def resolve_market_multiplier(city: Optional[str], state: Optional[str]) -> float:
+    """
+    Resolve market (revenue) multiplier using metro/state defaults.
+    """
+    if city and state:
+        key = (_normalize_city(city), _normalize_state(state))
+        if key in MARKET_METRO_OVERRIDES:
+            return MARKET_METRO_OVERRIDES[key]
+
+    if state:
+        st = _normalize_state(state)
+        if st in MARKET_STATE_DEFAULTS:
+            return MARKET_STATE_DEFAULTS[st]
+
+    return 1.0
+
+
 def get_regional_multiplier(location: str) -> float:
     """
     Public API used by CleanEngineV2.
@@ -288,6 +378,7 @@ def resolve_location_context(location: Optional[str]) -> Dict[str, Optional[str]
     city, state = parse_location(loc)
     explicit_state = _location_has_explicit_state(loc)
     inferred_city_state = bool(state and not explicit_state)
+    normalized_loc = loc.strip() or None
 
     if inferred_city_state:
         source = "city_inferred"
@@ -298,9 +389,24 @@ def resolve_location_context(location: Optional[str]) -> Dict[str, Optional[str]
     else:
         source = "baseline"
 
+    pretty_location = None
+    if city and state:
+        pretty_location = f"{city.title()}, {state}"
+    elif city:
+        pretty_location = city.title()
+    elif state:
+        pretty_location = state
+
+    base_multiplier = resolve_multiplier(city, state)
+    cost_factor = base_multiplier
+    market_factor = resolve_market_multiplier(city, state)
+
     return {
         "city": city,
         "state": state,
         "source": source,
-        "multiplier": resolve_multiplier(city, state),
+        "location_display": pretty_location or normalized_loc,
+        "cost_factor": cost_factor,
+        "market_factor": market_factor,
+        "multiplier": cost_factor,
     }

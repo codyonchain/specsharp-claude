@@ -70,14 +70,38 @@ run_test_suite() {
 # Start servers if needed
 check_servers
 
-# Run frontend unit tests
-run_test_suite "Frontend Unit Tests" "npm run test 2>/dev/null || true" "frontend"
+# Run frontend checks (STRICT - real gates)
+# NOTE: test:v2 is a smoke script that can log failures without exiting non-zero.
+run_test_suite "Frontend Lint" "npm run lint" "frontend"
+run_test_suite "Frontend Typecheck" "npm run typecheck" "frontend"
+run_test_suite "Frontend Build" "npm run build" "frontend"
 
-# Run backend tests
-run_test_suite "Backend Tests" "source venv/bin/activate && pytest ../tests/unit -v --tb=short 2>/dev/null || true" "backend"
+# Run backend tests (STRICT - venv + PYTHONPATH=. + prefer stable subset)
+# Why: running from backend/ requires PYTHONPATH=. for `import app...` and we must not hide import/collection errors.
+run_test_suite "Backend Tests" "bash -lc '
+  set -euo pipefail
+  source venv/bin/activate
 
-# Run smoke tests
-run_test_suite "E2E Smoke Tests" "npm run test:smoke 2>/dev/null || true" "frontend"
+  # Prefer the known stable subset used by CI when present
+  if [ -f tests/test_trace_flags.py ] && [ -f tests/test_invariants.py ] && [ -f tests/test_revenue_golden.py ]; then
+    PYTHONPATH=. pytest -q tests/test_trace_flags.py tests/test_invariants.py tests/test_revenue_golden.py
+    exit 0
+  fi
+
+  # Fallback: run any backend-local pytest suite if present
+  if [ -d tests ]; then
+    PYTHONPATH=. pytest -q tests
+    exit 0
+  fi
+
+  echo \"❌ No backend tests found to run (missing backend/tests directory and stable subset files)\"
+  exit 1
+'" "backend"
+
+# Run e2e tests (STRICT - do not mask failures)
+# IMPORTANT: Restrict Playwright to ./tests/e2e so it does not collect frontend unit tests under frontend/src/**/__tests__.
+# ALSO: Ensure Playwright browsers are installed (fresh machines / updated Playwright will fail without this).
+run_test_suite "E2E Tests" "bash -lc 'set -euo pipefail; npx playwright install; TESTING=true npx playwright test tests/e2e'" "."
 
 # Run deployment safety check
 echo -e "\n${YELLOW}Running Deployment Safety Check...${NC}"

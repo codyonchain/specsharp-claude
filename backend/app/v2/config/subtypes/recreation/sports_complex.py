@@ -1,0 +1,90 @@
+from app.v2.config.master_config import (
+    BuildingType,
+    BuildingConfig,
+    TradeBreakdown,
+    SoftCosts,
+    FinancingTerms,
+    OwnershipType,
+    NLPConfig,
+    ProjectClass,
+)
+
+
+CONFIG = (
+    BuildingType.RECREATION,
+    "sports_complex",
+    BuildingConfig(
+        display_name="Sports Complex",
+        base_cost_per_sf=225,
+        cost_range=(200, 250),
+        equipment_cost_per_sf=25,
+        typical_floors=2,
+        trades=TradeBreakdown(
+            structural=0.28,  # Large spans
+            mechanical=0.23,
+            electrical=0.14,
+            plumbing=0.13,
+            finishes=0.22,
+        ),
+        soft_costs=SoftCosts(
+            design_fees=0.06,
+            permits=0.022,
+            legal=0.015,
+            financing=0.028,
+            contingency=0.08,
+            testing=0.01,
+            construction_management=0.03,
+            startup=0.015,
+        ),
+        ownership_types={
+            OwnershipType.GOVERNMENT: FinancingTerms(
+                debt_ratio=0.75,
+                debt_rate=0.038,
+                equity_ratio=0.25,
+                target_dscr=1.15,
+                target_roi=0.0,
+            ),
+            OwnershipType.FOR_PROFIT: FinancingTerms(
+                debt_ratio=0.68,
+                debt_rate=0.062,
+                equity_ratio=0.32,
+                target_dscr=1.25,
+                target_roi=0.10,
+            ),
+        },
+        nlp=NLPConfig(
+            keywords=[
+                "sports complex",
+                "athletic complex",
+                "field house",
+                "sports center",
+                "recreation complex",
+                "sportsplex",
+            ],
+            priority=42,
+            incompatible_classes=[ProjectClass.TENANT_IMPROVEMENT],
+        ),
+        regional_multipliers={
+            "Nashville": 1.03,
+            "Franklin": 1.03,
+            "Manchester": 0.93,
+            "Memphis": 0.91,
+            "New York": 1.38,
+            "San Francisco": 1.42,
+            "Chicago": 1.20,
+            "Miami": 1.15,
+        },
+        special_features={
+            "indoor_track": 35,
+            "multiple_courts": 40,
+            "weight_room": 25,
+            "locker_complex": 30,
+            "concessions": 20,
+        },
+        base_revenue_per_sf_annual=40,
+        occupancy_rate_base=0.70,
+        occupancy_rate_premium=0.80,
+        operating_margin_base=0.15,
+        operating_margin_premium=0.25,
+    ),
+)

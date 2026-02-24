@@ -195,7 +195,7 @@ export const HomePage: React.FC = () => {
                 style={{backgroundColor: '#3B60E4', color: 'white', padding: '12px 24px'}}
                 onClick={() => {
                   handleCTAClick('Try It Now - No Signup', 'mobile-navigation');
-                  setIsMobileMenuOpen(false);
+                  setTimeout(() => setIsMobileMenuOpen(false), 0);
                 }}
               >
                 Try It Now - No Signup

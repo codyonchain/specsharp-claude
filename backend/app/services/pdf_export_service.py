@@ -23,6 +23,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from app.utils.building_type_display import get_display_building_type
 from app.utils.formatting import format_currency, format_percentage
 from app.services.executive_summary_service import executive_summary_service
+from app.services.dealshield_export import render_dealshield_html
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +211,10 @@ class ProfessionalPDFExportService:
         return self._render_chromium_pdf(project_data, executive_summary, client_name)
 
     def _render_chromium_pdf(self, project_data: Dict, executive_summary: Dict, client_name: Optional[str]) -> io.BytesIO:
+        html = self._render_executive_overview_html(project_data, executive_summary, client_name)
+        return self._render_html_to_pdf(html)
+
+    def _render_html_to_pdf(self, html: str) -> io.BytesIO:
         try:
             from playwright.sync_api import sync_playwright  # type: ignore
         except ImportError:
@@ -239,8 +244,6 @@ class ProfessionalPDFExportService:
                     f"({sys.executable}). Install it there with:\n"
                     f"  {sys.executable} -m pip install playwright && {sys.executable} -m playwright install chromium"
                 ) from exc
-
-        html = self._render_executive_overview_html(project_data, executive_summary, client_name)
 
         result_queue: "queue.Queue[bytes]" = queue.Queue(maxsize=1)
         error_queue: "queue.Queue[BaseException]" = queue.Queue(maxsize=1)
@@ -638,6 +641,11 @@ class ProfessionalPDFExportService:
   </div>
 </body>
 </html>"""
+
+    def generate_dealshield_pdf(self, view_model: Dict[str, Any]) -> io.BytesIO:
+        """Generate DealShield PDF via Playwright-rendered HTML."""
+        html = render_dealshield_html(view_model)
+        return self._render_html_to_pdf(html)
     
     def _create_cover_page(self, project_data: Dict, client_name: str) -> List:
         """Create professional cover page"""

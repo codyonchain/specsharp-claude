@@ -281,6 +281,12 @@ export const pdfService = {
     });
     return response;
   },
+  exportDealShield: async (projectId: string) => {
+    const response = await api.get(`/scope/projects/${projectId}/dealshield/pdf`, {
+      responseType: 'blob'
+    });
+    return response;
+  },
 };
 
 export const subscriptionService = {

@@ -353,6 +353,39 @@ class NLPService:
 
         # Detect classification first
         classification = self.detect_project_classification(text)
+        distribution_pattern = re.compile(
+            r"\b(distribution\s+cent(?:er|re)|fulfil?lment\s+cent(?:er|re)|logistics\s+cent(?:er|re))\b",
+            re.IGNORECASE
+        )
+        if distribution_pattern.search(text):
+            return 'industrial', 'distribution_center', classification
+
+        cold_storage_phrases = [
+            'cold storage',
+            'refrigerated',
+            'refrigeration',
+            'freezer',
+            'blast freezer',
+            'temperature-controlled',
+            'temperature controlled',
+            'temp controlled',
+        ]
+        if any(phrase in text_lower for phrase in cold_storage_phrases):
+            # Avoid misclassifying explicit self storage / mini storage
+            if 'self storage' not in text_lower and 'self-storage' not in text_lower:
+                return 'industrial', 'cold_storage', classification
+
+        # Check for flex industrial before defaulting to warehouse
+        flex_phrases = [
+            'flex industrial',
+            'industrial flex',
+            'flex space',
+            'warehouse office',
+            'office warehouse',
+            'showroom warehouse',
+        ]
+        if any(phrase in text_lower for phrase in flex_phrases) or re.search(r'\bflex\b', text_lower):
+            return 'industrial', 'flex_space', classification
 
         dental_phrases = [
             'dental office',
@@ -373,6 +406,48 @@ class NLPService:
         ]
         if any(keyword in text_lower for keyword in mob_keywords):
             return 'healthcare', 'medical_office', classification
+
+        hospitality_intent_pattern = re.compile(
+            r"\b(hotel|motel|inn|lodging|hospitality)\b",
+            re.IGNORECASE
+        )
+        key_count_pattern = re.compile(r"\b\d+\s+keys?\b", re.IGNORECASE)
+        hospitality_context_phrases = [
+            'limited service',
+            'limited-service',
+            'full service',
+            'full-service',
+            'guest room',
+            'guestroom',
+            'front desk',
+            'check in',
+            'check-in',
+            'breakfast area',
+        ]
+
+        has_hospitality_intent = bool(hospitality_intent_pattern.search(text)) or (
+            bool(key_count_pattern.search(text)) and
+            any(phrase in text_lower for phrase in hospitality_context_phrases)
+        )
+
+        if has_hospitality_intent and 'hospitality' in self.building_patterns:
+            # Preserve deterministic service-level preference for hotel prompts.
+            if re.search(r"\bfull[\s-]service\b", text_lower):
+                return 'hospitality', 'full_service_hotel', classification
+            if re.search(r"\blimited[\s-]service\b", text_lower):
+                return 'hospitality', 'limited_service_hotel', classification
+
+            hospitality_subtypes = self.building_patterns['hospitality']['subtypes']
+
+            for keyword in sorted(hospitality_subtypes.get('full_service_hotel', []), key=len, reverse=True):
+                if keyword in text_lower:
+                    return 'hospitality', 'full_service_hotel', classification
+
+            for keyword in sorted(hospitality_subtypes.get('limited_service_hotel', []), key=len, reverse=True):
+                if keyword in text_lower:
+                    return 'hospitality', 'limited_service_hotel', classification
+
+            return 'hospitality', self._get_default_subtype('hospitality'), classification
 
         # Priority order (check specific before general)
         PRIORITY_ORDER = [
@@ -497,6 +572,11 @@ class NLPService:
             'has_drive_thru': self._has_drive_thru(text)
         }
 
+        if building_type == 'industrial' and building_subtype == 'flex_space':
+            office_share = self._extract_flex_office_share(text)
+            if office_share is not None:
+                extracted['office_share'] = office_share
+
         # Log for debugging
         print(f"[NLP] Parsed: type='{building_type}', subtype='{building_subtype}', SF={square_footage}, floors={floors}, location='{location}'")
 
@@ -522,6 +602,27 @@ class NLPService:
                     return int(sf_str)
                 except ValueError:
                     continue
+        return None
+
+    def _extract_flex_office_share(self, text: str) -> Optional[float]:
+        """Extract explicit office percentage splits for industrial flex projects."""
+        patterns = [
+            r'(\d{1,3}(?:\.\d+)?)\s*%\s*office',
+            r'office\s*(\d{1,3}(?:\.\d+)?)\s*%',
+            r'(\d{1,3}(?:\.\d+)?)\s*(?:percent)\s*office',
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                try:
+                    pct_value = float(match.group(1))
+                except (TypeError, ValueError):
+                    continue
+                if pct_value > 100:
+                    continue
+                return max(0.0, min(1.0, pct_value / 100.0))
+
         return None
 
     def _extract_floors(self, text: str, building_type: str = None) -> int:

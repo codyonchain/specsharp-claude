@@ -5,6 +5,14 @@ import { api, createProject } from '../../api/client';
 import { tracer } from '../../utils/traceSystem';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { BuildingTaxonomy } from '../../../core/buildingTaxonomy';
+import {
+  detectHospitalityFeatureIdsFromDescription,
+  detectRestaurantFeatureIdsFromDescription,
+  filterSpecialFeaturesBySubtype,
+  getHospitalitySpecialFeatures,
+  getRestaurantSpecialFeatures,
+  type SpecialFeatureOption,
+} from './specialFeaturesCatalog';
 
 // Lucide icons
 import { 
@@ -19,30 +27,44 @@ import {
 
 const CITY_STATE_REGEX = /^.+,\s*[A-Za-z]{2}$/i;
 
-const detectCityStateInDescription = (description: string): string | null => {
-  if (!description) return null;
+const detectCityStateInDescription = (text: string): string | null => {
+  if (!text) return null;
 
-  const cityStateRegex = /([A-Z][A-Za-z .'\-]+?),\s*([A-Za-z]{2})/g;
-  let match: RegExpExecArray | null = null;
-  let lastMatch: RegExpExecArray | null = null;
+  // Strictly extract canonical "City, ST" (use the LAST match in the string).
+  // City rules:
+  // - 1 to 4 tokens
+  // - each token letters/periods/hyphens only (no digits)
+  const pattern =
+    /(?:^|[\s(])([A-Z][a-zA-Z.\-]*(?:\s+[A-Z][a-zA-Z.\-]*){0,3}),\s*([A-Z]{2})(?:\b|[\s).,;:!?\"'])/g;
 
-  while ((match = cityStateRegex.exec(description)) !== null) {
-    lastMatch = match;
+  const forbiddenTokens = new Set([
+    "SF", "SQ", "SQFT", "FT",
+    "OFFICE", "WAREHOUSE", "DISTRIBUTION", "CENTER",
+    "CLINIC", "HOSPITAL", "HOTEL", "RESTAURANT", "SCHOOL",
+    "APARTMENT", "INDUSTRIAL", "CLASS", "BUILDING",
+    "NEW", "REMODEL", "RENOVATION", "IN",
+  ]);
+
+  let match: RegExpExecArray | null;
+  let lastValid: { city: string; state: string } | null = null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    const cityRaw = (match[1] || "").trim();
+    const stateRaw = (match[2] || "").trim().toUpperCase();
+    if (!cityRaw || !stateRaw) continue;
+    if (cityRaw.length > 40) continue;
+    if (/\d/.test(cityRaw)) continue;
+
+    const tokens = cityRaw.toUpperCase().split(/\s+/).filter(Boolean);
+    if (tokens.some(token => forbiddenTokens.has(token))) continue;
+
+    lastValid = { city: cityRaw, state: stateRaw };
   }
 
-  if (!lastMatch) {
-    return null;
-  }
-
-  const city = lastMatch[1]?.trim().replace(/\s+/g, ' ');
-  const state = lastMatch[2]?.trim().toUpperCase();
-
-  if (!city || !state) {
-    return null;
-  }
-
-  return `${city}, ${state}`;
+  return lastValid ? `${lastValid.city}, ${lastValid.state}` : null;
 };
+
+
 
 export const NewProject: React.FC = () => {
   const navigate = useNavigate();
@@ -232,15 +254,7 @@ export const NewProject: React.FC = () => {
   ];
   
   // Special features by building type
-  type SpecialFeatureOption = {
-    id: string;
-    name: string;
-    cost: number;
-    description: string;
-    allowedSubtypes?: string[];
-  };
-
-  const getAvailableFeatures = (buildingType: string) => {
+  const getAvailableFeatures = (buildingType: string): SpecialFeatureOption[] => {
     const features: Record<string, SpecialFeatureOption[]> = {
       healthcare: [
         {
@@ -453,6 +467,61 @@ export const NewProject: React.FC = () => {
         { id: 'clubhouse', name: 'Clubhouse', cost: 1000000, description: 'Community gathering space' },
         { id: 'rooftop', name: 'Rooftop Terrace', cost: 1500000, description: 'Rooftop amenity space' }
       ],
+      multifamily: [
+        {
+          id: 'parking_garage',
+          name: 'Parking Garage',
+          costPerSFBySubtype: {
+            luxury_apartments: 45,
+            market_rate_apartments: 32,
+            affordable_housing: 26,
+          },
+          description: 'Structured resident and guest parking',
+          allowedSubtypes: ['market_rate_apartments', 'luxury_apartments', 'affordable_housing']
+        },
+        {
+          id: 'pool',
+          name: 'Pool',
+          costPerSFBySubtype: {
+            luxury_apartments: 25,
+            market_rate_apartments: 18,
+            affordable_housing: 12,
+          },
+          description: 'Outdoor pool with code-compliant deck and support spaces',
+          allowedSubtypes: ['market_rate_apartments', 'luxury_apartments', 'affordable_housing']
+        },
+        {
+          id: 'fitness_center',
+          name: 'Fitness Center',
+          costPerSFBySubtype: {
+            luxury_apartments: 20,
+            market_rate_apartments: 14,
+            affordable_housing: 10,
+          },
+          description: 'Resident fitness room with specialty flooring and MEP upgrades',
+          allowedSubtypes: ['market_rate_apartments', 'luxury_apartments', 'affordable_housing']
+        },
+        {
+          id: 'rooftop_amenity',
+          name: 'Rooftop Amenity',
+          costPerSFBySubtype: {
+            luxury_apartments: 35,
+            market_rate_apartments: 24,
+            affordable_housing: 18,
+          },
+          description: 'Rooftop gathering area with shade structures and utility tie-ins',
+          allowedSubtypes: ['market_rate_apartments', 'luxury_apartments', 'affordable_housing']
+        },
+        {
+          id: 'concierge',
+          name: 'Concierge Lobby',
+          costPerSFBySubtype: {
+            luxury_apartments: 15,
+          },
+          description: 'Enhanced staffed lobby and service desk buildout',
+          allowedSubtypes: ['luxury_apartments']
+        }
+      ],
       commercial: [
         { id: 'data_center', name: 'Data Center', cost: 5000000, description: 'Server room with redundant systems' },
         { id: 'cafeteria', name: 'Cafeteria', cost: 1000000, description: 'Employee dining facility' },
@@ -470,7 +539,9 @@ export const NewProject: React.FC = () => {
         { id: 'food_court', name: 'Food Court', cost: 2000000, description: 'Multi-vendor dining area' },
         { id: 'anchor_fitout', name: 'Anchor Tenant Fit-out', cost: 3000000, description: 'Major retailer customization' },
         { id: 'parking_deck', name: 'Parking Deck', cost: 4000000, description: 'Structured parking' }
-      ]
+      ],
+      restaurant: getRestaurantSpecialFeatures(),
+      hospitality: getHospitalitySpecialFeatures(),
     };
     
     return features[buildingType] || [];
@@ -481,16 +552,22 @@ export const NewProject: React.FC = () => {
     const lower = desc.toLowerCase();
     
     // Detect special features in description
-    const detectedFeatures: string[] = [];
-    if (lower.includes('emergency')) detectedFeatures.push('emergency');
-    if (lower.includes('imaging')) detectedFeatures.push('imaging');
-    if (lower.includes('gymnasium') || lower.includes('gym')) detectedFeatures.push('gymnasium');
-    if (lower.includes('parking garage') || lower.includes('garage')) detectedFeatures.push('parking_garage');
-    if (lower.includes('pool')) detectedFeatures.push('pool');
-    if (lower.includes('cafeteria')) detectedFeatures.push('cafeteria');
-    if (lower.includes('loading dock')) detectedFeatures.push('loading_docks');
-    if (lower.includes('cold storage')) detectedFeatures.push('cold_storage');
-    if (lower.includes('food court')) detectedFeatures.push('food_court');
+    const detectedFeatures = new Set<string>();
+    if (lower.includes('emergency')) detectedFeatures.add('emergency');
+    if (lower.includes('imaging')) detectedFeatures.add('imaging');
+    if (lower.includes('gymnasium') || lower.includes('gym')) detectedFeatures.add('gymnasium');
+    if (lower.includes('parking garage') || lower.includes('garage')) detectedFeatures.add('parking_garage');
+    if (lower.includes('pool')) detectedFeatures.add('pool');
+    if (lower.includes('cafeteria')) detectedFeatures.add('cafeteria');
+    if (lower.includes('loading dock')) detectedFeatures.add('loading_docks');
+    if (lower.includes('cold storage')) detectedFeatures.add('cold_storage');
+    if (lower.includes('food court')) detectedFeatures.add('food_court');
+    for (const featureId of detectRestaurantFeatureIdsFromDescription(desc)) {
+      detectedFeatures.add(featureId);
+    }
+    for (const featureId of detectHospitalityFeatureIdsFromDescription(desc)) {
+      detectedFeatures.add(featureId);
+    }
     
     // Detect finish level (luxury/high-end terms map into premium)
     let detectedFinish: 'standard' | 'premium' = 'standard';
@@ -509,7 +586,7 @@ export const NewProject: React.FC = () => {
     else if (lower.includes('addition') || lower.includes('expansion') || lower.includes('expand')) detectedComplexity = 'addition';
     
     return {
-      specialFeatures: detectedFeatures,
+      specialFeatures: Array.from(detectedFeatures),
       finishLevel: detectedFinish,
       projectComplexity: detectedComplexity
     };
@@ -606,15 +683,7 @@ export const NewProject: React.FC = () => {
   }, [liveDetectedLocation, locationTouched, locationInput, locationAutoFilled]);
   const currentSubtype = parsedInput?.subtype || parsedInput?.building_subtype;
   const availableSpecialFeatures = parsedInput ? getAvailableFeatures(parsedInput.building_type) : [];
-  const applicableSpecialFeatures = availableSpecialFeatures.filter(feature => {
-    if (!feature.allowedSubtypes || feature.allowedSubtypes.length === 0) {
-      return true;
-    }
-    if (!currentSubtype) {
-      return true;
-    }
-    return feature.allowedSubtypes.includes(currentSubtype);
-  });
+  const applicableSpecialFeatures = filterSpecialFeaturesBySubtype(availableSpecialFeatures, currentSubtype);
 
   // Live preview effect
   useEffect(() => {
@@ -649,6 +718,7 @@ export const NewProject: React.FC = () => {
           location: locationValue,
           finishLevel: finishLevelForApi(finishLevel),
           projectClass: projectComplexity,
+          special_features: specialFeatures,
           signal: controller.signal,
         });
 
@@ -688,7 +758,7 @@ export const NewProject: React.FC = () => {
         previewAbortRef.current = null;
       }
     };
-  }, [normalizedDescription, squareFootageInput, normalizedLocationInput, isLocationFormatValid, finishLevel, finishLevelLocked, projectComplexity]);
+  }, [normalizedDescription, squareFootageInput, normalizedLocationInput, isLocationFormatValid, finishLevel, finishLevelLocked, projectComplexity, specialFeatures]);
   
   // Calculate total cost including features
   const handleExampleClick = (example: any) => {
@@ -728,7 +798,20 @@ export const NewProject: React.FC = () => {
     if (analysis) {
       // Auto-detect features from description
       const parsed = parseDescription(description);
-      setSpecialFeatures(parsed.specialFeatures);
+      const parsedBuildingType = analysis.parsed_input?.building_type;
+      const parsedSubtype = analysis.parsed_input?.subtype || analysis.parsed_input?.building_subtype;
+      const allowedFeatureIds = new Set(
+        filterSpecialFeaturesBySubtype(
+          getAvailableFeatures(parsedBuildingType || ''),
+          parsedSubtype
+        ).map((feature) => feature.id)
+      );
+      const parsedSpecialFeatures = parsed.specialFeatures.filter((featureId) =>
+        allowedFeatureIds.has(featureId)
+      );
+      if (specialFeatures.length === 0 && parsedSpecialFeatures.length > 0) {
+        setSpecialFeatures(parsedSpecialFeatures);
+      }
       if (!finishLevelLocked) {
         const engineFinish = analysis.calculations?.project_info?.finish_level;
         const normalizedEngineFinish =
@@ -902,6 +985,97 @@ export const NewProject: React.FC = () => {
     
     return `${typeDisplay} - ${subtypeDisplay}`;
   };
+
+  type FeatureDisplayPricing = {
+    amountLabel: string;
+    detailLabel?: string;
+    totalCost?: number;
+    isEstimate: boolean;
+    isPlaceholder: boolean;
+  };
+
+  const usesSubtypeCostPerSF = ['multifamily', 'restaurant'].includes(
+    parsedInput?.building_type ?? ''
+  );
+  const isRestaurantProject = parsedInput?.building_type === 'restaurant';
+  const hasFeatureSquareFootage = typeof squareFootageSummary === 'number' && squareFootageSummary > 0;
+
+  const resolveFeatureCostPerSF = (feature: SpecialFeatureOption): number | undefined => {
+    const subtypeCost = currentSubtype && feature.costPerSFBySubtype
+      ? feature.costPerSFBySubtype[currentSubtype]
+      : undefined;
+    if (typeof subtypeCost === 'number' && Number.isFinite(subtypeCost)) {
+      return subtypeCost;
+    }
+    if (typeof feature.costPerSF === 'number' && Number.isFinite(feature.costPerSF)) {
+      return feature.costPerSF;
+    }
+    if (feature.costPerSFBySubtype) {
+      const fallback = Object.values(feature.costPerSFBySubtype).find(
+        (value) => typeof value === 'number' && Number.isFinite(value)
+      );
+      if (typeof fallback === 'number') {
+        return fallback;
+      }
+    }
+    return undefined;
+  };
+
+  const getFeatureDisplayPricing = (feature: SpecialFeatureOption): FeatureDisplayPricing => {
+    const costPerSF = resolveFeatureCostPerSF(feature);
+    if (usesSubtypeCostPerSF && typeof costPerSF === 'number') {
+      if (hasFeatureSquareFootage && squareFootageSummary) {
+        const totalCost = costPerSF * squareFootageSummary;
+        return {
+          amountLabel: `+${formatCurrency(totalCost)}`,
+          detailLabel: `${formatCurrency(costPerSF)}/SF × ${formatNumber(squareFootageSummary)} SF`,
+          totalCost,
+          isEstimate: false,
+          isPlaceholder: false,
+        };
+      }
+      return {
+        amountLabel: `+${formatCurrency(costPerSF)}/SF`,
+        detailLabel: 'Estimate until project SF is provided',
+        isEstimate: true,
+        isPlaceholder: false,
+      };
+    }
+
+    if (typeof feature.cost === 'number' && Number.isFinite(feature.cost)) {
+      return {
+        amountLabel: `+${formatCurrency(feature.cost)}`,
+        detailLabel: usesSubtypeCostPerSF ? 'Estimate placeholder' : 'Static placeholder value',
+        totalCost: feature.cost,
+        isEstimate: true,
+        isPlaceholder: true,
+      };
+    }
+
+    return {
+      amountLabel: '+—',
+      detailLabel: 'Pricing unavailable',
+      isEstimate: true,
+      isPlaceholder: true,
+    };
+  };
+
+  const selectedFeatureDetails = applicableSpecialFeatures
+    .filter((feature) => specialFeatures.includes(feature.id))
+    .map((feature) => ({ feature, pricing: getFeatureDisplayPricing(feature) }));
+  const selectedFeatureKnownTotal = selectedFeatureDetails.reduce(
+    (sum, item) => sum + (item.pricing.totalCost ?? 0),
+    0
+  );
+  const selectedFeatureHasUnknownTotal = selectedFeatureDetails.some(
+    (item) => item.pricing.totalCost === undefined
+  );
+  const selectedFeatureHasEstimate = selectedFeatureDetails.some(
+    (item) => item.pricing.isEstimate
+  );
+  const hasStaticFeaturePlaceholders = applicableSpecialFeatures.some(
+    (feature) => getFeatureDisplayPricing(feature).isPlaceholder
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
@@ -1346,41 +1520,84 @@ export const NewProject: React.FC = () => {
                 {/* Right Column - Special Features */}
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-3">Special Features</p>
+                  <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+                    <p className="text-[11px] text-blue-700">
+                      Feature costs are applied as $/SF × project SF in final estimate.
+                    </p>
+                    {usesSubtypeCostPerSF && !hasFeatureSquareFootage && (
+                      <p className="mt-1 text-[11px] text-blue-700">
+                        {isRestaurantProject
+                          ? 'Restaurant values below are estimates until square footage is provided.'
+                          : 'Multifamily values below are estimates until square footage is provided.'}
+                      </p>
+                    )}
+                    {hasStaticFeaturePlaceholders && (
+                      <p className="mt-1 text-[11px] text-blue-700">
+                        Some card values are static placeholders and may differ from backend-applied totals.
+                      </p>
+                    )}
+                  </div>
                   <div className="space-y-2 max-h-80 overflow-y-auto border border-gray-100 rounded-lg p-3">
                     {parsedInput && applicableSpecialFeatures.length > 0 ? (
-                      applicableSpecialFeatures.map(feature => (
-                        <label
-                          key={feature.id}
-                          className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer border border-transparent hover:border-gray-200 transition"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={specialFeatures.includes(feature.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSpecialFeatures([...specialFeatures, feature.id]);
-                              } else {
-                                setSpecialFeatures(specialFeatures.filter(f => f !== feature.id));
-                              }
-                            }}
-                            className="mt-1 h-4 w-4 text-blue-600 rounded"
-                          />
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-gray-900">{feature.name}</span>
-                              <span className="text-xs text-green-600 font-semibold">
-                                +{formatCurrency(feature.cost)}
-                              </span>
+                      applicableSpecialFeatures.map(feature => {
+                        const pricing = getFeatureDisplayPricing(feature);
+                        return (
+                          <label
+                            key={feature.id}
+                            className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer border border-transparent hover:border-gray-200 transition"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={specialFeatures.includes(feature.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSpecialFeatures([...specialFeatures, feature.id]);
+                                } else {
+                                  setSpecialFeatures(specialFeatures.filter(f => f !== feature.id));
+                                }
+                              }}
+                              className="mt-1 h-4 w-4 text-blue-600 rounded"
+                            />
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-900">{feature.name}</span>
+                                <span className="text-xs text-green-600 font-semibold">
+                                  {pricing.amountLabel}
+                                </span>
+                              </div>
+                              <span className="text-xs text-gray-500">{feature.description}</span>
+                              {pricing.detailLabel && (
+                                <p className="mt-1 text-[11px] text-gray-500">{pricing.detailLabel}</p>
+                              )}
                             </div>
-                            <span className="text-xs text-gray-500">{feature.description}</span>
-                          </div>
-                        </label>
-                      ))
+                          </label>
+                        );
+                      })
                     ) : (
                       <div className="text-center py-8 text-gray-400">
                         <Settings className="h-8 w-8 mx-auto mb-2 opacity-50" />
                         <p className="text-sm">No special features available for this building type</p>
                       </div>
+                    )}
+                  </div>
+                  <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                    <p className="text-[11px] uppercase tracking-wide text-gray-500">Selected Feature Impact</p>
+                    {selectedFeatureDetails.length === 0 ? (
+                      <p className="text-sm text-gray-700">No special features selected.</p>
+                    ) : selectedFeatureHasUnknownTotal ? (
+                      <p className="text-sm text-gray-700">
+                        {selectedFeatureDetails.length} selected. Impact shown as estimate.
+                      </p>
+                    ) : (
+                      <p className="text-sm font-semibold text-gray-900">
+                        +{formatCurrency(selectedFeatureKnownTotal)}
+                        {selectedFeatureHasEstimate && <span className="ml-1 text-gray-600">(estimate)</span>}
+                      </p>
+                    )}
+                    {!selectedFeatureHasUnknownTotal && hasFeatureSquareFootage && selectedFeatureKnownTotal > 0 && (
+                      <p className="text-[11px] text-gray-500">
+                        {formatCurrency(selectedFeatureKnownTotal / squareFootageSummary!)} / SF combined impact
+                      </p>
                     )}
                   </div>
                 </div>

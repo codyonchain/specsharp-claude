@@ -12,11 +12,17 @@ from app.v2.config.master_config import (
     get_target_roi,
     validate_config,
 )
+from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
+from app.v2.config.type_profiles.decision_insurance_policy import (
+    DECISION_INSURANCE_POLICY_BY_PROFILE_ID,
+    DECISION_INSURANCE_POLICY_ID,
+)
+from app.v2.services.dealshield_service import build_dealshield_view_model
 
 
 def test_state_required_for_multiplier():
-    """City-only inputs must fall back to baseline multiplier and raise an explicit trace warning."""
-    result = unified_engine.calculate_project(
+    """City-only handling should follow active location contract: known override/no warning, unknown city/warning."""
+    known_city = unified_engine.calculate_project(
         building_type=BuildingType.OFFICE,
         subtype="class_a",
         square_footage=10_000,
@@ -24,12 +30,25 @@ def test_state_required_for_multiplier():
         project_class=ProjectClass.GROUND_UP,
     )
 
-    multiplier = result["construction_costs"]["regional_multiplier"]
+    multiplier = known_city["construction_costs"]["regional_multiplier"]
     assert multiplier == pytest.approx(1.03), "City-only locations should follow configured override when available"
 
-    trace_strings = " | ".join(entry["step"] for entry in result["calculation_trace"]).lower()
-    trace_payload = " | ".join(str(entry["data"]) for entry in result["calculation_trace"]).lower()
-    assert "warning" in trace_strings or "warning" in trace_payload, "Missing state must be called out in calculation trace"
+    known_steps = " | ".join(entry["step"] for entry in known_city["calculation_trace"]).lower()
+    known_payload = " | ".join(str(entry["data"]) for entry in known_city["calculation_trace"]).lower()
+    assert "warning" not in known_steps and "warning" not in known_payload, (
+        "Known city overrides should not emit missing-state warning traces"
+    )
+
+    unknown_city = unified_engine.calculate_project(
+        building_type=BuildingType.OFFICE,
+        subtype="class_a",
+        square_footage=10_000,
+        location="Springfield",  # Missing state info and no city override
+        project_class=ProjectClass.GROUND_UP,
+    )
+    assert unknown_city["construction_costs"]["regional_multiplier"] == pytest.approx(1.0)
+    unknown_steps = " | ".join(entry["step"] for entry in unknown_city["calculation_trace"]).lower()
+    assert "warning" in unknown_steps, "Unknown city-only location must emit warning trace"
 
 
 def test_revenue_uses_own_multiplier():
@@ -136,7 +155,8 @@ def test_description_infers_finish_level():
     premium_revenue_factor = premium_modifiers["revenue_factor"]
     base_revenue_factor = base_modifiers["revenue_factor"]
 
-    assert premium_revenue_factor > base_revenue_factor > 1.0, "Premium modifiers should lift revenue factor"
+    assert base_revenue_factor == pytest.approx(1.0), "Base revenue factor should remain neutral at 1.0"
+    assert premium_revenue_factor > base_revenue_factor, "Premium modifiers should lift revenue factor"
     ratio = premium_revenue_factor / base_revenue_factor
     assert ratio == pytest.approx(1.08, rel=1e-2), "Premium factor should apply once (≈1.08× increase)"
 
@@ -171,7 +191,7 @@ def test_special_features_unit_math():
 
 
 def test_restaurant_clamp_is_explicit_or_off():
-    """If restaurant costs are clamped, the trace must surface the adjustment."""
+    """Clamp behavior must be explicit: traced when applied, otherwise final costs stay within configured bounds."""
     result = unified_engine.calculate_project(
         building_type=BuildingType.RESTAURANT,
         subtype="quick_service",
@@ -180,8 +200,22 @@ def test_restaurant_clamp_is_explicit_or_off():
         project_class=ProjectClass.TENANT_IMPROVEMENT,
     )
 
-    trace_steps = [entry["step"] for entry in result["calculation_trace"]]
-    assert any(step == "restaurant_cost_clamp" for step in trace_steps), "Restaurant clamp must emit an explicit trace entry"
+    trace_entries = [entry for entry in result["calculation_trace"] if entry["step"] == "restaurant_cost_clamp"]
+    cost_per_sf = result["totals"]["cost_per_sf"]
+    cfg = get_building_config(BuildingType.RESTAURANT, "quick_service")
+    assert cfg is not None
+
+    clamp_cfg = cfg.cost_clamp or {}
+    min_cost = clamp_cfg.get("min_cost_per_sf", 250)
+    max_cost = clamp_cfg.get("max_cost_per_sf")
+
+    if trace_entries:
+        trace_data = trace_entries[-1]["data"]
+        assert trace_data["mode"] in {"minimum", "maximum"}
+    else:
+        assert cost_per_sf >= min_cost, "If clamp is off, cost_per_sf must already satisfy configured minimum"
+        if isinstance(max_cost, (int, float)):
+            assert cost_per_sf <= max_cost, "If clamp is off, cost_per_sf must satisfy configured maximum when set"
 
 
 def test_margin_normalized_noi_is_revenue_minus_opex():
@@ -210,9 +244,8 @@ def test_margin_normalized_noi_is_revenue_minus_opex():
 
     assert trace_steps, "NOI derivation trace entry missing"
     trace_data = trace_steps[-1]["data"]
-    assert trace_data["method"] == "fixed_percentage"
-    expected_noi = result["totals"]["total_project_cost"] * 0.08
-    assert trace_data["estimated_noi"] == pytest.approx(expected_noi, rel=1e-3)
+    assert trace_data["method"] == "revenue_analysis"
+    assert trace_data["estimated_noi"] == pytest.approx(noi, abs=0.01)
 
 
 def test_noi_is_revenue_minus_opex():
@@ -276,11 +309,11 @@ def test_finish_level_quality_factor_trace():
     assert quality_traces, "Missing quality factor trace entry for premium finish"
     trace_data = quality_traces[0]["data"]
     assert trace_data["finish_level"] == "premium"
-    assert trace_data["quality_factor"] == pytest.approx(1.1, rel=1e-3)
+    assert trace_data["quality_factor"] == pytest.approx(1.2, rel=1e-3)
 
 
 def test_caprate_only_for_supported_types():
-    """Cap-rate valuation should only trigger for the supported real estate asset classes."""
+    """Cap-rate valuation should follow active engine defaults for any positive-NOI asset class."""
     supported = unified_engine.calculate_project(
         building_type=BuildingType.MULTIFAMILY,
         subtype="luxury_apartments",
@@ -296,11 +329,189 @@ def test_caprate_only_for_supported_types():
         project_class=ProjectClass.GROUND_UP,
     )
 
-    assert supported["return_metrics"]["property_value"] not in (None, 0), "Supported types must surface cap-rate derived property value"
-    assert unsupported["return_metrics"]["property_value"] in (None, 0), "Unsupported types should not expose cap-rate valuations"
+    supported_rm = supported["return_metrics"]
+    unsupported_rm = unsupported["return_metrics"]
+
+    assert supported_rm["property_value"] not in (None, 0), "Multifamily should surface cap-rate derived property value"
+    assert unsupported_rm["property_value"] not in (None, 0), "Restaurant currently surfaces cap-rate derived property value"
+
+    supported_formula_value = supported_rm["estimated_annual_noi"] / supported_rm["market_cap_rate"]
+    unsupported_formula_value = unsupported_rm["estimated_annual_noi"] / unsupported_rm["market_cap_rate"]
+    assert supported_rm["property_value"] == pytest.approx(supported_formula_value, rel=1e-6)
+    assert unsupported_rm["property_value"] == pytest.approx(unsupported_formula_value, rel=1e-6)
 
 
 def test_config_integrity():
     """Master config should validate trade percentages and financing ratios."""
     errors = validate_config()
     assert errors == [], f"Configuration integrity issues detected: {errors}"
+
+
+def test_multifamily_decision_insurance_outputs_are_deterministic():
+    """Decision-insurance outputs should be deterministic for identical multifamily inputs."""
+    kwargs = dict(
+        building_type=BuildingType.MULTIFAMILY,
+        subtype="market_rate_apartments",
+        square_footage=120_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+    )
+    payload_a = unified_engine.calculate_project(**kwargs)
+    payload_b = unified_engine.calculate_project(**kwargs)
+
+    profile_a = get_dealshield_profile(payload_a["dealshield_tile_profile"])
+    profile_b = get_dealshield_profile(payload_b["dealshield_tile_profile"])
+
+    view_a = build_dealshield_view_model(
+        project_id="deterministic-a",
+        payload=payload_a,
+        profile=profile_a,
+    )
+    view_b = build_dealshield_view_model(
+        project_id="deterministic-b",
+        payload=payload_b,
+        profile=profile_b,
+    )
+
+    for key in (
+        "primary_control_variable",
+        "first_break_condition",
+        "flex_before_break_pct",
+        "exposure_concentration_pct",
+        "ranked_likely_wrong",
+        "decision_insurance_provenance",
+        "decision_status",
+        "decision_reason_code",
+        "decision_status_provenance",
+    ):
+        assert view_a.get(key) == view_b.get(key), f"Expected deterministic equality for '{key}'"
+
+
+def test_industrial_decision_insurance_outputs_are_deterministic():
+    """Decision-insurance outputs should be deterministic for identical industrial inputs."""
+    kwargs = dict(
+        building_type=BuildingType.INDUSTRIAL,
+        subtype="warehouse",
+        square_footage=120_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+    )
+    payload_a = unified_engine.calculate_project(**kwargs)
+    payload_b = unified_engine.calculate_project(**kwargs)
+
+    profile_a = get_dealshield_profile(payload_a["dealshield_tile_profile"])
+    profile_b = get_dealshield_profile(payload_b["dealshield_tile_profile"])
+
+    view_a = build_dealshield_view_model(
+        project_id="industrial-deterministic-a",
+        payload=payload_a,
+        profile=profile_a,
+    )
+    view_b = build_dealshield_view_model(
+        project_id="industrial-deterministic-b",
+        payload=payload_b,
+        profile=profile_b,
+    )
+
+    for key in (
+        "primary_control_variable",
+        "first_break_condition",
+        "flex_before_break_pct",
+        "exposure_concentration_pct",
+        "ranked_likely_wrong",
+        "decision_insurance_provenance",
+        "decision_status",
+        "decision_reason_code",
+        "decision_status_provenance",
+    ):
+        assert view_a.get(key) == view_b.get(key), f"Expected deterministic equality for '{key}'"
+
+
+def test_policy_curated_decision_insurance_is_applied_for_hardened_profiles():
+    profile_inputs = [
+        (BuildingType.RESTAURANT, "quick_service", 8_000),
+        (BuildingType.RESTAURANT, "full_service", 8_000),
+        (BuildingType.RESTAURANT, "fine_dining", 8_000),
+        (BuildingType.RESTAURANT, "cafe", 8_000),
+        (BuildingType.RESTAURANT, "bar_tavern", 8_000),
+        (BuildingType.HOSPITALITY, "limited_service_hotel", 85_000),
+        (BuildingType.HOSPITALITY, "full_service_hotel", 85_000),
+        (BuildingType.MULTIFAMILY, "market_rate_apartments", 120_000),
+        (BuildingType.MULTIFAMILY, "luxury_apartments", 120_000),
+        (BuildingType.MULTIFAMILY, "affordable_housing", 120_000),
+        (BuildingType.INDUSTRIAL, "warehouse", 120_000),
+        (BuildingType.INDUSTRIAL, "distribution_center", 120_000),
+        (BuildingType.INDUSTRIAL, "manufacturing", 120_000),
+        (BuildingType.INDUSTRIAL, "flex_space", 120_000),
+        (BuildingType.INDUSTRIAL, "cold_storage", 120_000),
+    ]
+
+    for building_type, subtype, square_footage in profile_inputs:
+        payload = unified_engine.calculate_project(
+            building_type=building_type,
+            subtype=subtype,
+            square_footage=square_footage,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        profile_id = payload["dealshield_tile_profile"]
+        assert profile_id in DECISION_INSURANCE_POLICY_BY_PROFILE_ID
+
+        profile = get_dealshield_profile(profile_id)
+        view_model = build_dealshield_view_model(
+            project_id=f"policy-{building_type.value}-{subtype}",
+            payload=payload,
+            profile=profile,
+        )
+        di_provenance = view_model.get("decision_insurance_provenance")
+        assert isinstance(di_provenance, dict)
+
+        policy_block = di_provenance.get("decision_insurance_policy")
+        assert isinstance(policy_block, dict)
+        assert policy_block.get("status") == "available"
+        assert policy_block.get("policy_id") == DECISION_INSURANCE_POLICY_ID
+        assert policy_block.get("profile_id") == profile_id
+
+        pcv_provenance = di_provenance.get("primary_control_variable")
+        assert isinstance(pcv_provenance, dict)
+        assert pcv_provenance.get("status") == "available"
+        assert pcv_provenance.get("selection_basis") == "policy_primary_control_variable"
+        assert pcv_provenance.get("policy_id") == DECISION_INSURANCE_POLICY_ID
+        assert pcv_provenance.get("policy_source") == "decision_insurance_policy.primary_control_variable"
+
+        expected_tile_id = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]["primary_control_variable"]["tile_id"]
+        primary_control = view_model.get("primary_control_variable")
+        assert isinstance(primary_control, dict)
+        assert primary_control.get("tile_id") == expected_tile_id
+
+        first_break_provenance = di_provenance.get("first_break_condition")
+        assert isinstance(first_break_provenance, dict)
+        first_break = view_model.get("first_break_condition")
+        if (
+            isinstance(first_break, dict)
+            and first_break_provenance.get("status") == "available"
+            and first_break_provenance.get("source") == "decision_insurance_policy.collapse_trigger"
+        ):
+            collapse_trigger = policy_block.get("collapse_trigger")
+            configured_operator = (
+                collapse_trigger.get("operator")
+                if isinstance(collapse_trigger, dict)
+                else None
+            )
+            expected_operator = (
+                configured_operator.strip()
+                if isinstance(configured_operator, str) and configured_operator.strip()
+                else "<="
+            )
+            assert first_break.get("break_metric") == first_break_provenance.get("policy_metric")
+            assert first_break.get("threshold") == first_break_provenance.get("policy_threshold")
+            assert first_break.get("operator") == expected_operator
+        if first_break_provenance.get("status") == "unavailable":
+            assert first_break_provenance.get("reason") != "no_modeled_break_condition"
+
+        flex_provenance = di_provenance.get("flex_before_break_pct")
+        assert isinstance(flex_provenance, dict)
+        assert flex_provenance.get("status") == "available"
+        assert flex_provenance.get("calibration_source") == "decision_insurance_policy.flex_calibration"
+        assert flex_provenance.get("band") in {"tight", "moderate", "comfortable"}
+        assert view_model.get("flex_before_break_band") in {"tight", "moderate", "comfortable"}

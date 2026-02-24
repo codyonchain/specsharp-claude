@@ -11,11 +11,19 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Load the canonical taxonomy - Updated for hotel subtypes
-TAXONOMY_PATH = Path(__file__).parent.parent.parent.parent / "shared" / "building_types.json"
-if not TAXONOMY_PATH.exists():
-    # Fallback for testing
-    TAXONOMY_PATH = Path(__file__).parent.parent.parent / "shared" / "building_types.json"
+_HERE = Path(__file__).resolve()
 
+def _find_taxonomy_path() -> Path:
+    # Walk upward from this file and find the first shared/building_types.json
+    for parent in [_HERE.parent] + list(_HERE.parents):
+        candidate = parent / "shared" / "building_types.json"
+        if candidate.exists():
+            return candidate
+    # Final fallback: backend-shipped copy (Railway root dir = backend)
+    fallback = Path.cwd() / "shared" / "building_types.json"
+    return fallback
+
+TAXONOMY_PATH = _find_taxonomy_path()
 with open(TAXONOMY_PATH) as f:
     TAXONOMY = json.load(f)
 
@@ -157,14 +165,22 @@ class BuildingTaxonomy:
         if subtype_lower in valid_subtypes:
             return subtype_lower
         
-        # Check keywords
+        # Check keywords (pick best match by keyword specificity)
         subtypes_dict = TAXONOMY['building_types'][canonical_type].get('subtypes', {})
+        best_match = None
+        best_score = (-1, -1)  # (length, word_count)
         for valid_sub, config in subtypes_dict.items():
             keywords = config.get('keywords', [])
             for keyword in keywords:
-                if keyword.lower() in subtype_lower or subtype_lower in keyword.lower():
-                    logger.debug(f"Normalized subtype '{subtype}' to '{valid_sub}' via keyword")
-                    return valid_sub
+                keyword_lower = keyword.lower()
+                if keyword_lower in subtype_lower or subtype_lower in keyword_lower:
+                    score = (len(keyword_lower), keyword_lower.count(' '))
+                    if score > best_score:
+                        best_score = score
+                        best_match = valid_sub
+        if best_match:
+            logger.debug(f"Normalized subtype '{subtype}' to '{best_match}' via keyword")
+            return best_match
         
         # Partial match
         for valid_sub in valid_subtypes:

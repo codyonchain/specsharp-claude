@@ -141,6 +141,12 @@ export interface ConstructionCosts {
   construction_total: number;
   equipment_total: number;
   special_features_total: number;
+  special_features_breakdown?: Array<{
+    id: string;
+    cost_per_sf: number;
+    total_cost: number;
+    label: string;
+  }>;
 }
 
 export interface RegionalContext {
@@ -148,6 +154,8 @@ export interface RegionalContext {
   state?: string | null;
   source?: string | null;
   multiplier: number;
+  cost_factor?: number | null;
+  market_factor?: number | null;
   location_display?: string | null;
 }
 
@@ -323,3 +331,100 @@ export interface FinancialRequirements {
   performance_targets: FinancialRequirementsSection;
   market_analysis: FinancialRequirementsSection;
 }
+
+// ============================================================================
+// DEALSHIELD TYPES
+// ============================================================================
+
+export interface DealShieldControls {
+  stress_band_pct: 10 | 7 | 5 | 3;
+  anchor_total_project_cost: number | null;
+  use_cost_anchor: boolean;
+  anchor_annual_revenue: number | null;
+  use_revenue_anchor: boolean;
+}
+
+export type DecisionStatus = 'GO' | 'Needs Work' | 'NO-GO' | 'PENDING';
+
+export interface DecisionStatusProvenance {
+  status_source?: string;
+  value_gap?: number | null;
+  not_modeled_reason?: string | null;
+  first_break_scenario_id?: string | null;
+  base_break_detected?: boolean;
+  flex_before_break_pct_normalized?: number | null;
+  flex_band?: string | null;
+  [key: string]: any;
+}
+
+export interface DecisionInsurancePrimaryControlVariable {
+  tile_id?: string | null;
+  label?: string | null;
+  metric_ref?: string | null;
+  impact_pct?: number | null;
+  delta_cost?: number | null;
+  severity?: 'Low' | 'Med' | 'High' | 'Unknown' | string | null;
+}
+
+export interface DecisionInsuranceFirstBreakCondition {
+  scenario_id?: string | null;
+  scenario_label?: string | null;
+  break_metric?: string | null;
+  operator?: string | null;
+  threshold?: number | null;
+  observed_value?: number | null;
+  observed_value_pct?: number | null;
+}
+
+export interface DecisionInsuranceRankedLikelyWrongItem {
+  id?: string | null;
+  text?: string | null;
+  why?: string | null;
+  driver_tile_id?: string | null;
+  impact_pct?: number | null;
+  severity?: 'Low' | 'Med' | 'High' | 'Unknown' | string | null;
+}
+
+export interface DecisionInsuranceProvenanceEntry {
+  status?: 'available' | 'unavailable' | string;
+  reason?: string | null;
+  band?: string | null;
+  [key: string]: any;
+}
+
+export interface DecisionInsuranceFlexBandPolicy {
+  tight_lt?: number;
+  moderate_lt?: number;
+  labels?: {
+    tight?: string;
+    moderate?: string;
+    comfortable?: string;
+  };
+}
+
+export interface DecisionInsuranceProvenance {
+  enabled?: boolean;
+  profile_id?: string | null;
+  primary_control_variable?: DecisionInsuranceProvenanceEntry;
+  first_break_condition?: DecisionInsuranceProvenanceEntry;
+  flex_before_break_pct?: DecisionInsuranceProvenanceEntry;
+  flex_before_break_bands?: DecisionInsuranceFlexBandPolicy;
+  exposure_concentration_pct?: DecisionInsuranceProvenanceEntry;
+  ranked_likely_wrong?: DecisionInsuranceProvenanceEntry;
+  [key: string]: any;
+}
+
+export interface DealShieldDecisionInsuranceFields {
+  primary_control_variable?: DecisionInsurancePrimaryControlVariable | null;
+  first_break_condition?: DecisionInsuranceFirstBreakCondition | null;
+  flex_before_break_pct?: number | null;
+  flex_before_break_band?: string | null;
+  exposure_concentration_pct?: number | null;
+  ranked_likely_wrong?: DecisionInsuranceRankedLikelyWrongItem[];
+  decision_insurance_provenance?: DecisionInsuranceProvenance;
+  decision_status?: DecisionStatus;
+  decision_reason_code?: string;
+  decision_status_provenance?: DecisionStatusProvenance;
+}
+
+export type DealShieldViewModel = Record<string, any> & Partial<DealShieldDecisionInsuranceFields>;
