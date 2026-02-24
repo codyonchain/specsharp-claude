@@ -191,8 +191,6 @@ const formatAssumptionPercent = (value: unknown) => {
   }).format(percentValue)}%`;
 };
 
-const normalizePercentValue = (value: number) => (Math.abs(value) <= 1.5 ? value * 100 : value);
-
 const toComparableKey = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim().toLowerCase();
@@ -235,7 +233,7 @@ const formatAssumptionPercentFixed2 = (value: unknown) => {
   return `${new Intl.NumberFormat('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(normalizePercentValue(numeric))}%`;
+  }).format(numeric)}%`;
 };
 
 const classifyFlexBeforeBreak = (value: number): 'Structurally Tight' | 'Moderate' | 'Flexible' => {
@@ -578,7 +576,7 @@ export const DealShieldView: React.FC<Props> = ({
     return formatDecisionMetricValue(value, firstBreakMetricRaw);
   };
   const flexBeforeBreakDisplay = flexBeforeBreakPct !== null
-    ? `${formatAssumptionPercentFixed2(flexBeforeBreakPct)} (${classifyFlexBeforeBreak(normalizePercentValue(flexBeforeBreakPct))})`
+    ? `${formatAssumptionPercentFixed2(flexBeforeBreakPct)} (${classifyFlexBeforeBreak(flexBeforeBreakPct)})`
     : null;
   const exposureConcentrationSentence = exposureConcentrationPct !== null
     ? `Primary control variable contributes ${formatAssumptionPercentFixed2(exposureConcentrationPct)} of modeled downside sensitivity.`
@@ -834,14 +832,14 @@ export const DealShieldView: React.FC<Props> = ({
     if (hasBaseBreakCondition || hasBaseAlreadyBroken) return 'NO-GO';
     if (typeof decisionSummary.valueGap === 'number') {
       if (decisionSummary.valueGap <= 0) return 'NO-GO';
-      if (typeof flexBeforeBreakPct === 'number' && normalizePercentValue(flexBeforeBreakPct) <= 2) {
+      if (typeof flexBeforeBreakPct === 'number' && flexBeforeBreakPct <= 2) {
         return 'Needs Work';
       }
       return 'GO';
     }
     if (hasTightFlexBand) return 'Needs Work';
     if (typeof flexBeforeBreakPct === 'number') {
-      return normalizePercentValue(flexBeforeBreakPct) <= 2 ? 'Needs Work' : 'GO';
+      return flexBeforeBreakPct <= 2 ? 'Needs Work' : 'GO';
     }
     return 'PENDING';
   })();

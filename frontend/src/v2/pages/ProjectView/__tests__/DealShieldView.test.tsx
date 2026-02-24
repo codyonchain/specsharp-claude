@@ -689,6 +689,22 @@ const buildPolicyBackedDealShieldPayload = (
   },
 });
 
+const buildFlexExposurePolicyPayload = (
+  flexBeforeBreakPct: number,
+  exposureConcentrationPct: number
+) => {
+  const payload = buildPolicyBackedDealShieldPayload(POLICY_CONTRACT_CASES[0]) as any;
+  payload.view_model.flex_before_break_pct = flexBeforeBreakPct;
+  payload.view_model.exposure_concentration_pct = exposureConcentrationPct;
+  payload.view_model.decision_insurance_provenance.flex_before_break_pct.band =
+    flexBeforeBreakPct < 2
+      ? "tight"
+      : flexBeforeBreakPct < 5
+        ? "moderate"
+        : "comfortable";
+  return payload;
+};
+
 describe("DealShieldView", () => {
   it("renders restaurant decision status, DI provenance, and backend-shaped scenario rows", () => {
     const profileId = "restaurant_full_service_v1";
@@ -1017,5 +1033,55 @@ describe("DealShieldView", () => {
         return text.includes("Threshold:") && text.includes("<=") && text.includes("-25.0%");
       })
     ).toBeInTheDocument();
+  });
+
+  it("renders flex and exposure as backend percent units without multiplying by 100", () => {
+    render(
+      <DealShieldView
+        projectId="proj_percent_unit_fix"
+        data={buildFlexExposurePolicyPayload(1.3588, 1.3588) as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(screen.getByText("1.36% (Structurally Tight)")).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return text.includes("Primary control variable contributes 1.36%");
+      })
+    ).toBeInTheDocument();
+    expect(screen.queryByText("136.00% (Structurally Tight)")).not.toBeInTheDocument();
+  });
+
+  it("classifies flex band thresholds using percent units (<2 tight, <5 moderate, >=5 flexible)", () => {
+    const cases = [
+      { value: 1.99, expectedLabel: "1.99% (Structurally Tight)" },
+      { value: 2.0, expectedLabel: "2.00% (Moderate)" },
+      { value: 4.99, expectedLabel: "4.99% (Moderate)" },
+      { value: 5.0, expectedLabel: "5.00% (Flexible)" },
+    ];
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_flex_thresholds_0"
+        data={buildFlexExposurePolicyPayload(cases[0].value, 58.4) as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    for (const testCase of cases) {
+      rerender(
+        <DealShieldView
+          projectId={`proj_flex_thresholds_${testCase.value}`}
+          data={buildFlexExposurePolicyPayload(testCase.value, 58.4) as any}
+          loading={false}
+          error={null}
+        />
+      );
+      expect(screen.getByText(testCase.expectedLabel)).toBeInTheDocument();
+    }
   });
 });
