@@ -263,6 +263,35 @@ def test_industrial_distribution_center_and_flex_scope_profiles_are_subtype_auth
     }.isdisjoint(flex_space_keys)
 
 
+def test_industrial_scope_profiles_preserve_shared_rendering_shape():
+    expected_trade_keys = {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+    scope_profile_ids = {
+        get_building_config(BuildingType.INDUSTRIAL, subtype).scope_items_profile
+        for subtype in INDUSTRIAL_PROFILE_IDS.keys()
+    }
+
+    for profile_id in scope_profile_ids:
+        profile = industrial_scope_profiles.SCOPE_ITEM_PROFILES[profile_id]
+        trade_profiles = profile.get("trade_profiles")
+        assert isinstance(trade_profiles, list) and len(trade_profiles) == 5
+
+        trade_keys = {
+            trade_profile.get("trade_key")
+            for trade_profile in trade_profiles
+            if isinstance(trade_profile, dict)
+        }
+        assert trade_keys == expected_trade_keys
+
+        for trade_profile in trade_profiles:
+            items = trade_profile.get("items")
+            assert isinstance(items, list) and len(items) >= 2
+            share_total = sum(
+                float(item.get("allocation", {}).get("share", 0.0))
+                for item in items
+            )
+            assert abs(share_total - 1.0) <= 1e-9
+
+
 def test_industrial_tile_profiles_and_defaults_resolve():
     assert industrial_tile_profiles.DEALSHIELD_TILE_DEFAULTS == INDUSTRIAL_PROFILE_IDS
 

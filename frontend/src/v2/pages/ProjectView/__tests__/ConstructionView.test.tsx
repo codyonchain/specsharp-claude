@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { ConstructionView } from "../ConstructionView";
 
 const HOSPITALITY_PROFILE_IDS = [
@@ -39,6 +39,53 @@ const SPECIALTY_SCHEDULE_CASES = [
     subtype: "broadcast_facility",
     sitePhaseLabel: "Acoustic Isolation + Foundations",
     structuralPhaseLabel: "Studio Systems + Transmission Backbone",
+  },
+] as const;
+
+const DATA_CENTER_SCOPE_ITEMS = [
+  {
+    trade: "structural",
+    systems: [
+      { name: "Raised Floor + Cable Trench", quantity: 120000, unit: "SF", unit_cost: 42.5, total_cost: 5100000 },
+      { name: "Heavy Roof + Support Steel", quantity: 120000, unit: "SF", unit_cost: 35.0, total_cost: 4200000 },
+      { name: "Seismic Bracing for Rack Rows", quantity: 120000, unit: "SF", unit_cost: 22.0, total_cost: 2640000 },
+    ],
+  },
+  {
+    trade: "mechanical",
+    systems: [
+      { name: "Central Plant Chillers", quantity: 120000, unit: "SF", unit_cost: 58.0, total_cost: 6960000 },
+      { name: "Aisle Containment + Controls", quantity: 120000, unit: "SF", unit_cost: 41.0, total_cost: 4920000 },
+      { name: "CRAH Units + Hot Aisle Return", quantity: 120000, unit: "SF", unit_cost: 37.0, total_cost: 4440000 },
+      { name: "Condenser Water Pumping + Treatment", quantity: 120000, unit: "SF", unit_cost: 28.0, total_cost: 3360000 },
+      { name: "Economizer Relief + Airside Controls", quantity: 120000, unit: "SF", unit_cost: 23.0, total_cost: 2760000 },
+    ],
+  },
+  {
+    trade: "electrical",
+    systems: [
+      { name: "UPS, Switchgear + Distribution", quantity: 120000, unit: "SF", unit_cost: 62.0, total_cost: 7440000 },
+      { name: "Generator Paralleling + Fuel Controls", quantity: 120000, unit: "SF", unit_cost: 49.0, total_cost: 5880000 },
+      { name: "Busway + Rack Power Taps", quantity: 120000, unit: "SF", unit_cost: 40.0, total_cost: 4800000 },
+      { name: "Battery Monitoring + DC Controls", quantity: 120000, unit: "SF", unit_cost: 33.0, total_cost: 3960000 },
+      { name: "Branch Circuit Monitoring + BMS Points", quantity: 120000, unit: "SF", unit_cost: 29.0, total_cost: 3480000 },
+    ],
+  },
+  {
+    trade: "plumbing",
+    systems: [
+      { name: "Process Water + Leak Detection", quantity: 120000, unit: "SF", unit_cost: 19.0, total_cost: 2280000 },
+      { name: "Sanitary / Domestic + Trenching", quantity: 120000, unit: "SF", unit_cost: 14.0, total_cost: 1680000 },
+      { name: "Humidification Makeup + Blowdown", quantity: 120000, unit: "SF", unit_cost: 11.0, total_cost: 1320000 },
+    ],
+  },
+  {
+    trade: "finishes",
+    systems: [
+      { name: "White Space Envelope", quantity: 120000, unit: "SF", unit_cost: 17.0, total_cost: 2040000 },
+      { name: "NOC + Support Areas", quantity: 120000, unit: "SF", unit_cost: 14.0, total_cost: 1680000 },
+      { name: "Antistatic Access Floor Finish Package", quantity: 120000, unit: "SF", unit_cost: 13.0, total_cost: 1560000 },
+    ],
   },
 ] as const;
 
@@ -495,6 +542,13 @@ const buildSpecialtyScheduleProject = (
             end_month: 13,
           },
         ];
+  project.analysis.calculations.scope_items =
+    subtype === "data_center"
+      ? DATA_CENTER_SCOPE_ITEMS.map((trade) => ({
+          trade: trade.trade,
+          systems: trade.systems.map((system) => ({ ...system })),
+        }))
+      : [];
   return project;
 };
 
@@ -721,5 +775,32 @@ describe("ConstructionView", () => {
       expect(screen.getAllByText("Specialty Baseline Site Program").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Specialty Baseline Structural Program").length).toBeGreaterThan(0);
     }
+  });
+
+  it("renders expanded data-center scope detail for dominant mechanical and electrical trades", () => {
+    render(
+      <ConstructionView
+        project={buildSpecialtyScheduleProject("data_center", "subtype")}
+      />
+    );
+
+    const openTradeCard = (tradeName: string) => {
+      const tradeHeading = screen.getByText(tradeName, { selector: "h4" });
+      const tradeCard = tradeHeading.closest('[role="button"]');
+      expect(tradeCard).not.toBeNull();
+      fireEvent.click(tradeCard as HTMLElement);
+    };
+
+    openTradeCard("Mechanical");
+    expect(screen.getByText("5 systems")).toBeInTheDocument();
+    expect(screen.getByText("CRAH Units + Hot Aisle Return")).toBeInTheDocument();
+    expect(screen.getByText("Economizer Relief + Airside Controls")).toBeInTheDocument();
+    expect(screen.getAllByRole("row").length).toBeGreaterThanOrEqual(6);
+
+    openTradeCard("Electrical");
+    expect(screen.getByText("5 systems")).toBeInTheDocument();
+    expect(screen.getByText("Busway + Rack Power Taps")).toBeInTheDocument();
+    expect(screen.getByText("Branch Circuit Monitoring + BMS Points")).toBeInTheDocument();
+    expect(screen.getAllByRole("row").length).toBeGreaterThanOrEqual(6);
   });
 });

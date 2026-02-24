@@ -18,6 +18,7 @@ from app.v2.config.type_profiles.decision_insurance_policy import (
     DECISION_INSURANCE_POLICY_ID,
 )
 from app.v2.config.type_profiles.dealshield_content import specialty as specialty_content
+from app.v2.config.type_profiles.scope_items import specialty as specialty_scope_profiles
 from app.v2.services.dealshield_service import build_dealshield_view_model
 
 INDUSTRIAL_POLICY_EXPECTATIONS_BY_PROFILE_ID = {
@@ -669,3 +670,71 @@ def test_specialty_profiles_are_wired_and_content_is_subtype_specific():
         first_mlw_texts.append(mlw[0].get("text"))
 
     assert len(first_mlw_texts) == len(set(first_mlw_texts))
+
+
+def test_specialty_scope_profiles_keep_depth_and_allocation_integrity():
+    min_items_by_subtype = {
+        "data_center": {
+            "structural": 3,
+            "mechanical": 4,
+            "electrical": 4,
+            "plumbing": 3,
+            "finishes": 3,
+        },
+        "laboratory": {
+            "structural": 2,
+            "mechanical": 3,
+            "electrical": 3,
+            "plumbing": 3,
+            "finishes": 2,
+        },
+        "self_storage": {
+            "structural": 3,
+            "mechanical": 3,
+            "electrical": 3,
+            "plumbing": 2,
+            "finishes": 2,
+        },
+        "car_dealership": {
+            "structural": 3,
+            "mechanical": 3,
+            "electrical": 3,
+            "plumbing": 2,
+            "finishes": 2,
+        },
+        "broadcast_facility": {
+            "structural": 3,
+            "mechanical": 3,
+            "electrical": 3,
+            "plumbing": 2,
+            "finishes": 2,
+        },
+    }
+
+    for subtype, trade_minimums in min_items_by_subtype.items():
+        config = get_building_config(BuildingType.SPECIALTY, subtype)
+        assert config is not None
+        profile_id = config.scope_items_profile
+        profile = specialty_scope_profiles.SCOPE_ITEM_PROFILES[profile_id]
+        trade_profiles = profile.get("trade_profiles")
+        assert isinstance(trade_profiles, list) and len(trade_profiles) == 5
+
+        by_trade = {
+            trade.get("trade_key"): trade
+            for trade in trade_profiles
+            if isinstance(trade, dict) and isinstance(trade.get("trade_key"), str)
+        }
+        assert set(by_trade.keys()) == {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+
+        for trade_key, min_items in trade_minimums.items():
+            trade = by_trade[trade_key]
+            items = trade.get("items")
+            assert isinstance(items, list)
+            assert len(items) >= min_items
+            total_share = sum(
+                float(item.get("allocation", {}).get("share", 0.0))
+                for item in items
+            )
+            assert math.isclose(total_share, 1.0, rel_tol=1e-9, abs_tol=1e-9), (
+                f"{profile_id}::{trade_key} share total expected 1.0, got {total_share}"
+            )

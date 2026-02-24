@@ -36,6 +36,44 @@ SPECIALTY_PROFILE_MAP = {
     },
 }
 
+SPECIALTY_SCOPE_MIN_ITEMS_BY_SUBTYPE = {
+    "data_center": {
+        "structural": 3,
+        "mechanical": 4,
+        "electrical": 4,
+        "plumbing": 3,
+        "finishes": 3,
+    },
+    "laboratory": {
+        "structural": 2,
+        "mechanical": 3,
+        "electrical": 3,
+        "plumbing": 3,
+        "finishes": 2,
+    },
+    "self_storage": {
+        "structural": 3,
+        "mechanical": 3,
+        "electrical": 3,
+        "plumbing": 2,
+        "finishes": 2,
+    },
+    "car_dealership": {
+        "structural": 3,
+        "mechanical": 3,
+        "electrical": 3,
+        "plumbing": 2,
+        "finishes": 2,
+    },
+    "broadcast_facility": {
+        "structural": 3,
+        "mechanical": 3,
+        "electrical": 3,
+        "plumbing": 2,
+        "finishes": 2,
+    },
+}
+
 
 def test_specialty_subtypes_wire_scope_and_tile_profiles():
     for subtype, expected in SPECIALTY_PROFILE_MAP.items():
@@ -54,6 +92,48 @@ def test_specialty_scope_and_tile_defaults_are_stable():
     assert scope_defaults == {
         subtype: values["scope"] for subtype, values in SPECIALTY_PROFILE_MAP.items()
     }
+
+
+def test_specialty_scope_profile_trade_item_depth_by_subtype():
+    for subtype, expected in SPECIALTY_PROFILE_MAP.items():
+        scope_profile = specialty_scope_items.SCOPE_ITEM_PROFILES[expected["scope"]]
+        trade_profiles = scope_profile.get("trade_profiles")
+        assert isinstance(trade_profiles, list) and trade_profiles
+        trade_map = {
+            trade.get("trade_key"): trade
+            for trade in trade_profiles
+            if isinstance(trade, dict) and isinstance(trade.get("trade_key"), str)
+        }
+
+        for trade_key, min_items in SPECIALTY_SCOPE_MIN_ITEMS_BY_SUBTYPE[subtype].items():
+            trade = trade_map.get(trade_key)
+            assert isinstance(trade, dict), f"missing {trade_key} in {expected['scope']}"
+            items = trade.get("items")
+            assert isinstance(items, list)
+            assert len(items) >= min_items, (
+                f"{expected['scope']}::{trade_key} expected >= {min_items} scope items, "
+                f"found {len(items)}"
+            )
+
+
+def test_specialty_scope_trade_allocation_shares_sum_to_one():
+    for expected in SPECIALTY_PROFILE_MAP.values():
+        scope_profile = specialty_scope_items.SCOPE_ITEM_PROFILES[expected["scope"]]
+        for trade_profile in scope_profile.get("trade_profiles", []):
+            items = trade_profile.get("items")
+            assert isinstance(items, list) and items
+            total_share = 0.0
+            for item in items:
+                allocation = item.get("allocation")
+                assert isinstance(allocation, dict)
+                assert allocation.get("type") == "share_of_trade"
+                share = allocation.get("share")
+                assert isinstance(share, (int, float))
+                total_share += float(share)
+            assert abs(total_share - 1.0) <= 1e-9, (
+                f"{scope_profile['profile_id']}::{trade_profile.get('trade_key')} "
+                f"share total must equal 1.0, got {total_share}"
+            )
 
 
 def test_specialty_tile_profiles_resolve_with_required_shape():
