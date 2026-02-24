@@ -592,12 +592,16 @@ export const DealShieldView: React.FC<Props> = ({
     ]
   );
   const hasDecisionInsuranceData =
+    !!decisionInsuranceProvenance ||
     !!primaryControlVariable ||
     !!firstBreakCondition ||
     flexBeforeBreakPct !== null ||
     exposureConcentrationPct !== null ||
     rankedLikelyWrong.length > 0 ||
     decisionInsuranceUnavailableNotes.length > 0;
+  const decisionInsuranceBackendIndicatesUnavailable =
+    decisionInsuranceUnavailableNotes.length > 0 ||
+    decisionInsuranceProvenance?.enabled === false;
 
   const financingAssumptionsRaw =
     (viewModel as any)?.financing_assumptions ??
@@ -1217,8 +1221,10 @@ export const DealShieldView: React.FC<Props> = ({
                   </div>
                 )}
               </div>
-            ) : (
+            ) : decisionInsuranceBackendIndicatesUnavailable ? (
               <p className="text-sm text-slate-700">Decision Insurance unavailable for this profile/run.</p>
+            ) : (
+              <p className="text-sm text-slate-700">Decision Insurance data not provided for this run.</p>
             )}
           </section>
 

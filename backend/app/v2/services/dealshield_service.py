@@ -18,6 +18,10 @@ _WAVE1_PROFILE_IDS: Set[str] = {
     "healthcare_medical_office_building_v1",
     "healthcare_urgent_care_v1",
     "restaurant_quick_service_v1",
+    "restaurant_full_service_v1",
+    "restaurant_fine_dining_v1",
+    "restaurant_cafe_v1",
+    "restaurant_bar_tavern_v1",
     "hospitality_limited_service_hotel_v1",
 }
 
@@ -941,8 +945,16 @@ def _is_industrial_profile(profile_id: Any) -> bool:
     return isinstance(profile_id, str) and profile_id.startswith("industrial_")
 
 
+def _is_restaurant_profile(profile_id: Any) -> bool:
+    return isinstance(profile_id, str) and profile_id.startswith("restaurant_")
+
+
 def _supports_decision_insurance_profile(profile_id: Any) -> bool:
-    return _is_multifamily_profile(profile_id) or _is_industrial_profile(profile_id)
+    return (
+        _is_multifamily_profile(profile_id)
+        or _is_industrial_profile(profile_id)
+        or _is_restaurant_profile(profile_id)
+    )
 
 
 def _resolve_cell_map(row: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:

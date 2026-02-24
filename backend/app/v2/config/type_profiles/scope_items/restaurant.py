@@ -1,420 +1,1094 @@
-SCOPE_ITEM_DEFAULTS = {}
+SCOPE_ITEM_DEFAULTS = {
+    "quick_service": "restaurant_quick_service_structural_v1",
+    "full_service": "restaurant_full_service_structural_v1",
+    "fine_dining": "restaurant_fine_dining_structural_v1",
+    "cafe": "restaurant_cafe_structural_v1",
+    "bar_tavern": "restaurant_bar_tavern_structural_v1",
+}
+
+
+def _item(
+    *,
+    key: str,
+    label: str,
+    unit: str,
+    share: float,
+    quantity_type: str = "sf",
+    quantity_params: dict = None,
+) -> dict:
+    return {
+        "key": key,
+        "label": label,
+        "unit": unit,
+        "allocation": {
+            "type": "share_of_trade",
+            "share": share,
+        },
+        "quantity_rule": {
+            "type": quantity_type,
+            "params": quantity_params or {},
+        },
+    }
+
+
+def _trade(trade_key: str, trade_label: str, items: list[dict]) -> dict:
+    return {
+        "trade_key": trade_key,
+        "trade_label": trade_label,
+        "items": items,
+    }
+
 
 SCOPE_ITEM_PROFILES = {
     "restaurant_quick_service_structural_v1": {
         "trade_profiles": [
-            {
-                "trade_key": "structural",
-                "trade_label": "Structural",
-                "items": [
-                    {
-                        "key": "foundations_slab_footings",
-                        "label": "Foundations, slab, and footings",
-                        "unit": "SF",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.30,
-                        },
-                        "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
-                        },
-                    },
-                    {
-                        "key": "structural_frame_shell",
-                        "label": "Structural frame and shell",
-                        "unit": "SF",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.30,
-                        },
-                        "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
-                        },
-                    },
-                    {
-                        "key": "roof_structure_deck",
-                        "label": "Roof structure and deck",
-                        "unit": "SF",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.18,
-                        },
-                        "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
-                        },
-                    },
-                    {
-                        "key": "exterior_envelope_structural_allowance",
-                        "label": "Exterior envelope structural allowance",
-                        "unit": "SF",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.12,
-                        },
-                        "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
-                        },
-                    },
-                    {
-                        "key": "misc_structural_allowance",
-                        "label": "Misc. structural allowance and supports",
-                        "unit": "SF",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.10,
-                        },
-                        "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
-                        },
-                    },
+            _trade(
+                "structural",
+                "Structural",
+                [
+                    _item(
+                        key="foundations_slab_footings",
+                        label="Foundations, slab, and footings",
+                        unit="SF",
+                        share=0.30,
+                    ),
+                    _item(
+                        key="structural_frame_shell",
+                        label="Structural frame and shell",
+                        unit="SF",
+                        share=0.30,
+                    ),
+                    _item(
+                        key="roof_structure_deck",
+                        label="Roof structure and deck",
+                        unit="SF",
+                        share=0.20,
+                    ),
+                    _item(
+                        key="drive_thru_canopy_allowance",
+                        label="Drive-thru canopy and support allowance",
+                        unit="LS",
+                        share=0.20,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
                 ],
-            },
-            {
-                "trade_key": "mechanical",
-                "trade_label": "Mechanical",
-                "items": [
-                    {
-                        "key": "kitchen_hood_exhaust_makeup_air",
-                        "label": "Kitchen hood exhaust and make-up air allowance",
-                        "unit": "LS",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.30,
-                        },
-                        "quantity_rule": {
-                            "type": "constant",
-                            "params": {
-                                "value": 1,
-                            },
-                        },
-                    },
-                    {
-                        "key": "hvac_rtu_distribution",
-                        "label": "HVAC RTUs and distribution",
-                        "unit": "SF",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.40,
-                        },
-                        "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
-                        },
-                    },
-                    {
-                        "key": "controls_thermostats_allowance",
-                        "label": "Controls and thermostats allowance",
-                        "unit": "LS",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.10,
-                        },
-                        "quantity_rule": {
-                            "type": "constant",
-                            "params": {
-                                "value": 1,
-                            },
-                        },
-                    },
-                    {
-                        "key": "walkin_cooler_hvac_interface",
-                        "label": "Walk-in cooler/freezer HVAC interface allowance",
-                        "unit": "LS",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.20,
-                        },
-                        "quantity_rule": {
-                            "type": "constant",
-                            "params": {
-                                "value": 1,
-                            },
-                        },
-                    },
+            ),
+            _trade(
+                "mechanical",
+                "Mechanical",
+                [
+                    _item(
+                        key="kitchen_hood_exhaust_makeup_air",
+                        label="Kitchen hood exhaust and make-up air allowance",
+                        unit="LS",
+                        share=0.30,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="hvac_rtu_distribution",
+                        label="HVAC RTUs and distribution",
+                        unit="SF",
+                        share=0.35,
+                    ),
+                    _item(
+                        key="walkin_cooler_hvac_interface",
+                        label="Walk-in cooler/freezer HVAC interface allowance",
+                        unit="LS",
+                        share=0.20,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="controls_thermostats_allowance",
+                        label="Controls and thermostats allowance",
+                        unit="LS",
+                        share=0.15,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
                 ],
-            },
-            {
-                "trade_key": "electrical",
-                "trade_label": "Electrical",
-                "items": [
-                    {
-                        "key": "main_service_panels",
-                        "label": "Main service and panels",
-                        "unit": "LS",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.20,
-                        },
-                        "quantity_rule": {
-                            "type": "constant",
-                            "params": {
-                                "value": 1,
-                            },
-                        },
-                    },
-                    {
-                        "key": "lighting_receptacles",
-                        "label": "Lighting and receptacles",
-                        "unit": "SF",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.40,
-                        },
-                        "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
-                        },
-                    },
-                    {
-                        "key": "kitchen_power_rough_in",
-                        "label": "Kitchen power rough-in allowance",
-                        "unit": "SF",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.20,
-                        },
-                        "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
-                        },
-                    },
-                    {
-                        "key": "low_voltage_data_pos",
-                        "label": "Low-voltage, data, and POS allowance",
-                        "unit": "LS",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.10,
-                        },
-                        "quantity_rule": {
-                            "type": "constant",
-                            "params": {
-                                "value": 1,
-                            },
-                        },
-                    },
-                    {
-                        "key": "fire_alarm_allowance",
-                        "label": "Fire alarm allowance",
-                        "unit": "LS",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.10,
-                        },
-                        "quantity_rule": {
-                            "type": "constant",
-                            "params": {
-                                "value": 1,
-                            },
-                        },
-                    },
+            ),
+            _trade(
+                "electrical",
+                "Electrical",
+                [
+                    _item(
+                        key="main_service_panels",
+                        label="Main service and panels",
+                        unit="LS",
+                        share=0.20,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="lighting_receptacles",
+                        label="Lighting and receptacles",
+                        unit="SF",
+                        share=0.35,
+                    ),
+                    _item(
+                        key="kitchen_power_rough_in",
+                        label="Kitchen power rough-in allowance",
+                        unit="SF",
+                        share=0.25,
+                    ),
+                    _item(
+                        key="low_voltage_data_pos",
+                        label="Low-voltage, data, and POS allowance",
+                        unit="LS",
+                        share=0.20,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
                 ],
-            },
-            {
-                "trade_key": "plumbing",
-                "trade_label": "Plumbing",
-                "items": [
-                    {
-                        "key": "restroom_groups",
-                        "label": "Restroom groups (fixtures, waste, vent)",
-                        "unit": "EA",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.30,
-                        },
-                        "quantity_rule": {
-                            "type": "restroom_groups",
-                            "params": {
-                                "sf_per_group": 2000.0,
-                                "minimum": 1,
-                            },
-                        },
-                    },
-                    {
-                        "key": "domestic_water_sanitary",
-                        "label": "Domestic water and sanitary piping",
-                        "unit": "SF",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.25,
-                        },
-                        "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
-                        },
-                    },
-                    {
-                        "key": "grease_waste_vent_allowance",
-                        "label": "Grease waste and vent allowance",
-                        "unit": "LS",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.15,
-                        },
-                        "quantity_rule": {
-                            "type": "constant",
-                            "params": {
-                                "value": 1,
-                            },
-                        },
-                    },
-                    {
-                        "key": "grease_interceptor_allowance",
-                        "label": "Grease interceptor allowance",
-                        "unit": "LS",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.15,
-                        },
-                        "quantity_rule": {
-                            "type": "constant",
-                            "params": {
-                                "value": 1,
-                            },
-                        },
-                    },
-                    {
-                        "key": "floor_trench_drains_allowance",
-                        "label": "Floor drains and trench drains allowance",
-                        "unit": "SF",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.15,
-                        },
-                        "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
-                        },
-                    },
+            ),
+            _trade(
+                "plumbing",
+                "Plumbing",
+                [
+                    _item(
+                        key="restroom_groups",
+                        label="Restroom groups (fixtures, waste, vent)",
+                        unit="EA",
+                        share=0.30,
+                        quantity_type="restroom_groups",
+                        quantity_params={"sf_per_group": 2000.0, "minimum": 1},
+                    ),
+                    _item(
+                        key="domestic_water_sanitary",
+                        label="Domestic water and sanitary piping",
+                        unit="SF",
+                        share=0.25,
+                    ),
+                    _item(
+                        key="grease_waste_vent_allowance",
+                        label="Grease waste and vent allowance",
+                        unit="LS",
+                        share=0.25,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="grease_interceptor_allowance",
+                        label="Grease interceptor allowance",
+                        unit="LS",
+                        share=0.20,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
                 ],
-            },
-            {
-                "trade_key": "finishes",
-                "trade_label": "Finishes",
-                "items": [
-                    {
-                        "key": "foh_finishes_package",
-                        "label": "FOH finishes package",
-                        "unit": "SF",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.35,
-                        },
-                        "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
-                        },
-                    },
-                    {
-                        "key": "boh_food_grade_finishes",
-                        "label": "BOH food-grade finishes allowance",
-                        "unit": "SF",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.25,
-                        },
-                        "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
-                        },
-                    },
-                    {
-                        "key": "ceilings_paint_wall_protection",
-                        "label": "Ceilings, paint, and wall protection",
-                        "unit": "SF",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.25,
-                        },
-                        "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
-                        },
-                    },
-                    {
-                        "key": "millwork_casework_allowance",
-                        "label": "Millwork and casework allowance",
-                        "unit": "LS",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.15,
-                        },
-                        "quantity_rule": {
-                            "type": "constant",
-                            "params": {
-                                "value": 1,
-                            },
-                        },
-                    },
+            ),
+            _trade(
+                "finishes",
+                "Finishes",
+                [
+                    _item(
+                        key="foh_finishes_package",
+                        label="FOH finishes package",
+                        unit="SF",
+                        share=0.35,
+                    ),
+                    _item(
+                        key="boh_food_grade_finishes",
+                        label="BOH food-grade finishes allowance",
+                        unit="SF",
+                        share=0.25,
+                    ),
+                    _item(
+                        key="ceilings_paint_wall_protection",
+                        label="Ceilings, paint, and wall protection",
+                        unit="SF",
+                        share=0.25,
+                    ),
+                    _item(
+                        key="millwork_casework_allowance",
+                        label="Millwork and casework allowance",
+                        unit="LS",
+                        share=0.15,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
                 ],
-            },
-            {
-                "trade_key": "site",
-                "trade_label": "Site/Civil",
-                "items": [
-                    {
-                        "key": "paving_drive_aisles",
-                        "label": "Paving and drive aisles allowance",
-                        "unit": "SF",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.40,
-                        },
-                        "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
-                        },
-                    },
-                    {
-                        "key": "utility_tie_ins",
-                        "label": "Utility tie-ins allowance",
-                        "unit": "LS",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.20,
-                        },
-                        "quantity_rule": {
-                            "type": "constant",
-                            "params": {
-                                "value": 1,
-                            },
-                        },
-                    },
-                    {
-                        "key": "site_drainage_stormwater",
-                        "label": "Site drainage and stormwater allowance",
-                        "unit": "SF",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.25,
-                        },
-                        "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
-                        },
-                    },
-                    {
-                        "key": "site_lighting_signage",
-                        "label": "Site lighting and signage allowance",
-                        "unit": "LS",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.15,
-                        },
-                        "quantity_rule": {
-                            "type": "constant",
-                            "params": {
-                                "value": 1,
-                            },
-                        },
-                    },
+            ),
+            _trade(
+                "site",
+                "Site/Civil",
+                [
+                    _item(
+                        key="paving_drive_aisles",
+                        label="Paving and drive aisles allowance",
+                        unit="SF",
+                        share=0.35,
+                    ),
+                    _item(
+                        key="utility_tie_ins",
+                        label="Utility tie-ins allowance",
+                        unit="LS",
+                        share=0.20,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="site_drainage_stormwater",
+                        label="Site drainage and stormwater allowance",
+                        unit="SF",
+                        share=0.25,
+                    ),
+                    _item(
+                        key="site_lighting_signage",
+                        label="Site lighting and signage allowance",
+                        unit="LS",
+                        share=0.20,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
                 ],
-            },
+            ),
         ],
+        "provenance": {"notes": "Restaurant quick service scope profile v1."},
+    },
+    "restaurant_full_service_structural_v1": {
+        "trade_profiles": [
+            _trade(
+                "structural",
+                "Structural",
+                [
+                    _item(
+                        key="dining_foundation_and_slab",
+                        label="Dining foundation and slab package",
+                        unit="SF",
+                        share=0.30,
+                    ),
+                    _item(
+                        key="guest_dining_structural_frame",
+                        label="Guest dining structural frame",
+                        unit="SF",
+                        share=0.30,
+                    ),
+                    _item(
+                        key="covered_entry_and_patios",
+                        label="Covered entry and patio structures",
+                        unit="SF",
+                        share=0.20,
+                    ),
+                    _item(
+                        key="service_core_structural_allowance",
+                        label="Service core structural allowance",
+                        unit="LS",
+                        share=0.20,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                ],
+            ),
+            _trade(
+                "mechanical",
+                "Mechanical",
+                [
+                    _item(
+                        key="exhibition_kitchen_exhaust_makeup_air",
+                        label="Exhibition kitchen hood exhaust and make-up air",
+                        unit="LS",
+                        share=0.30,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="dining_hvac_rtu_distribution",
+                        label="Dining room HVAC and RTU distribution",
+                        unit="SF",
+                        share=0.30,
+                    ),
+                    _item(
+                        key="private_dining_zone_controls",
+                        label="Private dining zone controls allowance",
+                        unit="LS",
+                        share=0.20,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="bar_refrigeration_hvac_interface",
+                        label="Bar refrigeration HVAC interface allowance",
+                        unit="LS",
+                        share=0.20,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                ],
+            ),
+            _trade(
+                "electrical",
+                "Electrical",
+                [
+                    _item(
+                        key="main_service_panels_full_service",
+                        label="Main service and panels",
+                        unit="LS",
+                        share=0.20,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="dining_ambience_lighting_receptacles",
+                        label="Dining ambience lighting and receptacles",
+                        unit="SF",
+                        share=0.30,
+                    ),
+                    _item(
+                        key="kitchen_hotline_power_rough_in",
+                        label="Kitchen hotline power rough-in",
+                        unit="SF",
+                        share=0.25,
+                    ),
+                    _item(
+                        key="reservation_audio_visual_allowance",
+                        label="Reservation, A/V, and guest communication allowance",
+                        unit="LS",
+                        share=0.25,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                ],
+            ),
+            _trade(
+                "plumbing",
+                "Plumbing",
+                [
+                    _item(
+                        key="guest_restroom_groups_full_service",
+                        label="Guest restroom groups",
+                        unit="EA",
+                        share=0.30,
+                        quantity_type="restroom_groups",
+                        quantity_params={"sf_per_group": 1800.0, "minimum": 1},
+                    ),
+                    _item(
+                        key="domestic_water_sanitary_full_service",
+                        label="Domestic water and sanitary piping",
+                        unit="SF",
+                        share=0.25,
+                    ),
+                    _item(
+                        key="bar_and_beverage_plumbing_allowance",
+                        label="Bar and beverage plumbing allowance",
+                        unit="LS",
+                        share=0.20,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="grease_waste_interceptor_full_service",
+                        label="Grease waste and interceptor allowance",
+                        unit="LS",
+                        share=0.25,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                ],
+            ),
+            _trade(
+                "finishes",
+                "Finishes",
+                [
+                    _item(
+                        key="dining_room_finishes_package",
+                        label="Dining room finishes package",
+                        unit="SF",
+                        share=0.35,
+                    ),
+                    _item(
+                        key="boh_finishes_full_service",
+                        label="BOH food-grade finishes allowance",
+                        unit="SF",
+                        share=0.25,
+                    ),
+                    _item(
+                        key="acoustic_ceilings_and_wall_treatments",
+                        label="Acoustic ceilings and wall treatments",
+                        unit="SF",
+                        share=0.20,
+                    ),
+                    _item(
+                        key="hostess_bar_millwork_casework",
+                        label="Hostess stand and bar millwork allowance",
+                        unit="LS",
+                        share=0.20,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                ],
+            ),
+            _trade(
+                "site",
+                "Site/Civil",
+                [
+                    _item(
+                        key="guest_arrival_and_valet_dropoff_allowance",
+                        label="Guest arrival and valet drop-off allowance",
+                        unit="SF",
+                        share=0.30,
+                    ),
+                    _item(
+                        key="patio_drainage_hardscape_allowance",
+                        label="Patio drainage and hardscape allowance",
+                        unit="SF",
+                        share=0.25,
+                    ),
+                    _item(
+                        key="service_yard_and_screening_allowance",
+                        label="Service yard and screening allowance",
+                        unit="LS",
+                        share=0.20,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="exterior_wayfinding_lighting_signage",
+                        label="Exterior wayfinding lighting and signage",
+                        unit="LS",
+                        share=0.25,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                ],
+            ),
+        ],
+        "provenance": {"notes": "Restaurant full service scope profile v1."},
+    },
+    "restaurant_fine_dining_structural_v1": {
+        "trade_profiles": [
+            _trade(
+                "structural",
+                "Structural",
+                [
+                    _item(
+                        key="premium_foundation_slab_package",
+                        label="Premium foundation and slab package",
+                        unit="SF",
+                        share=0.28,
+                    ),
+                    _item(
+                        key="chef_table_structural_reinforcement",
+                        label="Chef table structural reinforcement",
+                        unit="SF",
+                        share=0.22,
+                    ),
+                    _item(
+                        key="wine_cellar_slab_insulation_allowance",
+                        label="Wine cellar slab insulation allowance",
+                        unit="LS",
+                        share=0.25,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="private_dining_structural_partitions",
+                        label="Private dining structural partitions",
+                        unit="SF",
+                        share=0.25,
+                    ),
+                ],
+            ),
+            _trade(
+                "mechanical",
+                "Mechanical",
+                [
+                    _item(
+                        key="chef_kitchen_hood_exhaust_makeup_air",
+                        label="Chef kitchen hood exhaust and make-up air",
+                        unit="LS",
+                        share=0.28,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="cellar_temperature_humidity_controls",
+                        label="Wine cellar temperature and humidity controls",
+                        unit="LS",
+                        share=0.24,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="dining_comfort_low_velocity_hvac",
+                        label="Dining comfort low-velocity HVAC distribution",
+                        unit="SF",
+                        share=0.24,
+                    ),
+                    _item(
+                        key="pastry_kitchen_refrigeration_hvac_interface",
+                        label="Pastry kitchen refrigeration HVAC interface",
+                        unit="LS",
+                        share=0.24,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                ],
+            ),
+            _trade(
+                "electrical",
+                "Electrical",
+                [
+                    _item(
+                        key="fine_dining_main_service_panels",
+                        label="Main service and specialty panels",
+                        unit="LS",
+                        share=0.20,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="architectural_lighting_dimming_controls",
+                        label="Architectural lighting and dimming controls",
+                        unit="SF",
+                        share=0.30,
+                    ),
+                    _item(
+                        key="sommelier_pos_and_service_communication_allowance",
+                        label="Sommelier POS and service communication allowance",
+                        unit="LS",
+                        share=0.25,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="chef_counter_specialty_power",
+                        label="Chef counter specialty power allowance",
+                        unit="SF",
+                        share=0.25,
+                    ),
+                ],
+            ),
+            _trade(
+                "plumbing",
+                "Plumbing",
+                [
+                    _item(
+                        key="fine_dining_restroom_groups",
+                        label="Fine dining restroom groups",
+                        unit="EA",
+                        share=0.28,
+                        quantity_type="restroom_groups",
+                        quantity_params={"sf_per_group": 1600.0, "minimum": 1},
+                    ),
+                    _item(
+                        key="premium_domestic_water_sanitary",
+                        label="Premium domestic water and sanitary piping",
+                        unit="SF",
+                        share=0.24,
+                    ),
+                    _item(
+                        key="wine_service_and_bar_plumbing_allowance",
+                        label="Wine service and bar plumbing allowance",
+                        unit="LS",
+                        share=0.24,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="grease_waste_polishing_interceptor",
+                        label="Grease waste and polishing interceptor allowance",
+                        unit="LS",
+                        share=0.24,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                ],
+            ),
+            _trade(
+                "finishes",
+                "Finishes",
+                [
+                    _item(
+                        key="bespoke_dining_room_finishes_package",
+                        label="Bespoke dining room finishes package",
+                        unit="SF",
+                        share=0.30,
+                    ),
+                    _item(
+                        key="premium_boh_food_grade_finishes",
+                        label="Premium BOH food-grade finishes allowance",
+                        unit="SF",
+                        share=0.22,
+                    ),
+                    _item(
+                        key="custom_millwork_casework_allowance",
+                        label="Custom millwork and casework allowance",
+                        unit="LS",
+                        share=0.28,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="acoustic_wall_panel_and_ceiling_package",
+                        label="Acoustic wall panel and ceiling package",
+                        unit="SF",
+                        share=0.20,
+                    ),
+                ],
+            ),
+            _trade(
+                "site",
+                "Site/Civil",
+                [
+                    _item(
+                        key="valet_court_hardscape_allowance",
+                        label="Valet court hardscape allowance",
+                        unit="SF",
+                        share=0.28,
+                    ),
+                    _item(
+                        key="curated_exterior_lighting_signage_allowance",
+                        label="Curated exterior lighting and signage allowance",
+                        unit="LS",
+                        share=0.24,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="outdoor_dining_terrace_weather_protection",
+                        label="Outdoor dining terrace weather protection",
+                        unit="SF",
+                        share=0.24,
+                    ),
+                    _item(
+                        key="landscape_entry_sequence_allowance",
+                        label="Landscape entry sequence allowance",
+                        unit="LS",
+                        share=0.24,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                ],
+            ),
+        ],
+        "provenance": {"notes": "Restaurant fine dining scope profile v1."},
+    },
+    "restaurant_cafe_structural_v1": {
+        "trade_profiles": [
+            _trade(
+                "structural",
+                "Structural",
+                [
+                    _item(
+                        key="compact_foundation_slab_package",
+                        label="Compact foundation and slab package",
+                        unit="SF",
+                        share=0.34,
+                    ),
+                    _item(
+                        key="counter_service_structural_frame",
+                        label="Counter service structural frame",
+                        unit="SF",
+                        share=0.28,
+                    ),
+                    _item(
+                        key="storefront_entry_canopy_allowance",
+                        label="Storefront entry canopy allowance",
+                        unit="SF",
+                        share=0.18,
+                    ),
+                    _item(
+                        key="patio_walkup_queue_structural_allowance",
+                        label="Patio walk-up queue structural allowance",
+                        unit="LS",
+                        share=0.20,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                ],
+            ),
+            _trade(
+                "mechanical",
+                "Mechanical",
+                [
+                    _item(
+                        key="beverage_bar_ventilation_makeup_air",
+                        label="Beverage bar ventilation and make-up air allowance",
+                        unit="LS",
+                        share=0.26,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="cafe_hvac_rtu_distribution",
+                        label="Cafe HVAC RTU distribution",
+                        unit="SF",
+                        share=0.30,
+                    ),
+                    _item(
+                        key="reachin_cooler_hvac_interface",
+                        label="Reach-in cooler HVAC interface allowance",
+                        unit="LS",
+                        share=0.22,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="bakery_display_case_refrigeration_interface",
+                        label="Bakery display case refrigeration interface",
+                        unit="LS",
+                        share=0.22,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                ],
+            ),
+            _trade(
+                "electrical",
+                "Electrical",
+                [
+                    _item(
+                        key="cafe_main_service_panels",
+                        label="Main service and panels",
+                        unit="LS",
+                        share=0.22,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="espresso_bar_power_rough_in",
+                        label="Espresso bar power rough-in",
+                        unit="SF",
+                        share=0.28,
+                    ),
+                    _item(
+                        key="customer_charging_low_voltage_allowance",
+                        label="Customer charging and low-voltage allowance",
+                        unit="LS",
+                        share=0.22,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="pendant_and_task_lighting_package",
+                        label="Pendant and task lighting package",
+                        unit="SF",
+                        share=0.28,
+                    ),
+                ],
+            ),
+            _trade(
+                "plumbing",
+                "Plumbing",
+                [
+                    _item(
+                        key="cafe_restroom_groups",
+                        label="Cafe restroom groups",
+                        unit="EA",
+                        share=0.28,
+                        quantity_type="restroom_groups",
+                        quantity_params={"sf_per_group": 2400.0, "minimum": 1},
+                    ),
+                    _item(
+                        key="beverage_bar_domestic_water_sanitary",
+                        label="Beverage bar domestic water and sanitary piping",
+                        unit="SF",
+                        share=0.26,
+                    ),
+                    _item(
+                        key="compact_grease_interceptor_allowance",
+                        label="Compact grease interceptor allowance",
+                        unit="LS",
+                        share=0.22,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="mop_sink_and_floor_drain_allowance",
+                        label="Mop sink and floor drain allowance",
+                        unit="LS",
+                        share=0.24,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                ],
+            ),
+            _trade(
+                "finishes",
+                "Finishes",
+                [
+                    _item(
+                        key="counter_service_finishes_package",
+                        label="Counter service finishes package",
+                        unit="SF",
+                        share=0.32,
+                    ),
+                    _item(
+                        key="bakery_display_millwork_allowance",
+                        label="Bakery display millwork allowance",
+                        unit="LS",
+                        share=0.24,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="ceilings_paint_wall_protection_cafe",
+                        label="Ceilings, paint, and wall protection",
+                        unit="SF",
+                        share=0.24,
+                    ),
+                    _item(
+                        key="lounge_seating_finish_package",
+                        label="Lounge seating finish package",
+                        unit="SF",
+                        share=0.20,
+                    ),
+                ],
+            ),
+            _trade(
+                "site",
+                "Site/Civil",
+                [
+                    _item(
+                        key="patio_walkup_and_queue_allowance",
+                        label="Patio, walk-up, and queue management allowance",
+                        unit="SF",
+                        share=0.30,
+                    ),
+                    _item(
+                        key="bike_rack_and_site_furnishings_allowance",
+                        label="Bike rack and site furnishings allowance",
+                        unit="LS",
+                        share=0.20,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="utility_tie_ins_cafe",
+                        label="Utility tie-ins allowance",
+                        unit="LS",
+                        share=0.24,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="storefront_signage_lighting_allowance",
+                        label="Storefront signage and lighting allowance",
+                        unit="LS",
+                        share=0.26,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                ],
+            ),
+        ],
+        "provenance": {"notes": "Restaurant cafe scope profile v1."},
+    },
+    "restaurant_bar_tavern_structural_v1": {
+        "trade_profiles": [
+            _trade(
+                "structural",
+                "Structural",
+                [
+                    _item(
+                        key="bar_foundation_and_slab_package",
+                        label="Bar foundation and slab package",
+                        unit="SF",
+                        share=0.28,
+                    ),
+                    _item(
+                        key="stage_and_dance_floor_structural_allowance",
+                        label="Stage and dance floor structural allowance",
+                        unit="SF",
+                        share=0.24,
+                    ),
+                    _item(
+                        key="rooftop_bar_structural_support_allowance",
+                        label="Rooftop bar structural support allowance",
+                        unit="LS",
+                        share=0.24,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="high_occupancy_egress_structural_package",
+                        label="High-occupancy egress structural package",
+                        unit="SF",
+                        share=0.24,
+                    ),
+                ],
+            ),
+            _trade(
+                "mechanical",
+                "Mechanical",
+                [
+                    _item(
+                        key="bar_kitchen_hood_exhaust_makeup_air",
+                        label="Bar kitchen hood exhaust and make-up air allowance",
+                        unit="LS",
+                        share=0.26,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="nightlife_hvac_distribution_and_smoke_control",
+                        label="Nightlife HVAC distribution and smoke control allowance",
+                        unit="SF",
+                        share=0.28,
+                    ),
+                    _item(
+                        key="draft_beer_cooler_hvac_interface",
+                        label="Draft beer cooler HVAC interface allowance",
+                        unit="LS",
+                        share=0.24,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="entertainment_zone_controls_allowance",
+                        label="Entertainment zone controls allowance",
+                        unit="LS",
+                        share=0.22,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                ],
+            ),
+            _trade(
+                "electrical",
+                "Electrical",
+                [
+                    _item(
+                        key="bar_main_service_panels",
+                        label="Main service and panels",
+                        unit="LS",
+                        share=0.20,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="av_entertainment_pos_allowance",
+                        label="A/V, entertainment, and POS allowance",
+                        unit="LS",
+                        share=0.30,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="accent_lighting_dimming_controls_bar",
+                        label="Accent lighting and dimming controls",
+                        unit="SF",
+                        share=0.26,
+                    ),
+                    _item(
+                        key="security_life_safety_power_allowance",
+                        label="Security and life-safety power allowance",
+                        unit="LS",
+                        share=0.24,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                ],
+            ),
+            _trade(
+                "plumbing",
+                "Plumbing",
+                [
+                    _item(
+                        key="bar_tavern_restroom_groups",
+                        label="Bar/tavern restroom groups",
+                        unit="EA",
+                        share=0.30,
+                        quantity_type="restroom_groups",
+                        quantity_params={"sf_per_group": 1500.0, "minimum": 1},
+                    ),
+                    _item(
+                        key="bar_water_distribution_sanitary",
+                        label="Bar water distribution and sanitary allowance",
+                        unit="SF",
+                        share=0.24,
+                    ),
+                    _item(
+                        key="bar_grease_interceptor_allowance",
+                        label="Bar grease interceptor allowance",
+                        unit="LS",
+                        share=0.22,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="draft_beverage_and_floor_drain_allowance",
+                        label="Draft beverage and floor drain allowance",
+                        unit="LS",
+                        share=0.24,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                ],
+            ),
+            _trade(
+                "finishes",
+                "Finishes",
+                [
+                    _item(
+                        key="bar_and_seating_finishes_package",
+                        label="Bar and seating finishes package",
+                        unit="SF",
+                        share=0.30,
+                    ),
+                    _item(
+                        key="stage_acoustic_finishes_allowance",
+                        label="Stage acoustic finishes allowance",
+                        unit="SF",
+                        share=0.22,
+                    ),
+                    _item(
+                        key="durable_floor_and_wall_protection_bar",
+                        label="Durable floor and wall protection",
+                        unit="SF",
+                        share=0.24,
+                    ),
+                    _item(
+                        key="nightlife_millwork_casework_allowance",
+                        label="Nightlife millwork and casework allowance",
+                        unit="LS",
+                        share=0.24,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                ],
+            ),
+            _trade(
+                "site",
+                "Site/Civil",
+                [
+                    _item(
+                        key="nightlife_lighting_signage_allowance",
+                        label="Nightlife lighting and signage allowance",
+                        unit="LS",
+                        share=0.28,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="patio_beer_garden_hardscape_allowance",
+                        label="Patio/beer garden hardscape allowance",
+                        unit="SF",
+                        share=0.26,
+                    ),
+                    _item(
+                        key="queue_management_and_entry_control_allowance",
+                        label="Queue management and entry control allowance",
+                        unit="LS",
+                        share=0.24,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                    _item(
+                        key="security_camera_site_backbone_allowance",
+                        label="Security camera site backbone allowance",
+                        unit="LS",
+                        share=0.22,
+                        quantity_type="constant",
+                        quantity_params={"value": 1},
+                    ),
+                ],
+            ),
+        ],
+        "provenance": {"notes": "Restaurant bar/tavern scope profile v1."},
     },
 }
