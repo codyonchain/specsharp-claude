@@ -505,4 +505,40 @@ describe("ConstructionView", () => {
       ).toBeInTheDocument();
     }
   });
+
+  it("renders industrial distribution-center schedule provenance for subtype and baseline fallback", () => {
+    const { rerender } = render(
+      <ConstructionView
+        project={buildCrossTypeScheduleProject(
+          "industrial",
+          "distribution_center",
+          "subtype"
+        )}
+      />
+    );
+
+    expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
+    expect(
+      screen.getByText("Timeline is tailored for this subtype profile.")
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Subtype Structural Program").length).toBeGreaterThan(0);
+
+    rerender(
+      <ConstructionView
+        project={buildCrossTypeScheduleProject(
+          "industrial",
+          "distribution_center",
+          "building_type"
+        )}
+      />
+    );
+
+    expect(screen.getByText("Building-type baseline")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Timeline uses building-type baseline (subtype override unavailable)."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Baseline Structural Program").length).toBeGreaterThan(0);
+  });
 });

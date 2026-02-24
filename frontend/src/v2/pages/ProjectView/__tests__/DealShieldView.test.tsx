@@ -72,11 +72,11 @@ const POLICY_CONTRACT_CASES = [
     decisionReasonCode: "tight_flex_band",
     primaryControlLabel: "Electrical +10%",
     breakScenarioLabel: "Conservative",
-    breakMetric: "value_gap",
-    breakMetricRef: "decision_summary.value_gap",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
     breakOperator: "<=",
-    threshold: 0.0,
-    observedValue: -45000,
+    threshold: -25.0,
+    observedValue: -45.9,
     flexBeforeBreakPct: 1.9,
     expectedFlexLabel: "1.90% (Structurally Tight)",
   },
@@ -844,5 +844,41 @@ describe("DealShieldView", () => {
       }
       expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
     }
+  });
+
+  it("renders industrial first-break percentage wording with percent-formatted observed and threshold values", () => {
+    const industrialCase = POLICY_CONTRACT_CASES.find(
+      (testCase) => testCase.profileId === "industrial_distribution_center_v1"
+    );
+    expect(industrialCase).toBeDefined();
+
+    render(
+      <DealShieldView
+        projectId="proj_industrial_policy_contract"
+        data={buildPolicyBackedDealShieldPayload(industrialCase!) as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        "Break occurs in Conservative: value-gap percentage crosses threshold."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return text.includes("Observed:") && text.includes("-45.9%");
+      })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return text.includes("Threshold:") && text.includes("<=") && text.includes("-25.0%");
+      })
+    ).toBeInTheDocument();
   });
 });
