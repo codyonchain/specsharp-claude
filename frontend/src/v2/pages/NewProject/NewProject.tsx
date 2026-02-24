@@ -30,6 +30,81 @@ import {
 } from 'lucide-react';
 
 const CITY_STATE_REGEX = /^.+,\s*[A-Za-z]{2}$/i;
+const escapeRegexPattern = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const normalizeCueText = (cue: string): string =>
+  cue.trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+
+const buildCuePattern = (cue: string): RegExp | null => {
+  const normalizedCue = normalizeCueText(cue);
+  if (!normalizedCue) return null;
+  if (/^[a-z]{1,2}$/.test(normalizedCue)) return null;
+
+  const cuePattern = normalizedCue
+    .split(' ')
+    .map((token) => escapeRegexPattern(token))
+    .join('\\s+');
+
+  return new RegExp(`\\b${cuePattern}\\b`, 'i');
+};
+
+const HEALTHCARE_SUBTYPE_DETECTION_CUES: RegExp[] = (() => {
+  const cueSet = new Set<string>();
+  for (const subtype of BuildingTaxonomy.getSubtypes('healthcare')) {
+    cueSet.add(subtype);
+    const subtypeInfo = BuildingTaxonomy.getSubtypeInfo('healthcare', subtype);
+    if (subtypeInfo?.display_name) {
+      cueSet.add(subtypeInfo.display_name);
+    }
+    for (const keyword of subtypeInfo?.keywords ?? []) {
+      cueSet.add(keyword);
+    }
+  }
+
+  return Array.from(cueSet)
+    .map((cue) => buildCuePattern(cue))
+    .filter((pattern): pattern is RegExp => Boolean(pattern));
+})();
+
+const BUILDING_TYPE_DETECTION_CUES: RegExp[] = [
+  /\bapartment(s)?\b/i,
+  /\bmultifamily\b/i,
+  /\boffice\b/i,
+  /\bhospital\b/i,
+  /\bschool\b/i,
+  /\bretail\b/i,
+  /\bindustrial\b/i,
+  /\bhotel\b/i,
+  /\brestaurant\b/i,
+  /\bwarehouse\b/i,
+  /\bdistribution center\b/i,
+  /\bclinic\b/i,
+  /\bmedical\b/i,
+  /\burgent care\b/i,
+  /\boutpatient\b/i,
+  /\bsurgical center\b/i,
+  /\bimaging center\b/i,
+  /\bmedical office(?: building)?\b/i,
+  /\bdental office\b/i,
+  /\bnursing home\b/i,
+  /\brehabilitation\b/i,
+  /\bdata\s*center\b/i,
+  /\bdatacenter\b/i,
+  /\bserver\s*farm\b/i,
+  /\bcolocation\b/i,
+  /\blaboratory\b/i,
+  /\bself\s*storage\b/i,
+  /\bcar\s*dealership\b/i,
+  /\bauto\s*dealership\b/i,
+  /\bbroadcast\b/i,
+  /\bstudio\b/i,
+  /\bstrip\s*mall\b/i,
+  ...HEALTHCARE_SUBTYPE_DETECTION_CUES,
+];
+
+const detectBuildingTypeInDescription = (text: string): boolean =>
+  BUILDING_TYPE_DETECTION_CUES.some((pattern) => pattern.test(text));
 
 const detectCityStateInDescription = (text: string): string | null => {
   if (!text) return null;
@@ -131,7 +206,7 @@ export const NewProject: React.FC = () => {
     const cityKeywordDetected = /(nashville|franklin|brentwood|murfreesboro|manchester|nashua|concord|bedford|salem)/i.test(input);
     setDetectedFeatures({
       size: /\d+[\s,]*(?:sf|square|feet|unit|key|bed|room)/i.test(description),
-      type: /(apartment|office|hospital|school|retail|industrial|hotel|restaurant|warehouse|medical|clinic|surgery|emergency|distribution|strip\s*mall|data\s*center|datacenter|server\s*farm|colocation|laboratory|self\s*storage|car\s*dealership|auto\s*dealership|broadcast|studio)/i.test(input),
+      type: detectBuildingTypeInDescription(input),
       location: Boolean(liveDetectedLocation || cityKeywordDetected)
     });
   }, [description, liveDetectedLocation]);
