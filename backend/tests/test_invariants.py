@@ -17,7 +17,9 @@ from app.v2.config.type_profiles.decision_insurance_policy import (
     DECISION_INSURANCE_POLICY_BY_PROFILE_ID,
     DECISION_INSURANCE_POLICY_ID,
 )
+from app.v2.config.type_profiles.dealshield_content import healthcare as healthcare_content
 from app.v2.config.type_profiles.dealshield_content import specialty as specialty_content
+from app.v2.config.type_profiles.scope_items import healthcare as healthcare_scope_profiles
 from app.v2.config.type_profiles.scope_items import specialty as specialty_scope_profiles
 from app.v2.services.dealshield_service import build_dealshield_view_model
 
@@ -479,6 +481,16 @@ def test_policy_curated_decision_insurance_is_applied_for_hardened_profiles():
         (BuildingType.INDUSTRIAL, "manufacturing", 120_000),
         (BuildingType.INDUSTRIAL, "flex_space", 120_000),
         (BuildingType.INDUSTRIAL, "cold_storage", 120_000),
+        (BuildingType.HEALTHCARE, "surgical_center", 70_000),
+        (BuildingType.HEALTHCARE, "imaging_center", 70_000),
+        (BuildingType.HEALTHCARE, "urgent_care", 70_000),
+        (BuildingType.HEALTHCARE, "outpatient_clinic", 70_000),
+        (BuildingType.HEALTHCARE, "medical_office_building", 70_000),
+        (BuildingType.HEALTHCARE, "dental_office", 70_000),
+        (BuildingType.HEALTHCARE, "hospital", 70_000),
+        (BuildingType.HEALTHCARE, "medical_center", 70_000),
+        (BuildingType.HEALTHCARE, "nursing_home", 70_000),
+        (BuildingType.HEALTHCARE, "rehabilitation", 70_000),
         (BuildingType.SPECIALTY, "data_center", 110_000),
         (BuildingType.SPECIALTY, "laboratory", 70_000),
         (BuildingType.SPECIALTY, "self_storage", 90_000),
@@ -731,6 +743,119 @@ def test_specialty_scope_profiles_keep_depth_and_allocation_integrity():
             items = trade.get("items")
             assert isinstance(items, list)
             assert len(items) >= min_items
+            total_share = sum(
+                float(item.get("allocation", {}).get("share", 0.0))
+                for item in items
+            )
+            assert math.isclose(total_share, 1.0, rel_tol=1e-9, abs_tol=1e-9), (
+                f"{profile_id}::{trade_key} share total expected 1.0, got {total_share}"
+            )
+
+
+def test_healthcare_profiles_are_wired_and_content_maps_to_tiles():
+    healthcare_cases = {
+        "surgical_center": {
+            "tile_profile": "healthcare_surgical_center_v1",
+            "scope_profile": "healthcare_surgical_center_structural_v1",
+        },
+        "imaging_center": {
+            "tile_profile": "healthcare_imaging_center_v1",
+            "scope_profile": "healthcare_imaging_center_structural_v1",
+        },
+        "urgent_care": {
+            "tile_profile": "healthcare_urgent_care_v1",
+            "scope_profile": "healthcare_urgent_care_structural_v1",
+        },
+        "outpatient_clinic": {
+            "tile_profile": "healthcare_outpatient_clinic_v1",
+            "scope_profile": "healthcare_outpatient_clinic_structural_v1",
+        },
+        "medical_office_building": {
+            "tile_profile": "healthcare_medical_office_building_v1",
+            "scope_profile": "healthcare_medical_office_building_structural_v1",
+        },
+        "dental_office": {
+            "tile_profile": "healthcare_dental_office_v1",
+            "scope_profile": "healthcare_dental_office_structural_v1",
+        },
+        "hospital": {
+            "tile_profile": "healthcare_hospital_v1",
+            "scope_profile": "healthcare_hospital_structural_v1",
+        },
+        "medical_center": {
+            "tile_profile": "healthcare_medical_center_v1",
+            "scope_profile": "healthcare_medical_center_structural_v1",
+        },
+        "nursing_home": {
+            "tile_profile": "healthcare_nursing_home_v1",
+            "scope_profile": "healthcare_nursing_home_structural_v1",
+        },
+        "rehabilitation": {
+            "tile_profile": "healthcare_rehabilitation_v1",
+            "scope_profile": "healthcare_rehabilitation_structural_v1",
+        },
+    }
+
+    mlw_first_texts = []
+    for subtype, expected in healthcare_cases.items():
+        cfg = get_building_config(BuildingType.HEALTHCARE, subtype)
+        assert cfg is not None
+        assert cfg.dealshield_tile_profile == expected["tile_profile"]
+        assert cfg.scope_items_profile == expected["scope_profile"]
+
+        profile = get_dealshield_profile(expected["tile_profile"])
+        assert profile.get("profile_id") == expected["tile_profile"]
+        tile_ids = {
+            tile.get("tile_id")
+            for tile in profile.get("tiles", [])
+            if isinstance(tile, dict) and isinstance(tile.get("tile_id"), str)
+        }
+        assert tile_ids
+
+        content = healthcare_content.DEALSHIELD_CONTENT_PROFILES[expected["tile_profile"]]
+        drivers = content.get("fastest_change", {}).get("drivers")
+        assert isinstance(drivers, list) and len(drivers) == 3
+        for driver in drivers:
+            assert isinstance(driver, dict)
+            assert driver.get("tile_id") in tile_ids
+
+        mlw = content.get("most_likely_wrong")
+        assert isinstance(mlw, list) and len(mlw) >= 3
+        mlw_first_texts.append(mlw[0].get("text"))
+        for entry in mlw:
+            assert isinstance(entry, dict)
+            assert entry.get("driver_tile_id") in tile_ids
+
+        question_bank = content.get("question_bank")
+        assert isinstance(question_bank, list) and len(question_bank) == 3
+        for question_entry in question_bank:
+            assert isinstance(question_entry, dict)
+            assert question_entry.get("driver_tile_id") in tile_ids
+
+    assert len(mlw_first_texts) == len(set(mlw_first_texts))
+
+
+def test_healthcare_scope_profiles_keep_depth_and_allocation_integrity():
+    for subtype, profile_id in healthcare_scope_profiles.SCOPE_ITEM_DEFAULTS.items():
+        cfg = get_building_config(BuildingType.HEALTHCARE, subtype)
+        assert cfg is not None
+        assert cfg.scope_items_profile == profile_id
+
+        profile = healthcare_scope_profiles.SCOPE_ITEM_PROFILES[profile_id]
+        trade_profiles = profile.get("trade_profiles")
+        assert isinstance(trade_profiles, list) and len(trade_profiles) == 5
+
+        by_trade = {
+            trade.get("trade_key"): trade
+            for trade in trade_profiles
+            if isinstance(trade, dict) and isinstance(trade.get("trade_key"), str)
+        }
+        assert set(by_trade.keys()) == {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+
+        for trade_key, trade in by_trade.items():
+            items = trade.get("items")
+            assert isinstance(items, list)
+            assert len(items) >= 2
             total_share = sum(
                 float(item.get("allocation", {}).get("share", 0.0))
                 for item in items
