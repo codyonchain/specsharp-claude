@@ -515,3 +515,64 @@ def test_policy_curated_decision_insurance_is_applied_for_hardened_profiles():
         assert flex_provenance.get("calibration_source") == "decision_insurance_policy.flex_calibration"
         assert flex_provenance.get("band") in {"tight", "moderate", "comfortable"}
         assert view_model.get("flex_before_break_band") in {"tight", "moderate", "comfortable"}
+        assert view_model.get("flex_before_break_band") == flex_provenance.get("band")
+
+
+def test_multifamily_policy_contract_is_explicit_for_first_break_and_flex_band():
+    multifamily_cases = [
+        ("market_rate_apartments", "multifamily_market_rate_apartments_v1"),
+        ("luxury_apartments", "multifamily_luxury_apartments_v1"),
+        ("affordable_housing", "multifamily_affordable_housing_v1"),
+    ]
+
+    for subtype, expected_profile_id in multifamily_cases:
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.MULTIFAMILY,
+            subtype=subtype,
+            square_footage=120_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        assert payload["dealshield_tile_profile"] == expected_profile_id
+        policy_cfg = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[expected_profile_id]
+
+        profile = get_dealshield_profile(expected_profile_id)
+        view_model = build_dealshield_view_model(
+            project_id=f"multifamily-contract-{subtype}",
+            payload=payload,
+            profile=profile,
+        )
+        di_provenance = view_model.get("decision_insurance_provenance")
+        assert isinstance(di_provenance, dict)
+        assert di_provenance.get("profile_id") == expected_profile_id
+
+        primary_control = view_model.get("primary_control_variable")
+        assert isinstance(primary_control, dict)
+        assert primary_control.get("tile_id") == policy_cfg["primary_control_variable"]["tile_id"]
+
+        first_break_provenance = di_provenance.get("first_break_condition")
+        assert isinstance(first_break_provenance, dict)
+        assert first_break_provenance.get("status") == "available"
+        assert first_break_provenance.get("source") == "decision_insurance_policy.collapse_trigger"
+        assert first_break_provenance.get("reason") != "no_modeled_break_condition"
+
+        first_break = view_model.get("first_break_condition")
+        assert isinstance(first_break, dict)
+        collapse_trigger = policy_cfg["collapse_trigger"]
+        configured_operator = collapse_trigger.get("operator")
+        expected_operator = (
+            configured_operator.strip()
+            if isinstance(configured_operator, str) and configured_operator.strip()
+            else "<="
+        )
+        assert first_break.get("break_metric") == collapse_trigger.get("metric")
+        assert first_break.get("operator") == expected_operator
+        assert first_break.get("threshold") == collapse_trigger.get("threshold")
+        assert isinstance(first_break.get("observed_value"), (int, float))
+
+        flex_provenance = di_provenance.get("flex_before_break_pct")
+        assert isinstance(flex_provenance, dict)
+        assert flex_provenance.get("status") == "available"
+        assert flex_provenance.get("calibration_source") == "decision_insurance_policy.flex_calibration"
+        assert flex_provenance.get("band") in {"tight", "moderate", "comfortable"}
+        assert view_model.get("flex_before_break_band") == flex_provenance.get("band")
