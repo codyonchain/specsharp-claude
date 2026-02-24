@@ -154,6 +154,17 @@ HEALTHCARE_SCOPE_DEPTH_MINIMUMS = {
     },
 }
 
+HEALTHCARE_RUNTIME_SCOPE_MINIMUMS = {
+    subtype: {
+        "structural": 5,
+        "mechanical": 6 if subtype in {"surgical_center", "imaging_center", "hospital", "medical_center"} else 5,
+        "electrical": 6 if subtype in {"surgical_center", "imaging_center", "hospital", "medical_center"} else 5,
+        "plumbing": 6 if subtype in {"surgical_center", "imaging_center", "hospital", "medical_center"} else 5,
+        "finishes": 5,
+    }
+    for subtype in HEALTHCARE_PROFILE_IDS.keys()
+}
+
 
 def _tile_map(profile_id: str):
     profile = get_dealshield_profile(profile_id)
@@ -209,6 +220,34 @@ def test_healthcare_scope_profiles_have_depth_and_normalized_allocations():
             total_share = sum(float(item.get("allocation", {}).get("share", 0.0)) for item in items)
             assert math.isclose(total_share, 1.0, rel_tol=1e-9, abs_tol=1e-9), (
                 f"{profile_id}::{trade_key} share total expected 1.0, got {total_share}"
+            )
+
+
+def test_healthcare_runtime_scope_items_emit_wow_depth_for_all_subtypes():
+    for subtype, expected_by_trade in HEALTHCARE_RUNTIME_SCOPE_MINIMUMS.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.HEALTHCARE,
+            subtype=subtype,
+            square_footage=90_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        scope_items = payload.get("scope_items")
+        assert isinstance(scope_items, list) and scope_items
+
+        emitted = {
+            str(trade.get("trade") or "").strip().lower(): trade
+            for trade in scope_items
+            if isinstance(trade, dict)
+        }
+        assert set(emitted.keys()) == {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+
+        for trade_key, minimum in expected_by_trade.items():
+            systems = emitted[trade_key].get("systems")
+            assert isinstance(systems, list)
+            assert len(systems) >= minimum, (
+                f"{subtype}::{trade_key} expected >= {minimum} runtime systems, "
+                f"found {len(systems)}"
             )
 
 
@@ -609,7 +648,7 @@ def test_healthcare_first_break_semantics_align_with_metric_type():
 
         if metric == "value_gap_pct":
             assert operator in {"<=", "<"}
-            assert abs(float(threshold)) <= 1000.0
+            assert abs(float(threshold)) <= 100.0
         else:
             assert operator in {"<=", "<"}
             assert float(threshold) <= 0.0 or abs(float(threshold)) >= 100000.0

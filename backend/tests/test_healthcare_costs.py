@@ -303,3 +303,40 @@ def test_inpatient_operational_kpis_are_realistic_and_emit_nonzero_units(
     efficiency_value = float(str(efficiency_kpi.get("value", "0")).replace("%", ""))
     assert min_occupancy <= occupancy_value <= max_occupancy
     assert min_efficiency <= efficiency_value <= max_efficiency
+
+
+def test_healthcare_runtime_scope_items_emit_deeper_system_lists_with_trade_totals_preserved():
+    runtime_minimums = {
+        "surgical_center": {"structural": 5, "mechanical": 6, "electrical": 6, "plumbing": 6, "finishes": 5},
+        "imaging_center": {"structural": 5, "mechanical": 6, "electrical": 6, "plumbing": 6, "finishes": 5},
+        "urgent_care": {"structural": 5, "mechanical": 5, "electrical": 5, "plumbing": 5, "finishes": 5},
+        "outpatient_clinic": {"structural": 5, "mechanical": 5, "electrical": 5, "plumbing": 5, "finishes": 5},
+        "medical_office_building": {"structural": 5, "mechanical": 5, "electrical": 5, "plumbing": 5, "finishes": 5},
+        "dental_office": {"structural": 5, "mechanical": 5, "electrical": 5, "plumbing": 5, "finishes": 5},
+        "hospital": {"structural": 5, "mechanical": 6, "electrical": 6, "plumbing": 6, "finishes": 5},
+        "medical_center": {"structural": 5, "mechanical": 6, "electrical": 6, "plumbing": 6, "finishes": 5},
+        "nursing_home": {"structural": 5, "mechanical": 5, "electrical": 5, "plumbing": 5, "finishes": 5},
+        "rehabilitation": {"structural": 5, "mechanical": 5, "electrical": 5, "plumbing": 5, "finishes": 5},
+    }
+
+    for subtype, expected_by_trade in runtime_minimums.items():
+        result = _calculate_healthcare(subtype=subtype, square_footage=120000)
+        scope_items = result.get("scope_items")
+        assert isinstance(scope_items, list) and scope_items
+
+        by_trade = {
+            str(trade.get("trade") or "").strip().lower(): trade
+            for trade in scope_items
+            if isinstance(trade, dict)
+        }
+        assert set(by_trade.keys()) == {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+
+        trade_breakdown = result.get("trade_breakdown") or {}
+        for trade_key, minimum in expected_by_trade.items():
+            systems = by_trade[trade_key].get("systems")
+            assert isinstance(systems, list)
+            assert len(systems) >= minimum
+
+            systems_total = sum(float(system.get("total_cost", 0.0) or 0.0) for system in systems)
+            trade_total = float(trade_breakdown.get(trade_key, 0.0) or 0.0)
+            assert systems_total == pytest.approx(trade_total, rel=0, abs=1e-6)

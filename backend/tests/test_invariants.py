@@ -928,7 +928,7 @@ def test_healthcare_policy_collapse_metrics_are_mixed_and_semantically_wired():
         assert subtype_rows[0] in row_ids
 
         if metric == "value_gap_pct":
-            assert abs(float(threshold)) <= 1000.0
+            assert abs(float(threshold)) <= 100.0
         else:
             assert float(threshold) <= 0.0 or abs(float(threshold)) >= 100000.0
 
@@ -1018,6 +1018,46 @@ def test_healthcare_scope_profiles_keep_depth_and_allocation_integrity():
             assert math.isclose(total_share, 1.0, rel_tol=1e-9, abs_tol=1e-9), (
                 f"{profile_id}::{trade_key} share total expected 1.0, got {total_share}"
             )
+
+
+def test_healthcare_runtime_scope_depth_floor_and_trade_reconciliation():
+    runtime_minimums = {
+        "surgical_center": {"structural": 5, "mechanical": 6, "electrical": 6, "plumbing": 6, "finishes": 5},
+        "imaging_center": {"structural": 5, "mechanical": 6, "electrical": 6, "plumbing": 6, "finishes": 5},
+        "urgent_care": {"structural": 5, "mechanical": 5, "electrical": 5, "plumbing": 5, "finishes": 5},
+        "outpatient_clinic": {"structural": 5, "mechanical": 5, "electrical": 5, "plumbing": 5, "finishes": 5},
+        "medical_office_building": {"structural": 5, "mechanical": 5, "electrical": 5, "plumbing": 5, "finishes": 5},
+        "dental_office": {"structural": 5, "mechanical": 5, "electrical": 5, "plumbing": 5, "finishes": 5},
+        "hospital": {"structural": 5, "mechanical": 6, "electrical": 6, "plumbing": 6, "finishes": 5},
+        "medical_center": {"structural": 5, "mechanical": 6, "electrical": 6, "plumbing": 6, "finishes": 5},
+        "nursing_home": {"structural": 5, "mechanical": 5, "electrical": 5, "plumbing": 5, "finishes": 5},
+        "rehabilitation": {"structural": 5, "mechanical": 5, "electrical": 5, "plumbing": 5, "finishes": 5},
+    }
+
+    for subtype, expected in runtime_minimums.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.HEALTHCARE,
+            subtype=subtype,
+            square_footage=120_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        scope_items = payload.get("scope_items")
+        assert isinstance(scope_items, list) and scope_items
+        by_trade = {
+            str(trade.get("trade") or "").strip().lower(): trade
+            for trade in scope_items
+            if isinstance(trade, dict)
+        }
+        assert set(by_trade.keys()) == {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+
+        trade_breakdown = payload.get("trade_breakdown") or {}
+        for trade_key, minimum in expected.items():
+            systems = by_trade[trade_key].get("systems")
+            assert isinstance(systems, list)
+            assert len(systems) >= minimum
+            systems_total = sum(float(system.get("total_cost", 0.0) or 0.0) for system in systems)
+            assert systems_total == pytest.approx(float(trade_breakdown.get(trade_key, 0.0) or 0.0), rel=0, abs=1e-6)
 
 
 def test_healthcare_special_feature_alias_targets_exist_in_subtype_configs():

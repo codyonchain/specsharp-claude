@@ -257,6 +257,111 @@ HEALTHCARE_OPERATIONAL_METRIC_DEFAULTS: Dict[str, Dict[str, Any]] = {
     },
 }
 
+HEALTHCARE_HIGH_ACUITY_SCOPE_SUBTYPES = {
+    "surgical_center",
+    "imaging_center",
+    "hospital",
+    "medical_center",
+}
+
+HEALTHCARE_SCOPE_MIN_SYSTEMS_BY_TRADE = {
+    "structural": 5,
+    "mechanical": 5,
+    "electrical": 5,
+    "plumbing": 5,
+    "finishes": 5,
+}
+
+HEALTHCARE_SCOPE_MIN_SYSTEMS_HIGH_ACUITY_OVERRIDES = {
+    "mechanical": 6,
+    "electrical": 6,
+    "plumbing": 6,
+}
+
+HEALTHCARE_SCOPE_DEPTH_LABELS_BY_CARE_GROUP: Dict[str, Dict[str, List[str]]] = {
+    "acuity": {
+        "structural": [
+            "Interdisciplinary Shaft + Opening Reinforcing",
+            "Equipment Anchorage + Vibration Support",
+            "Heavy Utility Corridor Framing",
+        ],
+        "mechanical": [
+            "Isolation Pressurization Control Loops",
+            "Airside Redundancy + N+1 Controls",
+            "Terminal Unit Balancing + TAB Allowance",
+        ],
+        "electrical": [
+            "Critical Branch Segregation + Transfer Logic",
+            "Selective Coordination + Arc Study Scope",
+            "Low-Voltage Clinical Backbone + Head-End",
+        ],
+        "plumbing": [
+            "Medical Gas Zoning + Alarm Panels",
+            "Critical Drainage + Neutralization Loops",
+            "Domestic Recirculation + Thermal Holdback",
+        ],
+        "finishes": [
+            "Infection-Control Transition Detailing",
+            "Clinical Wall Protection + Corner Guard Package",
+            "Door/Hardware Pressure-Rating Coordination",
+        ],
+    },
+    "ambulatory": {
+        "structural": [
+            "Exam Pod Framing + Door Header Coordination",
+            "Procedure-Room Blocking + Support Steel",
+            "MEP Penetration Framing + Firestopping Prep",
+        ],
+        "mechanical": [
+            "Room-Level Ventilation Zoning + Controls",
+            "Outside Air Balancing + Commissioning Scope",
+            "Comfort Reheat + Diffuser Optimization",
+        ],
+        "electrical": [
+            "Procedure Power Branching + Isolated Grounds",
+            "Lighting Controls + Patient/Staff Mode Scenes",
+            "Low-Voltage Data + Security Interface",
+        ],
+        "plumbing": [
+            "Hot-Water Loop Balancing + Mixing Valves",
+            "Point-of-Use Fixtures + Backflow Protection",
+            "Special Waste + Trench Coordination",
+        ],
+        "finishes": [
+            "High-Cleanability Surface Package",
+            "Wayfinding + Front-of-House Finish Layer",
+            "Acoustic Treatment + Privacy Assemblies",
+        ],
+    },
+    "post_acute": {
+        "structural": [
+            "Resident-Wing Reinforcing + Lift Path Support",
+            "Therapy Equipment Anchorage + Slab Prep",
+            "Roof Penetration Framing + Safety Access",
+        ],
+        "mechanical": [
+            "Resident Comfort Zoning + Night Setback",
+            "Humidity + Fresh-Air Control Sequencing",
+            "Therapy Space Ventilation + Controls",
+        ],
+        "electrical": [
+            "Nurse Call Backbone + Device Distribution",
+            "Life-Safety Branch Segregation + Panels",
+            "Resident Room Lighting + Controls",
+        ],
+        "plumbing": [
+            "Hydrotherapy + Specialty Fixture Rough-In",
+            "Domestic Hot Water Recirc + Balancing",
+            "Sanitary Branch Coordination + Access Points",
+        ],
+        "finishes": [
+            "Resident Durability Package + Wall Protection",
+            "Slip-Resistance Flooring + Transition Details",
+            "Acoustic + Comfort Finish Coordination",
+        ],
+    },
+}
+
 # SELECTOR_REGISTRY (Phase 4)
 # - id: construction_schedule_by_building_type
 #   location: build_construction_schedule (top)
@@ -1892,6 +1997,95 @@ class UnifiedEngine:
             profile["items"] = _apply_overrides_to_items(items)
         return profile
 
+    def _resolve_healthcare_scope_subtype_from_profile(self, profile_id: str) -> Optional[str]:
+        if not isinstance(profile_id, str):
+            return None
+        prefix = "healthcare_"
+        suffix = "_structural_v1"
+        if not (profile_id.startswith(prefix) and profile_id.endswith(suffix)):
+            return None
+        subtype = profile_id[len(prefix):-len(suffix)]
+        return subtype if subtype else None
+
+    def _resolve_healthcare_scope_group(self, subtype: str) -> str:
+        if subtype in {"nursing_home", "rehabilitation"}:
+            return "post_acute"
+        if subtype in {"urgent_care", "outpatient_clinic", "medical_office_building", "dental_office"}:
+            return "ambulatory"
+        return "acuity"
+
+    def _resolve_healthcare_scope_target_depth(self, subtype: str, trade_key: str) -> int:
+        target = int(HEALTHCARE_SCOPE_MIN_SYSTEMS_BY_TRADE.get(trade_key, 5))
+        if subtype in HEALTHCARE_HIGH_ACUITY_SCOPE_SUBTYPES:
+            target = int(HEALTHCARE_SCOPE_MIN_SYSTEMS_HIGH_ACUITY_OVERRIDES.get(trade_key, target))
+        return max(1, target)
+
+    def _apply_healthcare_scope_depth_uplift(
+        self,
+        profile_id: str,
+        trade_key: str,
+        systems: List[Dict[str, Any]],
+        square_footage: float,
+    ) -> List[Dict[str, Any]]:
+        subtype = self._resolve_healthcare_scope_subtype_from_profile(profile_id)
+        if subtype is None:
+            return systems
+
+        target_depth = self._resolve_healthcare_scope_target_depth(subtype, trade_key)
+        if len(systems) >= target_depth:
+            return systems
+
+        care_group = self._resolve_healthcare_scope_group(subtype)
+        label_bank = HEALTHCARE_SCOPE_DEPTH_LABELS_BY_CARE_GROUP.get(care_group, {}).get(trade_key, [])
+        if not label_bank:
+            return systems
+
+        existing_labels = {str(system.get("name") or "").strip().lower() for system in systems}
+        candidate_labels = [label for label in label_bank if label.strip().lower() not in existing_labels]
+        if not candidate_labels:
+            return systems
+
+        shortfall = min(target_depth - len(systems), len(candidate_labels))
+        if shortfall <= 0:
+            return systems
+
+        donor_idx = max(
+            range(len(systems)),
+            key=lambda idx: float(systems[idx].get("total_cost", 0.0) or 0.0),
+        )
+        donor = systems[donor_idx]
+        donor_total = float(donor.get("total_cost", 0.0) or 0.0)
+        if donor_total <= 0:
+            return systems
+
+        reserve_fraction = min(0.28, 0.06 * shortfall)
+        reserve_total = donor_total * reserve_fraction
+        if reserve_total <= 0:
+            return systems
+
+        donor_quantity_raw = donor.get("quantity", square_footage)
+        donor_quantity = float(donor_quantity_raw or 0.0)
+        donor_unit = str(donor.get("unit") or "SF")
+
+        donor_new_total = donor_total - reserve_total
+        donor["total_cost"] = donor_new_total
+        donor["unit_cost"] = self._safe_unit_cost(donor_new_total, donor_quantity)
+
+        per_detail_cost = reserve_total / shortfall
+        for idx in range(shortfall):
+            label = candidate_labels[idx]
+            systems.append(
+                {
+                    "name": label,
+                    "quantity": donor_quantity_raw,
+                    "unit": donor_unit,
+                    "unit_cost": self._safe_unit_cost(per_detail_cost, donor_quantity),
+                    "total_cost": per_detail_cost,
+                }
+            )
+
+        return systems
+
     def _build_scope_items_for_trade_profile(
         self,
         trade_profile: Dict[str, Any],
@@ -1988,6 +2182,13 @@ class UnifiedEngine:
 
         if not systems:
             return None
+
+        systems = self._apply_healthcare_scope_depth_uplift(
+            profile_id=profile_id,
+            trade_key=trade_key,
+            systems=systems,
+            square_footage=square_footage,
+        )
 
         trade_label = str(trade_profile.get("trade_label") or trade_key.replace("_", " ").title())
         return {"trade": trade_label, "systems": systems}

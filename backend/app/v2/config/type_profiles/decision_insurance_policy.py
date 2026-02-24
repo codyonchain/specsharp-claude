@@ -251,9 +251,9 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
             "label": "IC-First Walk-In Acuity Mix, Peak-Hour Staffing, and Visit Velocity Control",
         },
         "collapse_trigger": {
-            "metric": "value_gap_pct",
+            "metric": "value_gap",
             "operator": "<=",
-            "threshold": 560.0,
+            "threshold": 0.0,
             "scenario_priority": ["base", "weekend_surge_breakpoint", "conservative", "ugly"],
         },
         "flex_calibration": {"tight_max_pct": 2.0, "moderate_max_pct": 5.2, "fallback_pct": 2.3},
@@ -293,9 +293,9 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
             "label": "IC-First Chair Utilization, Hygiene Mix, and Sterilization Bottleneck Control",
         },
         "collapse_trigger": {
-            "metric": "value_gap_pct",
+            "metric": "value_gap",
             "operator": "<=",
-            "threshold": 300.0,
+            "threshold": 0.0,
             "scenario_priority": ["base", "sterilization_center_rework", "conservative", "ugly"],
         },
         "flex_calibration": {"tight_max_pct": 1.8, "moderate_max_pct": 4.5, "fallback_pct": 2.0},
