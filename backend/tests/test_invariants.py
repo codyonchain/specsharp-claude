@@ -19,6 +19,39 @@ from app.v2.config.type_profiles.decision_insurance_policy import (
 )
 from app.v2.services.dealshield_service import build_dealshield_view_model
 
+INDUSTRIAL_POLICY_EXPECTATIONS_BY_PROFILE_ID = {
+    "industrial_warehouse_v1": {
+        "tile_id": "structural_plus_10",
+        "collapse_metric": "value_gap_pct",
+        "collapse_operator": "<=",
+        "collapse_threshold": -8.0,
+    },
+    "industrial_distribution_center_v1": {
+        "tile_id": "electrical_plus_10",
+        "collapse_metric": "value_gap_pct",
+        "collapse_operator": "<=",
+        "collapse_threshold": -25.0,
+    },
+    "industrial_manufacturing_v1": {
+        "tile_id": "process_mep_plus_10",
+        "collapse_metric": "value_gap_pct",
+        "collapse_operator": "<=",
+        "collapse_threshold": -35.0,
+    },
+    "industrial_flex_space_v1": {
+        "tile_id": "office_finish_plus_10",
+        "collapse_metric": "value_gap_pct",
+        "collapse_operator": "<=",
+        "collapse_threshold": -6.0,
+    },
+    "industrial_cold_storage_v1": {
+        "tile_id": "equipment_plus_10",
+        "collapse_metric": "value_gap_pct",
+        "collapse_operator": "<=",
+        "collapse_threshold": -30.0,
+    },
+}
+
 
 def test_state_required_for_multiplier():
     """City-only handling should follow active location contract: known override/no warning, unknown city/warning."""
@@ -457,6 +490,14 @@ def test_policy_curated_decision_insurance_is_applied_for_hardened_profiles():
         profile_id = payload["dealshield_tile_profile"]
         assert profile_id in DECISION_INSURANCE_POLICY_BY_PROFILE_ID
 
+        if building_type == BuildingType.INDUSTRIAL:
+            expected_industrial_policy = INDUSTRIAL_POLICY_EXPECTATIONS_BY_PROFILE_ID[profile_id]
+            industrial_policy_cfg = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+            assert industrial_policy_cfg["primary_control_variable"]["tile_id"] == expected_industrial_policy["tile_id"]
+            assert industrial_policy_cfg["collapse_trigger"]["metric"] == expected_industrial_policy["collapse_metric"]
+            assert industrial_policy_cfg["collapse_trigger"]["operator"] == expected_industrial_policy["collapse_operator"]
+            assert industrial_policy_cfg["collapse_trigger"]["threshold"] == expected_industrial_policy["collapse_threshold"]
+
         profile = get_dealshield_profile(profile_id)
         view_model = build_dealshield_view_model(
             project_id=f"policy-{building_type.value}-{subtype}",
@@ -506,6 +547,11 @@ def test_policy_curated_decision_insurance_is_applied_for_hardened_profiles():
             assert first_break.get("break_metric") == first_break_provenance.get("policy_metric")
             assert first_break.get("threshold") == first_break_provenance.get("policy_threshold")
             assert first_break.get("operator") == expected_operator
+            if building_type == BuildingType.INDUSTRIAL:
+                expected_industrial_policy = INDUSTRIAL_POLICY_EXPECTATIONS_BY_PROFILE_ID[profile_id]
+                assert first_break.get("break_metric") == expected_industrial_policy["collapse_metric"]
+                assert first_break.get("operator") == expected_industrial_policy["collapse_operator"]
+                assert first_break.get("threshold") == expected_industrial_policy["collapse_threshold"]
         if first_break_provenance.get("status") == "unavailable":
             assert first_break_provenance.get("reason") != "no_modeled_break_condition"
 
@@ -515,3 +561,4 @@ def test_policy_curated_decision_insurance_is_applied_for_hardened_profiles():
         assert flex_provenance.get("calibration_source") == "decision_insurance_policy.flex_calibration"
         assert flex_provenance.get("band") in {"tight", "moderate", "comfortable"}
         assert view_model.get("flex_before_break_band") in {"tight", "moderate", "comfortable"}
+        assert view_model.get("flex_before_break_band") == flex_provenance.get("band")

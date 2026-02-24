@@ -153,12 +153,12 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
             "label": "Structural +10%",
         },
         "collapse_trigger": {
-            "metric": "value_gap",
+            "metric": "value_gap_pct",
             "operator": "<=",
-            "threshold": 0.0,
-            "scenario_priority": ["base", "conservative", "ugly"],
+            "threshold": -8.0,
+            "scenario_priority": ["base", "conservative", "ugly", "dock_queue_overrun"],
         },
-        "flex_calibration": {"tight_max_pct": 2.5, "moderate_max_pct": 6.0, "fallback_pct": 4.0},
+        "flex_calibration": {"tight_max_pct": 2.0, "moderate_max_pct": 5.0, "fallback_pct": 3.5},
     },
     "industrial_distribution_center_v1": {
         "primary_control_variable": {
@@ -167,12 +167,12 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
             "label": "Electrical +10%",
         },
         "collapse_trigger": {
-            "metric": "value_gap",
+            "metric": "value_gap_pct",
             "operator": "<=",
-            "threshold": 0.0,
-            "scenario_priority": ["base", "conservative", "ugly"],
+            "threshold": -25.0,
+            "scenario_priority": ["base", "conservative", "ugly", "sortation_power_stress"],
         },
-        "flex_calibration": {"tight_max_pct": 1.5, "moderate_max_pct": 4.0, "fallback_pct": 1.0},
+        "flex_calibration": {"tight_max_pct": 1.0, "moderate_max_pct": 3.0, "fallback_pct": 0.8},
     },
     "industrial_manufacturing_v1": {
         "primary_control_variable": {
@@ -181,12 +181,12 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
             "label": "Process MEP +10%",
         },
         "collapse_trigger": {
-            "metric": "value_gap",
+            "metric": "value_gap_pct",
             "operator": "<=",
-            "threshold": 0.0,
-            "scenario_priority": ["base", "conservative", "ugly"],
+            "threshold": -35.0,
+            "scenario_priority": ["base", "conservative", "ugly", "commissioning_rework_cycle"],
         },
-        "flex_calibration": {"tight_max_pct": 1.5, "moderate_max_pct": 4.0, "fallback_pct": 1.0},
+        "flex_calibration": {"tight_max_pct": 0.8, "moderate_max_pct": 2.5, "fallback_pct": 0.5},
     },
     "industrial_flex_space_v1": {
         "primary_control_variable": {
@@ -195,12 +195,12 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
             "label": "Office/Finish Scope +10%",
         },
         "collapse_trigger": {
-            "metric": "value_gap",
+            "metric": "value_gap_pct",
             "operator": "<=",
-            "threshold": 0.0,
-            "scenario_priority": ["base", "conservative", "ugly"],
+            "threshold": -6.0,
+            "scenario_priority": ["base", "conservative", "ugly", "tenant_mix_drift"],
         },
-        "flex_calibration": {"tight_max_pct": 2.5, "moderate_max_pct": 6.0, "fallback_pct": 4.0},
+        "flex_calibration": {"tight_max_pct": 2.2, "moderate_max_pct": 5.5, "fallback_pct": 3.2},
     },
     "industrial_cold_storage_v1": {
         "primary_control_variable": {
@@ -209,12 +209,12 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
             "label": "Equipment +10%",
         },
         "collapse_trigger": {
-            "metric": "value_gap",
+            "metric": "value_gap_pct",
             "operator": "<=",
-            "threshold": 0.0,
-            "scenario_priority": ["base", "conservative", "ugly"],
+            "threshold": -30.0,
+            "scenario_priority": ["base", "conservative", "ugly", "refrigeration_leak_response"],
         },
-        "flex_calibration": {"tight_max_pct": 1.5, "moderate_max_pct": 4.0, "fallback_pct": 1.0},
+        "flex_calibration": {"tight_max_pct": 1.0, "moderate_max_pct": 3.2, "fallback_pct": 0.9},
     },
 }
 

@@ -20,6 +20,39 @@ INDUSTRIAL_PROFILE_IDS = {
     "cold_storage": "industrial_cold_storage_v1",
 }
 
+INDUSTRIAL_POLICY_EXPECTATIONS = {
+    "warehouse": {
+        "tile_id": "structural_plus_10",
+        "collapse_metric": "value_gap_pct",
+        "collapse_operator": "<=",
+        "collapse_threshold": -8.0,
+    },
+    "distribution_center": {
+        "tile_id": "electrical_plus_10",
+        "collapse_metric": "value_gap_pct",
+        "collapse_operator": "<=",
+        "collapse_threshold": -25.0,
+    },
+    "manufacturing": {
+        "tile_id": "process_mep_plus_10",
+        "collapse_metric": "value_gap_pct",
+        "collapse_operator": "<=",
+        "collapse_threshold": -35.0,
+    },
+    "flex_space": {
+        "tile_id": "office_finish_plus_10",
+        "collapse_metric": "value_gap_pct",
+        "collapse_operator": "<=",
+        "collapse_threshold": -6.0,
+    },
+    "cold_storage": {
+        "tile_id": "equipment_plus_10",
+        "collapse_metric": "value_gap_pct",
+        "collapse_operator": "<=",
+        "collapse_threshold": -30.0,
+    },
+}
+
 INDUSTRIAL_SCOPE_PROFILE_IDS = {
     "distribution_center": "industrial_distribution_center_structural_v1",
     "flex_space": "industrial_flex_space_structural_v1",
@@ -324,6 +357,20 @@ def test_industrial_decision_insurance_outputs_and_provenance():
         assert di_provenance.get("profile_id") == expected_profile_id
         assert expected_profile_id in DECISION_INSURANCE_POLICY_BY_PROFILE_ID
         policy_cfg = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[expected_profile_id]
+        expected_policy = INDUSTRIAL_POLICY_EXPECTATIONS[subtype]
+
+        assert policy_cfg["primary_control_variable"]["tile_id"] == expected_policy["tile_id"]
+        collapse_cfg = policy_cfg["collapse_trigger"]
+        assert collapse_cfg.get("metric") == expected_policy["collapse_metric"]
+        assert collapse_cfg.get("operator") == expected_policy["collapse_operator"]
+        assert collapse_cfg.get("threshold") == expected_policy["collapse_threshold"]
+
+        flex_calibration = policy_cfg["flex_calibration"]
+        assert isinstance(flex_calibration, dict)
+        assert isinstance(flex_calibration.get("tight_max_pct"), (int, float))
+        assert isinstance(flex_calibration.get("moderate_max_pct"), (int, float))
+        assert isinstance(flex_calibration.get("fallback_pct"), (int, float))
+        assert float(flex_calibration["tight_max_pct"]) <= float(flex_calibration["moderate_max_pct"])
 
         primary_control = view_model.get("primary_control_variable")
         assert isinstance(primary_control, dict)
@@ -333,21 +380,25 @@ def test_industrial_decision_insurance_outputs_and_provenance():
         assert isinstance(first_break_block, dict)
         if first_break_block.get("status") == "available":
             if first_break_block.get("source") == "decision_insurance_policy.collapse_trigger":
-                collapse_cfg = policy_cfg["collapse_trigger"]
                 expected_operator = collapse_cfg.get("operator") if isinstance(collapse_cfg.get("operator"), str) and collapse_cfg.get("operator").strip() else "<="
                 first_break = view_model.get("first_break_condition")
                 assert isinstance(first_break, dict)
                 assert first_break.get("break_metric") == collapse_cfg.get("metric")
                 assert first_break.get("operator") == expected_operator
                 assert first_break.get("threshold") == collapse_cfg.get("threshold")
+                assert first_break_block.get("policy_metric") == collapse_cfg.get("metric")
+                assert first_break_block.get("policy_threshold") == collapse_cfg.get("threshold")
+                assert first_break_block.get("policy_operator") == expected_operator
         else:
             assert first_break_block.get("reason") != "no_modeled_break_condition"
 
         flex_block = di_provenance.get("flex_before_break_pct")
         assert isinstance(flex_block, dict)
         assert flex_block.get("status") == "available"
+        assert flex_block.get("calibration_source") == "decision_insurance_policy.flex_calibration"
         assert view_model.get("flex_before_break_band") in {"tight", "moderate", "comfortable"}
         assert flex_block.get("band") in {"tight", "moderate", "comfortable"}
+        assert view_model.get("flex_before_break_band") == flex_block.get("band")
 
         model_provenance = view_model.get("provenance")
         assert isinstance(model_provenance, dict)
@@ -394,11 +445,20 @@ def test_industrial_decision_insurance_outputs_and_provenance():
         first_break = view_model.get("first_break_condition")
         if first_break is not None:
             assert isinstance(first_break, dict)
-            assert first_break.get("break_metric") == "value_gap"
-            assert first_break.get("operator") == "<="
-            assert first_break.get("threshold") == 0.0
             assert isinstance(first_break.get("observed_value"), (int, float))
-            assert first_break["observed_value"] <= 0
+            if first_break.get("break_metric") == "value_gap_pct":
+                assert isinstance(first_break.get("observed_value_pct"), (int, float))
+            first_break_operator = first_break.get("operator")
+            first_break_observed = float(first_break["observed_value"])
+            first_break_threshold = float(first_break.get("threshold", 0.0))
+            if first_break_operator == "<=":
+                assert first_break_observed <= first_break_threshold
+            elif first_break_operator == "<":
+                assert first_break_observed < first_break_threshold
+            elif first_break_operator == ">=":
+                assert first_break_observed >= first_break_threshold
+            elif first_break_operator == ">":
+                assert first_break_observed > first_break_threshold
 
         flex_before_break = view_model.get("flex_before_break_pct")
         if flex_before_break is not None:
