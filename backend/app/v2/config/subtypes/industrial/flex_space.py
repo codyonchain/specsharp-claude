@@ -19,6 +19,7 @@ CONFIG = (
         base_cost_per_sf=115,
         cost_range=(100, 135),
         scope_profile="industrial_flex",
+        scope_items_profile="industrial_flex_space_structural_v1",
         dealshield_tile_profile="industrial_flex_space_v1",
         equipment_cost_per_sf=10,
         typical_floors=1,

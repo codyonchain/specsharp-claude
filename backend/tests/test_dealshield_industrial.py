@@ -19,6 +19,11 @@ INDUSTRIAL_PROFILE_IDS = {
     "cold_storage": "industrial_cold_storage_v1",
 }
 
+INDUSTRIAL_SCOPE_PROFILE_IDS = {
+    "distribution_center": "industrial_distribution_center_structural_v1",
+    "flex_space": "industrial_flex_space_structural_v1",
+}
+
 
 def _resolve_metric_ref(payload, metric_ref):
     current = payload
@@ -40,6 +45,20 @@ def _profile_item_keys(profile_id: str):
     return keys
 
 
+def _payload_system_names(payload):
+    scope_items = payload.get("scope_items")
+    assert isinstance(scope_items, list)
+    assert scope_items
+    assert any(isinstance(item.get("systems"), list) and item.get("systems") for item in scope_items)
+
+    return [
+        str(system.get("name", "")).lower()
+        for trade in scope_items
+        for system in (trade.get("systems") or [])
+        if isinstance(system, dict)
+    ]
+
+
 def test_industrial_subtypes_define_deterministic_dealshield_profile_ids():
     for subtype, expected_profile_id in INDUSTRIAL_PROFILE_IDS.items():
         config = get_building_config(BuildingType.INDUSTRIAL, subtype)
@@ -51,6 +70,13 @@ def test_industrial_manufacturing_uses_structural_scope_items_profile():
     config = get_building_config(BuildingType.INDUSTRIAL, "manufacturing")
     assert config is not None
     assert config.scope_items_profile == "industrial_manufacturing_structural_v1"
+
+
+def test_industrial_distribution_center_and_flex_space_use_scope_items_profiles():
+    for subtype, expected_profile_id in INDUSTRIAL_SCOPE_PROFILE_IDS.items():
+        config = get_building_config(BuildingType.INDUSTRIAL, subtype)
+        assert config is not None
+        assert config.scope_items_profile == expected_profile_id
 
 
 def test_industrial_manufacturing_scope_profile_is_not_warehouse_clone():
@@ -70,6 +96,37 @@ def test_industrial_manufacturing_scope_profile_is_not_warehouse_clone():
         "dock_pits_loading_aprons",
         "warehouse_floor_sealers",
     }.isdisjoint(manufacturing_keys)
+
+
+def test_industrial_distribution_center_and_flex_scope_profiles_are_subtype_authored():
+    warehouse_keys = _profile_item_keys("industrial_warehouse_structural_v1")
+    distribution_center_keys = _profile_item_keys("industrial_distribution_center_structural_v1")
+    flex_space_keys = _profile_item_keys("industrial_flex_space_structural_v1")
+
+    assert distribution_center_keys != warehouse_keys
+    assert flex_space_keys != warehouse_keys
+
+    assert {
+        "cross_dock_aprons_and_truck_courts",
+        "material_handling_motor_control_centers",
+        "sortation_conveyor_power_distribution",
+        "dock_door_air_curtains_and_heaters",
+    }.issubset(distribution_center_keys)
+    assert {
+        "dock_pits_loading_aprons",
+        "warehouse_floor_sealers",
+    }.isdisjoint(distribution_center_keys)
+
+    assert {
+        "office_partitions_and_gypsum_assemblies",
+        "storefront_glazing_and_entry_systems",
+        "office_showroom_vav_and_split_systems",
+        "mixed_use_hvac_controls_and_zoning",
+    }.issubset(flex_space_keys)
+    assert {
+        "tilt_wall_shell",
+        "warehouse_floor_sealers",
+    }.isdisjoint(flex_space_keys)
 
 
 def test_industrial_tile_profiles_and_defaults_resolve():
@@ -146,6 +203,42 @@ def test_industrial_manufacturing_emits_scope_items():
     assert any("process hvac" in name for name in all_system_names)
     assert any("motor control centers" in name for name in all_system_names)
     assert any("process water" in name for name in all_system_names)
+
+
+def test_industrial_distribution_center_and_flex_space_emit_subtype_specific_scope_items():
+    distribution_payload = unified_engine.calculate_project(
+        building_type=BuildingType.INDUSTRIAL,
+        subtype="distribution_center",
+        square_footage=120_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+    )
+    distribution_names = _payload_system_names(distribution_payload)
+    assert any("cross-dock aprons" in name for name in distribution_names)
+    assert any("sortation conveyor power" in name for name in distribution_names)
+    assert any("material-handling motor control centers" in name for name in distribution_names)
+    assert {
+        "cross_dock_aprons_and_truck_courts",
+        "sortation_conveyor_power_distribution",
+        "material_handling_motor_control_centers",
+    }.issubset(_profile_item_keys("industrial_distribution_center_structural_v1"))
+
+    flex_payload = unified_engine.calculate_project(
+        building_type=BuildingType.INDUSTRIAL,
+        subtype="flex_space",
+        square_footage=120_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+    )
+    flex_names = _payload_system_names(flex_payload)
+    assert any("office and showroom partitions" in name for name in flex_names)
+    assert any("storefront glazing" in name for name in flex_names)
+    assert any("office/showroom vav and split-system conditioning" in name for name in flex_names)
+    assert {
+        "office_partitions_and_gypsum_assemblies",
+        "storefront_glazing_and_entry_systems",
+        "office_showroom_vav_and_split_systems",
+    }.issubset(_profile_item_keys("industrial_flex_space_structural_v1"))
 
 
 def test_industrial_emits_wave1_dealshield_scenario_snapshots_and_controls():
