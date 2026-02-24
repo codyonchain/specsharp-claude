@@ -77,6 +77,8 @@ CONFIG = (
             "Chicago": 1.20,
             "Miami": 1.12,
         },
+        dealshield_tile_profile="specialty_laboratory_v1",
+        scope_items_profile="specialty_laboratory_structural_v1",
         special_features={
             "clean_room": 150,
             "fume_hoods": 75,
