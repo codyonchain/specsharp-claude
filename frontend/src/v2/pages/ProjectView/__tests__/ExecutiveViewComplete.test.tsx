@@ -461,4 +461,36 @@ describe("ExecutiveViewComplete", () => {
       expect(policyLineMatches.length).toBeGreaterThan(0);
     }
   });
+
+  it("renders industrial canonical decision status/reason/provenance contract", () => {
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject(
+            "industrial",
+            "distribution_center",
+            "industrial_distribution_center_v1"
+          )}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "industrial_distribution_center_v1",
+            "Needs Work",
+            "tight_flex_band"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Investment Decision: Needs Work")).toBeInTheDocument();
+    const policyLineMatches = screen.getAllByText((_, element) => {
+      if (element?.tagName.toLowerCase() !== "p") return false;
+      const text = element.textContent ?? "";
+      return (
+        text.includes("Policy source: dealshield_policy_v1") &&
+        text.includes("decision_insurance_subtype_policy_v1") &&
+        text.includes("reason: tight_flex_band")
+      );
+    });
+    expect(policyLineMatches.length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Scenario" })).toBeInTheDocument();
+  });
 });
