@@ -297,6 +297,45 @@ const HEALTHCARE_POLICY_CONTRACT_CASES = [
   },
 ] as const;
 
+const OFFICE_POLICY_CONTRACT_CASES = [
+  {
+    subtype: "class_a",
+    profileId: "office_class_a_v1",
+    scopeProfileId: "office_class_a_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel: "IC + Lease Velocity + Tenant-Improvement Discipline +11%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 7.0,
+    observedValue: 6.1,
+    flexBeforeBreakPct: 1.8,
+    expectedFlexLabel: "1.80% (Structurally Tight)",
+    baseDscr: 1.38,
+    stressedDscr: 1.14,
+  },
+  {
+    subtype: "class_b",
+    profileId: "office_class_b_v1",
+    scopeProfileId: "office_class_b_structural_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+    primaryControlLabel: "IC + Renewal Risk + Operating Cost Capture +8%",
+    breakScenarioLabel: "Ugly",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: 0.0,
+    observedValue: -42000,
+    flexBeforeBreakPct: 5.2,
+    expectedFlexLabel: "5.20% (Flexible)",
+    baseDscr: 1.44,
+    stressedDscr: 1.2,
+  },
+] as const;
+
 const POLICY_CONTRACT_CASES = [
   {
     buildingType: "restaurant",
@@ -987,8 +1026,27 @@ const buildFlexExposurePolicyPayload = (
   return payload;
 };
 
-const buildSpecialtyPolicyPayload = (
-  input: (typeof SPECIALTY_POLICY_CONTRACT_CASES)[number]
+type SubtypePolicyContractCase = {
+  subtype: string;
+  profileId: string;
+  scopeProfileId: string;
+  decisionStatus: string;
+  decisionReasonCode: string;
+  primaryControlLabel: string;
+  breakScenarioLabel: string;
+  breakMetric: string;
+  breakMetricRef: string;
+  breakOperator: string;
+  threshold: number;
+  observedValue: number;
+  flexBeforeBreakPct: number;
+  expectedFlexLabel: string;
+  baseDscr: number;
+  stressedDscr: number;
+};
+
+const buildSubtypePolicyPayload = (
+  input: SubtypePolicyContractCase
 ) => ({
   profile_id: input.profileId,
   view_model: {
@@ -1168,18 +1226,21 @@ const buildSpecialtyPolicyPayload = (
         base: {
           scenario_label: "Base",
           applied_tile_ids: [],
+          stress_band_pct: 10,
           cost_scalar: 1.0,
           revenue_scalar: 1.0,
         },
         conservative: {
           scenario_label: "Conservative",
           applied_tile_ids: ["cost_plus_10", "revenue_minus_10"],
+          stress_band_pct: 10,
           cost_scalar: 1.1,
           revenue_scalar: 0.9,
         },
         ugly: {
           scenario_label: "Ugly",
           applied_tile_ids: ["cost_plus_10", "revenue_minus_10"],
+          stress_band_pct: 10,
           cost_scalar: 1.15,
           revenue_scalar: 0.88,
         },
@@ -1544,11 +1605,122 @@ describe("DealShieldView", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders explicit office parity for class_a and class_b with canonical decision policy, first-break semantics, DSCR disclosure, and scenario controls", () => {
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_office_policy_contract_0"
+        data={buildSubtypePolicyPayload(OFFICE_POLICY_CONTRACT_CASES[0]) as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    for (const testCase of OFFICE_POLICY_CONTRACT_CASES) {
+      rerender(
+        <DealShieldView
+          projectId={`proj_${testCase.profileId}`}
+          data={buildSubtypePolicyPayload(testCase) as any}
+          loading={false}
+          error={null}
+        />
+      );
+
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      expect(screen.getByText(DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
+      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
+      expect(screen.getByText(testCase.baseDscr.toFixed(2))).toBeInTheDocument();
+      expect(
+        screen.getByText("DSCR and Yield reflect the underwriting/debt terms in this run — see Provenance.")
+      ).toBeInTheDocument();
+
+      const decisionPolicyMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return (
+          text.includes("Decision Policy:") &&
+          text.includes(`Status: ${testCase.decisionStatus}`) &&
+          text.includes(`Reason: ${testCase.decisionReasonCode}`) &&
+          text.includes("Source: dealshield_policy_v1")
+        );
+      });
+      expect(decisionPolicyMatches.length).toBeGreaterThan(0);
+
+      const controlsLineMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return (
+          text.includes(
+            `Tile: ${testCase.profileId} | Content: ${testCase.profileId} | Scope: ${testCase.scopeProfileId}`
+          ) &&
+          text.includes("Stress band: ±10%") &&
+          text.includes("Anchor: Off")
+        );
+      });
+      expect(controlsLineMatches.length).toBeGreaterThan(0);
+      expect(screen.getAllByText("±10%").length).toBeGreaterThan(0);
+
+      if (testCase.breakMetric === "value_gap_pct") {
+        expect(
+          screen.getByText(
+            `Break occurs in ${testCase.breakScenarioLabel}: value-gap percentage crosses threshold.`
+          )
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("%") && !text.includes("$");
+          })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return (
+              text.includes("Threshold:") &&
+              text.includes(testCase.breakOperator) &&
+              text.includes("%") &&
+              !text.includes("$")
+            );
+          })
+        ).toBeInTheDocument();
+      } else {
+        const expectedSummary =
+          testCase.threshold === 0
+            ? `Break occurs in ${testCase.breakScenarioLabel}: value gap turns negative.`
+            : `Break occurs in ${testCase.breakScenarioLabel}: value gap crosses threshold.`;
+        expect(screen.getByText(expectedSummary)).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("$");
+          })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return (
+              text.includes("Threshold:") &&
+              text.includes(testCase.breakOperator) &&
+              text.includes("$")
+            );
+          })
+        ).toBeInTheDocument();
+      }
+    }
+  });
+
   it("renders explicit specialty parity with canonical status/reason, truthful first-break units, and DSCR visibility (including data center)", () => {
     const { rerender } = render(
       <DealShieldView
         projectId="proj_specialty_policy_contract_0"
-        data={buildSpecialtyPolicyPayload(SPECIALTY_POLICY_CONTRACT_CASES[0]) as any}
+        data={buildSubtypePolicyPayload(SPECIALTY_POLICY_CONTRACT_CASES[0]) as any}
         loading={false}
         error={null}
       />
@@ -1558,7 +1730,7 @@ describe("DealShieldView", () => {
       rerender(
         <DealShieldView
           projectId={`proj_${testCase.profileId}`}
-          data={buildSpecialtyPolicyPayload(testCase) as any}
+          data={buildSubtypePolicyPayload(testCase) as any}
           loading={false}
           error={null}
         />
@@ -1633,7 +1805,7 @@ describe("DealShieldView", () => {
     const { rerender } = render(
       <DealShieldView
         projectId="proj_healthcare_policy_contract_0"
-        data={buildSpecialtyPolicyPayload(HEALTHCARE_POLICY_CONTRACT_CASES[0] as any) as any}
+        data={buildSubtypePolicyPayload(HEALTHCARE_POLICY_CONTRACT_CASES[0]) as any}
         loading={false}
         error={null}
       />
@@ -1643,7 +1815,7 @@ describe("DealShieldView", () => {
       rerender(
         <DealShieldView
           projectId={`proj_${testCase.profileId}`}
-          data={buildSpecialtyPolicyPayload(testCase as any) as any}
+          data={buildSubtypePolicyPayload(testCase) as any}
           loading={false}
           error={null}
         />

@@ -93,6 +93,21 @@ const MULTIFAMILY_POLICY_CASES = [
   },
 ] as const;
 
+const OFFICE_POLICY_CASES = [
+  {
+    subtype: "class_a",
+    profileId: "office_class_a_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+  },
+  {
+    subtype: "class_b",
+    profileId: "office_class_b_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+  },
+] as const;
+
 const HEALTHCARE_POLICY_CASES = [
   {
     subtype: "surgical_center",
@@ -638,6 +653,55 @@ describe("ExecutiveViewComplete", () => {
               testCase.subtype,
               testCase.profileId
             )}
+            dealShieldData={buildCrossTypeDealShieldViewModel(
+              testCase.profileId,
+              testCase.decisionStatus,
+              testCase.decisionReasonCode
+            ) as any}
+          />
+        </MemoryRouter>
+      );
+
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      const policyLineMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return (
+          text.includes("Policy source: dealshield_policy_v1") &&
+          text.includes("decision_insurance_subtype_policy_v1") &&
+          text.includes(`reason: ${testCase.decisionReasonCode}`)
+        );
+      });
+      expect(policyLineMatches.length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: "Scenario" })).toBeInTheDocument();
+    }
+  });
+
+  it("keeps canonical decision status/reason/provenance parity for office class_a and class_b", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject(
+            "office",
+            OFFICE_POLICY_CASES[0].subtype,
+            OFFICE_POLICY_CASES[0].profileId
+          )}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            OFFICE_POLICY_CASES[0].profileId,
+            OFFICE_POLICY_CASES[0].decisionStatus,
+            OFFICE_POLICY_CASES[0].decisionReasonCode
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    for (const testCase of OFFICE_POLICY_CASES) {
+      rerender(
+        <MemoryRouter>
+          <ExecutiveViewComplete
+            project={buildCrossTypeProject("office", testCase.subtype, testCase.profileId)}
             dealShieldData={buildCrossTypeDealShieldViewModel(
               testCase.profileId,
               testCase.decisionStatus,
