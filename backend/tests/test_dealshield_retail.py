@@ -7,6 +7,7 @@ from app.v2.config.type_profiles.decision_insurance_policy import (
     DECISION_INSURANCE_POLICY_BY_PROFILE_ID,
     DECISION_INSURANCE_POLICY_ID,
 )
+from app.v2.config.type_profiles.dealshield_content import get_dealshield_content_profile
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.v2.config.type_profiles.dealshield_tiles import retail as retail_tile_profiles
 from app.v2.config.type_profiles.dealshield_content import retail as retail_content_profiles
@@ -80,6 +81,15 @@ def test_retail_registries_and_defaults_are_non_empty_and_deterministic():
     assert retail_tile_profiles.DEALSHIELD_TILE_PROFILES
     assert retail_content_profiles.DEALSHIELD_CONTENT_PROFILES
     assert retail_scope_profiles.SCOPE_ITEM_PROFILES
+
+
+def test_retail_content_profiles_resolve_via_shared_registry_lookup():
+    for expected in RETAIL_PROFILE_MAP.values():
+        profile_id = expected["tile"]
+        direct_profile = get_dealshield_content_profile(profile_id)
+        module_profile = retail_content_profiles.DEALSHIELD_CONTENT_PROFILES[profile_id]
+        assert direct_profile == module_profile
+        assert direct_profile.get("profile_id") == profile_id
 
 
 def test_retail_scope_profiles_meet_depth_floor_and_normalized_shares():
