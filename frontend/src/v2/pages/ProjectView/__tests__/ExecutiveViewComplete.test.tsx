@@ -154,16 +154,16 @@ describe("ExecutiveViewComplete", () => {
     );
 
     expect(screen.getByText("Investment Decision: GO")).toBeInTheDocument();
-    expect(
-      screen.getByText((_, element) => {
-        const text = element?.textContent ?? "";
-        return (
-          text.includes("Policy source: payload_or_decision_summary") &&
-          text.includes("restaurant_policy_v1") &&
-          text.includes("reason: explicit_status_signal")
-        );
-      })
-    ).toBeInTheDocument();
+    const policyLineMatches = screen.getAllByText((_, element) => {
+      if (element?.tagName.toLowerCase() !== "p") return false;
+      const text = element.textContent ?? "";
+      return (
+        text.includes("Policy source: payload_or_decision_summary") &&
+        text.includes("restaurant_policy_v1") &&
+        text.includes("reason: explicit_status_signal")
+      );
+    });
+    expect(policyLineMatches.length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Scenario" })).toBeInTheDocument();
   });
 });

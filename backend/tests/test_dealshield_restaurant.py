@@ -440,3 +440,20 @@ def test_restaurant_special_features_math_and_breakdown_reconcile_for_all_subtyp
         assert feature_key in breakdown_map
         assert breakdown_map[feature_key] == pytest.approx(expected_delta, rel=1e-3)
         assert sum(breakdown_map.values()) == pytest.approx(feature_total, rel=1e-3)
+
+
+def test_restaurant_margin_normalized_trace_emitted_once_for_all_subtypes():
+    for subtype in RESTAURANT_PROFILE_IDS:
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.RESTAURANT,
+            subtype=subtype,
+            square_footage=5_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        margin_traces = [
+            entry
+            for entry in payload.get("calculation_trace", [])
+            if isinstance(entry, dict) and entry.get("step") == "margin_normalized"
+        ]
+        assert len(margin_traces) == 1, f"Expected exactly one margin_normalized trace for subtype={subtype}"

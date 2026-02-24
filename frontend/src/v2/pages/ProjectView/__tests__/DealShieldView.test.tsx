@@ -194,14 +194,14 @@ describe("DealShieldView", () => {
     expect(screen.getAllByText("Conservative").length).toBeGreaterThan(0);
     expect(screen.getByText("$3,000,000")).toBeInTheDocument();
     expect(screen.getByText("$1,500,000")).toBeInTheDocument();
-    expect(
-      screen.getByText((_, element) => {
-        const text = element?.textContent ?? "";
-        return text.includes(
-          `Tile: ${profileId} | Content: ${profileId} | Scope: restaurant_full_service_structural_v1`
-        );
-      })
-    ).toBeInTheDocument();
+    const provenanceMatches = screen.getAllByText((_, element) => {
+      if (element?.tagName.toLowerCase() !== "p") return false;
+      const text = element.textContent ?? "";
+      return text.includes(
+        `Tile: ${profileId} | Content: ${profileId} | Scope: restaurant_full_service_structural_v1`
+      );
+    });
+    expect(provenanceMatches.length).toBeGreaterThan(0);
     expect(screen.queryByText("Decision Insurance unavailable for this profile/run.")).not.toBeInTheDocument();
   });
 

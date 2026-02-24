@@ -369,6 +369,34 @@ def _assert_tile_metrics(payload: Dict[str, Any], metric_refs: List[str], scenar
             )
 
 
+def _build_ownership_bundle_without_trace_side_effects(
+    engine: Any,
+    building_config: Any,
+    ownership_type: OwnershipType,
+    total_project_cost: float,
+    calculation_context: Dict[str, Any],
+) -> Dict[str, Any]:
+    trace = getattr(engine, "calculation_trace", None)
+    if not isinstance(trace, list):
+        return engine._build_ownership_bundle(
+            building_config=building_config,
+            ownership_type=ownership_type,
+            total_project_cost=total_project_cost,
+            calculation_context=calculation_context,
+        )
+
+    trace_snapshot = list(trace)
+    try:
+        return engine._build_ownership_bundle(
+            building_config=building_config,
+            ownership_type=ownership_type,
+            total_project_cost=total_project_cost,
+            calculation_context=calculation_context,
+        )
+    finally:
+        trace[:] = trace_snapshot
+
+
 def build_dealshield_scenarios(
     base_payload: Dict[str, Any],
     building_config: Any,
@@ -437,7 +465,8 @@ def build_dealshield_scenarios(
         total_cost_value = (base_snapshot.get("totals") or {}).get("total_project_cost")
         if not _is_number(total_cost_value):
             raise DealShieldScenarioError("Base total_project_cost missing or invalid after cost anchor")
-        bundle = engine._build_ownership_bundle(
+        bundle = _build_ownership_bundle_without_trace_side_effects(
+            engine=engine,
             building_config=building_config,
             ownership_type=ownership_type,
             total_project_cost=total_cost_value,
@@ -603,7 +632,8 @@ def build_dealshield_scenarios(
         total_cost_value = (scenario_payload.get("totals") or {}).get("total_project_cost")
         if not _is_number(total_cost_value):
             raise DealShieldScenarioError("Scenario total_project_cost missing or invalid")
-        bundle = engine._build_ownership_bundle(
+        bundle = _build_ownership_bundle_without_trace_side_effects(
+            engine=engine,
             building_config=building_config,
             ownership_type=ownership_type,
             total_project_cost=total_cost_value,

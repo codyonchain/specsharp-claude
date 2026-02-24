@@ -232,9 +232,9 @@ def test_margin_normalized_noi_is_revenue_minus_opex():
     assert noi == pytest.approx(round(derived_noi, 2), abs=0.01), "Net income should match revenue minus expenses"
 
     margin_traces = [entry for entry in result["calculation_trace"] if entry["step"] == "margin_normalized"]
-    assert margin_traces, "Margin normalization trace entry missing"
+    assert len(margin_traces) == 1, "Margin normalization trace entry missing or duplicated"
     expected_margin = get_margin_pct(BuildingType.RESTAURANT, "full_service")
-    assert margin_traces[-1]["data"]["margin_pct"] == pytest.approx(expected_margin, rel=1e-4)
+    assert margin_traces[0]["data"]["margin_pct"] == pytest.approx(expected_margin, rel=1e-4)
 
     trace_steps = [entry for entry in result["calculation_trace"] if entry["step"] == "noi_derived"]
 
