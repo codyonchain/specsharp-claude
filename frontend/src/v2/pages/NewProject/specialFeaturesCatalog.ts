@@ -64,6 +64,32 @@ export const RESTAURANT_FEATURE_COSTS_BY_SUBTYPE: Record<
   },
 };
 
+export const HOSPITALITY_SUBTYPES = [
+  "limited_service_hotel",
+  "full_service_hotel",
+] as const;
+
+export type HospitalitySubtype = (typeof HOSPITALITY_SUBTYPES)[number];
+
+export const HOSPITALITY_FEATURE_COSTS_BY_SUBTYPE: Record<
+  HospitalitySubtype,
+  Record<string, number>
+> = {
+  limited_service_hotel: {
+    breakfast_area: 20,
+    fitness_center: 15,
+    business_center: 10,
+    pool: 25,
+  },
+  full_service_hotel: {
+    ballroom: 50,
+    restaurant: 75,
+    spa: 60,
+    conference_center: 45,
+    rooftop_bar: 55,
+  },
+};
+
 const RESTAURANT_FEATURE_METADATA: Record<
   string,
   { name: string; description: string }
@@ -162,6 +188,48 @@ const RESTAURANT_FEATURE_METADATA: Record<
   },
 };
 
+const HOSPITALITY_FEATURE_METADATA: Record<
+  string,
+  { name: string; description: string }
+> = {
+  breakfast_area: {
+    name: "Breakfast Area",
+    description: "Guest breakfast area with serving line and seating support buildout.",
+  },
+  fitness_center: {
+    name: "Fitness Center",
+    description: "Dedicated fitness room with flooring, ventilation, and equipment-ready utilities.",
+  },
+  business_center: {
+    name: "Business Center",
+    description: "Shared business center with workstations, print area, and connectivity infrastructure.",
+  },
+  pool: {
+    name: "Pool",
+    description: "Hospitality pool buildout with deck, life-safety systems, and support spaces.",
+  },
+  ballroom: {
+    name: "Ballroom",
+    description: "Large event ballroom with premium finishes, lighting, and acoustic treatment.",
+  },
+  restaurant: {
+    name: "Restaurant",
+    description: "On-site restaurant buildout with back-of-house and guest dining infrastructure.",
+  },
+  spa: {
+    name: "Spa",
+    description: "Spa and wellness suite with treatment rooms and specialized MEP requirements.",
+  },
+  conference_center: {
+    name: "Conference Center",
+    description: "Flexible conference center with divisible meeting rooms and AV infrastructure.",
+  },
+  rooftop_bar: {
+    name: "Rooftop Bar",
+    description: "Rooftop bar venue with structural, weatherproofing, and service utility upgrades.",
+  },
+};
+
 export const filterSpecialFeaturesBySubtype = (
   features: SpecialFeatureOption[],
   subtype?: string
@@ -218,6 +286,48 @@ export const RESTAURANT_SPECIAL_FEATURES = createRestaurantSpecialFeatures();
 
 export const getRestaurantSpecialFeatures = (): SpecialFeatureOption[] =>
   RESTAURANT_SPECIAL_FEATURES;
+
+const createHospitalitySpecialFeatures = (): SpecialFeatureOption[] => {
+  const byFeatureId: Record<
+    string,
+    { costPerSFBySubtype: Record<string, number>; allowedSubtypes: string[] }
+  > = {};
+
+  for (const subtype of HOSPITALITY_SUBTYPES) {
+    const entries = HOSPITALITY_FEATURE_COSTS_BY_SUBTYPE[subtype];
+    for (const [featureId, costPerSF] of Object.entries(entries)) {
+      if (!byFeatureId[featureId]) {
+        byFeatureId[featureId] = {
+          costPerSFBySubtype: {},
+          allowedSubtypes: [],
+        };
+      }
+      byFeatureId[featureId].costPerSFBySubtype[subtype] = costPerSF;
+      byFeatureId[featureId].allowedSubtypes.push(subtype);
+    }
+  }
+
+  return Object.entries(byFeatureId)
+    .sort(([featureA], [featureB]) => featureA.localeCompare(featureB))
+    .map(([featureId, featureData]) => {
+      const metadata = HOSPITALITY_FEATURE_METADATA[featureId];
+      return {
+        id: featureId,
+        name: metadata?.name ?? featureId.replace(/_/g, " "),
+        description:
+          metadata?.description ?? "Hospitality subtype specific special feature.",
+        costPerSFBySubtype: featureData.costPerSFBySubtype,
+        allowedSubtypes: HOSPITALITY_SUBTYPES.filter((subtype) =>
+          featureData.allowedSubtypes.includes(subtype)
+        ),
+      };
+    });
+};
+
+export const HOSPITALITY_SPECIAL_FEATURES = createHospitalitySpecialFeatures();
+
+export const getHospitalitySpecialFeatures = (): SpecialFeatureOption[] =>
+  HOSPITALITY_SPECIAL_FEATURES;
 
 const RESTAURANT_KEYWORD_DETECTION: Array<{
   featureId: string;
@@ -281,5 +391,62 @@ export const detectRestaurantFeatureIdsFromDescription = (
   return Array.from(detectedFeatureIds);
 };
 
+const HOSPITALITY_KEYWORD_DETECTION: Array<{
+  featureId: string;
+  patterns: RegExp[];
+}> = [
+  {
+    featureId: "breakfast_area",
+    patterns: [/\bbreakfast area\b/i, /\bcomplimentary breakfast\b/i],
+  },
+  {
+    featureId: "fitness_center",
+    patterns: [/\bfitness center\b/i, /\bhotel gym\b/i],
+  },
+  {
+    featureId: "business_center",
+    patterns: [/\bbusiness center\b/i],
+  },
+  {
+    featureId: "pool",
+    patterns: [/\bpool\b/i],
+  },
+  {
+    featureId: "ballroom",
+    patterns: [/\bballroom\b/i],
+  },
+  {
+    featureId: "restaurant",
+    patterns: [/\bsignature restaurant\b/i, /\bon[-\s]?site restaurant\b/i, /\bhotel restaurant\b/i],
+  },
+  {
+    featureId: "spa",
+    patterns: [/\bspa\b/i],
+  },
+  {
+    featureId: "conference_center",
+    patterns: [/\bconference center\b/i, /\bconference facilities?\b/i],
+  },
+  {
+    featureId: "rooftop_bar",
+    patterns: [/\brooftop bar\b/i, /\broof[\s-]?top bar\b/i],
+  },
+];
+
+export const detectHospitalityFeatureIdsFromDescription = (
+  description: string
+): string[] => {
+  const detectedFeatureIds = new Set<string>();
+  for (const { featureId, patterns } of HOSPITALITY_KEYWORD_DETECTION) {
+    if (patterns.some((pattern) => pattern.test(description))) {
+      detectedFeatureIds.add(featureId);
+    }
+  }
+  return Array.from(detectedFeatureIds);
+};
+
 export const restaurantSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
   filterSpecialFeaturesBySubtype(RESTAURANT_SPECIAL_FEATURES, subtype).length > 0;
+
+export const hospitalitySubtypeHasSpecialFeatures = (subtype?: string): boolean =>
+  filterSpecialFeaturesBySubtype(HOSPITALITY_SPECIAL_FEATURES, subtype).length > 0;

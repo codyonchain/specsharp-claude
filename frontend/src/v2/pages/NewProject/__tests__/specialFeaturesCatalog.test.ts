@@ -1,8 +1,13 @@
 import {
+  HOSPITALITY_FEATURE_COSTS_BY_SUBTYPE,
+  HOSPITALITY_SUBTYPES,
   RESTAURANT_FEATURE_COSTS_BY_SUBTYPE,
   RESTAURANT_SUBTYPES,
+  detectHospitalityFeatureIdsFromDescription,
   filterSpecialFeaturesBySubtype,
+  getHospitalitySpecialFeatures,
   getRestaurantSpecialFeatures,
+  hospitalitySubtypeHasSpecialFeatures,
   restaurantSubtypeHasSpecialFeatures,
 } from "../specialFeaturesCatalog";
 
@@ -46,6 +51,22 @@ const REQUIRED_RESTAURANT_MAPPING = {
     rooftop_bar: 50,
     private_party_room: 30,
     craft_beer_system: 35,
+  },
+} as const;
+
+const REQUIRED_HOSPITALITY_MAPPING = {
+  limited_service_hotel: {
+    breakfast_area: 20,
+    fitness_center: 15,
+    business_center: 10,
+    pool: 25,
+  },
+  full_service_hotel: {
+    ballroom: 50,
+    restaurant: 75,
+    spa: 60,
+    conference_center: 45,
+    rooftop_bar: 55,
   },
 } as const;
 
@@ -97,5 +118,79 @@ describe("restaurant special features catalog", () => {
       expect(restaurantSubtypeHasSpecialFeatures(subtype)).toBe(true);
       expect(filterSpecialFeaturesBySubtype(restaurantFeatures, subtype).length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("hospitality special features catalog", () => {
+  it("is non-empty and matches required subtype mapping keys/values", () => {
+    const hospitalityFeatures = getHospitalitySpecialFeatures();
+    expect(hospitalityFeatures.length).toBeGreaterThan(0);
+    expect(HOSPITALITY_FEATURE_COSTS_BY_SUBTYPE).toEqual(REQUIRED_HOSPITALITY_MAPPING);
+  });
+
+  it("resolves expected feature IDs for every hospitality subtype with no duplicates", () => {
+    const hospitalityFeatures = getHospitalitySpecialFeatures();
+
+    for (const subtype of HOSPITALITY_SUBTYPES) {
+      const expectedIds = Object.keys(REQUIRED_HOSPITALITY_MAPPING[subtype]).sort();
+      const resolvedIds = filterSpecialFeaturesBySubtype(hospitalityFeatures, subtype).map(
+        (feature) => feature.id
+      );
+      const uniqueResolvedIds = Array.from(new Set(resolvedIds));
+
+      expect(uniqueResolvedIds.length).toBe(resolvedIds.length);
+      expect(uniqueResolvedIds.sort()).toEqual(expectedIds);
+    }
+  });
+
+  it("has valid cost-per-subtype entries for all allowed hospitality feature subtype combinations", () => {
+    const hospitalityFeatures = getHospitalitySpecialFeatures();
+
+    for (const feature of hospitalityFeatures) {
+      expect(feature.costPerSFBySubtype).toBeDefined();
+      expect(feature.allowedSubtypes && feature.allowedSubtypes.length > 0).toBe(true);
+
+      for (const subtype of feature.allowedSubtypes || []) {
+        const expectedCost = REQUIRED_HOSPITALITY_MAPPING[
+          subtype as keyof typeof REQUIRED_HOSPITALITY_MAPPING
+        ][feature.id as keyof (typeof REQUIRED_HOSPITALITY_MAPPING)[keyof typeof REQUIRED_HOSPITALITY_MAPPING]];
+
+        expect(typeof expectedCost).toBe("number");
+        expect(expectedCost).toBeGreaterThan(0);
+        expect(feature.costPerSFBySubtype?.[subtype]).toBe(expectedCost);
+      }
+    }
+  });
+
+  it("hospitality subtype helper returns true for both hotel subtypes", () => {
+    expect(hospitalitySubtypeHasSpecialFeatures("limited_service_hotel")).toBe(true);
+    expect(hospitalitySubtypeHasSpecialFeatures("full_service_hotel")).toBe(true);
+  });
+
+  it("detects hospitality feature IDs from limited and full service amenity language", () => {
+    const limitedServiceDetected = detectHospitalityFeatureIdsFromDescription(
+      "breakfast area, fitness center, business center, pool"
+    );
+    expect(limitedServiceDetected).toEqual(
+      expect.arrayContaining([
+        "breakfast_area",
+        "fitness_center",
+        "business_center",
+        "pool",
+      ])
+    );
+
+    const fullServiceDetected = detectHospitalityFeatureIdsFromDescription(
+      "ballroom, conference center, spa, rooftop bar, signature restaurant"
+    );
+    expect(fullServiceDetected).toEqual(
+      expect.arrayContaining([
+        "ballroom",
+        "conference_center",
+        "spa",
+        "rooftop_bar",
+        "restaurant",
+      ])
+    );
   });
 });

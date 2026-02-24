@@ -6,8 +6,10 @@ import { tracer } from '../../utils/traceSystem';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { BuildingTaxonomy } from '../../../core/buildingTaxonomy';
 import {
+  detectHospitalityFeatureIdsFromDescription,
   detectRestaurantFeatureIdsFromDescription,
   filterSpecialFeaturesBySubtype,
+  getHospitalitySpecialFeatures,
   getRestaurantSpecialFeatures,
   type SpecialFeatureOption,
 } from './specialFeaturesCatalog';
@@ -539,6 +541,7 @@ export const NewProject: React.FC = () => {
         { id: 'parking_deck', name: 'Parking Deck', cost: 4000000, description: 'Structured parking' }
       ],
       restaurant: getRestaurantSpecialFeatures(),
+      hospitality: getHospitalitySpecialFeatures(),
     };
     
     return features[buildingType] || [];
@@ -560,6 +563,9 @@ export const NewProject: React.FC = () => {
     if (lower.includes('cold storage')) detectedFeatures.add('cold_storage');
     if (lower.includes('food court')) detectedFeatures.add('food_court');
     for (const featureId of detectRestaurantFeatureIdsFromDescription(desc)) {
+      detectedFeatures.add(featureId);
+    }
+    for (const featureId of detectHospitalityFeatureIdsFromDescription(desc)) {
       detectedFeatures.add(featureId);
     }
     
