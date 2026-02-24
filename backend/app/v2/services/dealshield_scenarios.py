@@ -27,6 +27,11 @@ WAVE1_PROFILES: Set[str] = {
     "multifamily_market_rate_apartments_v1",
     "multifamily_luxury_apartments_v1",
     "multifamily_affordable_housing_v1",
+    "specialty_data_center_v1",
+    "specialty_laboratory_v1",
+    "specialty_self_storage_v1",
+    "specialty_car_dealership_v1",
+    "specialty_broadcast_facility_v1",
 }
 
 _ALLOWED_STRESS_BAND_PCTS: Set[int] = {10, 7, 5, 3}

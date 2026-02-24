@@ -15,6 +15,105 @@ const HOSPITALITY_PROFILE_IDS = [
   "hospitality_full_service_hotel_v1",
 ];
 
+const SPECIALTY_POLICY_CONTRACT_CASES = [
+  {
+    subtype: "data_center",
+    profileId: "specialty_data_center_v1",
+    scopeProfileId: "specialty_data_center_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel: "Utility + Backup Power Train +15%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 18.0,
+    observedValue: 16.4,
+    flexBeforeBreakPct: 1.6,
+    expectedFlexLabel: "1.60% (Structurally Tight)",
+    baseDscr: 1.42,
+    stressedDscr: 1.18,
+  },
+  {
+    subtype: "laboratory",
+    profileId: "specialty_laboratory_v1",
+    scopeProfileId: "specialty_laboratory_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+    primaryControlLabel: "MEP Validation and Containment Fit-Out +12%",
+    breakScenarioLabel: "Ugly",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: 0.0,
+    observedValue: -125000,
+    flexBeforeBreakPct: 1.9,
+    expectedFlexLabel: "1.90% (Structurally Tight)",
+    baseDscr: 1.35,
+    stressedDscr: 1.06,
+  },
+  {
+    subtype: "self_storage",
+    profileId: "specialty_self_storage_v1",
+    scopeProfileId: "specialty_self_storage_structural_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+    primaryControlLabel: "Lease-Up Velocity and Security Stack +10%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 8.0,
+    observedValue: 10.8,
+    flexBeforeBreakPct: 5.4,
+    expectedFlexLabel: "5.40% (Flexible)",
+    baseDscr: 1.58,
+    stressedDscr: 1.33,
+  },
+  {
+    subtype: "car_dealership",
+    profileId: "specialty_car_dealership_v1",
+    scopeProfileId: "specialty_car_dealership_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel: "Showroom Envelope + Service Bay Equipment +11%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 22.0,
+    observedValue: 20.5,
+    flexBeforeBreakPct: 1.8,
+    expectedFlexLabel: "1.80% (Structurally Tight)",
+    baseDscr: 1.41,
+    stressedDscr: 1.14,
+  },
+  {
+    subtype: "broadcast_facility",
+    profileId: "specialty_broadcast_facility_v1",
+    scopeProfileId: "specialty_broadcast_facility_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+    primaryControlLabel: "Acoustics Isolation + Studio Systems +9%",
+    breakScenarioLabel: "Ugly",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: 50000.0,
+    observedValue: 42000,
+    flexBeforeBreakPct: 3.1,
+    expectedFlexLabel: "3.10% (Moderate)",
+    baseDscr: 1.31,
+    stressedDscr: 1.09,
+  },
+] as const;
+
+const SPECIALTY_DECISION_REASON_TEXT: Record<string, string> = {
+  low_flex_before_break_buffer: "Status reflects low flex-before-break buffer.",
+  tight_flex_band: "Status reflects a tight flex-before-break band.",
+  base_value_gap_positive: "Base value gap is positive under current assumptions.",
+};
+
 const POLICY_CONTRACT_CASES = [
   {
     buildingType: "restaurant",
@@ -705,6 +804,233 @@ const buildFlexExposurePolicyPayload = (
   return payload;
 };
 
+const buildSpecialtyPolicyPayload = (
+  input: (typeof SPECIALTY_POLICY_CONTRACT_CASES)[number]
+) => ({
+  profile_id: input.profileId,
+  view_model: {
+    profile_id: input.profileId,
+    tile_profile_id: input.profileId,
+    content_profile_id: input.profileId,
+    scope_items_profile_id: input.scopeProfileId,
+    decision_status: input.decisionStatus,
+    decision_reason_code: input.decisionReasonCode,
+    decision_status_provenance: {
+      status_source: "dealshield_policy_v1",
+      policy_id: "decision_insurance_subtype_policy_v1",
+    },
+    columns: [
+      {
+        id: "total_cost",
+        label: "Total Project Cost",
+        metric_ref: "totals.total_project_cost",
+      },
+      {
+        id: "annual_revenue",
+        label: "Annual Revenue",
+        metric_ref: "revenue_analysis.annual_revenue",
+      },
+      {
+        id: "dscr",
+        label: "DSCR",
+        metric_ref: "ownership_analysis.debt_metrics.calculated_dscr",
+      },
+      {
+        id: "break_metric",
+        label: "Break Metric",
+        metric_ref: input.breakMetricRef,
+      },
+    ],
+    rows: [
+      {
+        scenario_id: "base",
+        label: "Base",
+        cells: [
+          { col_id: "total_cost", value: 24000000, metric_ref: "totals.total_project_cost" },
+          { col_id: "annual_revenue", value: 6200000, metric_ref: "revenue_analysis.annual_revenue" },
+          { col_id: "dscr", value: input.baseDscr, metric_ref: "ownership_analysis.debt_metrics.calculated_dscr" },
+          {
+            col_id: "break_metric",
+            value: input.breakMetric === "value_gap_pct" ? input.observedValue + 8.0 : input.observedValue + 200000,
+            metric_ref: input.breakMetricRef,
+          },
+        ],
+      },
+      {
+        scenario_id: "conservative",
+        label: "Conservative",
+        cells: [
+          { col_id: "total_cost", value: 26400000, metric_ref: "totals.total_project_cost" },
+          { col_id: "annual_revenue", value: 5600000, metric_ref: "revenue_analysis.annual_revenue" },
+          { col_id: "dscr", value: input.stressedDscr, metric_ref: "ownership_analysis.debt_metrics.calculated_dscr" },
+          { col_id: "break_metric", value: input.observedValue, metric_ref: input.breakMetricRef },
+        ],
+      },
+      {
+        scenario_id: "ugly",
+        label: "Ugly",
+        cells: [
+          { col_id: "total_cost", value: 27600000, metric_ref: "totals.total_project_cost" },
+          { col_id: "annual_revenue", value: 5340000, metric_ref: "revenue_analysis.annual_revenue" },
+          {
+            col_id: "dscr",
+            value: Math.max(0.85, Number((input.stressedDscr - 0.12).toFixed(2))),
+            metric_ref: "ownership_analysis.debt_metrics.calculated_dscr",
+          },
+          {
+            col_id: "break_metric",
+            value: input.breakMetric === "value_gap_pct" ? input.observedValue - 3.0 : input.observedValue - 110000,
+            metric_ref: input.breakMetricRef,
+          },
+        ],
+      },
+    ],
+    content: {
+      profile_id: input.profileId,
+      fastest_change: {
+        drivers: [
+          { tile_id: "cost_plus_10", label: "Confirm hard costs +/-10%" },
+          { tile_id: "revenue_minus_10", label: "Validate demand revenue +/-10%" },
+        ],
+      },
+      most_likely_wrong: [
+        {
+          id: "mlw_1",
+          text: `${input.subtype} downside concentration is under-modeled.`,
+          why: "Single-driver sensitivity dominates downside exposure.",
+          driver_tile_id: "cost_plus_10",
+        },
+      ],
+      question_bank: [
+        {
+          id: "qb_1",
+          driver_tile_id: "cost_plus_10",
+          questions: ["Which risk assumptions remain placeholder-based?"],
+        },
+      ],
+      red_flags_actions: [
+        {
+          id: "rf_1",
+          flag: "Commissioning scope is partially unresolved.",
+          action: "Lock mission-critical scopes before procurement freeze.",
+        },
+      ],
+    },
+    primary_control_variable: {
+      tile_id: "policy_primary_tile",
+      label: input.primaryControlLabel,
+      impact_pct: 8.2,
+      delta_cost: 145000,
+      severity: "High",
+    },
+    first_break_condition: {
+      scenario_id: input.breakScenarioLabel.toLowerCase().replace(/\s+/g, "_"),
+      scenario_label: input.breakScenarioLabel,
+      break_metric: input.breakMetric,
+      operator: input.breakOperator,
+      threshold: input.threshold,
+      observed_value: input.observedValue,
+      observed_value_pct: input.breakMetric === "value_gap_pct" ? input.observedValue : -1.1,
+    },
+    flex_before_break_pct: input.flexBeforeBreakPct,
+    exposure_concentration_pct: 61.2,
+    ranked_likely_wrong: [
+      {
+        id: "mlw_1",
+        text: `${input.subtype} downside concentration is under-modeled.`,
+        why: "Single-driver sensitivity dominates downside exposure.",
+        driver_tile_id: "cost_plus_10",
+        impact_pct: 8.2,
+        severity: "High",
+      },
+    ],
+    decision_insurance_provenance: {
+      enabled: true,
+      profile_id: input.profileId,
+      decision_insurance_policy: {
+        status: "available",
+        source: "decision_insurance_policy",
+        policy_id: "decision_insurance_subtype_policy_v1",
+        profile_id: input.profileId,
+      },
+      primary_control_variable: {
+        status: "available",
+        source: "decision_insurance_policy.primary_control_variable",
+      },
+      first_break_condition: {
+        status: "available",
+        source: "decision_insurance_policy.collapse_trigger",
+        policy_metric: input.breakMetric,
+        policy_threshold: input.threshold,
+        policy_operator: input.breakOperator,
+      },
+      flex_before_break_pct: {
+        status: "available",
+        calibration_source: "decision_insurance_policy.flex_calibration",
+        band:
+          input.flexBeforeBreakPct <= 2.0
+            ? "tight"
+            : input.flexBeforeBreakPct <= 5.0
+              ? "moderate"
+              : "comfortable",
+      },
+      exposure_concentration_pct: { status: "available" },
+      ranked_likely_wrong: { status: "available" },
+    },
+    provenance: {
+      profile_id: input.profileId,
+      content_profile_id: input.profileId,
+      scope_items_profile_id: input.scopeProfileId,
+      scenario_inputs: {
+        base: {
+          scenario_label: "Base",
+          applied_tile_ids: [],
+          cost_scalar: 1.0,
+          revenue_scalar: 1.0,
+        },
+        conservative: {
+          scenario_label: "Conservative",
+          applied_tile_ids: ["cost_plus_10", "revenue_minus_10"],
+          cost_scalar: 1.1,
+          revenue_scalar: 0.9,
+        },
+        ugly: {
+          scenario_label: "Ugly",
+          applied_tile_ids: ["cost_plus_10", "revenue_minus_10"],
+          cost_scalar: 1.15,
+          revenue_scalar: 0.88,
+        },
+      },
+      metric_refs_used: [
+        "totals.total_project_cost",
+        "revenue_analysis.annual_revenue",
+        "ownership_analysis.debt_metrics.calculated_dscr",
+        input.breakMetricRef,
+      ],
+      decision_insurance: {
+        enabled: true,
+        profile_id: input.profileId,
+        decision_insurance_policy: {
+          status: "available",
+          source: "decision_insurance_policy",
+          policy_id: "decision_insurance_subtype_policy_v1",
+          profile_id: input.profileId,
+        },
+        primary_control_variable: { status: "available" },
+        first_break_condition: { status: "available" },
+        flex_before_break_pct: { status: "available" },
+        exposure_concentration_pct: { status: "available" },
+        ranked_likely_wrong: { status: "available" },
+      },
+      dealshield_controls: {
+        stress_band_pct: 10,
+        use_cost_anchor: false,
+        use_revenue_anchor: false,
+      },
+    },
+  },
+});
+
 describe("DealShieldView", () => {
   it("renders restaurant decision status, DI provenance, and backend-shaped scenario rows", () => {
     const profileId = "restaurant_full_service_v1";
@@ -1033,6 +1359,91 @@ describe("DealShieldView", () => {
         return text.includes("Threshold:") && text.includes("<=") && text.includes("-25.0%");
       })
     ).toBeInTheDocument();
+  });
+
+  it("renders explicit specialty parity with canonical status/reason, truthful first-break units, and DSCR visibility (including data center)", () => {
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_specialty_policy_contract_0"
+        data={buildSpecialtyPolicyPayload(SPECIALTY_POLICY_CONTRACT_CASES[0]) as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    for (const testCase of SPECIALTY_POLICY_CONTRACT_CASES) {
+      rerender(
+        <DealShieldView
+          projectId={`proj_${testCase.profileId}`}
+          data={buildSpecialtyPolicyPayload(testCase) as any}
+          loading={false}
+          error={null}
+        />
+      );
+
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      expect(screen.getByText(SPECIALTY_DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
+      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
+      expect(screen.getByText(testCase.baseDscr.toFixed(2))).toBeInTheDocument();
+      expect(
+        screen.getByText("DSCR and Yield reflect the underwriting/debt terms in this run — see Provenance.")
+      ).toBeInTheDocument();
+
+      if (testCase.breakMetric === "value_gap_pct") {
+        expect(
+          screen.getByText(
+            `Break occurs in ${testCase.breakScenarioLabel}: value-gap percentage crosses threshold.`
+          )
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("%") && !text.includes("$");
+          })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return (
+              text.includes("Threshold:") &&
+              text.includes(testCase.breakOperator) &&
+              text.includes("%") &&
+              !text.includes("$")
+            );
+          })
+        ).toBeInTheDocument();
+      } else {
+        const expectedSummary =
+          testCase.threshold === 0
+            ? `Break occurs in ${testCase.breakScenarioLabel}: value gap turns negative.`
+            : `Break occurs in ${testCase.breakScenarioLabel}: value gap crosses threshold.`;
+        expect(screen.getByText(expectedSummary)).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("$");
+          })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return (
+              text.includes("Threshold:") &&
+              text.includes(testCase.breakOperator) &&
+              text.includes("$")
+            );
+          })
+        ).toBeInTheDocument();
+      }
+    }
   });
 
   it("renders flex and exposure as backend percent units without multiplying by 100", () => {

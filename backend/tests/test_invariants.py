@@ -17,6 +17,7 @@ from app.v2.config.type_profiles.decision_insurance_policy import (
     DECISION_INSURANCE_POLICY_BY_PROFILE_ID,
     DECISION_INSURANCE_POLICY_ID,
 )
+from app.v2.config.type_profiles.dealshield_content import specialty as specialty_content
 from app.v2.services.dealshield_service import build_dealshield_view_model
 
 INDUSTRIAL_POLICY_EXPECTATIONS_BY_PROFILE_ID = {
@@ -477,6 +478,11 @@ def test_policy_curated_decision_insurance_is_applied_for_hardened_profiles():
         (BuildingType.INDUSTRIAL, "manufacturing", 120_000),
         (BuildingType.INDUSTRIAL, "flex_space", 120_000),
         (BuildingType.INDUSTRIAL, "cold_storage", 120_000),
+        (BuildingType.SPECIALTY, "data_center", 110_000),
+        (BuildingType.SPECIALTY, "laboratory", 70_000),
+        (BuildingType.SPECIALTY, "self_storage", 90_000),
+        (BuildingType.SPECIALTY, "car_dealership", 65_000),
+        (BuildingType.SPECIALTY, "broadcast_facility", 60_000),
     ]
 
     for building_type, subtype, square_footage in profile_inputs:
@@ -622,3 +628,44 @@ def test_multifamily_policy_contract_is_explicit_for_first_break_and_flex_band()
         assert flex_provenance.get("calibration_source") == "decision_insurance_policy.flex_calibration"
         assert flex_provenance.get("band") in {"tight", "moderate", "comfortable"}
         assert view_model.get("flex_before_break_band") == flex_provenance.get("band")
+
+
+def test_specialty_profiles_are_wired_and_content_is_subtype_specific():
+    specialty_cases = {
+        "data_center": {
+            "tile_profile": "specialty_data_center_v1",
+            "scope_profile": "specialty_data_center_structural_v1",
+        },
+        "laboratory": {
+            "tile_profile": "specialty_laboratory_v1",
+            "scope_profile": "specialty_laboratory_structural_v1",
+        },
+        "self_storage": {
+            "tile_profile": "specialty_self_storage_v1",
+            "scope_profile": "specialty_self_storage_structural_v1",
+        },
+        "car_dealership": {
+            "tile_profile": "specialty_car_dealership_v1",
+            "scope_profile": "specialty_car_dealership_structural_v1",
+        },
+        "broadcast_facility": {
+            "tile_profile": "specialty_broadcast_facility_v1",
+            "scope_profile": "specialty_broadcast_facility_structural_v1",
+        },
+    }
+
+    first_mlw_texts = []
+    for subtype, expected in specialty_cases.items():
+        cfg = get_building_config(BuildingType.SPECIALTY, subtype)
+        assert cfg is not None
+        assert cfg.dealshield_tile_profile == expected["tile_profile"]
+        assert cfg.scope_items_profile == expected["scope_profile"]
+
+        profile = get_dealshield_profile(expected["tile_profile"])
+        assert profile.get("profile_id") == expected["tile_profile"]
+        content = specialty_content.DEALSHIELD_CONTENT_PROFILES[expected["tile_profile"]]
+        mlw = content.get("most_likely_wrong")
+        assert isinstance(mlw, list) and mlw
+        first_mlw_texts.append(mlw[0].get("text"))
+
+    assert len(first_mlw_texts) == len(set(first_mlw_texts))

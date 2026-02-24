@@ -67,6 +67,8 @@ CONFIG = (
             "Chicago": 1.10,
             "Miami": 1.05,
         },
+        dealshield_tile_profile="specialty_self_storage_v1",
+        scope_items_profile="specialty_self_storage_structural_v1",
         special_features={
             "climate_control": 20,
             "vehicle_storage": 15,

@@ -69,6 +69,8 @@ CONFIG = (
             "Chicago": 1.15,
             "Miami": 1.10,
         },
+        dealshield_tile_profile="specialty_data_center_v1",
+        scope_items_profile="specialty_data_center_structural_v1",
         special_features={
             "tier_4_certification": 200,
             "redundant_power": 150,

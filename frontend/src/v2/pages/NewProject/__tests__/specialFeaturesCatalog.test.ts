@@ -4,9 +4,11 @@ import {
   RESTAURANT_FEATURE_COSTS_BY_SUBTYPE,
   RESTAURANT_SUBTYPES,
   detectHospitalityFeatureIdsFromDescription,
+  detectSpecialtyFeatureIdsFromDescription,
   filterSpecialFeaturesBySubtype,
   getHospitalitySpecialFeatures,
   getRestaurantSpecialFeatures,
+  getSpecialtySpecialFeatures,
   hospitalitySubtypeHasSpecialFeatures,
   restaurantSubtypeHasSpecialFeatures,
 } from "../specialFeaturesCatalog";
@@ -69,6 +71,23 @@ const REQUIRED_HOSPITALITY_MAPPING = {
     rooftop_bar: 55,
   },
 } as const;
+
+const resolveFeatureCostPerSF = (
+  feature: ReturnType<typeof getSpecialtySpecialFeatures>[number],
+  subtype: string
+): number => {
+  const subtypeCost =
+    feature.costPerSFBySubtype && subtype in feature.costPerSFBySubtype
+      ? feature.costPerSFBySubtype[subtype]
+      : undefined;
+  if (typeof subtypeCost === "number" && Number.isFinite(subtypeCost)) {
+    return subtypeCost;
+  }
+  if (typeof feature.costPerSF === "number" && Number.isFinite(feature.costPerSF)) {
+    return feature.costPerSF;
+  }
+  return 0;
+};
 
 describe("restaurant special features catalog", () => {
   it("is non-empty and matches required subtype mapping keys/values", () => {
@@ -192,5 +211,75 @@ describe("hospitality special features catalog", () => {
         "restaurant",
       ])
     );
+  });
+});
+
+describe("specialty special feature catalog", () => {
+  it("exposes operationally credible data-center features with subtype filtering", () => {
+    const allSpecialtyFeatures = getSpecialtySpecialFeatures();
+    const dataCenterFeatures = filterSpecialFeaturesBySubtype(
+      allSpecialtyFeatures,
+      "data_center"
+    );
+    const dataCenterIds = dataCenterFeatures.map((feature) => feature.id);
+
+    expect(dataCenterIds).toEqual(
+      expect.arrayContaining([
+        "utility_substation",
+        "generator_plant",
+        "chilled_water_plant",
+        "dual_fiber_meet_me_room",
+        "integrated_commissioning",
+      ])
+    );
+    expect(
+      dataCenterFeatures.every((feature) =>
+        feature.allowedSubtypes?.includes("data_center")
+      )
+    ).toBe(true);
+  });
+
+  it("detects specialty feature IDs from description cues", () => {
+    const detected = detectSpecialtyFeatureIdsFromDescription(
+      "Tier IV data center with dedicated substation, generator plant, chilled water CRAH loop, dual fiber meet-me room, and integrated commissioning."
+    );
+
+    expect(detected).toEqual(
+      expect.arrayContaining([
+        "utility_substation",
+        "generator_plant",
+        "chilled_water_plant",
+        "dual_fiber_meet_me_room",
+        "integrated_commissioning",
+      ])
+    );
+  });
+
+  it("increases total modeled special-feature cost when specialty features are selected", () => {
+    const squareFootage = 100_000;
+    const subtype = "data_center";
+    const applicable = filterSpecialFeaturesBySubtype(
+      getSpecialtySpecialFeatures(),
+      subtype
+    );
+
+    const selected = [
+      "utility_substation",
+      "generator_plant",
+      "chilled_water_plant",
+    ];
+    const selectedCost = applicable
+      .filter((feature) => selected.includes(feature.id))
+      .reduce(
+        (sum, feature) =>
+          sum + resolveFeatureCostPerSF(feature, subtype) * squareFootage,
+        0
+      );
+
+    const baselineTotalCost = 150_000_000;
+    const totalWithFeatures = baselineTotalCost + selectedCost;
+
+    expect(selectedCost).toBeGreaterThan(0);
+    expect(totalWithFeatures).toBeGreaterThan(baselineTotalCost);
   });
 });

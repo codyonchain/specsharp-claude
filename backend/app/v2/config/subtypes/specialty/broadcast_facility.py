@@ -67,6 +67,8 @@ CONFIG = (
             "Chicago": 1.20,
             "Miami": 1.15,
         },
+        dealshield_tile_profile="specialty_broadcast_facility_v1",
+        scope_items_profile="specialty_broadcast_facility_structural_v1",
         special_features={
             "sound_stage": 60,
             "control_room": 45,

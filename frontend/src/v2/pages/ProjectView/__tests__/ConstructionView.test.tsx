@@ -14,6 +14,34 @@ const CROSS_TYPE_SCHEDULE_CASES = [
   { buildingType: "industrial", subtype: "distribution_center" },
 ] as const;
 
+const SPECIALTY_SCHEDULE_CASES = [
+  {
+    subtype: "data_center",
+    sitePhaseLabel: "Utility Interconnect + Foundations",
+    structuralPhaseLabel: "Critical Power + Cooling Plant",
+  },
+  {
+    subtype: "laboratory",
+    sitePhaseLabel: "Lab Utility Rough-In + Foundations",
+    structuralPhaseLabel: "Containment Build + Commissioning",
+  },
+  {
+    subtype: "self_storage",
+    sitePhaseLabel: "Prototype Pads + Foundations",
+    structuralPhaseLabel: "Envelope + Access-Control Buildout",
+  },
+  {
+    subtype: "car_dealership",
+    sitePhaseLabel: "Showroom + Service Slab",
+    structuralPhaseLabel: "Service Equipment + Delivery Court",
+  },
+  {
+    subtype: "broadcast_facility",
+    sitePhaseLabel: "Acoustic Isolation + Foundations",
+    structuralPhaseLabel: "Studio Systems + Transmission Backbone",
+  },
+] as const;
+
 const MULTIFAMILY_SCHEDULE_CASES = [
   { subtype: "market_rate_apartments" },
   { subtype: "luxury_apartments" },
@@ -407,6 +435,69 @@ const buildCrossTypeScheduleProject = (
     },
   }) as any;
 
+const buildSpecialtyScheduleProject = (
+  subtype: (typeof SPECIALTY_SCHEDULE_CASES)[number]["subtype"],
+  scheduleSource: "subtype" | "building_type"
+) => {
+  const fixture = SPECIALTY_SCHEDULE_CASES.find((item) => item.subtype === subtype)!;
+  const project = buildCrossTypeScheduleProject("specialty", subtype, scheduleSource);
+  project.analysis.calculations.construction_schedule.total_months =
+    scheduleSource === "subtype"
+      ? subtype === "data_center"
+        ? 28
+        : subtype === "laboratory"
+          ? 24
+          : subtype === "self_storage"
+            ? 12
+            : subtype === "car_dealership"
+              ? 16
+              : 18
+      : subtype === "data_center"
+        ? 26
+        : subtype === "laboratory"
+          ? 22
+          : subtype === "self_storage"
+            ? 11
+            : subtype === "car_dealership"
+              ? 15
+              : 17;
+  project.analysis.calculations.construction_schedule.phases =
+    scheduleSource === "subtype"
+      ? [
+          {
+            id: "site_foundation",
+            label: fixture.sitePhaseLabel,
+            start_month: 0,
+            duration_months: 6,
+            end_month: 6,
+          },
+          {
+            id: "structural",
+            label: fixture.structuralPhaseLabel,
+            start_month: 4,
+            duration_months: 12,
+            end_month: 16,
+          },
+        ]
+      : [
+          {
+            id: "site_foundation",
+            label: "Specialty Baseline Site Program",
+            start_month: 0,
+            duration_months: 5,
+            end_month: 5,
+          },
+          {
+            id: "structural",
+            label: "Specialty Baseline Structural Program",
+            start_month: 3,
+            duration_months: 10,
+            end_month: 13,
+          },
+        ];
+  return project;
+};
+
 describe("ConstructionView", () => {
   it("renders subtype schedule messaging for restaurant subtype schedules", () => {
     render(<ConstructionView project={buildRestaurantProject("subtype")} />);
@@ -593,6 +684,42 @@ describe("ConstructionView", () => {
       ).toBeInTheDocument();
       expect(screen.getAllByText("Baseline Site Program").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Baseline Structural Program").length).toBeGreaterThan(0);
+    }
+  });
+
+  it("renders truthful specialty schedule-source provenance for all five subtypes, including data center", () => {
+    const { rerender } = render(
+      <ConstructionView
+        project={buildSpecialtyScheduleProject(SPECIALTY_SCHEDULE_CASES[0].subtype, "subtype")}
+      />
+    );
+
+    for (const testCase of SPECIALTY_SCHEDULE_CASES) {
+      rerender(
+        <ConstructionView
+          project={buildSpecialtyScheduleProject(testCase.subtype, "subtype")}
+        />
+      );
+      expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
+      expect(
+        screen.getByText("Timeline is tailored for this subtype profile.")
+      ).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.sitePhaseLabel).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(testCase.structuralPhaseLabel).length).toBeGreaterThan(0);
+
+      rerender(
+        <ConstructionView
+          project={buildSpecialtyScheduleProject(testCase.subtype, "building_type")}
+        />
+      );
+      expect(screen.getByText("Building-type baseline")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Timeline uses building-type baseline (subtype override unavailable)."
+        )
+      ).toBeInTheDocument();
+      expect(screen.getAllByText("Specialty Baseline Site Program").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Specialty Baseline Structural Program").length).toBeGreaterThan(0);
     }
   });
 });

@@ -66,6 +66,8 @@ CONFIG = (
             "Chicago": 1.15,
             "Miami": 1.10,
         },
+        dealshield_tile_profile="specialty_car_dealership_v1",
+        scope_items_profile="specialty_car_dealership_structural_v1",
         special_features={
             "service_center": 45,
             "detail_bay": 25,

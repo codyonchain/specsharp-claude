@@ -216,6 +216,76 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         },
         "flex_calibration": {"tight_max_pct": 1.0, "moderate_max_pct": 3.2, "fallback_pct": 0.9},
     },
+    "specialty_data_center_v1": {
+        "primary_control_variable": {
+            "tile_id": "power_train_redundancy_rework_plus_15",
+            "metric_ref": "trade_breakdown.electrical",
+            "label": "Power Train Redundancy Rework +15%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 20.0,
+            "scenario_priority": ["base", "conservative", "commissioning_failure_window", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.2, "moderate_max_pct": 3.8, "fallback_pct": 1.0},
+    },
+    "specialty_laboratory_v1": {
+        "primary_control_variable": {
+            "tile_id": "validation_air_change_rebalance_plus_12",
+            "metric_ref": "trade_breakdown.mechanical",
+            "label": "Validation Air Change Rebalance +12%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 10.0,
+            "scenario_priority": ["base", "conservative", "validation_retest_cycle", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.5, "moderate_max_pct": 4.2, "fallback_pct": 1.4},
+    },
+    "specialty_self_storage_v1": {
+        "primary_control_variable": {
+            "tile_id": "access_control_and_surveillance_plus_10",
+            "metric_ref": "trade_breakdown.electrical",
+            "label": "Access Control + Surveillance +10%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 5.0,
+            "scenario_priority": ["base", "conservative", "leaseup_drag", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 2.0, "moderate_max_pct": 5.5, "fallback_pct": 2.2},
+    },
+    "specialty_car_dealership_v1": {
+        "primary_control_variable": {
+            "tile_id": "service_bay_process_mep_plus_11",
+            "metric_ref": "trade_breakdown.mechanical",
+            "label": "Service Bay Process MEP +11%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 8.0,
+            "scenario_priority": ["base", "conservative", "service_absorption_slip", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.8, "moderate_max_pct": 4.8, "fallback_pct": 1.9},
+    },
+    "specialty_broadcast_facility_v1": {
+        "primary_control_variable": {
+            "tile_id": "signal_chain_and_power_quality_plus_12",
+            "metric_ref": "trade_breakdown.electrical",
+            "label": "Signal Chain + Power Quality +12%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 12.0,
+            "scenario_priority": ["base", "conservative", "control_room_recommissioning", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.6, "moderate_max_pct": 4.4, "fallback_pct": 1.7},
+    },
 }
 
 

@@ -20,6 +20,11 @@ TARGET_SUBTYPE_EXPECTATIONS = [
     (BuildingType.RESTAURANT, "bar_tavern", 16),
     (BuildingType.HOSPITALITY, "limited_service_hotel", 24),
     (BuildingType.HOSPITALITY, "full_service_hotel", 32),
+    (BuildingType.SPECIALTY, "data_center", 26),
+    (BuildingType.SPECIALTY, "laboratory", 22),
+    (BuildingType.SPECIALTY, "self_storage", 15),
+    (BuildingType.SPECIALTY, "car_dealership", 18),
+    (BuildingType.SPECIALTY, "broadcast_facility", 20),
 ]
 
 
@@ -56,6 +61,7 @@ def test_subtype_schedules_resolve_for_target_verticals(
         (BuildingType.MULTIFAMILY, "student_housing_variant", 30),
         (BuildingType.RESTAURANT, "chef_counter_concept", 14),
         (BuildingType.HOSPITALITY, "unknown_hotel_variant", 30),
+        (BuildingType.SPECIALTY, "unknown_specialty_variant", 27),
     ],
 )
 def test_unknown_subtype_falls_back_to_building_type_schedule(
