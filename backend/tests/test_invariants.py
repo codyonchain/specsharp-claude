@@ -22,8 +22,10 @@ from app.v2.config.type_profiles.decision_insurance_policy import (
     DECISION_INSURANCE_POLICY_ID,
 )
 from app.v2.config.type_profiles.dealshield_content import healthcare as healthcare_content
+from app.v2.config.type_profiles.dealshield_content import office as office_content
 from app.v2.config.type_profiles.dealshield_content import specialty as specialty_content
 from app.v2.config.type_profiles.scope_items import healthcare as healthcare_scope_profiles
+from app.v2.config.type_profiles.scope_items import office as office_scope_profiles
 from app.v2.config.type_profiles.scope_items import specialty as specialty_scope_profiles
 from app.v2.services.dealshield_service import build_dealshield_view_model
 
@@ -79,6 +81,22 @@ HEALTHCARE_PCV_GENERIC_TERMS = {
     "margin control",
     "primary control variable",
     "generic",
+}
+
+OFFICE_PROFILE_IDS = {
+    "class_a": {
+        "tile_profile": "office_class_a_v1",
+        "scope_profile": "office_class_a_structural_v1",
+    },
+    "class_b": {
+        "tile_profile": "office_class_b_v1",
+        "scope_profile": "office_class_b_structural_v1",
+    },
+}
+
+OFFICE_SCOPE_DEPTH_FLOOR = {
+    "class_a": {"structural": 5, "mechanical": 6, "electrical": 6, "plumbing": 5, "finishes": 6},
+    "class_b": {"structural": 5, "mechanical": 5, "electrical": 5, "plumbing": 5, "finishes": 5},
 }
 
 
@@ -775,6 +793,126 @@ def test_specialty_scope_profiles_keep_depth_and_allocation_integrity():
             assert math.isclose(total_share, 1.0, rel_tol=1e-9, abs_tol=1e-9), (
                 f"{profile_id}::{trade_key} share total expected 1.0, got {total_share}"
             )
+
+
+def test_office_profiles_are_wired_and_registries_are_non_empty():
+    assert office_content.DEALSHIELD_CONTENT_PROFILES
+    assert office_scope_profiles.SCOPE_ITEM_PROFILES
+    assert office_scope_profiles.SCOPE_ITEM_DEFAULTS == {
+        subtype: expected["scope_profile"] for subtype, expected in OFFICE_PROFILE_IDS.items()
+    }
+
+    first_mlw_texts = []
+    for subtype, expected in OFFICE_PROFILE_IDS.items():
+        cfg = get_building_config(BuildingType.OFFICE, subtype)
+        assert cfg is not None
+        assert cfg.dealshield_tile_profile == expected["tile_profile"]
+        assert cfg.scope_items_profile == expected["scope_profile"]
+
+        tile_profile = get_dealshield_profile(expected["tile_profile"])
+        assert tile_profile.get("profile_id") == expected["tile_profile"]
+        tile_ids = {
+            tile.get("tile_id")
+            for tile in tile_profile.get("tiles", [])
+            if isinstance(tile, dict) and isinstance(tile.get("tile_id"), str)
+        }
+        assert tile_ids
+
+        content = office_content.DEALSHIELD_CONTENT_PROFILES[expected["tile_profile"]]
+        drivers = content.get("fastest_change", {}).get("drivers")
+        assert isinstance(drivers, list) and len(drivers) == 3
+        for driver in drivers:
+            assert isinstance(driver, dict)
+            assert driver.get("tile_id") in tile_ids
+
+        mlw = content.get("most_likely_wrong")
+        assert isinstance(mlw, list) and len(mlw) >= 3
+        first_mlw_texts.append(mlw[0].get("text"))
+        for entry in mlw:
+            assert isinstance(entry, dict)
+            assert entry.get("driver_tile_id") in tile_ids
+
+        question_bank = content.get("question_bank")
+        assert isinstance(question_bank, list) and len(question_bank) == 3
+        for question_entry in question_bank:
+            assert isinstance(question_entry, dict)
+            assert question_entry.get("driver_tile_id") in tile_ids
+
+    assert len(first_mlw_texts) == len(set(first_mlw_texts))
+
+
+def test_office_scope_profiles_keep_depth_and_allocation_integrity():
+    for subtype, expected in OFFICE_PROFILE_IDS.items():
+        profile_id = expected["scope_profile"]
+        profile = office_scope_profiles.SCOPE_ITEM_PROFILES[profile_id]
+        trade_profiles = profile.get("trade_profiles")
+        assert isinstance(trade_profiles, list) and len(trade_profiles) == 5
+
+        by_trade = {
+            trade.get("trade_key"): trade
+            for trade in trade_profiles
+            if isinstance(trade, dict) and isinstance(trade.get("trade_key"), str)
+        }
+        assert set(by_trade.keys()) == {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+
+        for trade_key, trade in by_trade.items():
+            items = trade.get("items")
+            assert isinstance(items, list)
+            assert len(items) >= OFFICE_SCOPE_DEPTH_FLOOR[subtype][trade_key]
+            total_share = sum(
+                float(item.get("allocation", {}).get("share", 0.0))
+                for item in items
+            )
+            assert math.isclose(total_share, 1.0, rel_tol=1e-9, abs_tol=1e-9), (
+                f"{profile_id}::{trade_key} share total expected 1.0, got {total_share}"
+            )
+
+
+def test_office_no_clone_invariants_across_tiles_content_and_scope():
+    class_a_tile = get_dealshield_profile(OFFICE_PROFILE_IDS["class_a"]["tile_profile"])
+    class_b_tile = get_dealshield_profile(OFFICE_PROFILE_IDS["class_b"]["tile_profile"])
+
+    class_a_primary = class_a_tile.get("tiles", [])[2].get("tile_id")
+    class_b_primary = class_b_tile.get("tiles", [])[2].get("tile_id")
+    assert class_a_primary != class_b_primary
+
+    class_a_rows = {
+        row.get("row_id")
+        for row in class_a_tile.get("derived_rows", [])
+        if isinstance(row, dict)
+    }
+    class_b_rows = {
+        row.get("row_id")
+        for row in class_b_tile.get("derived_rows", [])
+        if isinstance(row, dict)
+    }
+    assert class_a_rows != class_b_rows
+
+    class_a_content = office_content.DEALSHIELD_CONTENT_PROFILES[OFFICE_PROFILE_IDS["class_a"]["tile_profile"]]
+    class_b_content = office_content.DEALSHIELD_CONTENT_PROFILES[OFFICE_PROFILE_IDS["class_b"]["tile_profile"]]
+    assert class_a_content["most_likely_wrong"][0]["text"] != class_b_content["most_likely_wrong"][0]["text"]
+    assert class_a_content["fastest_change"]["drivers"][2]["label"] != class_b_content["fastest_change"]["drivers"][2]["label"]
+
+    class_a_scope = office_scope_profiles.SCOPE_ITEM_PROFILES[OFFICE_PROFILE_IDS["class_a"]["scope_profile"]]
+    class_b_scope = office_scope_profiles.SCOPE_ITEM_PROFILES[OFFICE_PROFILE_IDS["class_b"]["scope_profile"]]
+
+    class_a_signature = tuple(
+        (
+            trade.get("trade_key"),
+            tuple(item.get("key") for item in trade.get("items", []) if isinstance(item, dict)),
+        )
+        for trade in class_a_scope.get("trade_profiles", [])
+        if isinstance(trade, dict)
+    )
+    class_b_signature = tuple(
+        (
+            trade.get("trade_key"),
+            tuple(item.get("key") for item in trade.get("items", []) if isinstance(item, dict)),
+        )
+        for trade in class_b_scope.get("trade_profiles", [])
+        if isinstance(trade, dict)
+    )
+    assert class_a_signature != class_b_signature
 
 
 def test_healthcare_profiles_are_wired_and_content_maps_to_tiles():

@@ -3,6 +3,7 @@ from . import industrial
 from . import healthcare
 from . import hospitality
 from . import multifamily
+from . import office
 from . import restaurant
 
 CIVIC_SCOPE_ITEM_PROFILE_ALIASES = {
@@ -16,6 +17,7 @@ SCOPE_ITEM_PROFILE_SOURCES = [
     healthcare.SCOPE_ITEM_PROFILES,
     hospitality.SCOPE_ITEM_PROFILES,
     multifamily.SCOPE_ITEM_PROFILES,
+    office.SCOPE_ITEM_PROFILES,
     restaurant.SCOPE_ITEM_PROFILES,
 ]
 
@@ -25,5 +27,6 @@ SCOPE_ITEM_DEFAULT_SOURCES = [
     healthcare.SCOPE_ITEM_DEFAULTS,
     hospitality.SCOPE_ITEM_DEFAULTS,
     multifamily.SCOPE_ITEM_DEFAULTS,
+    office.SCOPE_ITEM_DEFAULTS,
     restaurant.SCOPE_ITEM_DEFAULTS,
 ]
