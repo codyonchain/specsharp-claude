@@ -2,6 +2,7 @@ import pytest
 
 from app.v2.config.master_config import BuildingType, ProjectClass, get_building_config
 from app.v2.config.type_profiles.dealshield_content import get_dealshield_content_profile
+from app.v2.config.type_profiles.decision_insurance_policy import DECISION_INSURANCE_POLICY_BY_PROFILE_ID
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.v2.config.type_profiles.dealshield_tiles import restaurant as restaurant_tile_profiles
 from app.v2.config.type_profiles.scope_items import restaurant as restaurant_scope_profiles
@@ -296,6 +297,32 @@ def test_restaurant_decision_insurance_outputs_and_provenance():
         assert isinstance(di_provenance, dict)
         assert di_provenance.get("enabled") is True
         assert di_provenance.get("profile_id") == expected_profile_id
+        assert expected_profile_id in DECISION_INSURANCE_POLICY_BY_PROFILE_ID
+        policy_cfg = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[expected_profile_id]
+
+        primary_control = view_model.get("primary_control_variable")
+        assert isinstance(primary_control, dict)
+        assert primary_control.get("tile_id") == policy_cfg["primary_control_variable"]["tile_id"]
+
+        first_break_block = di_provenance.get("first_break_condition")
+        assert isinstance(first_break_block, dict)
+        if first_break_block.get("status") == "available":
+            if first_break_block.get("source") == "decision_insurance_policy.collapse_trigger":
+                collapse_cfg = policy_cfg["collapse_trigger"]
+                expected_operator = collapse_cfg.get("operator") if isinstance(collapse_cfg.get("operator"), str) and collapse_cfg.get("operator").strip() else "<="
+                first_break = view_model.get("first_break_condition")
+                assert isinstance(first_break, dict)
+                assert first_break.get("break_metric") == collapse_cfg.get("metric")
+                assert first_break.get("operator") == expected_operator
+                assert first_break.get("threshold") == collapse_cfg.get("threshold")
+        else:
+            assert first_break_block.get("reason") != "no_modeled_break_condition"
+
+        flex_block = di_provenance.get("flex_before_break_pct")
+        assert isinstance(flex_block, dict)
+        assert flex_block.get("status") == "available"
+        assert view_model.get("flex_before_break_band") in {"tight", "moderate", "comfortable"}
+        assert flex_block.get("band") in {"tight", "moderate", "comfortable"}
 
         model_provenance = view_model.get("provenance")
         assert isinstance(model_provenance, dict)
