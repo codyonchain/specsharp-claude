@@ -24,8 +24,7 @@ from app.v2.config.master_config import (
     get_building_profile,
 )
 from app.v2.config.construction_schedule import (
-    CONSTRUCTION_SCHEDULES,
-    CONSTRUCTION_SCHEDULE_FALLBACKS,
+    build_construction_schedule as _build_construction_schedule,
 )
 from app.v2.config.type_profiles import scope_items
 # from app.v2.services.financial_analyzer import FinancialAnalyzer  # TODO: Implement this
@@ -402,44 +401,15 @@ def _month_to_quarter_string(d: date) -> str:
     return f"Q{quarter} {d.year}"
 
 
-def build_construction_schedule(building_type: BuildingType) -> Dict[str, Any]:
+def build_construction_schedule(
+    building_type: BuildingType,
+    subtype: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Build the construction schedule payload (total duration + phase timings)
     for the Construction Schedule card.
     """
-    schedule_config = CONSTRUCTION_SCHEDULES.get(building_type)
-    if not schedule_config:
-        fallback_type = CONSTRUCTION_SCHEDULE_FALLBACKS.get(building_type)
-        if fallback_type:
-            schedule_config = CONSTRUCTION_SCHEDULES.get(fallback_type)
-    if not schedule_config:
-        schedule_config = CONSTRUCTION_SCHEDULES.get(BuildingType.OFFICE, {})
-
-    total_months = int(schedule_config.get("total_months", 0) or 0)
-    phases_payload: List[Dict[str, Any]] = []
-    for phase in schedule_config.get("phases", []):
-        start_month = int(phase.get("start_month", 0) or 0)
-        duration = int(phase.get("duration", 0) or 0)
-        end_month = start_month + duration
-        if total_months:
-            end_month = min(end_month, total_months)
-        phase_payload = {
-            "id": phase.get("id"),
-            "label": phase.get("label"),
-            "start_month": start_month,
-            "duration_months": duration,
-            "end_month": end_month,
-        }
-        color = phase.get("color")
-        if color:
-            phase_payload["color"] = color
-        phases_payload.append(phase_payload)
-
-    return {
-        "building_type": building_type.value if isinstance(building_type, BuildingType) else building_type,
-        "total_months": total_months,
-        "phases": phases_payload,
-    }
+    return _build_construction_schedule(building_type=building_type, subtype=subtype)
 
 
 def build_project_timeline(building_type: BuildingType, start_date: Optional[date] = None) -> Dict[str, str]:
@@ -2858,7 +2828,7 @@ class UnifiedEngine:
             }
 
         project_timeline = build_project_timeline(building_enum, None)
-        construction_schedule = build_construction_schedule(building_enum)
+        construction_schedule = build_construction_schedule(building_enum, subtype=subtype)
 
         return {
             'revenue_analysis': {

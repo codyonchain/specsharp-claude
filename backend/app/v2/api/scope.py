@@ -1140,7 +1140,10 @@ async def generate_scope(
         # Create project with new schema
         import json
         project_timeline = build_project_timeline(building_type_enum, None)
-        construction_schedule = build_construction_schedule(building_type_enum)
+        construction_schedule = build_construction_schedule(
+            building_type_enum,
+            subtype=parsed.get('subtype'),
+        )
         calculations_block = None
         if isinstance(result, dict) and 'calculations' in result:
             calculations_block = result['calculations']

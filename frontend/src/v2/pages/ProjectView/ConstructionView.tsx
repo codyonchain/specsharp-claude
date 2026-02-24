@@ -20,6 +20,20 @@ type TradeCostSplit = {
 
 type AnyRecord = Record<string, any>;
 
+const toRecord = (value: unknown): AnyRecord =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as AnyRecord)
+    : {};
+
+const coalesceRecord = (...candidates: unknown[]): AnyRecord => {
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+      return candidate as AnyRecord;
+    }
+  }
+  return {};
+};
+
 const normalizeTradeCostSplit = (split: TradeCostSplit): TradeCostSplit => {
   const { materials, labor, equipment } = split;
   const total = materials + labor + equipment || 1;
@@ -444,6 +458,14 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
     .join(' • ');
 
   const scenarioCalc = analysisRecord?.calculations || projectRecord?.calculation_data || {};
+  const scenarioDealShieldBundle = coalesceRecord(
+    scenarioCalc?.dealshield_scenarios,
+    scenarioCalc?.dealShieldScenarios,
+    analysisRecord?.dealshield_scenarios,
+    analysisRecord?.dealShieldScenarios,
+    projectRecord?.calculation_data?.dealshield_scenarios,
+    projectRecord?.calculation_data?.dealShieldScenarios
+  );
   const scenarioReturn =
     scenarioCalc?.ownership_analysis?.return_metrics ||
     scenarioCalc?.ownershipAnalysis?.returnMetrics ||
@@ -1081,6 +1103,27 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
   };
 
   const timelineMonthsLabel = `${totalMonths} Month${totalMonths === 1 ? '' : 's'} Timeline`;
+  const scheduleSource =
+    constructionSchedule?.schedule_source === 'subtype' ? 'subtype' : 'building_type';
+  const scheduleSubtype =
+    typeof constructionSchedule?.subtype === 'string' && constructionSchedule.subtype.trim()
+      ? constructionSchedule.subtype.trim()
+      : null;
+  const scheduleBuildingType =
+    typeof constructionSchedule?.building_type === 'string' && constructionSchedule.building_type.trim()
+      ? constructionSchedule.building_type.trim()
+      : (typeof buildingTypeRaw === 'string' ? buildingTypeRaw : null);
+  const scheduleSourceBadgeText =
+    scheduleSource === 'subtype' ? 'Subtype schedule' : 'Building-type baseline';
+  const scheduleSourceDescription =
+    scheduleSource === 'subtype'
+      ? 'Timeline is tailored for this subtype profile.'
+      : 'Timeline uses building-type baseline (subtype override unavailable).';
+  const scheduleSourceTitleParts = [
+    scheduleSourceBadgeText,
+    scheduleBuildingType ? `type: ${scheduleBuildingType}` : null,
+    scheduleSubtype ? `subtype: ${scheduleSubtype}` : null,
+  ].filter(Boolean);
 
   const handleExportPdf = async () => {
     try {
@@ -1280,16 +1323,22 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
           {/* Construction Schedule */}
           <div className="bg-gray-50 rounded-lg p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-semibold text-gray-900">Construction Schedule</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-gray-900">Construction Schedule</h3>
+                <span
+                  className="inline-flex items-center rounded-full border border-gray-300 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-700"
+                  title={scheduleSourceTitleParts.join(' • ')}
+                >
+                  {scheduleSourceBadgeText}
+                </span>
+              </div>
               <span className="text-sm text-gray-500 flex items-center gap-1">
                 <Clock className="h-4 w-4" />
                 {timelineMonthsLabel}
               </span>
             </div>
             <p className="text-sm text-gray-600 mb-4">Phased timeline with trade overlap optimization</p>
-            <p className="text-xs text-gray-500 mb-4">
-              Schedule shown is a planning baseline by building type. It does not yet reflect subtype-specific permitting, procurement, or financing-timing variance.
-            </p>
+            <p className="text-xs text-gray-500 mb-4">{scheduleSourceDescription}</p>
             {/* Mobile Timeline */}
             <div className="md:hidden space-y-4">
               {phasesWithTrades.map((phase) => {
@@ -2077,6 +2126,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
         open={isScenarioOpen}
         onClose={() => setIsScenarioOpen(false)}
         base={scenarioBase}
+        dealShieldScenarioBundle={scenarioDealShieldBundle}
       />
     </>
   );
