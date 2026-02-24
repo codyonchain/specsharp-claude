@@ -539,7 +539,7 @@ class NLPService:
             for keyword in patterns['keywords']:
                 if keyword in text_lower:
                     # Found building type, get default subtype
-                    if building_type == 'office':
+                    if building_type in {'office', 'retail'}:
                         return building_type, None, classification
                     subtype = self._get_default_subtype(building_type)
                     return building_type, subtype, classification

@@ -34,6 +34,8 @@ WAVE1_PROFILES: Set[str] = {
     "hospitality_full_service_hotel_v1",
     "office_class_a_v1",
     "office_class_b_v1",
+    "retail_shopping_center_v1",
+    "retail_big_box_v1",
     "multifamily_market_rate_apartments_v1",
     "multifamily_luxury_apartments_v1",
     "multifamily_affordable_housing_v1",

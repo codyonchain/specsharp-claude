@@ -1,10 +1,18 @@
 import math
 
-from app.v2.config.master_config import BuildingType, get_building_config
+import pytest
+
+from app.v2.config.master_config import BuildingType, ProjectClass, get_building_config
+from app.v2.config.type_profiles.decision_insurance_policy import (
+    DECISION_INSURANCE_POLICY_BY_PROFILE_ID,
+    DECISION_INSURANCE_POLICY_ID,
+)
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.v2.config.type_profiles.dealshield_tiles import retail as retail_tile_profiles
 from app.v2.config.type_profiles.dealshield_content import retail as retail_content_profiles
 from app.v2.config.type_profiles.scope_items import retail as retail_scope_profiles
+from app.v2.engines.unified_engine import unified_engine
+from app.v2.services.dealshield_service import build_dealshield_view_model
 
 
 RETAIL_PROFILE_MAP = {
@@ -33,6 +41,14 @@ RETAIL_SCOPE_DEPTH_FLOOR = {
         "plumbing": 3,
         "finishes": 4,
     },
+}
+
+RETAIL_PCV_GENERIC_TERMS = {
+    "cost control",
+    "revenue control",
+    "margin control",
+    "primary control variable",
+    "generic",
 }
 
 
@@ -138,3 +154,215 @@ def test_retail_profiles_are_authored_not_clones():
         for trade_key, trade in sorted(big_box_scope.items())
     )
     assert shopping_signature != big_box_signature
+
+
+def test_retail_di_policy_labels_are_ic_first_and_non_generic():
+    labels = []
+    for expected in RETAIL_PROFILE_MAP.values():
+        profile_id = expected["tile"]
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+        primary_control = policy.get("primary_control_variable")
+        assert isinstance(primary_control, dict)
+        label = primary_control.get("label")
+        assert isinstance(label, str) and label.strip()
+
+        normalized_label = label.strip().lower()
+        assert normalized_label.startswith("ic-first ")
+        assert len(normalized_label) >= 35
+        for generic_term in RETAIL_PCV_GENERIC_TERMS:
+            assert generic_term not in normalized_label
+        labels.append(normalized_label)
+
+    assert len(labels) == len(set(labels))
+
+
+def test_retail_policy_collapse_and_flex_semantics():
+    collapse_metric_families = set()
+
+    for subtype, expected in RETAIL_PROFILE_MAP.items():
+        profile_id = expected["tile"]
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+        primary_control = policy.get("primary_control_variable")
+        collapse_trigger = policy.get("collapse_trigger")
+        flex_calibration = policy.get("flex_calibration")
+
+        assert isinstance(primary_control, dict)
+        assert isinstance(collapse_trigger, dict)
+        assert isinstance(flex_calibration, dict)
+
+        profile = get_dealshield_profile(profile_id)
+        tile_map = {
+            tile.get("tile_id"): tile
+            for tile in profile.get("tiles", [])
+            if isinstance(tile, dict) and isinstance(tile.get("tile_id"), str)
+        }
+        tile_id = primary_control.get("tile_id")
+        assert tile_id in tile_map
+        assert primary_control.get("metric_ref") == tile_map[tile_id].get("metric_ref")
+
+        metric = collapse_trigger.get("metric")
+        operator = collapse_trigger.get("operator")
+        threshold = collapse_trigger.get("threshold")
+        scenario_priority = collapse_trigger.get("scenario_priority")
+
+        assert metric in {"value_gap_pct", "value_gap"}
+        assert operator in {"<=", "<"}
+        assert isinstance(threshold, (int, float))
+        assert isinstance(scenario_priority, list) and len(scenario_priority) == 4
+        assert len(set(scenario_priority)) == 4
+        assert scenario_priority[0] == "base"
+        assert {"base", "conservative", "ugly"}.issubset(set(scenario_priority))
+
+        row_ids = {
+            row.get("row_id")
+            for row in profile.get("derived_rows", [])
+            if isinstance(row, dict) and isinstance(row.get("row_id"), str)
+        }
+        subtype_rows = [
+            scenario_id for scenario_id in scenario_priority
+            if scenario_id not in {"base", "conservative", "ugly"}
+        ]
+        assert len(subtype_rows) == 1
+        assert subtype_rows[0] in row_ids
+
+        if subtype == "shopping_center":
+            assert metric == "value_gap_pct"
+            assert float(threshold) > 0.0
+        else:
+            assert metric == "value_gap"
+            assert float(threshold) <= 0.0
+
+        tight = float(flex_calibration.get("tight_max_pct"))
+        moderate = float(flex_calibration.get("moderate_max_pct"))
+        fallback = float(flex_calibration.get("fallback_pct"))
+        assert tight <= moderate
+        assert fallback >= 0.0
+
+        collapse_metric_families.add(metric)
+
+    assert collapse_metric_families == {"value_gap_pct", "value_gap"}
+
+
+def test_retail_runtime_scope_depth_floor_and_trade_reconciliation():
+    for subtype, expected_depth in RETAIL_SCOPE_DEPTH_FLOOR.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.RETAIL,
+            subtype=subtype,
+            square_footage=120_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        scope_items = payload.get("scope_items")
+        assert isinstance(scope_items, list) and scope_items
+
+        by_trade = {
+            str(trade.get("trade") or "").strip().lower(): trade
+            for trade in scope_items
+            if isinstance(trade, dict)
+        }
+        assert set(by_trade.keys()) == {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+
+        trade_breakdown = payload.get("trade_breakdown") or {}
+        for trade_key, minimum in expected_depth.items():
+            systems = by_trade[trade_key].get("systems")
+            assert isinstance(systems, list) and len(systems) >= minimum
+            systems_total = sum(float(system.get("total_cost", 0.0) or 0.0) for system in systems)
+            assert systems_total == pytest.approx(float(trade_breakdown.get(trade_key, 0.0) or 0.0), rel=0, abs=1e-6)
+
+
+def test_retail_scenarios_emit_for_both_subtypes():
+    for subtype, expected in RETAIL_PROFILE_MAP.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.RETAIL,
+            subtype=subtype,
+            square_footage=120_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        assert payload.get("dealshield_tile_profile") == expected["tile"]
+
+        scenarios = payload.get("dealshield_scenarios")
+        assert isinstance(scenarios, dict)
+        assert scenarios.get("profile_id") == expected["tile"]
+
+        scenario_ids = scenarios.get("scenario_ids")
+        if not isinstance(scenario_ids, list):
+            provenance = scenarios.get("provenance")
+            scenario_ids = provenance.get("scenario_ids") if isinstance(provenance, dict) else None
+        assert isinstance(scenario_ids, list)
+        assert {"base", "conservative", "ugly"}.issubset(set(scenario_ids))
+
+        profile = get_dealshield_profile(expected["tile"])
+        subtype_rows = {
+            row.get("row_id")
+            for row in profile.get("derived_rows", [])
+            if isinstance(row, dict)
+            and isinstance(row.get("row_id"), str)
+            and row.get("row_id") not in {"conservative", "ugly"}
+        }
+        assert len(subtype_rows) == 1
+        assert subtype_rows.issubset(set(scenario_ids))
+
+
+def test_retail_decision_insurance_contract_and_provenance_is_deterministic():
+    for subtype, expected in RETAIL_PROFILE_MAP.items():
+        payload_a = unified_engine.calculate_project(
+            building_type=BuildingType.RETAIL,
+            subtype=subtype,
+            square_footage=120_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        payload_b = unified_engine.calculate_project(
+            building_type=BuildingType.RETAIL,
+            subtype=subtype,
+            square_footage=120_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+
+        profile_id = expected["tile"]
+        profile = get_dealshield_profile(profile_id)
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+
+        view_model_a = build_dealshield_view_model(
+            project_id=f"retail-policy-a-{subtype}",
+            payload=payload_a,
+            profile=profile,
+        )
+        view_model_b = build_dealshield_view_model(
+            project_id=f"retail-policy-b-{subtype}",
+            payload=payload_b,
+            profile=profile,
+        )
+
+        for view_model in (view_model_a, view_model_b):
+            assert view_model.get("scope_items_profile_id") == expected["scope"]
+            assert view_model.get("decision_status") in {"GO", "Needs Work", "NO-GO", "PENDING"}
+            assert isinstance(view_model.get("decision_reason_code"), str) and view_model.get("decision_reason_code")
+
+            status_provenance = view_model.get("decision_status_provenance")
+            assert isinstance(status_provenance, dict)
+            assert status_provenance.get("status_source") == "dealshield_policy_v1"
+            assert isinstance(status_provenance.get("policy_id"), str) and status_provenance.get("policy_id")
+
+            di_provenance = view_model.get("decision_insurance_provenance")
+            assert isinstance(di_provenance, dict)
+
+            policy_block = di_provenance.get("decision_insurance_policy")
+            assert isinstance(policy_block, dict)
+            assert policy_block.get("status") == "available"
+            assert policy_block.get("policy_id") == DECISION_INSURANCE_POLICY_ID
+            assert policy_block.get("profile_id") == profile_id
+
+            primary_control = view_model.get("primary_control_variable")
+            assert isinstance(primary_control, dict)
+            assert primary_control.get("tile_id") == policy["primary_control_variable"]["tile_id"]
+            assert primary_control.get("metric_ref") == policy["primary_control_variable"]["metric_ref"]
+
+            flex_band = view_model.get("flex_before_break_band")
+            assert flex_band in {"tight", "moderate", "comfortable"}
+
+        assert view_model_a.get("decision_status") == view_model_b.get("decision_status")
+        assert view_model_a.get("decision_reason_code") == view_model_b.get("decision_reason_code")
+        assert view_model_a.get("decision_status_provenance") == view_model_b.get("decision_status_provenance")

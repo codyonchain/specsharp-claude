@@ -281,6 +281,102 @@ CONSTRUCTION_SCHEDULE_FALLBACKS: Dict[BuildingType, BuildingType] = {
 
 
 CONSTRUCTION_SUBTYPE_SCHEDULES: Dict[BuildingType, Dict[str, ScheduleConfig]] = {
+    BuildingType.RETAIL: {
+        "shopping_center": {
+            "total_months": 20,
+            "phases": _phases([
+                {
+                    "id": "site_foundation",
+                    "label": "Pad Prep + Utility Loops",
+                    "start_month": 0,
+                    "duration": 4,
+                    "color": "blue",
+                },
+                {
+                    "id": "structural",
+                    "label": "Inline Shell + Canopy Structure",
+                    "start_month": 2,
+                    "duration": 7,
+                    "color": "green",
+                },
+                {
+                    "id": "exterior_envelope",
+                    "label": "Storefront Envelope + Signage Raceway",
+                    "start_month": 6,
+                    "duration": 6,
+                    "color": "orange",
+                },
+                {
+                    "id": "mep_rough",
+                    "label": "Tenant Utility Rough-In + Metering",
+                    "start_month": 6,
+                    "duration": 7,
+                    "color": "purple",
+                },
+                {
+                    "id": "interior_finishes",
+                    "label": "Inline Fit-Out + Common-Area Finishes",
+                    "start_month": 11,
+                    "duration": 7,
+                    "color": "pink",
+                },
+                {
+                    "id": "mep_finishes",
+                    "label": "Systems Balancing + Tenant Turnover",
+                    "start_month": 14,
+                    "duration": 5,
+                    "color": "teal",
+                },
+            ]),
+        },
+        "big_box": {
+            "total_months": 18,
+            "phases": _phases([
+                {
+                    "id": "site_foundation",
+                    "label": "Mass Grading + Heavy Slab Prep",
+                    "start_month": 0,
+                    "duration": 3,
+                    "color": "blue",
+                },
+                {
+                    "id": "structural",
+                    "label": "Long-Span Steel + Dock Aprons",
+                    "start_month": 1,
+                    "duration": 7,
+                    "color": "green",
+                },
+                {
+                    "id": "exterior_envelope",
+                    "label": "Facade Panels + Entry Canopies",
+                    "start_month": 5,
+                    "duration": 6,
+                    "color": "orange",
+                },
+                {
+                    "id": "mep_rough",
+                    "label": "High-Amp Service + Back-of-House MEP",
+                    "start_month": 5,
+                    "duration": 7,
+                    "color": "purple",
+                },
+                {
+                    "id": "interior_finishes",
+                    "label": "Sales Floor + Front-End Buildout",
+                    "start_month": 10,
+                    "duration": 6,
+                    "color": "pink",
+                },
+                {
+                    "id": "mep_finishes",
+                    "label": "Refrigeration Startup + Commissioning",
+                    "start_month": 13,
+                    "duration": 4,
+                    "color": "teal",
+                },
+            ]),
+        },
+    },
     BuildingType.OFFICE: {
         "class_a": {
             "total_months": 30,

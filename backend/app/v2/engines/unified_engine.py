@@ -1460,6 +1460,8 @@ class UnifiedEngine:
                 "hospitality_full_service_hotel_v1",
                 "office_class_a_v1",
                 "office_class_b_v1",
+                "retail_shopping_center_v1",
+                "retail_big_box_v1",
                 "multifamily_market_rate_apartments_v1",
                 "multifamily_luxury_apartments_v1",
                 "multifamily_affordable_housing_v1",
@@ -1973,6 +1975,13 @@ class UnifiedEngine:
                 profile_sources.append(specialty_scope_items.SCOPE_ITEM_PROFILES)
             except Exception:
                 pass
+        if building_type == BuildingType.RETAIL:
+            try:
+                from app.v2.config.type_profiles.scope_items import retail as retail_scope_items
+
+                profile_sources.append(retail_scope_items.SCOPE_ITEM_PROFILES)
+            except Exception:
+                pass
 
         for source in profile_sources:
             profile = source.get(profile_id)
@@ -1987,6 +1996,12 @@ class UnifiedEngine:
             from app.v2.config.type_profiles.scope_items import specialty as specialty_scope_items
 
             default_sources.append(specialty_scope_items.SCOPE_ITEM_DEFAULTS)
+        except Exception:
+            pass
+        try:
+            from app.v2.config.type_profiles.scope_items import retail as retail_scope_items
+
+            default_sources.append(retail_scope_items.SCOPE_ITEM_DEFAULTS)
         except Exception:
             pass
         for source in default_sources:
