@@ -407,6 +407,48 @@ class NLPService:
         if any(keyword in text_lower for keyword in mob_keywords):
             return 'healthcare', 'medical_office', classification
 
+        hospitality_intent_pattern = re.compile(
+            r"\b(hotel|motel|inn|lodging|hospitality)\b",
+            re.IGNORECASE
+        )
+        key_count_pattern = re.compile(r"\b\d+\s+keys?\b", re.IGNORECASE)
+        hospitality_context_phrases = [
+            'limited service',
+            'limited-service',
+            'full service',
+            'full-service',
+            'guest room',
+            'guestroom',
+            'front desk',
+            'check in',
+            'check-in',
+            'breakfast area',
+        ]
+
+        has_hospitality_intent = bool(hospitality_intent_pattern.search(text)) or (
+            bool(key_count_pattern.search(text)) and
+            any(phrase in text_lower for phrase in hospitality_context_phrases)
+        )
+
+        if has_hospitality_intent and 'hospitality' in self.building_patterns:
+            # Preserve deterministic service-level preference for hotel prompts.
+            if re.search(r"\bfull[\s-]service\b", text_lower):
+                return 'hospitality', 'full_service_hotel', classification
+            if re.search(r"\blimited[\s-]service\b", text_lower):
+                return 'hospitality', 'limited_service_hotel', classification
+
+            hospitality_subtypes = self.building_patterns['hospitality']['subtypes']
+
+            for keyword in sorted(hospitality_subtypes.get('full_service_hotel', []), key=len, reverse=True):
+                if keyword in text_lower:
+                    return 'hospitality', 'full_service_hotel', classification
+
+            for keyword in sorted(hospitality_subtypes.get('limited_service_hotel', []), key=len, reverse=True):
+                if keyword in text_lower:
+                    return 'hospitality', 'limited_service_hotel', classification
+
+            return 'hospitality', self._get_default_subtype('hospitality'), classification
+
         # Priority order (check specific before general)
         PRIORITY_ORDER = [
             'mixed_use',       # Check first - often contains other keywords

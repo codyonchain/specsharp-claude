@@ -185,3 +185,25 @@ class TestProjectNameGeneration:
         assert parsed["building_type"] == "restaurant"
         assert parsed["subtype"] == expected_subtype
         assert name == expected_name
+
+    @pytest.mark.parametrize(
+        "description",
+        [
+            "Build a 128,000 SF limited service hotel with 210 keys, breakfast area, fitness center, business center, and pool in Nashville, TN.",
+            "Build a 128,000 SF limited service hotel with 210 keys in Nashville, TN.",
+        ],
+    )
+    def test_limited_service_hotel_intent_wins_over_amenity_overlap(self, description):
+        parsed, _ = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "hospitality"
+        assert parsed["subtype"] == "limited_service_hotel"
+
+    def test_recreation_prompt_with_pool_and_fitness_remains_recreation(self):
+        description = (
+            "Build a 110,000 SF aquatic center and sports complex with indoor pool, "
+            "fitness studios, and basketball courts in Nashville, TN."
+        )
+        parsed, _ = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "recreation"
