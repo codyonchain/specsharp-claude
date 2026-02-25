@@ -343,7 +343,7 @@ const RETAIL_POLICY_CONTRACT_CASES = [
     scopeProfileId: "retail_shopping_center_structural_v1",
     decisionStatus: "Needs Work",
     decisionReasonCode: "low_flex_before_break_buffer",
-    primaryControlLabel: "IC-First Shopping Center Tenant Mix, CAM Recovery Lag, and Inline Rollover Control",
+    primaryControlLabel: "IC-First Shopping Center Inline Fit-Out Carry, Rollover Rework, and Turnover Control",
     breakScenarioLabel: "Conservative",
     breakMetric: "value_gap_pct",
     breakMetricRef: "decision_summary.value_gap_pct",

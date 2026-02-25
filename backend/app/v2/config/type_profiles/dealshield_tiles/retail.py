@@ -33,7 +33,7 @@ DEALSHIELD_TILE_PROFILES = {
         + [
             {
                 "tile_id": "tenant_mix_and_cam_recovery_plus_11",
-                "label": "Tenant Mix + CAM Recovery +11%",
+                "label": "Inline Fit-Out Carry + Rollover Rework +11%",
                 "metric_ref": "trade_breakdown.finishes",
                 "required": False,
                 "transform": {"op": "mul", "value": 1.11},

@@ -235,6 +235,8 @@ def test_retail_policy_collapse_and_flex_semantics():
         tile_id = primary_control.get("tile_id")
         assert tile_id in tile_map
         assert primary_control.get("metric_ref") == tile_map[tile_id].get("metric_ref")
+        tile_label = str(tile_map[tile_id].get("label") or "").strip().lower()
+        policy_label = str(primary_control.get("label") or "").strip().lower()
 
         metric = collapse_trigger.get("metric")
         operator = collapse_trigger.get("operator")
@@ -264,6 +266,11 @@ def test_retail_policy_collapse_and_flex_semantics():
         if subtype == "shopping_center":
             assert metric == "value_gap_pct"
             assert float(threshold) > 0.0
+            assert primary_control.get("metric_ref") == "trade_breakdown.finishes"
+            assert "cam" not in tile_label
+            assert "cam" not in policy_label
+            assert "fit-out" in tile_label
+            assert "fit-out" in policy_label
         else:
             assert metric == "value_gap"
             assert float(threshold) <= 0.0

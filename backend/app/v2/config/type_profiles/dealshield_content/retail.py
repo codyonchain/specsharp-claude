@@ -19,7 +19,7 @@ DEALSHIELD_CONTENT_PROFILES = {
                 },
                 {
                     "id": "driver_trade",
-                    "label": "Pressure-test CAM recovery and tenant-fitout carry",
+                    "label": "Pressure-test inline fit-out carry and rollover rework",
                     "tile_id": "tenant_mix_and_cam_recovery_plus_11",
                 },
             ],
@@ -29,7 +29,7 @@ DEALSHIELD_CONTENT_PROFILES = {
                 "id": "mlw_1",
                 "driver_tile_id": "tenant_mix_and_cam_recovery_plus_11",
                 "text": "Inline-tenant turnover is modeled as smooth despite staggered lease expirations and delayed TI recapture.",
-                "why": "Rollover bunching can stack downtime, CAM leakage, and fit-out carry in one leasing cycle.",
+                "why": "Rollover bunching can stack downtime, white-box rework, and fit-out carry in one leasing cycle.",
             },
             {
                 "id": "mlw_2",
@@ -65,8 +65,8 @@ DEALSHIELD_CONTENT_PROFILES = {
                 "id": "qb_trade_1",
                 "driver_tile_id": "tenant_mix_and_cam_recovery_plus_11",
                 "questions": [
-                    "Which tenant-improvement scopes are landlord-funded versus reimbursed in CAM?",
-                    "What CAM true-up lag is assumed when tenant fit-out turnover runs long?",
+                    "Which tenant-improvement scopes are still carried as owner hard-cost instead of lease pass-through?",
+                    "What rework allowance is modeled when inline fit-out turnover runs long?",
                 ],
             },
         ],
@@ -78,8 +78,8 @@ DEALSHIELD_CONTENT_PROFILES = {
             },
             {
                 "id": "rf_2",
-                "flag": "CAM recovery timing is modeled as linear despite tenant-specific exclusions.",
-                "action": "Recast CAM reimbursement by tenant class with explicit lag and exclusion scenarios.",
+                "flag": "Inline turnover carry is modeled as linear despite tenant-specific rework depth.",
+                "action": "Recast white-box and frontage rework carry by tenant class with explicit downtime scenarios.",
             },
             {
                 "id": "rf_3",

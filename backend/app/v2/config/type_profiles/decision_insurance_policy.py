@@ -248,7 +248,7 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "primary_control_variable": {
             "tile_id": "tenant_mix_and_cam_recovery_plus_11",
             "metric_ref": "trade_breakdown.finishes",
-            "label": "IC-First Shopping Center Tenant Mix, CAM Recovery Lag, and Inline Rollover Control",
+            "label": "IC-First Shopping Center Inline Fit-Out Carry, Rollover Rework, and Turnover Control",
         },
         "collapse_trigger": {
             "metric": "value_gap_pct",
