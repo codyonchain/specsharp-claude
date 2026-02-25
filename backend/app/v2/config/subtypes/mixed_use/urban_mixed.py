@@ -66,6 +66,8 @@ CONFIG = (
             "Chicago": 1.30,
             "Miami": 1.22,
         },
+        dealshield_tile_profile="mixed_use_urban_mixed_v1",
+        scope_items_profile="mixed_use_urban_mixed_structural_v1",
         special_features={
             "public_plaza": 40,
             "green_roof": 35,

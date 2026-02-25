@@ -66,6 +66,8 @@ CONFIG = (
             "Chicago": 1.28,
             "Miami": 1.20,
         },
+        dealshield_tile_profile="mixed_use_office_residential_v1",
+        scope_items_profile="mixed_use_office_residential_structural_v1",
         special_features={
             "amenity_deck": 35,
             "business_center": 20,

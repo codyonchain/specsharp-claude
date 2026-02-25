@@ -27,11 +27,13 @@ from app.v2.config.type_profiles.dealshield_content import healthcare as healthc
 from app.v2.config.type_profiles.dealshield_content import office as office_content
 from app.v2.config.type_profiles.dealshield_content import specialty as specialty_content
 from app.v2.config.type_profiles.dealshield_content import civic as civic_content
+from app.v2.config.type_profiles.dealshield_content import mixed_use as mixed_use_content
 from app.v2.config.type_profiles.dealshield_content import recreation as recreation_content
 from app.v2.config.type_profiles.scope_items import healthcare as healthcare_scope_profiles
 from app.v2.config.type_profiles.scope_items import office as office_scope_profiles
 from app.v2.config.type_profiles.scope_items import specialty as specialty_scope_profiles
 from app.v2.config.type_profiles.scope_items import civic as civic_scope_profiles
+from app.v2.config.type_profiles.scope_items import mixed_use as mixed_use_scope_profiles
 from app.v2.config.type_profiles.scope_items import recreation as recreation_scope_profiles
 from app.v2.services.dealshield_service import build_dealshield_view_model
 
@@ -213,6 +215,37 @@ RECREATION_PCV_GENERIC_TERMS = {
     "margin control",
     "primary control variable",
     "generic",
+}
+
+MIXED_USE_PROFILE_IDS = {
+    "office_residential": {
+        "tile_profile": "mixed_use_office_residential_v1",
+        "scope_profile": "mixed_use_office_residential_structural_v1",
+    },
+    "retail_residential": {
+        "tile_profile": "mixed_use_retail_residential_v1",
+        "scope_profile": "mixed_use_retail_residential_structural_v1",
+    },
+    "hotel_retail": {
+        "tile_profile": "mixed_use_hotel_retail_v1",
+        "scope_profile": "mixed_use_hotel_retail_structural_v1",
+    },
+    "transit_oriented": {
+        "tile_profile": "mixed_use_transit_oriented_v1",
+        "scope_profile": "mixed_use_transit_oriented_structural_v1",
+    },
+    "urban_mixed": {
+        "tile_profile": "mixed_use_urban_mixed_v1",
+        "scope_profile": "mixed_use_urban_mixed_structural_v1",
+    },
+}
+
+MIXED_USE_SCOPE_DEPTH_FLOOR = {
+    "office_residential": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    "retail_residential": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    "hotel_retail": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    "transit_oriented": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    "urban_mixed": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
 }
 
 
@@ -2300,3 +2333,143 @@ def test_recreation_di_policy_entries_are_available_for_all_profiles():
 
         assert collapse_trigger.get("metric") in {"value_gap_pct", "value_gap"}
         assert collapse_trigger.get("operator") in {"<=", "<"}
+
+
+def test_mixed_use_profiles_are_wired_and_content_maps_to_tiles():
+    first_mlw_texts = []
+
+    for subtype, expected in MIXED_USE_PROFILE_IDS.items():
+        cfg = get_building_config(BuildingType.MIXED_USE, subtype)
+        assert cfg is not None
+        assert cfg.dealshield_tile_profile == expected["tile_profile"]
+        assert cfg.scope_items_profile == expected["scope_profile"]
+
+        profile = get_dealshield_profile(expected["tile_profile"])
+        assert profile.get("profile_id") == expected["tile_profile"]
+        tile_ids = {
+            tile.get("tile_id")
+            for tile in profile.get("tiles", [])
+            if isinstance(tile, dict) and isinstance(tile.get("tile_id"), str)
+        }
+        assert tile_ids
+
+        content = mixed_use_content.DEALSHIELD_CONTENT_PROFILES[expected["tile_profile"]]
+        drivers = content.get("fastest_change", {}).get("drivers")
+        assert isinstance(drivers, list) and len(drivers) == 3
+        for driver in drivers:
+            assert isinstance(driver, dict)
+            assert driver.get("tile_id") in tile_ids
+
+        mlw = content.get("most_likely_wrong")
+        assert isinstance(mlw, list) and len(mlw) >= 3
+        first_mlw_texts.append(mlw[0].get("text"))
+        for entry in mlw:
+            assert isinstance(entry, dict)
+            assert entry.get("driver_tile_id") in tile_ids
+
+        question_bank = content.get("question_bank")
+        assert isinstance(question_bank, list) and len(question_bank) == 3
+        for question_entry in question_bank:
+            assert isinstance(question_entry, dict)
+            assert question_entry.get("driver_tile_id") in tile_ids
+
+    assert len(first_mlw_texts) == len(set(first_mlw_texts))
+
+
+def test_mixed_use_scope_profiles_keep_depth_and_allocation_integrity():
+    for subtype, expected in MIXED_USE_PROFILE_IDS.items():
+        profile_id = expected["scope_profile"]
+        cfg = get_building_config(BuildingType.MIXED_USE, subtype)
+        assert cfg is not None
+        assert cfg.scope_items_profile == profile_id
+        assert mixed_use_scope_profiles.SCOPE_ITEM_DEFAULTS[subtype] == profile_id
+
+        profile = mixed_use_scope_profiles.SCOPE_ITEM_PROFILES[profile_id]
+        trade_profiles = profile.get("trade_profiles")
+        assert isinstance(trade_profiles, list) and len(trade_profiles) == 5
+
+        by_trade = {
+            trade.get("trade_key"): trade
+            for trade in trade_profiles
+            if isinstance(trade, dict) and isinstance(trade.get("trade_key"), str)
+        }
+        assert set(by_trade.keys()) == {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+
+        for trade_key, trade in by_trade.items():
+            items = trade.get("items")
+            assert isinstance(items, list)
+            assert len(items) >= MIXED_USE_SCOPE_DEPTH_FLOOR[subtype][trade_key]
+            total_share = sum(
+                float(item.get("allocation", {}).get("share", 0.0))
+                for item in items
+            )
+            assert math.isclose(total_share, 1.0, rel_tol=1e-9, abs_tol=1e-9), (
+                f"{profile_id}::{trade_key} share total expected 1.0, got {total_share}"
+            )
+
+
+def test_mixed_use_no_clone_invariants_across_tiles_content_and_scope():
+    unique_tile_ids = set()
+    unique_row_ids = set()
+    scope_signatures = set()
+
+    for expected in MIXED_USE_PROFILE_IDS.values():
+        tile_profile = get_dealshield_profile(expected["tile_profile"])
+        tile_ids = {
+            tile.get("tile_id")
+            for tile in tile_profile.get("tiles", [])
+            if isinstance(tile, dict) and isinstance(tile.get("tile_id"), str)
+        }
+        subtype_tile_ids = tile_ids - {"cost_plus_10", "revenue_minus_10"}
+        assert len(subtype_tile_ids) == 1
+        unique_tile_ids.update(subtype_tile_ids)
+
+        subtype_rows = {
+            row.get("row_id")
+            for row in tile_profile.get("derived_rows", [])
+            if isinstance(row, dict) and isinstance(row.get("row_id"), str)
+        } - {"conservative", "ugly"}
+        assert len(subtype_rows) == 1
+        unique_row_ids.update(subtype_rows)
+
+        scope_profile = mixed_use_scope_profiles.SCOPE_ITEM_PROFILES[expected["scope_profile"]]
+        signature = tuple(
+            (
+                trade.get("trade_key"),
+                tuple(item.get("key") for item in trade.get("items", []) if isinstance(item, dict)),
+            )
+            for trade in scope_profile.get("trade_profiles", [])
+            if isinstance(trade, dict)
+        )
+        scope_signatures.add(signature)
+
+    assert len(unique_tile_ids) == len(MIXED_USE_PROFILE_IDS)
+    assert len(unique_row_ids) == len(MIXED_USE_PROFILE_IDS)
+    assert len(scope_signatures) == len(MIXED_USE_PROFILE_IDS)
+
+
+def test_mixed_use_runtime_scope_depth_floor_and_trade_reconciliation():
+    for subtype, expected in MIXED_USE_SCOPE_DEPTH_FLOOR.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.MIXED_USE,
+            subtype=subtype,
+            square_footage=125_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        scope_items = payload.get("scope_items")
+        assert isinstance(scope_items, list) and scope_items
+        by_trade = {
+            str(trade.get("trade") or "").strip().lower(): trade
+            for trade in scope_items
+            if isinstance(trade, dict)
+        }
+        assert set(by_trade.keys()) == {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+
+        trade_breakdown = payload.get("trade_breakdown") or {}
+        for trade_key, minimum in expected.items():
+            systems = by_trade[trade_key].get("systems")
+            assert isinstance(systems, list)
+            assert len(systems) >= minimum
+            systems_total = sum(float(system.get("total_cost", 0.0) or 0.0) for system in systems)
+            assert systems_total == pytest.approx(float(trade_breakdown.get(trade_key, 0.0) or 0.0), rel=0, abs=1e-6)
