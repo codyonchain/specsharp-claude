@@ -33,10 +33,10 @@ PARKING_PROFILE_MAP = {
 
 
 PARKING_SCOPE_DEPTH_FLOOR = {
-    "surface_parking": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
-    "parking_garage": {"structural": 4, "mechanical": 4, "electrical": 4, "plumbing": 3, "finishes": 4},
-    "underground_parking": {"structural": 4, "mechanical": 5, "electrical": 4, "plumbing": 4, "finishes": 4},
-    "automated_parking": {"structural": 4, "mechanical": 5, "electrical": 5, "plumbing": 3, "finishes": 4},
+    "surface_parking": {"structural": 4, "mechanical": 3, "electrical": 4, "plumbing": 2, "finishes": 2},
+    "parking_garage": {"structural": 5, "mechanical": 4, "electrical": 5, "plumbing": 2, "finishes": 3},
+    "underground_parking": {"structural": 6, "mechanical": 5, "electrical": 5, "plumbing": 3, "finishes": 3},
+    "automated_parking": {"structural": 5, "mechanical": 5, "electrical": 6, "plumbing": 2, "finishes": 3},
 }
 
 
@@ -217,3 +217,58 @@ def test_parking_runtime_payload_and_scope_trade_reconciliation():
             assert isinstance(systems, list) and len(systems) >= minimum
             systems_total = sum(float(system.get("total_cost", 0.0) or 0.0) for system in systems)
             assert systems_total == pytest.approx(float(trade_breakdown.get(trade_key, 0.0) or 0.0), rel=0, abs=1e-6)
+
+
+def test_parking_runtime_emits_scenario_snapshots_and_provenance():
+    for subtype, expected in PARKING_PROFILE_MAP.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.PARKING,
+            subtype=subtype,
+            square_footage=120_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        scenario_block = payload.get("dealshield_scenarios")
+        assert isinstance(scenario_block, dict)
+        assert scenario_block.get("profile_id") == expected["tile"]
+
+        scenarios = scenario_block.get("scenarios")
+        assert isinstance(scenarios, dict)
+        assert {"base", "conservative", "ugly"}.issubset(set(scenarios.keys()))
+        assert len(scenarios) == 4
+
+        provenance = scenario_block.get("provenance")
+        assert isinstance(provenance, dict)
+        assert provenance.get("profile_id") == expected["tile"]
+        scenario_inputs = provenance.get("scenario_inputs")
+        assert isinstance(scenario_inputs, dict)
+        assert set(scenario_inputs.keys()) == set(scenarios.keys())
+
+
+def test_parking_economics_survive_ownership_fallback_without_nulling_revenue_or_noi():
+    for subtype in PARKING_PROFILE_MAP.keys():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.PARKING,
+            subtype=subtype,
+            square_footage=95_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+            ownership_type="public",
+        )
+
+        revenue = payload.get("revenue_analysis")
+        assert isinstance(revenue, dict)
+        assert isinstance(revenue.get("annual_revenue"), (int, float))
+        assert isinstance(revenue.get("net_income"), (int, float))
+        assert revenue.get("annual_revenue") is not None
+        assert revenue.get("net_income") is not None
+
+        return_metrics = payload.get("return_metrics")
+        assert isinstance(return_metrics, dict)
+        assert isinstance(return_metrics.get("estimated_annual_noi"), (int, float))
+
+        ownership = payload.get("ownership_analysis")
+        assert isinstance(ownership, dict)
+        debt_metrics = ownership.get("debt_metrics")
+        assert isinstance(debt_metrics, dict)
+        assert isinstance(debt_metrics.get("calculated_dscr"), (int, float))

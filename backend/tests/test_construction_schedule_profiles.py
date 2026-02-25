@@ -59,6 +59,10 @@ TARGET_SUBTYPE_EXPECTATIONS = [
     (BuildingType.RECREATION, "aquatic_center", 22),
     (BuildingType.RECREATION, "recreation_center", 20),
     (BuildingType.RECREATION, "stadium", 36),
+    (BuildingType.PARKING, "surface_parking", 10),
+    (BuildingType.PARKING, "parking_garage", 20),
+    (BuildingType.PARKING, "underground_parking", 24),
+    (BuildingType.PARKING, "automated_parking", 22),
 ]
 
 
@@ -103,6 +107,7 @@ def test_subtype_schedules_resolve_for_target_verticals(
         (BuildingType.EDUCATIONAL, "unknown_educational_variant", 30),
         (BuildingType.CIVIC, "unknown_civic_variant", 27),
         (BuildingType.RECREATION, "unknown_recreation_variant", 27),
+        (BuildingType.PARKING, "unknown_parking_variant", 18),
     ],
 )
 def test_unknown_subtype_falls_back_to_building_type_schedule(
@@ -132,8 +137,8 @@ def test_unknown_hospitality_subtype_falls_back_to_multifamily_baseline_determin
     assert hospitality_fallback["phases"] == multifamily_baseline["phases"]
 
 
-def test_non_target_building_types_keep_existing_behavior():
-    parking_schedule = build_construction_schedule(BuildingType.PARKING, subtype="garage")
+def test_unknown_parking_subtype_truthfully_uses_building_type_fallback_source():
+    parking_schedule = build_construction_schedule(BuildingType.PARKING, subtype="garage_variant_not_configured")
     industrial_default_schedule = build_construction_schedule(BuildingType.INDUSTRIAL)
 
     assert parking_schedule["building_type"] == BuildingType.PARKING.value

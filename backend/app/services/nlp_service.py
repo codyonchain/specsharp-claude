@@ -585,6 +585,107 @@ class NLPService:
 
         return None
 
+    def _resolve_parking_subtype_from_intent(self, text_lower: str) -> Optional[str]:
+        """Resolve explicit parking subtype cues when parking is the primary intent."""
+        if not isinstance(text_lower, str) or not text_lower.strip():
+            return None
+
+        automated_patterns = (
+            r"\bautomated\s+parking\b",
+            r"\bautomated\s+parking\s+structure\b",
+            r"\brobotic\s+parking\b",
+            r"\bmechanized\s+parking\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in automated_patterns):
+            return "automated_parking"
+
+        underground_patterns = (
+            r"\bunderground\s+parking\b",
+            r"\bbelow[-\s]?grade\s+parking\b",
+            r"\bsubterranean\s+parking\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in underground_patterns):
+            return "underground_parking"
+
+        surface_patterns = (
+            r"\bsurface\s+parking\b",
+            r"\bsurface\s+lot\b",
+            r"\bparking\s+lot\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in surface_patterns):
+            return "surface_parking"
+
+        garage_patterns = (
+            r"\bparking\s+garage\b",
+            r"\bparking\s+structure\b",
+            r"\bstructured\s+parking\b",
+            r"\bparking\s+deck\b",
+            r"\bparking\s+ramp\b",
+            r"\bstandalone\s+garage\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in garage_patterns):
+            return "parking_garage"
+
+        return None
+
+    def _resolve_parking_intent(self, text_lower: str) -> Tuple[bool, Optional[str], str]:
+        """Return whether parking should be treated as the primary building type."""
+        if not isinstance(text_lower, str) or not text_lower.strip():
+            return False, None, "no_signal"
+
+        has_parking_signal = bool(
+            re.search(r"\bparking\b", text_lower)
+            or re.search(r"\bparking\s+garage\b", text_lower)
+            or re.search(r"\bparking\s+structure\b", text_lower)
+            or re.search(r"\bparking\s+lot\b", text_lower)
+            or re.search(r"\bstructured\s+parking\b", text_lower)
+        )
+        if not has_parking_signal:
+            return False, None, "no_signal"
+
+        subtype = self._resolve_parking_subtype_from_intent(text_lower)
+
+        has_standalone_signal = bool(
+            re.search(r"\bstandalone\s+parking\b", text_lower)
+            or re.search(r"\bstandalone\s+parking\s+garage\b", text_lower)
+            or re.search(r"\bdedicated\s+parking\s+(?:facility|structure|garage)\b", text_lower)
+            or re.search(r"\bparking\s+(?:facility|structure|garage)\s+only\b", text_lower)
+        )
+        has_primary_action_signal = bool(
+            re.search(
+                r"\b(new|build|construct|develop|redevelop|expand|expansion|replacement)\b.{0,40}\bparking\b",
+                text_lower,
+            )
+        )
+        has_explicit_parking_asset_signal = bool(
+            re.search(r"\bautomated\s+parking\b", text_lower)
+            or re.search(r"\bunderground\s+parking\b", text_lower)
+            or re.search(r"\bsurface\s+parking\b", text_lower)
+            or re.search(r"\bparking\s+garage\b", text_lower)
+            or re.search(r"\bparking\s+structure\b", text_lower)
+            or re.search(r"\bstructured\s+parking\b", text_lower)
+            or re.search(r"\bparking\s+lot\b", text_lower)
+        )
+
+        if re.search(r"\b(apartment|apartments|multifamily|multi-family|residential\s+tower)\b", text_lower):
+            if not has_standalone_signal:
+                return False, subtype, "parking_demoted_multifamily_primary"
+        if re.search(r"\b(hotel|motel|inn|hospitality|lodging)\b", text_lower):
+            if not has_standalone_signal:
+                return False, subtype, "parking_demoted_hospitality_primary"
+        if re.search(r"\b(class\s*a|class\s*b|office\s+tower|office\s+building|corporate\s+office)\b", text_lower):
+            if not has_standalone_signal:
+                return False, subtype, "parking_demoted_office_primary"
+
+        if has_standalone_signal:
+            return True, subtype, "parking_primary_standalone"
+        if has_primary_action_signal:
+            return True, subtype, "parking_primary_action"
+        if has_explicit_parking_asset_signal:
+            return True, subtype, "parking_primary_asset_intent"
+
+        return False, subtype, "parking_context_only"
+
     @staticmethod
     def _default_mixed_use_pair(subtype: Optional[str]) -> Tuple[str, str]:
         subtype_key = (subtype or "").strip().lower()
@@ -751,7 +852,10 @@ class NLPService:
     def detect_building_type_with_subtype(self, text: str) -> Tuple[str, Optional[str], str]:
         """Detect building type and subtype using config-driven patterns"""
         text_lower = text.lower()
-        self._last_detection_metadata = {}
+        self._last_detection_metadata = {
+            "detection_source": "nlp_service.detect_building_type_with_subtype",
+            "conflict_resolution": "none",
+        }
 
         # Detect classification first
         classification = self.detect_project_classification(text)
@@ -826,7 +930,12 @@ class NLPService:
 
         mixed_use_subtype, mixed_use_alias = self._resolve_mixed_use_subtype_from_intent(text_lower)
         if self._has_explicit_mixed_use_intent(text_lower) or mixed_use_subtype is not None:
-            self._last_detection_metadata = {"alias_mapping": mixed_use_alias}
+            self._last_detection_metadata = {
+                "detection_source": "nlp_service.mixed_use_intent",
+                "conflict_resolution": "none",
+            }
+            if isinstance(mixed_use_alias, dict):
+                self._last_detection_metadata["alias_mapping"] = mixed_use_alias
             return 'mixed_use', (mixed_use_subtype or self._get_default_subtype('mixed_use')), classification
 
         hospitality_intent_pattern = re.compile(
@@ -901,6 +1010,19 @@ class NLPService:
         ):
             return 'recreation', None, classification
 
+        parking_is_primary, parking_subtype, parking_outcome = self._resolve_parking_intent(text_lower)
+        if parking_is_primary:
+            self._last_detection_metadata = {
+                "detection_source": "nlp_service.parking_primary_intent",
+                "conflict_resolution": parking_outcome,
+            }
+            return "parking", parking_subtype, classification
+        if parking_outcome.startswith("parking_demoted_"):
+            self._last_detection_metadata = {
+                "detection_source": "nlp_service.parking_conflict_router",
+                "conflict_resolution": parking_outcome,
+            }
+
         # Priority order (check specific before general)
         PRIORITY_ORDER = [
             'mixed_use',       # Check first - often contains other keywords
@@ -909,13 +1031,13 @@ class NLPService:
             'civic',
             'recreation',
             'specialty',
-            'parking',
             'multifamily',
             'hospitality',
             'restaurant',
             'retail',
             'industrial',
-            'office'          # Most general (default)
+            'office',
+            'parking',         # Parking is only selected after other primary intents.
         ]
 
         # Check each building type in priority order
@@ -935,7 +1057,7 @@ class NLPService:
             for keyword in patterns['keywords']:
                 if keyword in text_lower:
                     # Found building type, get default subtype
-                    if building_type in {'office', 'retail', 'educational', 'civic', 'recreation'}:
+                    if building_type in {'office', 'retail', 'educational', 'civic', 'recreation', 'parking'}:
                         return building_type, None, classification
                     subtype = self._get_default_subtype(building_type)
                     return building_type, subtype, classification
@@ -1030,6 +1152,12 @@ class NLPService:
         alias_mapping = detection_metadata.get("alias_mapping")
         if isinstance(alias_mapping, dict):
             extracted['subtype_alias_mapping'] = alias_mapping
+        detection_source = detection_metadata.get("detection_source")
+        if isinstance(detection_source, str) and detection_source.strip():
+            extracted["detection_source"] = detection_source
+        conflict_resolution = detection_metadata.get("conflict_resolution")
+        if isinstance(conflict_resolution, str) and conflict_resolution.strip():
+            extracted["detection_conflict_resolution"] = conflict_resolution
 
         if building_type == 'mixed_use':
             split_hint = self._extract_mixed_use_split_hint(text_lower, building_subtype)

@@ -1575,6 +1575,10 @@ class UnifiedEngine:
                 "recreation_aquatic_center_v1",
                 "recreation_recreation_center_v1",
                 "recreation_stadium_v1",
+                "parking_surface_parking_v1",
+                "parking_parking_garage_v1",
+                "parking_underground_parking_v1",
+                "parking_automated_parking_v1",
                 "mixed_use_office_residential_v1",
                 "mixed_use_retail_residential_v1",
                 "mixed_use_hotel_retail_v1",
@@ -5448,10 +5452,24 @@ class UnifiedEngine:
         parsed_subtype = parsed_details.get("subtype") if isinstance(parsed_details, dict) else None
         parsed_alias_mapping = parsed_details.get("subtype_alias_mapping") if isinstance(parsed_details, dict) else None
         parsed_split_hint = parsed_details.get("mixed_use_split_hint") if isinstance(parsed_details, dict) else None
+        parsed_detection_source = parsed_details.get("detection_source") if isinstance(parsed_details, dict) else None
+        parsed_detection_conflict = (
+            parsed_details.get("detection_conflict_resolution") if isinstance(parsed_details, dict) else None
+        )
 
         building_type = None
         subtype = parsed_subtype if isinstance(parsed_subtype, str) and parsed_subtype.strip() else None
         detection_method = "nlp_service"
+        detection_source = (
+            parsed_detection_source
+            if isinstance(parsed_detection_source, str) and parsed_detection_source.strip()
+            else "nlp_service.detect_building_type_with_subtype"
+        )
+        detection_conflict_outcome = (
+            parsed_detection_conflict
+            if isinstance(parsed_detection_conflict, str) and parsed_detection_conflict.strip()
+            else "none"
+        )
 
         if isinstance(parsed_building_type, str) and parsed_building_type.strip():
             try:
@@ -5463,9 +5481,23 @@ class UnifiedEngine:
             detected_type, detected_subtype, detected_method = detection
             if building_type is None:
                 building_type = detected_type
+                detection_conflict_outcome = "master_detector_selected"
+            elif detected_type != building_type:
+                if detection_conflict_outcome == "none":
+                    detection_conflict_outcome = f"parser_precedence_over_{detected_type.value}"
             detection_method = detected_method
             if subtype is None and isinstance(detected_subtype, str) and detected_subtype.strip():
                 subtype = detected_subtype
+            elif (
+                isinstance(detected_subtype, str)
+                and detected_subtype.strip()
+                and isinstance(subtype, str)
+                and subtype.strip()
+                and subtype.strip().lower() != detected_subtype.strip().lower()
+            ):
+                if detection_conflict_outcome == "none":
+                    detection_conflict_outcome = f"parser_subtype_precedence_over_{detected_subtype.strip().lower()}"
+            detection_source = f"{detection_source}+master_config.detect_building_type_with_method"
 
         if building_type is None or subtype is None:
             return {
@@ -5542,6 +5574,8 @@ class UnifiedEngine:
             'detected_class': project_class.value,
             'original_description': description,
             'method': detection_method,
+            'detection_source': detection_source,
+            'detection_conflict_outcome': detection_conflict_outcome,
             'subtype_alias_mapping': parsed_alias_mapping if isinstance(parsed_alias_mapping, dict) else None,
         }
         if isinstance(result.get('mixed_use_split'), dict):
