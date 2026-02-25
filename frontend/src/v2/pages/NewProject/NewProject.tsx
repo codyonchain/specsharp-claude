@@ -13,6 +13,8 @@ import {
   detectHealthcareFeatureIdsFromDescription,
   detectHospitalityFeatureIdsFromDescription,
   detectOfficeFeatureIdsFromDescription,
+  detectRecreationFeatureIdsFromDescription,
+  detectRecreationSubtypeFromDescription,
   detectRetailFeatureIdsFromDescription,
   detectRestaurantFeatureIdsFromDescription,
   detectSpecialtyFeatureIdsFromDescription,
@@ -109,6 +111,13 @@ const BUILDING_TYPE_DETECTION_CUES: RegExp[] = [
   /\bbroadcast\b/i,
   /\bstudio\b/i,
   /\bstrip\s*mall\b/i,
+  /\bfitness center\b/i,
+  /\bsports complex\b/i,
+  /\baquatic center\b/i,
+  /\bnatatorium\b/i,
+  /\brecreation center\b/i,
+  /\bstadium\b/i,
+  /\barena\b/i,
   ...HEALTHCARE_SUBTYPE_DETECTION_CUES,
 ];
 
@@ -354,7 +363,8 @@ export const NewProject: React.FC = () => {
       buildingType === 'restaurant' ||
       buildingType === 'hospitality' ||
       buildingType === 'specialty' ||
-      buildingType === 'civic'
+      buildingType === 'civic' ||
+      buildingType === 'recreation'
     ) {
       return getAvailableSpecialFeatures(buildingType, subtype);
     }
@@ -477,6 +487,9 @@ export const NewProject: React.FC = () => {
     for (const featureId of detectCivicFeatureIdsFromDescription(desc)) {
       detectedFeatures.add(featureId);
     }
+    for (const featureId of detectRecreationFeatureIdsFromDescription(desc)) {
+      detectedFeatures.add(featureId);
+    }
     
     // Detect finish level (luxury/high-end terms map into premium)
     let detectedFinish: 'standard' | 'premium' = 'standard';
@@ -596,6 +609,8 @@ export const NewProject: React.FC = () => {
       ? detectEducationalSubtypeFromDescription(description)
       : parsedInput?.building_type === 'civic' && !parsedSubtype
         ? detectCivicSubtypeFromDescription(description)
+      : parsedInput?.building_type === 'recreation' && !parsedSubtype
+        ? detectRecreationSubtypeFromDescription(description)
       : undefined;
   const currentSubtype = parsedSubtype || subtypeFromCues;
   const availableSpecialFeatures = parsedInput
@@ -723,6 +738,8 @@ export const NewProject: React.FC = () => {
           ? detectEducationalSubtypeFromDescription(description)
           : parsedBuildingType === 'civic' && !parsedSubtype
             ? detectCivicSubtypeFromDescription(description)
+          : parsedBuildingType === 'recreation' && !parsedSubtype
+            ? detectRecreationSubtypeFromDescription(description)
           : undefined;
       const resolvedSubtype = parsedSubtype || subtypeFromDescription;
       const allowedFeatureIds = new Set(
@@ -916,13 +933,14 @@ export const NewProject: React.FC = () => {
     isPlaceholder: boolean;
   };
 
-  const usesSubtypeCostPerSF = ['healthcare', 'multifamily', 'restaurant', 'specialty', 'office', 'retail', 'educational', 'civic'].includes(
+  const usesSubtypeCostPerSF = ['healthcare', 'multifamily', 'restaurant', 'specialty', 'office', 'retail', 'educational', 'civic', 'recreation'].includes(
     parsedInput?.building_type ?? ''
   );
   const isRestaurantProject = parsedInput?.building_type === 'restaurant';
   const isOfficeProject = parsedInput?.building_type === 'office';
   const isEducationalProject = parsedInput?.building_type === 'educational';
   const isCivicProject = parsedInput?.building_type === 'civic';
+  const isRecreationProject = parsedInput?.building_type === 'recreation';
   const hasFeatureSquareFootage = typeof squareFootageSummary === 'number' && squareFootageSummary > 0;
 
   const resolveFeatureCostPerSF = (feature: SpecialFeatureOption): number | undefined => {
@@ -942,7 +960,7 @@ export const NewProject: React.FC = () => {
     if (typeof feature.costPerSF === 'number' && Number.isFinite(feature.costPerSF)) {
       return feature.costPerSF;
     }
-    if ((isOfficeProject || isEducationalProject || isCivicProject) && !currentSubtype && feature.costPerSFBySubtype) {
+    if ((isOfficeProject || isEducationalProject || isCivicProject || isRecreationProject) && !currentSubtype && feature.costPerSFBySubtype) {
       return undefined;
     }
     if (currentSubtype && feature.costPerSFBySubtype) {
