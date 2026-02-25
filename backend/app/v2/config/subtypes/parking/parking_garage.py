@@ -87,5 +87,8 @@ CONFIG = (
         occupancy_rate_premium=0.92,
         operating_margin_base=0.75,
         operating_margin_premium=0.80,
+        dealshield_tile_profile="parking_parking_garage_v1",
+        scope_profile="parking_parking_garage_structural_v1",
+        scope_items_profile="parking_parking_garage_structural_v1",
     ),
 )
