@@ -672,6 +672,11 @@ class TestProjectNameGeneration:
         "description,expected_type,expected_subtype",
         [
             ("luxury apartments with parking garage in Nashville, TN", "multifamily", "luxury_apartments"),
+            (
+                "220,000 SF 200-unit Class A luxury apartment development in Nashville, TN",
+                "multifamily",
+                "luxury_apartments",
+            ),
             ("hotel with underground parking in Nashville, TN", "hospitality", "limited_service_hotel"),
             ("office tower with structured parking in Nashville, TN", "office", None),
         ],

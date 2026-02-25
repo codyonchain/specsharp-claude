@@ -414,9 +414,23 @@ class NLPService:
         """Detect high-confidence office language that should not be rerouted by generic amenities."""
         if not isinstance(text_lower, str) or not text_lower.strip():
             return False
+
+        # Do not let generic office class language override explicit housing intent.
+        multifamily_primary_patterns = (
+            r"\bapartment(?:s)?\b",
+            r"\bmulti[-\s]?family\b",
+            r"\bresidential (?:tower|complex|development)\b",
+            r"\b\d+\s*[-]?\s*unit\b",
+            r"\bcondo(?:minium)?s?\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in multifamily_primary_patterns):
+            return False
+
         strong_office_patterns = (
-            r"\bclass\s*a\b",
-            r"\bclass\s*b\b",
+            r"\bclass\s*a\s+office\b",
+            r"\bclass\s*b\s+office\b",
+            r"\bgrade\s*a\s+office\b",
+            r"\bgrade\s*b\s+office\b",
             r"\boffice tower\b",
             r"\boffice building\b",
             r"\bcorporate office\b",
