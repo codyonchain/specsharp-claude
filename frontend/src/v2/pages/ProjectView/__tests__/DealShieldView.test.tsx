@@ -297,6 +297,99 @@ const HEALTHCARE_POLICY_CONTRACT_CASES = [
   },
 ] as const;
 
+const EDUCATIONAL_POLICY_CONTRACT_CASES = [
+  {
+    subtype: "elementary_school",
+    profileId: "educational_elementary_school_v1",
+    scopeProfileId: "educational_elementary_school_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel: "IC-First Classroom Core + Student-Safety Envelope +11%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 18.0,
+    observedValue: 16.4,
+    flexBeforeBreakPct: 1.7,
+    expectedFlexLabel: "1.70% (Structurally Tight)",
+    baseDscr: 1.33,
+    stressedDscr: 1.12,
+  },
+  {
+    subtype: "middle_school",
+    profileId: "educational_middle_school_v1",
+    scopeProfileId: "educational_middle_school_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+    primaryControlLabel: "IC-First Lab + Commons Program Coordination +10%",
+    breakScenarioLabel: "Ugly",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: 0.0,
+    observedValue: -145000,
+    flexBeforeBreakPct: 1.9,
+    expectedFlexLabel: "1.90% (Structurally Tight)",
+    baseDscr: 1.3,
+    stressedDscr: 1.04,
+  },
+  {
+    subtype: "high_school",
+    profileId: "educational_high_school_v1",
+    scopeProfileId: "educational_high_school_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel: "IC-First Fieldhouse + Performing-Arts Buildout +12%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 9.0,
+    observedValue: 7.5,
+    flexBeforeBreakPct: 1.6,
+    expectedFlexLabel: "1.60% (Structurally Tight)",
+    baseDscr: 1.34,
+    stressedDscr: 1.11,
+  },
+  {
+    subtype: "university",
+    profileId: "educational_university_v1",
+    scopeProfileId: "educational_university_structural_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+    primaryControlLabel: "IC-First Research Utility Spine + Commissioning +9%",
+    breakScenarioLabel: "Base",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: -5000000.0,
+    observedValue: 6200000,
+    flexBeforeBreakPct: 5.3,
+    expectedFlexLabel: "5.30% (Flexible)",
+    baseDscr: 1.46,
+    stressedDscr: 1.22,
+  },
+  {
+    subtype: "community_college",
+    profileId: "educational_community_college_v1",
+    scopeProfileId: "educational_community_college_structural_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+    primaryControlLabel: "IC-First Workforce Labs + Trade-Shop Fitout +8%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 6.5,
+    observedValue: 8.4,
+    flexBeforeBreakPct: 2.1,
+    expectedFlexLabel: "2.10% (Moderate)",
+    baseDscr: 1.43,
+    stressedDscr: 1.21,
+  },
+] as const;
+
 const OFFICE_POLICY_CONTRACT_CASES = [
   {
     subtype: "class_a",
@@ -2019,6 +2112,114 @@ describe("DealShieldView", () => {
           })
         ).toBeInTheDocument();
       }
+    }
+  });
+
+  it("renders educational parity with canonical decision contract fields, DI metric semantics, and subtype-authored content anchors for all five subtypes", () => {
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_educational_policy_contract_0"
+        data={buildSubtypePolicyPayload(EDUCATIONAL_POLICY_CONTRACT_CASES[0]) as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    for (const testCase of EDUCATIONAL_POLICY_CONTRACT_CASES) {
+      rerender(
+        <DealShieldView
+          projectId={`proj_${testCase.profileId}`}
+          data={buildSubtypePolicyPayload(testCase) as any}
+          loading={false}
+          error={null}
+        />
+      );
+
+      expect(screen.getByText("Decision Status")).toBeInTheDocument();
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      expect(screen.getByText(DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
+
+      const decisionPolicyMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return (
+          text.includes("Decision Policy:") &&
+          text.includes(`Status: ${testCase.decisionStatus}`) &&
+          text.includes(`Reason: ${testCase.decisionReasonCode}`) &&
+          text.includes("Source: dealshield_policy_v1")
+        );
+      });
+      expect(decisionPolicyMatches.length).toBeGreaterThan(0);
+
+      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText("First Break Condition")).toBeInTheDocument();
+      expect(screen.getByText("Flex Before Break %")).toBeInTheDocument();
+      expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
+
+      if (testCase.breakMetric === "value_gap_pct") {
+        expect(
+          screen.getByText(
+            `Break occurs in ${testCase.breakScenarioLabel}: value-gap percentage crosses threshold.`
+          )
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("%") && !text.includes("$");
+          })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return (
+              text.includes("Threshold:") &&
+              text.includes(testCase.breakOperator) &&
+              text.includes("%") &&
+              !text.includes("$")
+            );
+          })
+        ).toBeInTheDocument();
+      } else {
+        const expectedSummary =
+          testCase.threshold === 0
+            ? `Break occurs in ${testCase.breakScenarioLabel}: value gap turns negative.`
+            : `Break occurs in ${testCase.breakScenarioLabel}: value gap crosses threshold.`;
+        expect(screen.getByText(expectedSummary)).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("$");
+          })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return (
+              text.includes("Threshold:") &&
+              text.includes(testCase.breakOperator) &&
+              text.includes("$")
+            );
+          })
+        ).toBeInTheDocument();
+      }
+
+      expect(screen.getByText("Fastest-Change")).toBeInTheDocument();
+      expect(screen.getByText("Most Likely Wrong")).toBeInTheDocument();
+      expect(screen.getByText("Question Bank")).toBeInTheDocument();
+      expect(screen.getByText("Red Flags")).toBeInTheDocument();
+      expect(
+        screen.getAllByText(`${testCase.subtype} downside concentration is under-modeled.`).length
+      ).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText("Which risk assumptions remain placeholder-based?").length
+      ).toBeGreaterThan(0);
     }
   });
 

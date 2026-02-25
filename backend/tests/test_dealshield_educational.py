@@ -5,6 +5,7 @@ from app.v2.config.master_config import (
     ProjectClass,
     get_building_config,
 )
+from app.v2.config.construction_schedule import build_construction_schedule
 from app.v2.config.type_profiles.dealshield_content import educational as educational_content
 from app.v2.config.type_profiles.dealshield_content import get_dealshield_content_profile
 from app.v2.config.type_profiles.decision_insurance_policy import (
@@ -420,3 +421,67 @@ def test_educational_decision_status_and_provenance_are_deterministic():
             "decision_insurance_provenance",
         ):
             assert view_a.get(key) == view_b.get(key), f"Expected deterministic equality for '{key}'"
+
+
+def test_educational_first_break_unit_semantics_match_metric_family():
+    for subtype, expected in EDUCATIONAL_PROFILE_IDS.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.EDUCATIONAL,
+            subtype=subtype,
+            square_footage=80_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        profile = get_dealshield_profile(expected["tile_profile"])
+        view_model = build_dealshield_view_model(
+            project_id=f"educational-first-break-units-{subtype}",
+            payload=payload,
+            profile=profile,
+        )
+
+        first_break = view_model.get("first_break_condition")
+        assert isinstance(first_break, dict)
+        metric = first_break.get("break_metric")
+        threshold = float(first_break.get("threshold"))
+        observed_value = float(first_break.get("observed_value"))
+        observed_value_pct = first_break.get("observed_value_pct")
+        assert isinstance(observed_value_pct, (int, float))
+
+        if metric == "value_gap_pct":
+            assert abs(threshold) <= 100.0
+            assert math.isclose(
+                observed_value,
+                float(observed_value_pct),
+                rel_tol=1e-9,
+                abs_tol=1e-9,
+            )
+        else:
+            assert metric == "value_gap"
+            assert abs(threshold) >= 1_000.0 or math.isclose(threshold, 0.0, abs_tol=1e-9)
+            assert abs(observed_value) >= 1_000.0
+            assert not math.isclose(
+                abs(observed_value),
+                abs(float(observed_value_pct)),
+                rel_tol=1e-6,
+                abs_tol=1e-6,
+            )
+
+
+def test_educational_schedule_source_is_subtype_specific_with_unknown_subtype_fallback():
+    for subtype in EDUCATIONAL_PROFILE_IDS:
+        schedule = build_construction_schedule(BuildingType.EDUCATIONAL, subtype)
+        assert schedule.get("building_type") == BuildingType.EDUCATIONAL.value
+        assert schedule.get("schedule_source") == "subtype"
+        assert schedule.get("subtype") == subtype
+        phases = schedule.get("phases")
+        assert isinstance(phases, list) and phases
+
+    unknown_schedule = build_construction_schedule(
+        BuildingType.EDUCATIONAL,
+        "unknown_educational_variant",
+    )
+    assert unknown_schedule.get("building_type") == BuildingType.EDUCATIONAL.value
+    assert unknown_schedule.get("schedule_source") == "building_type"
+    assert unknown_schedule.get("subtype") is None
+    phases = unknown_schedule.get("phases")
+    assert isinstance(phases, list) and phases
