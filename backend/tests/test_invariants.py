@@ -17,6 +17,7 @@ from app.v2.config.master_config import (
     get_target_roi,
     validate_config,
 )
+from app.v2.config.construction_schedule import build_construction_schedule
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.v2.config.type_profiles.decision_insurance_policy import (
     DECISION_INSURANCE_POLICY_BY_PROFILE_ID,
@@ -82,6 +83,30 @@ HEALTHCARE_PCV_GENERIC_TERMS = {
     "margin control",
     "primary control variable",
     "generic",
+}
+
+EDUCATIONAL_PROFILE_IDS = {
+    "elementary_school": "educational_elementary_school_v1",
+    "middle_school": "educational_middle_school_v1",
+    "high_school": "educational_high_school_v1",
+    "university": "educational_university_v1",
+    "community_college": "educational_community_college_v1",
+}
+
+EDUCATIONAL_PCV_GENERIC_TERMS = {
+    "cost control",
+    "revenue control",
+    "margin control",
+    "primary control variable",
+    "generic",
+}
+
+EDUCATIONAL_SCOPE_DEPTH_FLOOR = {
+    "elementary_school": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    "middle_school": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    "high_school": {"structural": 4, "mechanical": 4, "electrical": 4, "plumbing": 4, "finishes": 4},
+    "university": {"structural": 4, "mechanical": 5, "electrical": 5, "plumbing": 4, "finishes": 4},
+    "community_college": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
 }
 
 OFFICE_PROFILE_IDS = {
@@ -545,6 +570,11 @@ def test_policy_curated_decision_insurance_is_applied_for_hardened_profiles():
         (BuildingType.HEALTHCARE, "medical_center", 70_000),
         (BuildingType.HEALTHCARE, "nursing_home", 70_000),
         (BuildingType.HEALTHCARE, "rehabilitation", 70_000),
+        (BuildingType.EDUCATIONAL, "elementary_school", 70_000),
+        (BuildingType.EDUCATIONAL, "middle_school", 70_000),
+        (BuildingType.EDUCATIONAL, "high_school", 70_000),
+        (BuildingType.EDUCATIONAL, "university", 70_000),
+        (BuildingType.EDUCATIONAL, "community_college", 70_000),
         (BuildingType.SPECIALTY, "data_center", 110_000),
         (BuildingType.SPECIALTY, "laboratory", 70_000),
         (BuildingType.SPECIALTY, "self_storage", 90_000),
@@ -1476,3 +1506,171 @@ def test_healthcare_runtime_emits_utilization_and_efficiency_metrics_for_all_sub
             assert 0.0 <= occupancy_pct <= 100.0, (
                 f"{subtype} occupancy must be bounded to 0-100, got {occupancy_pct}"
             )
+
+
+def test_educational_di_policy_labels_are_ic_first_and_non_generic():
+    labels = []
+    for profile_id in EDUCATIONAL_PROFILE_IDS.values():
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+        primary_control = policy.get("primary_control_variable")
+        assert isinstance(primary_control, dict)
+        label = primary_control.get("label")
+        assert isinstance(label, str) and label.strip()
+
+        normalized_label = label.strip().lower()
+        assert normalized_label.startswith("ic-first ")
+        assert len(normalized_label) >= 30
+        for generic_term in EDUCATIONAL_PCV_GENERIC_TERMS:
+            assert generic_term not in normalized_label
+        labels.append(normalized_label)
+
+    assert len(labels) == len(set(labels))
+
+
+def test_educational_policy_collapse_metrics_are_mixed_and_semantically_wired():
+    collapse_metric_families = set()
+    flex_signatures = set()
+
+    for profile_id in EDUCATIONAL_PROFILE_IDS.values():
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+        collapse_trigger = policy.get("collapse_trigger")
+        flex_calibration = policy.get("flex_calibration")
+
+        assert isinstance(collapse_trigger, dict)
+        assert isinstance(flex_calibration, dict)
+
+        metric = collapse_trigger.get("metric")
+        operator = collapse_trigger.get("operator")
+        threshold = collapse_trigger.get("threshold")
+        scenario_priority = collapse_trigger.get("scenario_priority")
+
+        assert metric in {"value_gap_pct", "value_gap"}
+        assert operator in {"<=", "<"}
+        assert isinstance(threshold, (int, float))
+        assert isinstance(scenario_priority, list) and len(scenario_priority) == 4
+        assert len(set(scenario_priority)) == 4
+        assert scenario_priority[0] == "base"
+        assert {"base", "conservative", "ugly"}.issubset(set(scenario_priority))
+
+        profile = get_dealshield_profile(profile_id)
+        row_ids = {
+            row.get("row_id")
+            for row in profile.get("derived_rows", [])
+            if isinstance(row, dict) and isinstance(row.get("row_id"), str)
+        }
+        subtype_rows = [
+            scenario_id for scenario_id in scenario_priority
+            if scenario_id not in {"base", "conservative", "ugly"}
+        ]
+        assert len(subtype_rows) == 1
+        assert subtype_rows[0] in row_ids
+
+        tight = float(flex_calibration.get("tight_max_pct"))
+        moderate = float(flex_calibration.get("moderate_max_pct"))
+        fallback = float(flex_calibration.get("fallback_pct"))
+        assert tight <= moderate
+        assert fallback >= 0.0
+
+        collapse_metric_families.add(metric)
+        flex_signatures.add((tight, moderate, fallback))
+
+    assert collapse_metric_families == {"value_gap_pct", "value_gap"}
+    assert len(flex_signatures) == len(EDUCATIONAL_PROFILE_IDS)
+
+
+def test_educational_profiles_resolve_canonical_di_policy_and_deterministic_contract_provenance():
+    for subtype, profile_id in EDUCATIONAL_PROFILE_IDS.items():
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID.get(profile_id)
+        assert isinstance(policy, dict)
+
+        kwargs = dict(
+            building_type=BuildingType.EDUCATIONAL,
+            subtype=subtype,
+            square_footage=80_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        payload_a = unified_engine.calculate_project(**kwargs)
+        payload_b = unified_engine.calculate_project(**kwargs)
+        profile = get_dealshield_profile(profile_id)
+
+        view_a = build_dealshield_view_model(
+            project_id=f"educational-invariant-a-{subtype}",
+            payload=payload_a,
+            profile=profile,
+        )
+        view_b = build_dealshield_view_model(
+            project_id=f"educational-invariant-b-{subtype}",
+            payload=payload_b,
+            profile=profile,
+        )
+
+        di_provenance = view_a.get("decision_insurance_provenance")
+        assert isinstance(di_provenance, dict)
+        policy_block = di_provenance.get("decision_insurance_policy")
+        assert isinstance(policy_block, dict)
+        assert policy_block.get("status") == "available"
+        assert policy_block.get("policy_id") == DECISION_INSURANCE_POLICY_ID
+        assert policy_block.get("profile_id") == profile_id
+
+        status_provenance = view_a.get("decision_status_provenance")
+        assert isinstance(status_provenance, dict)
+        assert isinstance(status_provenance.get("status_source"), str)
+
+        for key in (
+            "decision_status",
+            "decision_reason_code",
+            "first_break_condition",
+            "flex_before_break_pct",
+            "flex_before_break_band",
+            "decision_status_provenance",
+            "decision_insurance_provenance",
+        ):
+            assert view_a.get(key) == view_b.get(key), f"Expected deterministic equality for '{key}'"
+
+
+def test_educational_schedule_source_and_scope_depth_invariants():
+    required_trades = {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+
+    for subtype, floors in EDUCATIONAL_SCOPE_DEPTH_FLOOR.items():
+        schedule = build_construction_schedule(BuildingType.EDUCATIONAL, subtype)
+        assert schedule.get("building_type") == BuildingType.EDUCATIONAL.value
+        assert schedule.get("schedule_source") == "subtype"
+        assert schedule.get("subtype") == subtype
+        phases = schedule.get("phases")
+        assert isinstance(phases, list) and phases
+
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.EDUCATIONAL,
+            subtype=subtype,
+            square_footage=80_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        scope_items = payload.get("scope_items")
+        assert isinstance(scope_items, list) and scope_items
+
+        by_trade = {
+            str(trade_block.get("trade", "")).strip().lower(): trade_block
+            for trade_block in scope_items
+            if isinstance(trade_block, dict) and isinstance(trade_block.get("trade"), str)
+        }
+        assert required_trades.issubset(by_trade.keys())
+
+        for trade_key, minimum_items in floors.items():
+            trade_block = by_trade[trade_key]
+            systems = trade_block.get("systems")
+            if not isinstance(systems, list):
+                systems = trade_block.get("items")
+            assert isinstance(systems, list)
+            assert len(systems) >= minimum_items
+
+    unknown_schedule = build_construction_schedule(
+        BuildingType.EDUCATIONAL,
+        "unknown_educational_variant",
+    )
+    assert unknown_schedule.get("building_type") == BuildingType.EDUCATIONAL.value
+    assert unknown_schedule.get("schedule_source") == "building_type"
+    assert unknown_schedule.get("subtype") is None
+    phases = unknown_schedule.get("phases")
+    assert isinstance(phases, list) and phases

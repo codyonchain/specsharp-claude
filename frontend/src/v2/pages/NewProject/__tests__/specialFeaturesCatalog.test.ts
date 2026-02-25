@@ -1,4 +1,6 @@
 import {
+  EDUCATIONAL_FEATURE_COSTS_BY_SUBTYPE,
+  EDUCATIONAL_SUBTYPES,
   HEALTHCARE_FEATURE_COSTS_BY_SUBTYPE,
   HEALTHCARE_SUBTYPES,
   HOSPITALITY_FEATURE_COSTS_BY_SUBTYPE,
@@ -9,17 +11,23 @@ import {
   RETAIL_SUBTYPES,
   RESTAURANT_FEATURE_COSTS_BY_SUBTYPE,
   RESTAURANT_SUBTYPES,
+  detectEducationalFeatureIdsFromDescription,
+  detectEducationalSubtypeFromDescription,
   detectHealthcareFeatureIdsFromDescription,
   detectHospitalityFeatureIdsFromDescription,
   detectOfficeFeatureIdsFromDescription,
   detectRetailFeatureIdsFromDescription,
   detectSpecialtyFeatureIdsFromDescription,
+  educationalSubtypeHasSpecialFeatures,
   filterSpecialFeaturesBySubtype,
+  getAvailableSpecialFeatures,
+  getEducationalSpecialFeatures,
   getHealthcareSpecialFeatures,
   getHospitalitySpecialFeatures,
   getOfficeSpecialFeatures,
   getRetailSpecialFeatures,
   getRestaurantSpecialFeatures,
+  getSpecialFeatureCost,
   getSpecialtySpecialFeatures,
   healthcareSubtypeHasSpecialFeatures,
   hospitalitySubtypeHasSpecialFeatures,
@@ -215,6 +223,45 @@ const REQUIRED_HEALTHCARE_MAPPING = {
     hydrotherapy: 50,
     treatment_rooms: 20,
     assessment_suite: 25,
+  },
+} as const;
+
+const REQUIRED_EDUCATIONAL_MAPPING = {
+  elementary_school: {
+    gymnasium: 35,
+    cafeteria: 30,
+    playground: 20,
+    computer_lab: 25,
+    library: 25,
+  },
+  middle_school: {
+    gymnasium: 40,
+    cafeteria: 30,
+    science_labs: 35,
+    computer_lab: 25,
+    auditorium: 45,
+    athletic_field: 30,
+  },
+  high_school: {
+    stadium: 60,
+    field_house: 50,
+    performing_arts_center: 55,
+    science_labs: 40,
+    vocational_shops: 45,
+    media_center: 30,
+  },
+  university: {
+    lecture_hall: 45,
+    research_lab: 75,
+    clean_room: 100,
+    library: 40,
+    student_center: 35,
+  },
+  community_college: {
+    vocational_lab: 40,
+    computer_lab: 25,
+    library: 20,
+    student_services: 15,
   },
 } as const;
 
@@ -567,6 +614,131 @@ describe("office special features catalog", () => {
     const classATotal = classACostPerSF * squareFootage;
     const classBTotal = classBCostPerSF * squareFootage;
     expect(classATotal).toBeGreaterThan(classBTotal);
+  });
+});
+
+describe("educational special features catalog", () => {
+  it("is non-empty and matches backend-aligned subtype mapping keys/values", () => {
+    const educationalFeatures = getEducationalSpecialFeatures();
+    expect(educationalFeatures.length).toBeGreaterThan(0);
+    expect(EDUCATIONAL_FEATURE_COSTS_BY_SUBTYPE).toEqual(REQUIRED_EDUCATIONAL_MAPPING);
+  });
+
+  it("resolves expected feature IDs for every educational subtype with no duplicates", () => {
+    for (const subtype of EDUCATIONAL_SUBTYPES) {
+      const expectedIds = Object.keys(REQUIRED_EDUCATIONAL_MAPPING[subtype]).sort();
+      const resolvedIds = getAvailableSpecialFeatures("educational", subtype).map(
+        (feature) => feature.id
+      );
+      const uniqueResolvedIds = Array.from(new Set(resolvedIds));
+
+      expect(uniqueResolvedIds.length).toBe(resolvedIds.length);
+      expect(uniqueResolvedIds.sort()).toEqual(expectedIds);
+    }
+  });
+
+  it("keeps unknown educational subtype explicit (no silent subtype coercion)", () => {
+    const unknownSubtypeResolved = getAvailableSpecialFeatures(
+      "educational",
+      "unknown_educational_variant"
+    );
+    expect(unknownSubtypeResolved).toEqual([]);
+
+    const noSubtypeResolved = getAvailableSpecialFeatures("educational");
+    const allExpectedIds = Array.from(
+      new Set(
+        Object.values(REQUIRED_EDUCATIONAL_MAPPING).flatMap((mapping) =>
+          Object.keys(mapping)
+        )
+      )
+    );
+    expect(noSubtypeResolved.map((feature) => feature.id)).toEqual(
+      expect.arrayContaining(allExpectedIds)
+    );
+  });
+
+  it("resolves subtype-specific costs only for valid educational subtype feature IDs", () => {
+    for (const subtype of EDUCATIONAL_SUBTYPES) {
+      for (const [featureId, expectedCost] of Object.entries(
+        REQUIRED_EDUCATIONAL_MAPPING[subtype]
+      )) {
+        expect(getSpecialFeatureCost("educational", featureId, subtype)).toBe(
+          expectedCost
+        );
+      }
+    }
+
+    expect(
+      getSpecialFeatureCost("educational", "stadium", "elementary_school")
+    ).toBeUndefined();
+    expect(
+      getSpecialFeatureCost(
+        "educational",
+        "community_college_workforce_program_shift",
+        "community_college"
+      )
+    ).toBeUndefined();
+  });
+
+  it("detects educational subtype cues for all five profiles and keeps generic educational explicit", () => {
+    expect(
+      detectEducationalSubtypeFromDescription(
+        "New 42000 sf elementary school with classroom wing in Nashville, TN"
+      )
+    ).toBe("elementary_school");
+    expect(
+      detectEducationalSubtypeFromDescription(
+        "New 68000 sf middle school with media lab and gymnasium in Nashville, TN"
+      )
+    ).toBe("middle_school");
+    expect(
+      detectEducationalSubtypeFromDescription(
+        "New 115000 sf high school with field house and performing arts hall in Nashville, TN"
+      )
+    ).toBe("high_school");
+    expect(
+      detectEducationalSubtypeFromDescription(
+        "New 185000 sf university science and lecture complex in Nashville, TN"
+      )
+    ).toBe("university");
+    expect(
+      detectEducationalSubtypeFromDescription(
+        "Renovate 62000 sf community college workforce training center in Nashville, TN"
+      )
+    ).toBe("community_college");
+
+    expect(
+      detectEducationalSubtypeFromDescription(
+        "New 38000 sf educational building in Nashville, TN"
+      )
+    ).toBeUndefined();
+  });
+
+  it("detects educational feature IDs from subtype-specific scope cues", () => {
+    const highSchoolDetected = detectEducationalFeatureIdsFromDescription(
+      "High school program with field house, stadium, performing arts center, and science labs."
+    );
+    expect(highSchoolDetected).toEqual(
+      expect.arrayContaining([
+        "field_house",
+        "stadium",
+        "performing_arts_center",
+        "science_labs",
+      ])
+    );
+
+    const communityCollegeDetected = detectEducationalFeatureIdsFromDescription(
+      "Community college expansion with vocational lab and student services modernization."
+    );
+    expect(communityCollegeDetected).toEqual(
+      expect.arrayContaining(["vocational_lab", "student_services"])
+    );
+  });
+
+  it("educational subtype helper returns true for all five educational subtypes", () => {
+    for (const subtype of EDUCATIONAL_SUBTYPES) {
+      expect(educationalSubtypeHasSpecialFeatures(subtype)).toBe(true);
+    }
   });
 });
 

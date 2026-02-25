@@ -239,7 +239,8 @@ class NLPService:
                     'elementary_school': ['elementary school', 'primary school', 'grade school', 'elementary'],
                     'middle_school': ['middle school', 'junior high', 'intermediate school'],
                     'high_school': ['high school', 'secondary school', 'senior high'],
-                    'university': ['university', 'college', 'campus', 'higher education']
+                    'community_college': ['community college', 'junior college', 'two-year college'],
+                    'university': ['university', 'campus', 'higher education', 'undergraduate campus']
                 }
             },
             'civic': {
@@ -539,7 +540,7 @@ class NLPService:
             for keyword in patterns['keywords']:
                 if keyword in text_lower:
                     # Found building type, get default subtype
-                    if building_type in {'office', 'retail'}:
+                    if building_type in {'office', 'retail', 'educational'}:
                         return building_type, None, classification
                     subtype = self._get_default_subtype(building_type)
                     return building_type, subtype, classification

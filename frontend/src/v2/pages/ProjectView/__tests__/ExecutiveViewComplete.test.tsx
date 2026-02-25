@@ -186,6 +186,39 @@ const HEALTHCARE_POLICY_CASES = [
   },
 ] as const;
 
+const EDUCATIONAL_POLICY_CASES = [
+  {
+    subtype: "elementary_school",
+    profileId: "educational_elementary_school_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+  },
+  {
+    subtype: "middle_school",
+    profileId: "educational_middle_school_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+  },
+  {
+    subtype: "high_school",
+    profileId: "educational_high_school_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+  },
+  {
+    subtype: "university",
+    profileId: "educational_university_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+  },
+  {
+    subtype: "community_college",
+    profileId: "educational_community_college_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+  },
+] as const;
+
 const buildRestaurantProject = () =>
   ({
     id: "proj_restaurant_exec",
@@ -869,6 +902,59 @@ describe("ExecutiveViewComplete", () => {
           <ExecutiveViewComplete
             project={buildCrossTypeProject(
               "healthcare",
+              testCase.subtype,
+              testCase.profileId
+            )}
+            dealShieldData={buildCrossTypeDealShieldViewModel(
+              testCase.profileId,
+              testCase.decisionStatus,
+              testCase.decisionReasonCode
+            ) as any}
+          />
+        </MemoryRouter>
+      );
+
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      const policyLineMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return (
+          text.includes("Policy source: dealshield_policy_v1") &&
+          text.includes("decision_insurance_subtype_policy_v1") &&
+          text.includes(`reason: ${testCase.decisionReasonCode}`)
+        );
+      });
+      expect(policyLineMatches.length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: "Scenario" })).toBeInTheDocument();
+    }
+  });
+
+  it("keeps canonical decision status/reason/provenance parity for all five educational subtypes", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject(
+            "educational",
+            EDUCATIONAL_POLICY_CASES[0].subtype,
+            EDUCATIONAL_POLICY_CASES[0].profileId
+          )}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            EDUCATIONAL_POLICY_CASES[0].profileId,
+            EDUCATIONAL_POLICY_CASES[0].decisionStatus,
+            EDUCATIONAL_POLICY_CASES[0].decisionReasonCode
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    for (const testCase of EDUCATIONAL_POLICY_CASES) {
+      rerender(
+        <MemoryRouter>
+          <ExecutiveViewComplete
+            project={buildCrossTypeProject(
+              "educational",
               testCase.subtype,
               testCase.profileId
             )}

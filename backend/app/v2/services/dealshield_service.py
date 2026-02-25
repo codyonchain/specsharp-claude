@@ -992,6 +992,10 @@ def _is_retail_profile(profile_id: Any) -> bool:
     return isinstance(profile_id, str) and profile_id.startswith("retail_")
 
 
+def _is_educational_profile(profile_id: Any) -> bool:
+    return isinstance(profile_id, str) and profile_id.startswith("educational_")
+
+
 def _supports_decision_insurance_profile(profile_id: Any) -> bool:
     return (
         _is_multifamily_profile(profile_id)
@@ -999,6 +1003,7 @@ def _supports_decision_insurance_profile(profile_id: Any) -> bool:
         or _is_healthcare_profile(profile_id)
         or _is_office_profile(profile_id)
         or _is_retail_profile(profile_id)
+        or _is_educational_profile(profile_id)
         or _is_restaurant_profile(profile_id)
         or _is_hospitality_profile(profile_id)
         or _is_specialty_profile(profile_id)
@@ -2002,6 +2007,14 @@ def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profil
 
                     retail_profile = retail_content.DEALSHIELD_CONTENT_PROFILES.get(content_profile_id)
                     content_profile = copy.deepcopy(retail_profile) if isinstance(retail_profile, dict) else None
+                except Exception:
+                    content_profile = None
+            elif _is_educational_profile(content_profile_id):
+                try:
+                    from app.v2.config.type_profiles.dealshield_content import educational as educational_content
+
+                    educational_profile = educational_content.DEALSHIELD_CONTENT_PROFILES.get(content_profile_id)
+                    content_profile = copy.deepcopy(educational_profile) if isinstance(educational_profile, dict) else None
                 except Exception:
                     content_profile = None
             else:

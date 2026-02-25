@@ -44,6 +44,11 @@ WAVE1_PROFILES: Set[str] = {
     "specialty_self_storage_v1",
     "specialty_car_dealership_v1",
     "specialty_broadcast_facility_v1",
+    "educational_elementary_school_v1",
+    "educational_middle_school_v1",
+    "educational_high_school_v1",
+    "educational_university_v1",
+    "educational_community_college_v1",
 }
 
 _ALLOWED_STRESS_BAND_PCTS: Set[int] = {10, 7, 5, 3}
@@ -543,13 +548,13 @@ def build_dealshield_scenarios(
                     "transforms": transforms,
                 })
                 levers.append(f"Total project cost scaled (tile {tile_id}).")
-            elif metric_ref == "revenue_analysis.annual_revenue":
+            elif metric_ref in {"revenue_analysis.annual_revenue", "modifiers.revenue_factor"}:
                 revenue_transforms.extend(transforms)
                 revenue_tiles.append({
                     "tile_id": tile_id,
                     "transforms": transforms,
                 })
-                levers.append(f"Annual revenue scaled (tile {tile_id}).")
+                levers.append(f"Revenue stress scaled via {metric_ref} (tile {tile_id}).")
             else:
                 driver_overrides.append((metric_ref, transforms))
                 driver_entries.append(_driver_entry(tile_id, metric_ref, transforms))
@@ -622,19 +627,21 @@ def build_dealshield_scenarios(
             _apply_driver_override(scenario_payload, metric_ref, transforms)
 
         if revenue_transforms:
-            revenue_block = scenario_payload.get("revenue_analysis") or {}
-            base_revenue = revenue_block.get("annual_revenue")
-            if not _is_number(base_revenue):
-                raise DealShieldScenarioError("Missing revenue_analysis.annual_revenue for scenario override")
-            new_revenue = _apply_transforms(float(base_revenue), revenue_transforms)
-            if not _is_number(new_revenue):
-                raise DealShieldScenarioError("Scenario annual_revenue is not numeric")
-            factor = (new_revenue / float(base_revenue)) if base_revenue else 1.0
             modifiers = dict(scenario_payload.get("modifiers") or {})
             base_factor = modifiers.get("revenue_factor", 1.0)
             if not _is_number(base_factor):
                 base_factor = 1.0
-            modifiers["revenue_factor"] = float(base_factor) * factor
+            revenue_block = scenario_payload.get("revenue_analysis") or {}
+            base_revenue = revenue_block.get("annual_revenue")
+            if _is_number(base_revenue):
+                new_revenue = _apply_transforms(float(base_revenue), revenue_transforms)
+                if not _is_number(new_revenue):
+                    raise DealShieldScenarioError("Scenario annual_revenue is not numeric")
+                factor = (new_revenue / float(base_revenue)) if base_revenue else 1.0
+                modifiers["revenue_factor"] = float(base_factor) * factor
+            else:
+                # Educational/public profiles may not emit annual_revenue; apply stress to revenue factor directly.
+                modifiers["revenue_factor"] = _apply_transforms(float(base_factor), revenue_transforms)
             scenario_payload["modifiers"] = modifiers
 
         if ramp_factor is not None:
