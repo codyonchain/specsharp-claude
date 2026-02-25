@@ -1480,6 +1480,11 @@ class UnifiedEngine:
                 "civic_government_building_v1",
                 "civic_community_center_v1",
                 "civic_public_safety_v1",
+                "recreation_fitness_center_v1",
+                "recreation_sports_complex_v1",
+                "recreation_aquatic_center_v1",
+                "recreation_recreation_center_v1",
+                "recreation_stadium_v1",
             }:
                 from app.v2.services.dealshield_scenarios import (
                     build_dealshield_scenarios,
@@ -3689,11 +3694,14 @@ class UnifiedEngine:
         
         # Recreation - special handling for stadium
         elif building_enum == BuildingType.RECREATION:
-            if hasattr(config, 'base_revenue_per_seat_annual'):
-                seats = square_footage * config.seats_per_sf
-                base_revenue = seats * config.base_revenue_per_seat_annual
+            per_seat_annual = getattr(config, 'base_revenue_per_seat_annual', None)
+            seats_per_sf = getattr(config, 'seats_per_sf', None)
+            per_sf_annual = getattr(config, 'base_revenue_per_sf_annual', 0)
+            if isinstance(per_seat_annual, (int, float)) and isinstance(seats_per_sf, (int, float)):
+                seats = square_footage * float(seats_per_sf)
+                base_revenue = seats * float(per_seat_annual)
             else:
-                base_revenue = square_footage * config.base_revenue_per_sf_annual
+                base_revenue = square_footage * float(per_sf_annual or 0)
         
         # Civic - no revenue (government funded)
         elif building_enum == BuildingType.CIVIC:

@@ -54,6 +54,11 @@ WAVE1_PROFILES: Set[str] = {
     "civic_government_building_v1",
     "civic_community_center_v1",
     "civic_public_safety_v1",
+    "recreation_fitness_center_v1",
+    "recreation_sports_complex_v1",
+    "recreation_aquatic_center_v1",
+    "recreation_recreation_center_v1",
+    "recreation_stadium_v1",
 }
 
 _ALLOWED_STRESS_BAND_PCTS: Set[int] = {10, 7, 5, 3}
