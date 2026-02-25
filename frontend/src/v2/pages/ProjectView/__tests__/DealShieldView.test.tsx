@@ -1812,6 +1812,18 @@ describe("DealShieldView", () => {
             return text.includes("Observed:") && text.includes("%") && !text.includes("$");
           })
         ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return (
+              text.includes("Threshold:") &&
+              text.includes(testCase.breakOperator) &&
+              text.includes("%") &&
+              !text.includes("$")
+            );
+          })
+        ).toBeInTheDocument();
       } else {
         const expectedSummary =
           testCase.threshold === 0
@@ -1823,6 +1835,17 @@ describe("DealShieldView", () => {
             if (element?.tagName.toLowerCase() !== "p") return false;
             const text = element.textContent ?? "";
             return text.includes("Observed:") && text.includes("$");
+          })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return (
+              text.includes("Threshold:") &&
+              text.includes(testCase.breakOperator) &&
+              text.includes("$")
+            );
           })
         ).toBeInTheDocument();
       }
