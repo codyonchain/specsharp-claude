@@ -3,6 +3,7 @@
 from typing import Any, Dict
 
 from . import civic
+from . import educational
 from . import healthcare
 from . import hospitality
 from . import industrial
@@ -27,6 +28,7 @@ DEALSHIELD_CONTENT_PROFILE_SOURCES: list[dict] = [
     multifamily.DEALSHIELD_CONTENT_PROFILES,
     office.DEALSHIELD_CONTENT_PROFILES,
     retail.DEALSHIELD_CONTENT_PROFILES,
+    educational.DEALSHIELD_CONTENT_PROFILES,
     civic.DEALSHIELD_CONTENT_PROFILES,
     CIVIC_CONTENT_PROFILE_ALIASES,
 ]

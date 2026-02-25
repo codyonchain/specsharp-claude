@@ -84,6 +84,22 @@ HEALTHCARE_PCV_GENERIC_TERMS = {
     "generic",
 }
 
+EDUCATIONAL_PROFILE_IDS = {
+    "elementary_school": "educational_elementary_school_v1",
+    "middle_school": "educational_middle_school_v1",
+    "high_school": "educational_high_school_v1",
+    "university": "educational_university_v1",
+    "community_college": "educational_community_college_v1",
+}
+
+EDUCATIONAL_PCV_GENERIC_TERMS = {
+    "cost control",
+    "revenue control",
+    "margin control",
+    "primary control variable",
+    "generic",
+}
+
 OFFICE_PROFILE_IDS = {
     "class_a": {
         "tile_profile": "office_class_a_v1",
@@ -545,6 +561,11 @@ def test_policy_curated_decision_insurance_is_applied_for_hardened_profiles():
         (BuildingType.HEALTHCARE, "medical_center", 70_000),
         (BuildingType.HEALTHCARE, "nursing_home", 70_000),
         (BuildingType.HEALTHCARE, "rehabilitation", 70_000),
+        (BuildingType.EDUCATIONAL, "elementary_school", 70_000),
+        (BuildingType.EDUCATIONAL, "middle_school", 70_000),
+        (BuildingType.EDUCATIONAL, "high_school", 70_000),
+        (BuildingType.EDUCATIONAL, "university", 70_000),
+        (BuildingType.EDUCATIONAL, "community_college", 70_000),
         (BuildingType.SPECIALTY, "data_center", 110_000),
         (BuildingType.SPECIALTY, "laboratory", 70_000),
         (BuildingType.SPECIALTY, "self_storage", 90_000),
@@ -1476,3 +1497,73 @@ def test_healthcare_runtime_emits_utilization_and_efficiency_metrics_for_all_sub
             assert 0.0 <= occupancy_pct <= 100.0, (
                 f"{subtype} occupancy must be bounded to 0-100, got {occupancy_pct}"
             )
+
+
+def test_educational_di_policy_labels_are_ic_first_and_non_generic():
+    labels = []
+    for profile_id in EDUCATIONAL_PROFILE_IDS.values():
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+        primary_control = policy.get("primary_control_variable")
+        assert isinstance(primary_control, dict)
+        label = primary_control.get("label")
+        assert isinstance(label, str) and label.strip()
+
+        normalized_label = label.strip().lower()
+        assert normalized_label.startswith("ic-first ")
+        assert len(normalized_label) >= 30
+        for generic_term in EDUCATIONAL_PCV_GENERIC_TERMS:
+            assert generic_term not in normalized_label
+        labels.append(normalized_label)
+
+    assert len(labels) == len(set(labels))
+
+
+def test_educational_policy_collapse_metrics_are_mixed_and_semantically_wired():
+    collapse_metric_families = set()
+    flex_signatures = set()
+
+    for profile_id in EDUCATIONAL_PROFILE_IDS.values():
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+        collapse_trigger = policy.get("collapse_trigger")
+        flex_calibration = policy.get("flex_calibration")
+
+        assert isinstance(collapse_trigger, dict)
+        assert isinstance(flex_calibration, dict)
+
+        metric = collapse_trigger.get("metric")
+        operator = collapse_trigger.get("operator")
+        threshold = collapse_trigger.get("threshold")
+        scenario_priority = collapse_trigger.get("scenario_priority")
+
+        assert metric in {"value_gap_pct", "value_gap"}
+        assert operator in {"<=", "<"}
+        assert isinstance(threshold, (int, float))
+        assert isinstance(scenario_priority, list) and len(scenario_priority) == 4
+        assert len(set(scenario_priority)) == 4
+        assert scenario_priority[0] == "base"
+        assert {"base", "conservative", "ugly"}.issubset(set(scenario_priority))
+
+        profile = get_dealshield_profile(profile_id)
+        row_ids = {
+            row.get("row_id")
+            for row in profile.get("derived_rows", [])
+            if isinstance(row, dict) and isinstance(row.get("row_id"), str)
+        }
+        subtype_rows = [
+            scenario_id for scenario_id in scenario_priority
+            if scenario_id not in {"base", "conservative", "ugly"}
+        ]
+        assert len(subtype_rows) == 1
+        assert subtype_rows[0] in row_ids
+
+        tight = float(flex_calibration.get("tight_max_pct"))
+        moderate = float(flex_calibration.get("moderate_max_pct"))
+        fallback = float(flex_calibration.get("fallback_pct"))
+        assert tight <= moderate
+        assert fallback >= 0.0
+
+        collapse_metric_families.add(metric)
+        flex_signatures.add((tight, moderate, fallback))
+
+    assert collapse_metric_families == {"value_gap_pct", "value_gap"}
+    assert len(flex_signatures) == len(EDUCATIONAL_PROFILE_IDS)

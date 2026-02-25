@@ -104,6 +104,76 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         },
         "flex_calibration": {"tight_max_pct": 2.0, "moderate_max_pct": 5.0, "fallback_pct": 3.0},
     },
+    "educational_elementary_school_v1": {
+        "primary_control_variable": {
+            "tile_id": "early_grade_program_and_ventilation_plus_9",
+            "metric_ref": "trade_breakdown.mechanical",
+            "label": "IC-First Early-Grade Program Drift, Ventilation Compliance, and Enrollment Rightsizing Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 18.0,
+            "scenario_priority": ["base", "conservative", "ugly", "elementary_enrollment_rightsizing_drag"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.7, "moderate_max_pct": 4.6, "fallback_pct": 2.0},
+    },
+    "educational_middle_school_v1": {
+        "primary_control_variable": {
+            "tile_id": "media_and_stem_load_plus_10",
+            "metric_ref": "trade_breakdown.electrical",
+            "label": "IC-First Media/STEM Density Creep, Power Distribution Risk, and Lab Turnover Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap",
+            "operator": "<=",
+            "threshold": 0.0,
+            "scenario_priority": ["base", "conservative", "ugly", "middle_curriculum_lab_fitout_drag"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.5, "moderate_max_pct": 4.1, "fallback_pct": 1.8},
+    },
+    "educational_high_school_v1": {
+        "primary_control_variable": {
+            "tile_id": "athletics_and_performing_arts_plus_11",
+            "metric_ref": "trade_breakdown.finishes",
+            "label": "IC-First Athletics/Arts Program Creep, Finish Intensity, and Utilization Volatility Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 9.0,
+            "scenario_priority": ["base", "conservative", "ugly", "high_school_activity_program_bloat"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.3, "moderate_max_pct": 3.9, "fallback_pct": 1.6},
+    },
+    "educational_university_v1": {
+        "primary_control_variable": {
+            "tile_id": "research_mep_and_controls_plus_12",
+            "metric_ref": "trade_breakdown.mechanical",
+            "label": "IC-First Research Commissioning Retest, Controls Integration, and Throughput Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap",
+            "operator": "<=",
+            "threshold": -5000000.0,
+            "scenario_priority": ["base", "conservative", "ugly", "university_research_commissioning_drag"],
+        },
+        "flex_calibration": {"tight_max_pct": 0.9, "moderate_max_pct": 2.8, "fallback_pct": 1.1},
+    },
+    "educational_community_college_v1": {
+        "primary_control_variable": {
+            "tile_id": "vocational_fitout_and_turnover_plus_9",
+            "metric_ref": "trade_breakdown.finishes",
+            "label": "IC-First Workforce Turnover Drift, Vocational Fit-Out Rework, and Enrollment Mix Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 6.5,
+            "scenario_priority": ["base", "conservative", "ugly", "community_college_workforce_program_shift"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.8, "moderate_max_pct": 4.7, "fallback_pct": 2.1},
+    },
     "multifamily_market_rate_apartments_v1": {
         "primary_control_variable": {
             "tile_id": "structural_carry_proxy_plus_5",

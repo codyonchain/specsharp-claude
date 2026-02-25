@@ -1470,6 +1470,11 @@ class UnifiedEngine:
                 "specialty_self_storage_v1",
                 "specialty_car_dealership_v1",
                 "specialty_broadcast_facility_v1",
+                "educational_elementary_school_v1",
+                "educational_middle_school_v1",
+                "educational_high_school_v1",
+                "educational_university_v1",
+                "educational_community_college_v1",
             }:
                 from app.v2.services.dealshield_scenarios import (
                     build_dealshield_scenarios,
@@ -1968,6 +1973,13 @@ class UnifiedEngine:
     def _load_scope_item_profile(self, profile_id: str, building_type: BuildingType) -> Optional[Dict[str, Any]]:
         profile_sources: List[Dict[str, Dict[str, Any]]] = []
         profile_sources.extend(scope_items.SCOPE_ITEM_PROFILE_SOURCES)
+        if building_type == BuildingType.EDUCATIONAL:
+            try:
+                from app.v2.config.type_profiles.scope_items import educational as educational_scope_items
+
+                profile_sources.append(educational_scope_items.SCOPE_ITEM_PROFILES)
+            except Exception:
+                pass
         if building_type == BuildingType.SPECIALTY:
             try:
                 from app.v2.config.type_profiles.scope_items import specialty as specialty_scope_items
@@ -1992,6 +2004,12 @@ class UnifiedEngine:
     def _resolve_scope_item_defaults(self, default_key: str) -> Dict[str, Any]:
         default_sources: List[Dict[str, Any]] = []
         default_sources.extend(scope_items.SCOPE_ITEM_DEFAULT_SOURCES)
+        try:
+            from app.v2.config.type_profiles.scope_items import educational as educational_scope_items
+
+            default_sources.append(educational_scope_items.SCOPE_ITEM_DEFAULTS)
+        except Exception:
+            pass
         try:
             from app.v2.config.type_profiles.scope_items import specialty as specialty_scope_items
 

@@ -192,6 +192,58 @@ class TestProjectNameGeneration:
         assert parsed["project_classification"] == "addition"
         assert name == "High School in Nashville"
 
+    @pytest.mark.parametrize(
+        "description,expected_subtype,expected_name",
+        [
+            (
+                "New 42000 sf elementary school with classroom wing and cafeteria in Nashville, TN",
+                "elementary_school",
+                "Elementary School in Nashville",
+            ),
+            (
+                "New 68000 sf middle school with media lab and gymnasium in Nashville, TN",
+                "middle_school",
+                "Middle School in Nashville",
+            ),
+            (
+                "New 115000 sf high school with field house and performing arts hall in Nashville, TN",
+                "high_school",
+                "High School in Nashville",
+            ),
+            (
+                "New 185000 sf university science and lecture complex in Nashville, TN",
+                "university",
+                "University in Nashville",
+            ),
+            (
+                "Renovate 62000 sf community college workforce training center in Nashville, TN",
+                "community_college",
+                "Community College in Nashville",
+            ),
+        ],
+    )
+    def test_educational_subtype_discoverability_all_five_profiles(
+        self,
+        description,
+        expected_subtype,
+        expected_name,
+    ):
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "educational"
+        assert parsed["subtype"] == expected_subtype
+        assert parsed["building_subtype"] == expected_subtype
+        assert name == expected_name
+
+    def test_educational_unknown_subtype_is_explicit_and_not_silent_elementary_fallback(self):
+        description = "New 38000 sf education support building in Nashville, TN"
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "educational"
+        assert parsed["subtype"] is None
+        assert parsed["building_subtype"] is None
+        assert name == "Educational in Nashville"
+
     def test_surgical_center_with_features(self):
         description = "Construct 10000 sf addition to medical clinic for outpatient surgery center with 4 procedure rooms"
         parsed, name = self._parse_and_name(description)
