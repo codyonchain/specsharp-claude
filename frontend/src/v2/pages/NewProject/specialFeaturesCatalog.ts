@@ -300,6 +300,58 @@ export const HEALTHCARE_FEATURE_COSTS_BY_SUBTYPE: Record<
   },
 };
 
+export const EDUCATIONAL_SUBTYPES = [
+  "elementary_school",
+  "middle_school",
+  "high_school",
+  "university",
+  "community_college",
+] as const;
+
+export type EducationalSubtype = (typeof EDUCATIONAL_SUBTYPES)[number];
+
+export const EDUCATIONAL_FEATURE_COSTS_BY_SUBTYPE: Record<
+  EducationalSubtype,
+  Record<string, number>
+> = {
+  elementary_school: {
+    gymnasium: 35,
+    cafeteria: 30,
+    playground: 20,
+    computer_lab: 25,
+    library: 25,
+  },
+  middle_school: {
+    gymnasium: 40,
+    cafeteria: 30,
+    science_labs: 35,
+    computer_lab: 25,
+    auditorium: 45,
+    athletic_field: 30,
+  },
+  high_school: {
+    stadium: 60,
+    field_house: 50,
+    performing_arts_center: 55,
+    science_labs: 40,
+    vocational_shops: 45,
+    media_center: 30,
+  },
+  university: {
+    lecture_hall: 45,
+    research_lab: 75,
+    clean_room: 100,
+    library: 40,
+    student_center: 35,
+  },
+  community_college: {
+    vocational_lab: 40,
+    computer_lab: 25,
+    library: 20,
+    student_services: 15,
+  },
+};
+
 const RESTAURANT_FEATURE_METADATA: Record<
   string,
   { name: string; description: string }
@@ -944,6 +996,88 @@ const HEALTHCARE_FEATURE_METADATA: Record<
   },
 };
 
+const EDUCATIONAL_FEATURE_METADATA: Record<
+  string,
+  { name: string; description: string }
+> = {
+  gymnasium: {
+    name: "Gymnasium",
+    description: "Athletics-ready school gym with resilient flooring, bleachers, and support zones.",
+  },
+  cafeteria: {
+    name: "Cafeteria",
+    description: "Student dining and serving infrastructure with high-throughput food service support.",
+  },
+  playground: {
+    name: "Playground",
+    description: "Age-appropriate exterior play environment with safety surfacing and site coordination.",
+  },
+  computer_lab: {
+    name: "Computer Lab",
+    description: "Instructional technology lab with power/data density and supervision-friendly layout.",
+  },
+  library: {
+    name: "Library / Media Center",
+    description: "Learning commons and media collections environment with flexible study spaces.",
+  },
+  science_labs: {
+    name: "Science Labs",
+    description: "General science laboratory classrooms with utility rough-ins and prep support.",
+  },
+  auditorium: {
+    name: "Auditorium",
+    description: "Assembly/performance venue with seating, acoustic treatment, and AV infrastructure.",
+  },
+  athletic_field: {
+    name: "Athletic Field",
+    description: "Outdoor student athletics field package with lighting, drainage, and spectator support.",
+  },
+  stadium: {
+    name: "Stadium",
+    description: "Large-capacity athletics venue with structured seating and game-day operations support.",
+  },
+  field_house: {
+    name: "Field House",
+    description: "Indoor athletics support building with training, equipment, and team facilities.",
+  },
+  performing_arts_center: {
+    name: "Performing Arts Center",
+    description: "Dedicated performance hall with stage systems, acoustic control, and back-of-house support.",
+  },
+  vocational_shops: {
+    name: "Vocational Shops",
+    description: "CTE workshop bays with specialty utilities, safety zoning, and durable interior systems.",
+  },
+  media_center: {
+    name: "Media Center",
+    description: "Integrated media production and collaboration hub with digital-learning infrastructure.",
+  },
+  lecture_hall: {
+    name: "Lecture Hall",
+    description: "Tiered higher-education lecture venue with AV backbone and acoustic performance.",
+  },
+  research_lab: {
+    name: "Research Lab",
+    description: "University research lab fitout with advanced utility support and operational controls.",
+  },
+  clean_room: {
+    name: "Clean Room",
+    description: "Controlled-environment research/teaching clean-room suite with specialty systems.",
+  },
+  student_center: {
+    name: "Student Center",
+    description: "Campus student-services and gathering hub with multipurpose program spaces.",
+  },
+  vocational_lab: {
+    name: "Vocational Lab",
+    description: "Workforce training lab with equipment-ready infrastructure for technical programs.",
+  },
+  student_services: {
+    name: "Student Services",
+    description: "Community-college advising, enrollment, and support-services suite buildout.",
+  },
+};
+
 export const filterSpecialFeaturesBySubtype = (
   features: SpecialFeatureOption[],
   subtype?: string
@@ -1211,6 +1345,48 @@ export const HEALTHCARE_SPECIAL_FEATURES = createHealthcareSpecialFeatures();
 export const getHealthcareSpecialFeatures = (): SpecialFeatureOption[] =>
   HEALTHCARE_SPECIAL_FEATURES;
 
+const createEducationalSpecialFeatures = (): SpecialFeatureOption[] => {
+  const byFeatureId: Record<
+    string,
+    { costPerSFBySubtype: Record<string, number>; allowedSubtypes: string[] }
+  > = {};
+
+  for (const subtype of EDUCATIONAL_SUBTYPES) {
+    const entries = EDUCATIONAL_FEATURE_COSTS_BY_SUBTYPE[subtype];
+    for (const [featureId, costPerSF] of Object.entries(entries)) {
+      if (!byFeatureId[featureId]) {
+        byFeatureId[featureId] = {
+          costPerSFBySubtype: {},
+          allowedSubtypes: [],
+        };
+      }
+      byFeatureId[featureId].costPerSFBySubtype[subtype] = costPerSF;
+      byFeatureId[featureId].allowedSubtypes.push(subtype);
+    }
+  }
+
+  return Object.entries(byFeatureId)
+    .sort(([featureA], [featureB]) => featureA.localeCompare(featureB))
+    .map(([featureId, featureData]) => {
+      const metadata = EDUCATIONAL_FEATURE_METADATA[featureId];
+      return {
+        id: featureId,
+        name: metadata?.name ?? featureId.replace(/_/g, " "),
+        description:
+          metadata?.description ?? "Educational subtype specific special feature.",
+        costPerSFBySubtype: featureData.costPerSFBySubtype,
+        allowedSubtypes: EDUCATIONAL_SUBTYPES.filter((subtype) =>
+          featureData.allowedSubtypes.includes(subtype)
+        ),
+      };
+    });
+};
+
+export const EDUCATIONAL_SPECIAL_FEATURES = createEducationalSpecialFeatures();
+
+export const getEducationalSpecialFeatures = (): SpecialFeatureOption[] =>
+  EDUCATIONAL_SPECIAL_FEATURES;
+
 const RESTAURANT_KEYWORD_DETECTION: Array<{
   featureId: string;
   patterns: RegExp[];
@@ -1461,6 +1637,83 @@ export const detectOfficeFeatureIdsFromDescription = (
     }
   }
   return Array.from(detectedFeatureIds);
+};
+
+const EDUCATIONAL_KEYWORD_DETECTION: Array<{
+  featureId: string;
+  patterns: RegExp[];
+}> = [
+  { featureId: "gymnasium", patterns: [/\bgymnasium\b/i, /\bschool gym\b/i] },
+  { featureId: "cafeteria", patterns: [/\bcafeteria\b/i, /\bschool dining\b/i] },
+  { featureId: "playground", patterns: [/\bplayground\b/i] },
+  { featureId: "computer_lab", patterns: [/\bcomputer lab\b/i] },
+  { featureId: "library", patterns: [/\blibrary\b/i, /\blearning commons\b/i] },
+  { featureId: "science_labs", patterns: [/\bscience labs?\b/i] },
+  { featureId: "auditorium", patterns: [/\bauditorium\b/i] },
+  { featureId: "athletic_field", patterns: [/\bathletic fields?\b/i] },
+  { featureId: "stadium", patterns: [/\bstadium\b/i] },
+  { featureId: "field_house", patterns: [/\bfield house\b/i] },
+  {
+    featureId: "performing_arts_center",
+    patterns: [/\bperforming arts center\b/i, /\bperforming arts hall\b/i],
+  },
+  { featureId: "vocational_shops", patterns: [/\bvocational shops?\b/i] },
+  { featureId: "media_center", patterns: [/\bmedia center\b/i] },
+  { featureId: "lecture_hall", patterns: [/\blecture hall\b/i] },
+  { featureId: "research_lab", patterns: [/\bresearch labs?\b/i, /\bresearch complex\b/i] },
+  { featureId: "clean_room", patterns: [/\bclean room\b/i, /\bcleanroom\b/i] },
+  { featureId: "student_center", patterns: [/\bstudent center\b/i] },
+  { featureId: "vocational_lab", patterns: [/\bvocational lab\b/i, /\bworkforce training\b/i] },
+  { featureId: "student_services", patterns: [/\bstudent services\b/i] },
+];
+
+export const detectEducationalFeatureIdsFromDescription = (
+  description: string
+): string[] => {
+  const detectedFeatureIds = new Set<string>();
+  for (const { featureId, patterns } of EDUCATIONAL_KEYWORD_DETECTION) {
+    if (patterns.some((pattern) => pattern.test(description))) {
+      detectedFeatureIds.add(featureId);
+    }
+  }
+  return Array.from(detectedFeatureIds);
+};
+
+const EDUCATIONAL_SUBTYPE_CUE_ORDER: Array<{
+  subtype: EducationalSubtype;
+  patterns: RegExp[];
+}> = [
+  {
+    subtype: "community_college",
+    patterns: [/\bcommunity college\b/i, /\bjunior college\b/i, /\btwo-year college\b/i],
+  },
+  {
+    subtype: "elementary_school",
+    patterns: [/\belementary school\b/i, /\bprimary school\b/i, /\bgrade school\b/i],
+  },
+  {
+    subtype: "middle_school",
+    patterns: [/\bmiddle school\b/i, /\bjunior high\b/i, /\bintermediate school\b/i],
+  },
+  {
+    subtype: "high_school",
+    patterns: [/\bhigh school\b/i, /\bsecondary school\b/i, /\bsenior high\b/i],
+  },
+  {
+    subtype: "university",
+    patterns: [/\buniversity\b/i, /\bcampus\b/i, /\bhigher education\b/i],
+  },
+];
+
+export const detectEducationalSubtypeFromDescription = (
+  description: string
+): EducationalSubtype | undefined => {
+  for (const { subtype, patterns } of EDUCATIONAL_SUBTYPE_CUE_ORDER) {
+    if (patterns.some((pattern) => pattern.test(description))) {
+      return subtype;
+    }
+  }
+  return undefined;
 };
 
 const SPECIALTY_KEYWORD_DETECTION: Array<{
@@ -1759,6 +2012,76 @@ export const detectHealthcareFeatureIdsFromDescription = (
   return Array.from(detectedFeatureIds);
 };
 
+const SPECIAL_FEATURES_BY_BUILDING_TYPE: Record<string, SpecialFeatureOption[]> = {
+  restaurant: RESTAURANT_SPECIAL_FEATURES,
+  hospitality: HOSPITALITY_SPECIAL_FEATURES,
+  retail: RETAIL_SPECIAL_FEATURES,
+  office: OFFICE_SPECIAL_FEATURES,
+  specialty: SPECIALTY_SPECIAL_FEATURES,
+  healthcare: HEALTHCARE_SPECIAL_FEATURES,
+  educational: EDUCATIONAL_SPECIAL_FEATURES,
+};
+
+const VALID_SUBTYPES_BY_BUILDING_TYPE: Record<string, readonly string[]> = {
+  restaurant: RESTAURANT_SUBTYPES,
+  hospitality: HOSPITALITY_SUBTYPES,
+  retail: RETAIL_SUBTYPES,
+  office: OFFICE_SUBTYPES,
+  specialty: SPECIALTY_SUBTYPES,
+  healthcare: HEALTHCARE_SUBTYPES,
+  educational: EDUCATIONAL_SUBTYPES,
+};
+
+export const getAvailableSpecialFeatures = (
+  buildingType?: string,
+  subtype?: string
+): SpecialFeatureOption[] => {
+  if (!buildingType) {
+    return [];
+  }
+  const features = SPECIAL_FEATURES_BY_BUILDING_TYPE[buildingType] || [];
+  if (!subtype) {
+    return features;
+  }
+  const validSubtypes = VALID_SUBTYPES_BY_BUILDING_TYPE[buildingType];
+  if (Array.isArray(validSubtypes) && !validSubtypes.includes(subtype)) {
+    // Explicitly preserve unknown-subtype behavior; do not coerce to a known subtype.
+    return [];
+  }
+  return filterSpecialFeaturesBySubtype(features, subtype);
+};
+
+export const getSpecialFeatureCost = (
+  buildingType: string,
+  featureId: string,
+  subtype?: string
+): number | undefined => {
+  if (!buildingType || !featureId) {
+    return undefined;
+  }
+  const feature = getAvailableSpecialFeatures(buildingType, subtype).find(
+    (entry) => entry.id === featureId
+  );
+  if (!feature) {
+    return undefined;
+  }
+
+  const subtypeCost =
+    subtype && feature.costPerSFBySubtype
+      ? feature.costPerSFBySubtype[subtype]
+      : undefined;
+  if (typeof subtypeCost === "number" && Number.isFinite(subtypeCost)) {
+    return subtypeCost;
+  }
+  if (typeof feature.costPerSF === "number" && Number.isFinite(feature.costPerSF)) {
+    return feature.costPerSF;
+  }
+  if (typeof feature.cost === "number" && Number.isFinite(feature.cost)) {
+    return feature.cost;
+  }
+  return undefined;
+};
+
 export const restaurantSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
   filterSpecialFeaturesBySubtype(RESTAURANT_SPECIAL_FEATURES, subtype).length > 0;
 
@@ -1776,3 +2099,6 @@ export const healthcareSubtypeHasSpecialFeatures = (subtype?: string): boolean =
 
 export const officeSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
   filterSpecialFeaturesBySubtype(OFFICE_SPECIAL_FEATURES, subtype).length > 0;
+
+export const educationalSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
+  filterSpecialFeaturesBySubtype(EDUCATIONAL_SPECIAL_FEATURES, subtype).length > 0;

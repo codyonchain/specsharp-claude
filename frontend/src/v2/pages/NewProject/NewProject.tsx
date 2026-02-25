@@ -6,6 +6,8 @@ import { tracer } from '../../utils/traceSystem';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { BuildingTaxonomy } from '../../../core/buildingTaxonomy';
 import {
+  detectEducationalFeatureIdsFromDescription,
+  detectEducationalSubtypeFromDescription,
   detectHealthcareFeatureIdsFromDescription,
   detectHospitalityFeatureIdsFromDescription,
   detectOfficeFeatureIdsFromDescription,
@@ -13,12 +15,8 @@ import {
   detectRestaurantFeatureIdsFromDescription,
   detectSpecialtyFeatureIdsFromDescription,
   filterSpecialFeaturesBySubtype,
-  getHealthcareSpecialFeatures,
-  getHospitalitySpecialFeatures,
-  getOfficeSpecialFeatures,
-  getRetailSpecialFeatures,
-  getRestaurantSpecialFeatures,
-  getSpecialtySpecialFeatures,
+  getAvailableSpecialFeatures,
+  getSpecialFeatureCost,
   type SpecialFeatureOption,
 } from './specialFeaturesCatalog';
 
@@ -77,6 +75,11 @@ const BUILDING_TYPE_DETECTION_CUES: RegExp[] = [
   /\boffice\b/i,
   /\bhospital\b/i,
   /\bschool\b/i,
+  /\belementary school\b/i,
+  /\bmiddle school\b/i,
+  /\bhigh school\b/i,
+  /\buniversity\b/i,
+  /\bcommunity college\b/i,
   /\bretail\b/i,
   /\bindustrial\b/i,
   /\bhotel\b/i,
@@ -337,16 +340,23 @@ export const NewProject: React.FC = () => {
   ];
   
   // Special features by building type
-  const getAvailableFeatures = (buildingType: string): SpecialFeatureOption[] => {
+  const getAvailableFeatures = (
+    buildingType: string,
+    subtype?: string
+  ): SpecialFeatureOption[] => {
+    if (
+      buildingType === 'healthcare' ||
+      buildingType === 'educational' ||
+      buildingType === 'office' ||
+      buildingType === 'retail' ||
+      buildingType === 'restaurant' ||
+      buildingType === 'hospitality' ||
+      buildingType === 'specialty'
+    ) {
+      return getAvailableSpecialFeatures(buildingType, subtype);
+    }
+
     const features: Record<string, SpecialFeatureOption[]> = {
-      healthcare: getHealthcareSpecialFeatures(),
-      educational: [
-        { id: 'gymnasium', name: 'Gymnasium', cost: 2000000, description: 'Full-size gym with bleachers' },
-        { id: 'auditorium', name: 'Auditorium', cost: 3000000, description: 'Performance space with seating' },
-        { id: 'cafeteria', name: 'Cafeteria & Kitchen', cost: 1500000, description: 'Commercial kitchen and dining' },
-        { id: 'science_labs', name: 'Science Labs', cost: 2500000, description: 'Specialized laboratory classrooms' },
-        { id: 'athletic_fields', name: 'Athletic Fields', cost: 1000000, description: 'Outdoor sports facilities' }
-      ],
       residential: [
         { id: 'parking_garage', name: 'Parking Garage', cost: 5000000, description: 'Structured parking facility' },
         { id: 'pool', name: 'Pool & Amenity Deck', cost: 2000000, description: 'Swimming pool and deck area' },
@@ -422,14 +432,9 @@ export const NewProject: React.FC = () => {
         { id: 'office_buildout', name: 'Office Build-out', cost: 1000000, description: 'Administrative space' },
         { id: 'cranes', name: 'Overhead Cranes', cost: 2000000, description: 'Heavy lifting equipment' }
       ],
-      office: getOfficeSpecialFeatures(),
-      retail: getRetailSpecialFeatures(),
-      restaurant: getRestaurantSpecialFeatures(),
-      hospitality: getHospitalitySpecialFeatures(),
-      specialty: getSpecialtySpecialFeatures(),
     };
-    
-    return features[buildingType] || [];
+
+    return filterSpecialFeaturesBySubtype(features[buildingType] || [], subtype);
   };
   
   // Parse description to detect features automatically
@@ -461,6 +466,9 @@ export const NewProject: React.FC = () => {
       detectedFeatures.add(featureId);
     }
     for (const featureId of detectSpecialtyFeatureIdsFromDescription(desc)) {
+      detectedFeatures.add(featureId);
+    }
+    for (const featureId of detectEducationalFeatureIdsFromDescription(desc)) {
       detectedFeatures.add(featureId);
     }
     
@@ -576,9 +584,16 @@ export const NewProject: React.FC = () => {
     setLocationInput(liveDetectedLocation);
     setLocationAutoFilled(true);
   }, [liveDetectedLocation, locationTouched, locationInput, locationAutoFilled]);
-  const currentSubtype = parsedInput?.subtype || parsedInput?.building_subtype;
-  const availableSpecialFeatures = parsedInput ? getAvailableFeatures(parsedInput.building_type) : [];
-  const applicableSpecialFeatures = filterSpecialFeaturesBySubtype(availableSpecialFeatures, currentSubtype);
+  const parsedSubtype = parsedInput?.subtype || parsedInput?.building_subtype;
+  const educationalSubtypeFromCues =
+    parsedInput?.building_type === 'educational' && !parsedSubtype
+      ? detectEducationalSubtypeFromDescription(description)
+      : undefined;
+  const currentSubtype = parsedSubtype || educationalSubtypeFromCues;
+  const availableSpecialFeatures = parsedInput
+    ? getAvailableFeatures(parsedInput.building_type, currentSubtype)
+    : [];
+  const applicableSpecialFeatures = availableSpecialFeatures;
 
   // Live preview effect
   useEffect(() => {
@@ -695,11 +710,13 @@ export const NewProject: React.FC = () => {
       const parsed = parseDescription(description);
       const parsedBuildingType = analysis.parsed_input?.building_type;
       const parsedSubtype = analysis.parsed_input?.subtype || analysis.parsed_input?.building_subtype;
+      const educationalSubtypeFromDescription =
+        parsedBuildingType === 'educational' && !parsedSubtype
+          ? detectEducationalSubtypeFromDescription(description)
+          : undefined;
+      const resolvedSubtype = parsedSubtype || educationalSubtypeFromDescription;
       const allowedFeatureIds = new Set(
-        filterSpecialFeaturesBySubtype(
-          getAvailableFeatures(parsedBuildingType || ''),
-          parsedSubtype
-        ).map((feature) => feature.id)
+        getAvailableFeatures(parsedBuildingType || '', resolvedSubtype).map((feature) => feature.id)
       );
       const parsedSpecialFeatures = parsed.specialFeatures.filter((featureId) =>
         allowedFeatureIds.has(featureId)
@@ -889,14 +906,22 @@ export const NewProject: React.FC = () => {
     isPlaceholder: boolean;
   };
 
-  const usesSubtypeCostPerSF = ['healthcare', 'multifamily', 'restaurant', 'specialty', 'office', 'retail'].includes(
+  const usesSubtypeCostPerSF = ['healthcare', 'multifamily', 'restaurant', 'specialty', 'office', 'retail', 'educational'].includes(
     parsedInput?.building_type ?? ''
   );
   const isRestaurantProject = parsedInput?.building_type === 'restaurant';
   const isOfficeProject = parsedInput?.building_type === 'office';
+  const isEducationalProject = parsedInput?.building_type === 'educational';
   const hasFeatureSquareFootage = typeof squareFootageSummary === 'number' && squareFootageSummary > 0;
 
   const resolveFeatureCostPerSF = (feature: SpecialFeatureOption): number | undefined => {
+    const catalogCost = parsedInput?.building_type
+      ? getSpecialFeatureCost(parsedInput.building_type, feature.id, currentSubtype)
+      : undefined;
+    if (typeof catalogCost === 'number' && Number.isFinite(catalogCost)) {
+      return catalogCost;
+    }
+
     const subtypeCost = currentSubtype && feature.costPerSFBySubtype
       ? feature.costPerSFBySubtype[currentSubtype]
       : undefined;
@@ -906,7 +931,7 @@ export const NewProject: React.FC = () => {
     if (typeof feature.costPerSF === 'number' && Number.isFinite(feature.costPerSF)) {
       return feature.costPerSF;
     }
-    if (isOfficeProject && !currentSubtype && feature.costPerSFBySubtype) {
+    if ((isOfficeProject || isEducationalProject) && !currentSubtype && feature.costPerSFBySubtype) {
       return undefined;
     }
     if (currentSubtype && feature.costPerSFBySubtype) {
