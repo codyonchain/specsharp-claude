@@ -11,6 +11,7 @@ from app.v2.config.type_profiles.dealshield_content import get_dealshield_conten
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.v2.config.type_profiles.dealshield_tiles import retail as retail_tile_profiles
 from app.v2.config.type_profiles.dealshield_content import retail as retail_content_profiles
+from app.v2.config.type_profiles import scope_items as shared_scope_registry
 from app.v2.config.type_profiles.scope_items import retail as retail_scope_profiles
 from app.v2.engines.unified_engine import unified_engine
 from app.v2.services.dealshield_service import build_dealshield_view_model
@@ -62,6 +63,20 @@ def _scope_trade_map(profile_id: str) -> dict[str, dict]:
     }
 
 
+def _resolve_scope_profile_from_shared_registry(profile_id: str) -> dict:
+    for source in shared_scope_registry.SCOPE_ITEM_PROFILE_SOURCES:
+        if isinstance(source, dict) and profile_id in source:
+            return source[profile_id]
+    raise KeyError(profile_id)
+
+
+def _resolve_scope_default_from_shared_registry(subtype: str) -> str:
+    for source in shared_scope_registry.SCOPE_ITEM_DEFAULT_SOURCES:
+        if isinstance(source, dict) and subtype in source:
+            return source[subtype]
+    raise KeyError(subtype)
+
+
 def test_retail_subtypes_wire_explicit_tile_and_scope_profiles():
     for subtype, expected in RETAIL_PROFILE_MAP.items():
         config = get_building_config(BuildingType.RETAIL, subtype)
@@ -90,6 +105,17 @@ def test_retail_content_profiles_resolve_via_shared_registry_lookup():
         module_profile = retail_content_profiles.DEALSHIELD_CONTENT_PROFILES[profile_id]
         assert direct_profile == module_profile
         assert direct_profile.get("profile_id") == profile_id
+
+
+def test_retail_scope_profiles_resolve_via_shared_scope_registry_lookup():
+    for subtype, expected in RETAIL_PROFILE_MAP.items():
+        profile_id = expected["scope"]
+        direct_profile = _resolve_scope_profile_from_shared_registry(profile_id)
+        module_profile = retail_scope_profiles.SCOPE_ITEM_PROFILES[profile_id]
+        assert direct_profile == module_profile
+
+        default_profile_id = _resolve_scope_default_from_shared_registry(subtype)
+        assert default_profile_id == profile_id
 
 
 def test_retail_scope_profiles_meet_depth_floor_and_normalized_shares():
