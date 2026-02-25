@@ -5,23 +5,26 @@ import { formatCurrency } from '../../utils/formatters';
 interface ProvenanceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  projectData: any;
-  calculationTrace?: any[];
-  calculationData?: any;
+  analysis: any;
   displayData?: any;
 }
 
 export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
   isOpen,
   onClose,
-  projectData,
-  calculationTrace = [],
-  calculationData,
+  analysis,
   displayData,
 }) => {
   if (!isOpen) return null;
 
-  const calc = calculationData || {};
+  const analysisRecord = analysis || {};
+  const calc = analysisRecord.calculations || {};
+  const parsedInput = analysisRecord.parsed_input || {};
+  const calculationTrace = Array.isArray(calc?.calculation_trace)
+    ? calc.calculation_trace
+    : Array.isArray(analysisRecord?.calculation_trace)
+      ? analysisRecord.calculation_trace
+      : [];
   const projectInfo = calc.project_info || {};
   const ownershipAnalysis = calc.ownership_analysis || {};
   const returnMetrics = calc.return_metrics || {};
@@ -31,10 +34,67 @@ export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
   const revenueRequirements =
     calc.revenue_requirements || ownershipAnalysis.revenue_requirements || {};
   const investmentAnalysis = ownershipAnalysis.investment_analysis || {};
+  const buildingTypeFromParsed = (parsedInput?.building_type || '').toLowerCase();
   const buildingTypeFromCalc = (projectInfo?.building_type || '').toLowerCase();
   const buildingTypeFromDisplay = (displayData?.buildingType || '').toLowerCase();
   const normalizedBuildingType =
-    buildingTypeFromCalc || buildingTypeFromDisplay || '';
+    buildingTypeFromParsed || buildingTypeFromCalc || buildingTypeFromDisplay || '';
+  const normalizedSubtype =
+    parsedInput?.subtype ||
+    parsedInput?.building_subtype ||
+    projectInfo?.subtype ||
+    displayData?.subtype ||
+    undefined;
+  const resolvedSquareFootage =
+    typeof parsedInput?.square_footage === 'number' && parsedInput.square_footage > 0
+      ? parsedInput.square_footage
+      : typeof projectInfo?.square_footage === 'number' && projectInfo.square_footage > 0
+        ? projectInfo.square_footage
+        : undefined;
+  const resolvedLocation =
+    parsedInput?.location || projectInfo?.location || undefined;
+  const resolvedProjectClass =
+    parsedInput?.project_classification ||
+    parsedInput?.project_class ||
+    projectInfo?.project_class ||
+    undefined;
+  const detectionSource =
+    parsedInput?.detection_source || 'N/A';
+  const conflictResolution =
+    parsedInput?.detection_conflict_resolution || 'N/A';
+
+  const formatLabel = (value?: string) => {
+    if (!value || typeof value !== 'string') {
+      return 'N/A';
+    }
+    return value
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  };
+
+  const formatProjectClass = (value?: string) => {
+    if (!value || typeof value !== 'string') {
+      return 'Ground-Up';
+    }
+    return value
+      .replace(/_/g, '-')
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  };
+
+  const generatedAtTimestamp = (() => {
+    if (!Array.isArray(calculationTrace) || calculationTrace.length === 0) {
+      return undefined;
+    }
+    const timestamps = calculationTrace
+      .map((trace) => trace?.timestamp)
+      .filter((value): value is string => typeof value === 'string' && !Number.isNaN(Date.parse(value)));
+    if (timestamps.length === 0) {
+      return undefined;
+    }
+    return timestamps
+      .map((value) => Date.parse(value))
+      .reduce((max, current) => (current > max ? current : max), 0);
+  })();
 
   // Format timestamp
   const formatTimestamp = (timestamp: string) => {
@@ -62,14 +122,40 @@ export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
   // Format data values
   const formatDataValue = (key: string, value: any): string => {
     if (value === null || value === undefined) return 'N/A';
-    if (key.toLowerCase().includes('cost') || key.toLowerCase().includes('total') || key.toLowerCase().includes('amount')) {
-      return typeof value === 'number' ? formatCurrency(value) : value;
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+    const keyLower = key.toLowerCase();
+    const isFactorKey =
+      keyLower.includes('factor') ||
+      keyLower.includes('multiplier');
+    const isPercentKey =
+      keyLower.includes('pct') ||
+      keyLower.includes('percent') ||
+      keyLower.includes('percentage') ||
+      keyLower.includes('margin') ||
+      keyLower.includes('yield') ||
+      keyLower.includes('roi');
+    const isCurrencyKey =
+      keyLower.includes('cost') ||
+      keyLower.includes('total') ||
+      keyLower.includes('amount') ||
+      keyLower.includes('revenue') ||
+      keyLower.includes('noi') ||
+      keyLower.includes('npv') ||
+      keyLower.includes('debt') ||
+      keyLower.includes('value');
+
+    if (isPercentKey) {
+      if (typeof value !== 'number' || !Number.isFinite(value)) return String(value);
+      const normalized = value > 0 && value < 1 ? value * 100 : value;
+      return `${normalized.toFixed(2)}%`;
     }
-    if (key.toLowerCase().includes('multiplier') || key.toLowerCase().includes('rate')) {
-      return typeof value === 'number' ? `${value.toFixed(2)}x` : value;
+    if (isFactorKey) {
+      if (typeof value !== 'number' || !Number.isFinite(value)) return String(value);
+      return `${value.toFixed(2)}x`;
     }
-    if (key.toLowerCase().includes('percentage') || key.toLowerCase().includes('percent')) {
-      return typeof value === 'number' ? `${(value * 100).toFixed(1)}%` : value;
+    if (isCurrencyKey && !keyLower.includes('cost_factor')) {
+      if (typeof value !== 'number' || !Number.isFinite(value)) return String(value);
+      return formatCurrency(value);
     }
     if (typeof value === 'number') {
       return value.toLocaleString();
@@ -168,38 +254,49 @@ export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
             {/* Project Summary */}
             <div className="bg-gray-50 rounded-lg p-4 mb-6">
               <h3 className="font-semibold text-gray-900 mb-3">Project Summary</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
                 <div>
                   <p className="text-gray-600">Building Type</p>
                   <p className="font-medium">
-                    {projectInfo?.display_name ||
-                      projectInfo?.building_type ||
-                      projectData?.building_type ||
-                      'N/A'}
+                    {projectInfo?.display_name
+                      ? projectInfo.display_name
+                      : formatLabel(normalizedBuildingType)}
                   </p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Subtype</p>
+                  <p className="font-medium">{formatLabel(normalizedSubtype)}</p>
                 </div>
                 <div>
                   <p className="text-gray-600">Square Footage</p>
                   <p className="font-medium">
-                    {projectInfo?.square_footage
-                      ? `${projectInfo.square_footage.toLocaleString()} SF`
-                      : projectData?.square_footage
-                        ? `${projectData.square_footage.toLocaleString()} SF`
-                        : 'N/A'}
+                    {resolvedSquareFootage
+                      ? `${resolvedSquareFootage.toLocaleString()} SF`
+                      : 'N/A'}
                   </p>
                 </div>
                 <div>
                   <p className="text-gray-600">Location</p>
                   <p className="font-medium">
-                    {projectInfo?.location || projectData?.location || 'N/A'}
+                    {resolvedLocation || 'N/A'}
                   </p>
                 </div>
                 <div>
                   <p className="text-gray-600">Project Class</p>
                   <p className="font-medium">
-                    {projectInfo?.project_class ||
-                      projectData?.project_class ||
-                      'Ground-Up'}
+                    {formatProjectClass(resolvedProjectClass)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Detection Source</p>
+                  <p className="font-medium text-xs break-all">
+                    {detectionSource}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Conflict Outcome</p>
+                  <p className="font-medium text-xs break-all">
+                    {conflictResolution}
                   </p>
                 </div>
               </div>
@@ -207,18 +304,27 @@ export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
 
             {/* Data Sources */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <h3 className="font-semibold text-blue-900 mb-2">Data Sources</h3>
+              <h3 className="font-semibold text-blue-900 mb-2">Run Provenance</h3>
               <ul className="space-y-1 text-sm text-blue-800">
-                <li>• Base costs: RSMeans 2024 Q3 Construction Cost Data</li>
-                <li>• Regional adjustments: SpecSharp Market Intelligence Database</li>
-                <li>• Trade breakdowns: Industry-standard allocations</li>
-                <li>• Soft costs: Regional market averages</li>
-                <li>• Equipment costs: Manufacturer MSRP data</li>
+                <li>• Building type: {formatLabel(normalizedBuildingType)}</li>
+                <li>• Subtype: {formatLabel(normalizedSubtype)}</li>
+                <li>
+                  • Scope profile: {calc?.scope_items_profile_id || calc?.scope_profile || 'N/A'}
+                </li>
+                <li>
+                  • DealShield tile profile: {calc?.dealshield_tile_profile_id || 'N/A'}
+                </li>
+                <li>
+                  • Schedule source: {calc?.construction_schedule?.schedule_source || 'N/A'}
+                </li>
+                <li>
+                  • Schedule profile: {calc?.construction_schedule?.profile_id || 'N/A'}
+                </li>
               </ul>
             </div>
 
             {(() => {
-              const feasibilityData = feasibilityTrace?.data || {};
+              const feasibilityData = feasibilityTrace?.data || feasibilityTrace?.payload || {};
               const isIndustrial = normalizedBuildingType === 'industrial';
 
               let roiPercent: number | undefined;
@@ -393,9 +499,10 @@ export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
                             </span>
                           </div>
                           
-                          {trace.data && Object.keys(trace.data).length > 0 && (
+                          {(trace.data || trace.payload) &&
+                            Object.keys((trace.data || trace.payload) as Record<string, unknown>).length > 0 && (
                             <div className="bg-gray-50 rounded p-3 space-y-2">
-                              {Object.entries(trace.data).map(([key, value]) => (
+                              {Object.entries((trace.data || trace.payload) as Record<string, unknown>).map(([key, value]) => (
                                 <div key={key} className="flex justify-between text-sm">
                                   <span className="text-gray-600">
                                     {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:
@@ -433,7 +540,15 @@ export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
                 <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
                 <div className="text-sm text-green-800">
                   <p className="font-semibold mb-1">Calculation Confidence</p>
-                  <p>This estimate is based on current market data and has been validated against {projectData?.confidence_projects || 47} similar projects in the region. The methodology follows industry-standard practices and incorporates real-time market conditions.</p>
+                  {typeof parsedInput?.confidence_projects === 'number' ? (
+                    <p>
+                      This run references {parsedInput.confidence_projects} comparable projects in the configured confidence model.
+                    </p>
+                  ) : (
+                    <p>
+                      Confidence cohort size is not explicitly provided for this run; use the trace steps and profile IDs above for auditability.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -443,7 +558,7 @@ export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
           <div className="sticky bottom-0 bg-gray-50 border-t px-6 py-4">
             <div className="flex items-center justify-between">
               <p className="text-sm text-gray-600">
-                Generated on {new Date().toLocaleDateString('en-US', { 
+                Generated on {new Date(generatedAtTimestamp || Date.now()).toLocaleDateString('en-US', {
                   month: 'long', 
                   day: 'numeric', 
                   year: 'numeric',

@@ -11,6 +11,7 @@ import {
 import { ProvenanceModal } from '../../components/ProvenanceModal';
 import { BackendDataMapper } from '../../utils/backendDataMapper';
 import { ScenarioModal } from '@/v2/components/ScenarioModal';
+import { normalizeAnalysisPayload } from '../../utils/analysisPayload';
 
 type TradeCostSplit = {
   materials: number;
@@ -359,14 +360,14 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
   const [activeTradeFilter, setActiveTradeFilter] = useState<'all' | 'structural' | 'mechanical' | 'electrical' | 'plumbing' | 'finishes'>('all');
   const [isScenarioOpen, setIsScenarioOpen] = useState(false);
   
-  const analysis = project.analysis;
-  if (!analysis) {
+  const analysis = normalizeAnalysisPayload(project);
+  if (!analysis || Object.keys(analysis).length === 0) {
     return <div className="p-6">Loading trade breakdown...</div>;
   }
   
   const calculations = analysis.calculations || {};
   const parsed_input = analysis.parsed_input || {};
-  const displayData = BackendDataMapper.mapToDisplay(project.analysis);
+  const displayData = BackendDataMapper.mapToDisplay(analysis);
   const isDev = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
   const constructionSchedule = calculations?.construction_schedule;
 
@@ -2156,21 +2157,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
       <ProvenanceModal
         isOpen={showProvenanceModal}
         onClose={() => setShowProvenanceModal(false)}
-        projectData={{
-          building_type: calculations?.project_info?.building_type || parsed_input?.building_type,
-          square_footage:
-            typeof calculations?.project_info?.square_footage === 'number'
-              ? calculations.project_info.square_footage
-              : squareFootage,
-          location: calculations?.project_info?.location || parsed_input?.location,
-          project_class:
-            calculations?.project_info?.project_class ||
-            parsed_input?.project_classification ||
-            parsed_input?.project_class,
-          confidence_projects: 47
-        }}
-        calculationData={calculations}
-        calculationTrace={calculations?.calculation_trace || project.analysis?.calculation_trace}
+        analysis={analysis}
         displayData={displayData}
       />
 

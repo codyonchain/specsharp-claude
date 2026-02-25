@@ -1243,6 +1243,54 @@ const buildRetailScheduleProject = (
 };
 
 describe("ConstructionView", () => {
+  it("uses canonical analysis payload for provenance receipt fields instead of re-deriving a separate project summary object", () => {
+    const project = buildCrossTypeScheduleProject("multifamily", "luxury_apartments", "subtype");
+    project.analysis.parsed_input = {
+      ...project.analysis.parsed_input,
+      building_type: "multifamily",
+      subtype: "luxury_apartments",
+      square_footage: 220000,
+      location: "Nashville, TN",
+      project_classification: "ground_up",
+      detection_source: "nlp_service.detect_building_type_with_subtype",
+      detection_conflict_resolution: "none",
+    };
+    project.analysis.calculations.project_info = {
+      ...project.analysis.calculations.project_info,
+      building_type: "office",
+      subtype: "class_a",
+      square_footage: 111111,
+      location: "Miami, FL",
+      project_class: "renovation",
+    };
+    project.analysis.calculations.calculation_trace = [
+      {
+        step: "calculation_start",
+        data: {
+          building_type: "multifamily",
+          subtype: "luxury_apartments",
+          square_footage: 220000,
+        },
+        timestamp: "2026-02-25T16:38:00Z",
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+    fireEvent.click(screen.getByRole("button", { name: "View Detailed Provenance Receipt" }));
+
+    expect(screen.getByText("Provenance Receipt")).toBeInTheDocument();
+    expect(screen.getByText(/Building type:\s*Multifamily/i)).toBeInTheDocument();
+    expect(screen.getByText(/Subtype:\s*Luxury Apartments/i)).toBeInTheDocument();
+    expect(screen.getByText("220,000 SF")).toBeInTheDocument();
+    expect(screen.getByText("Nashville, TN")).toBeInTheDocument();
+    expect(screen.getByText("Ground-Up")).toBeInTheDocument();
+    expect(screen.getByText("nlp_service.detect_building_type_with_subtype")).toBeInTheDocument();
+    expect(screen.getByText("none")).toBeInTheDocument();
+
+    expect(screen.queryByText("111,111 SF")).not.toBeInTheDocument();
+    expect(screen.queryByText("Miami, FL")).not.toBeInTheDocument();
+  });
+
   it("renders subtype schedule messaging for restaurant subtype schedules", () => {
     render(<ConstructionView project={buildRestaurantProject("subtype")} />);
 
