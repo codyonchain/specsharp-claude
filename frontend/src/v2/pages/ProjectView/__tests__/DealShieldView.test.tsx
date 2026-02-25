@@ -483,6 +483,104 @@ const CIVIC_POLICY_CONTRACT_CASES = [
   },
 ] as const;
 
+const RECREATION_POLICY_CONTRACT_CASES = [
+  {
+    subtype: "fitness_center",
+    profileId: "recreation_fitness_center_v1",
+    scopeProfileId: "recreation_fitness_center_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel:
+      "IC-First Peak Utilization Drift, Ventilation Load Volatility, and Membership Throughput Control",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 8.0,
+    observedValue: 7.3,
+    flexBeforeBreakPct: 1.6,
+    expectedFlexLabel: "1.60% (Structurally Tight)",
+    baseDscr: 1.36,
+    stressedDscr: 1.12,
+  },
+  {
+    subtype: "sports_complex",
+    profileId: "recreation_sports_complex_v1",
+    scopeProfileId: "recreation_sports_complex_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+    primaryControlLabel:
+      "IC-First Tournament Calendar Compression, Long-Span Drift, and Event Turnover Control",
+    breakScenarioLabel: "Ugly",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 6.0,
+    observedValue: 5.2,
+    flexBeforeBreakPct: 1.4,
+    expectedFlexLabel: "1.40% (Structurally Tight)",
+    baseDscr: 1.31,
+    stressedDscr: 1.05,
+  },
+  {
+    subtype: "aquatic_center",
+    profileId: "recreation_aquatic_center_v1",
+    scopeProfileId: "recreation_aquatic_center_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+    primaryControlLabel:
+      "IC-First Natatorium Humidity Stability, Water Chemistry Rework, and Corrosion Exposure Control",
+    breakScenarioLabel: "Ugly",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: -1500000.0,
+    observedValue: -1710000,
+    flexBeforeBreakPct: 1.1,
+    expectedFlexLabel: "1.10% (Structurally Tight)",
+    baseDscr: 1.28,
+    stressedDscr: 1.01,
+  },
+  {
+    subtype: "recreation_center",
+    profileId: "recreation_recreation_center_v1",
+    scopeProfileId: "recreation_recreation_center_structural_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+    primaryControlLabel:
+      "IC-First Program Mix Drift, Shared-Zone Utilization Conflict, and Throughput Balancing Control",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 5.0,
+    observedValue: 6.4,
+    flexBeforeBreakPct: 4.6,
+    expectedFlexLabel: "4.60% (Moderate)",
+    baseDscr: 1.44,
+    stressedDscr: 1.2,
+  },
+  {
+    subtype: "stadium",
+    profileId: "recreation_stadium_v1",
+    scopeProfileId: "recreation_stadium_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel:
+      "IC-First Event Calendar Disruption, Seating-Bowl Structural Drift, and Attendance Volatility Control",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: -9000000.0,
+    observedValue: -9280000,
+    flexBeforeBreakPct: 1.5,
+    expectedFlexLabel: "1.50% (Structurally Tight)",
+    baseDscr: 1.33,
+    stressedDscr: 1.09,
+  },
+] as const;
+
 const OFFICE_POLICY_CONTRACT_CASES = [
   {
     subtype: "class_a",
@@ -2327,6 +2425,113 @@ describe("DealShieldView", () => {
     );
 
     for (const testCase of CIVIC_POLICY_CONTRACT_CASES) {
+      rerender(
+        <DealShieldView
+          projectId={`proj_${testCase.profileId}`}
+          data={buildSubtypePolicyPayload(testCase) as any}
+          loading={false}
+          error={null}
+        />
+      );
+
+      expect(screen.getByText("Decision Status")).toBeInTheDocument();
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      expect(screen.getByText(DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
+      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText("First Break Condition")).toBeInTheDocument();
+      expect(screen.getByText("Flex Before Break %")).toBeInTheDocument();
+      expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
+
+      const decisionPolicyMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return (
+          text.includes("Decision Policy:") &&
+          text.includes(`Status: ${testCase.decisionStatus}`) &&
+          text.includes(`Reason: ${testCase.decisionReasonCode}`) &&
+          text.includes("Source: dealshield_policy_v1")
+        );
+      });
+      expect(decisionPolicyMatches.length).toBeGreaterThan(0);
+
+      if (testCase.breakMetric === "value_gap_pct") {
+        expect(
+          screen.getByText(
+            `Break occurs in ${testCase.breakScenarioLabel}: value-gap percentage crosses threshold.`
+          )
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("%") && !text.includes("$");
+          })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return (
+              text.includes("Threshold:") &&
+              text.includes(testCase.breakOperator) &&
+              text.includes("%") &&
+              !text.includes("$")
+            );
+          })
+        ).toBeInTheDocument();
+      } else {
+        expect(
+          screen.getByText(
+            `Break occurs in ${testCase.breakScenarioLabel}: value gap crosses threshold.`
+          )
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("$");
+          })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return (
+              text.includes("Threshold:") &&
+              text.includes(testCase.breakOperator) &&
+              text.includes("$")
+            );
+          })
+        ).toBeInTheDocument();
+      }
+
+      expect(screen.getByText("Fastest-Change")).toBeInTheDocument();
+      expect(screen.getByText("Most Likely Wrong")).toBeInTheDocument();
+      expect(screen.getByText("Question Bank")).toBeInTheDocument();
+      expect(screen.getByText("Red Flags")).toBeInTheDocument();
+      expect(
+        screen.getAllByText(`${testCase.subtype} downside concentration is under-modeled.`).length
+      ).toBeGreaterThan(0);
+      expect(
+        screen.queryByText("Decision Insurance unavailable for this profile/run.")
+      ).not.toBeInTheDocument();
+    }
+  });
+
+  it("renders recreation parity with canonical decision contract fields, DI metric semantics, and subtype-authored content anchors for all five subtypes", () => {
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_recreation_policy_contract_0"
+        data={buildSubtypePolicyPayload(RECREATION_POLICY_CONTRACT_CASES[0]) as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    for (const testCase of RECREATION_POLICY_CONTRACT_CASES) {
       rerender(
         <DealShieldView
           projectId={`proj_${testCase.profileId}`}

@@ -252,6 +252,39 @@ const CIVIC_POLICY_CASES = [
   },
 ] as const;
 
+const RECREATION_POLICY_CASES = [
+  {
+    subtype: "fitness_center",
+    profileId: "recreation_fitness_center_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+  },
+  {
+    subtype: "sports_complex",
+    profileId: "recreation_sports_complex_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+  },
+  {
+    subtype: "aquatic_center",
+    profileId: "recreation_aquatic_center_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+  },
+  {
+    subtype: "recreation_center",
+    profileId: "recreation_recreation_center_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+  },
+  {
+    subtype: "stadium",
+    profileId: "recreation_stadium_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+  },
+] as const;
+
 const buildRestaurantProject = () =>
   ({
     id: "proj_restaurant_exec",
@@ -1041,6 +1074,59 @@ describe("ExecutiveViewComplete", () => {
           <ExecutiveViewComplete
             project={buildCrossTypeProject(
               "civic",
+              testCase.subtype,
+              testCase.profileId
+            )}
+            dealShieldData={buildCrossTypeDealShieldViewModel(
+              testCase.profileId,
+              testCase.decisionStatus,
+              testCase.decisionReasonCode
+            ) as any}
+          />
+        </MemoryRouter>
+      );
+
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      const policyLineMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return (
+          text.includes("Policy source: dealshield_policy_v1") &&
+          text.includes("decision_insurance_subtype_policy_v1") &&
+          text.includes(`reason: ${testCase.decisionReasonCode}`)
+        );
+      });
+      expect(policyLineMatches.length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: "Scenario" })).toBeInTheDocument();
+    }
+  });
+
+  it("keeps canonical decision status/reason/provenance parity for all five recreation subtypes", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject(
+            "recreation",
+            RECREATION_POLICY_CASES[0].subtype,
+            RECREATION_POLICY_CASES[0].profileId
+          )}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            RECREATION_POLICY_CASES[0].profileId,
+            RECREATION_POLICY_CASES[0].decisionStatus,
+            RECREATION_POLICY_CASES[0].decisionReasonCode
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    for (const testCase of RECREATION_POLICY_CASES) {
+      rerender(
+        <MemoryRouter>
+          <ExecutiveViewComplete
+            project={buildCrossTypeProject(
+              "recreation",
               testCase.subtype,
               testCase.profileId
             )}
