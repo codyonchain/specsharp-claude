@@ -26,9 +26,11 @@ from app.v2.config.type_profiles.decision_insurance_policy import (
 from app.v2.config.type_profiles.dealshield_content import healthcare as healthcare_content
 from app.v2.config.type_profiles.dealshield_content import office as office_content
 from app.v2.config.type_profiles.dealshield_content import specialty as specialty_content
+from app.v2.config.type_profiles.dealshield_content import civic as civic_content
 from app.v2.config.type_profiles.scope_items import healthcare as healthcare_scope_profiles
 from app.v2.config.type_profiles.scope_items import office as office_scope_profiles
 from app.v2.config.type_profiles.scope_items import specialty as specialty_scope_profiles
+from app.v2.config.type_profiles.scope_items import civic as civic_scope_profiles
 from app.v2.services.dealshield_service import build_dealshield_view_model
 
 INDUSTRIAL_POLICY_EXPECTATIONS_BY_PROFILE_ID = {
@@ -131,6 +133,45 @@ OFFICE_PCV_GENERIC_TERMS = {
     "margin control",
     "primary control variable",
     "generic",
+}
+
+CIVIC_PROFILE_IDS = {
+    "library": {
+        "tile_profile": "civic_library_v1",
+        "scope_profile": "civic_library_structural_v1",
+    },
+    "courthouse": {
+        "tile_profile": "civic_courthouse_v1",
+        "scope_profile": "civic_courthouse_structural_v1",
+    },
+    "government_building": {
+        "tile_profile": "civic_government_building_v1",
+        "scope_profile": "civic_government_building_structural_v1",
+    },
+    "community_center": {
+        "tile_profile": "civic_community_center_v1",
+        "scope_profile": "civic_community_center_structural_v1",
+    },
+    "public_safety": {
+        "tile_profile": "civic_public_safety_v1",
+        "scope_profile": "civic_public_safety_structural_v1",
+    },
+}
+
+CIVIC_PCV_GENERIC_TERMS = {
+    "cost control",
+    "revenue control",
+    "margin control",
+    "primary control variable",
+    "generic",
+}
+
+CIVIC_SCOPE_DEPTH_FLOOR = {
+    "library": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    "courthouse": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    "government_building": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    "community_center": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    "public_safety": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
 }
 
 
@@ -1674,3 +1715,259 @@ def test_educational_schedule_source_and_scope_depth_invariants():
     assert unknown_schedule.get("subtype") is None
     phases = unknown_schedule.get("phases")
     assert isinstance(phases, list) and phases
+
+
+def test_civic_first_mlw_text_is_unique_across_all_subtypes():
+    first_mlw_texts = []
+
+    for expected in CIVIC_PROFILE_IDS.values():
+        content = civic_content.DEALSHIELD_CONTENT_PROFILES[expected["tile_profile"]]
+        mlw_entries = content.get("most_likely_wrong")
+        assert isinstance(mlw_entries, list) and mlw_entries
+
+        first_entry = mlw_entries[0]
+        assert isinstance(first_entry, dict)
+        first_text = first_entry.get("text")
+        assert isinstance(first_text, str) and first_text.strip()
+        first_mlw_texts.append(first_text.strip())
+
+    assert len(first_mlw_texts) == len(set(first_mlw_texts))
+
+
+def test_civic_subtypes_do_not_leak_baseline_alias_wiring():
+    for subtype, expected in CIVIC_PROFILE_IDS.items():
+        cfg = get_building_config(BuildingType.CIVIC, subtype)
+        assert cfg is not None
+
+        assert cfg.dealshield_tile_profile == expected["tile_profile"]
+        assert cfg.scope_items_profile == expected["scope_profile"]
+
+        assert cfg.dealshield_tile_profile != "civic_baseline_v1"
+        assert cfg.scope_items_profile != "civic_baseline_structural_v1"
+
+
+def test_civic_profile_resolution_is_present_and_deterministic():
+    scope_defaults = civic_scope_profiles.SCOPE_ITEM_DEFAULTS.get("default_profile_by_subtype")
+    assert isinstance(scope_defaults, dict)
+
+    for subtype, expected in CIVIC_PROFILE_IDS.items():
+        tile_profile_id = expected["tile_profile"]
+        scope_profile_id = expected["scope_profile"]
+
+        first_tile = get_dealshield_profile(tile_profile_id)
+        second_tile = get_dealshield_profile(tile_profile_id)
+        assert first_tile == second_tile
+        assert first_tile.get("profile_id") == tile_profile_id
+
+        content_first = civic_content.DEALSHIELD_CONTENT_PROFILES[tile_profile_id]
+        content_second = civic_content.DEALSHIELD_CONTENT_PROFILES[tile_profile_id]
+        assert content_first == content_second
+        assert content_first.get("profile_id") == tile_profile_id
+
+        scope_profile = civic_scope_profiles.SCOPE_ITEM_PROFILES[scope_profile_id]
+        assert scope_profile.get("profile_id") == scope_profile_id
+        assert scope_defaults.get(subtype) == scope_profile_id
+
+        cfg = get_building_config(BuildingType.CIVIC, subtype)
+        assert cfg is not None
+        assert cfg.dealshield_tile_profile == tile_profile_id
+        assert cfg.scope_items_profile == scope_profile_id
+
+
+def test_civic_di_policy_labels_are_ic_first_and_non_generic():
+    labels = []
+    for expected in CIVIC_PROFILE_IDS.values():
+        profile_id = expected["tile_profile"]
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+        primary_control = policy.get("primary_control_variable")
+        assert isinstance(primary_control, dict)
+        label = primary_control.get("label")
+        assert isinstance(label, str) and label.strip()
+
+        normalized_label = label.strip().lower()
+        assert normalized_label.startswith("ic-first ")
+        assert len(normalized_label) >= 30
+        for generic_term in CIVIC_PCV_GENERIC_TERMS:
+            assert generic_term not in normalized_label
+        labels.append(normalized_label)
+
+    assert len(labels) == len(set(labels))
+
+
+def test_civic_policy_collapse_metrics_are_mixed_and_semantically_wired():
+    collapse_metric_families = set()
+    flex_signatures = set()
+
+    for expected in CIVIC_PROFILE_IDS.values():
+        profile_id = expected["tile_profile"]
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+        primary_control = policy.get("primary_control_variable")
+        collapse_trigger = policy.get("collapse_trigger")
+        flex_calibration = policy.get("flex_calibration")
+
+        assert isinstance(primary_control, dict)
+        assert isinstance(collapse_trigger, dict)
+        assert isinstance(flex_calibration, dict)
+
+        profile = get_dealshield_profile(profile_id)
+        tile_map = {
+            tile.get("tile_id"): tile
+            for tile in profile.get("tiles", [])
+            if isinstance(tile, dict) and isinstance(tile.get("tile_id"), str)
+        }
+        tile_id = primary_control.get("tile_id")
+        assert tile_id in tile_map
+        assert primary_control.get("metric_ref") == tile_map[tile_id].get("metric_ref")
+
+        metric = collapse_trigger.get("metric")
+        operator = collapse_trigger.get("operator")
+        threshold = collapse_trigger.get("threshold")
+        scenario_priority = collapse_trigger.get("scenario_priority")
+
+        assert metric in {"value_gap_pct", "value_gap"}
+        assert operator in {"<=", "<"}
+        assert isinstance(threshold, (int, float))
+        assert isinstance(scenario_priority, list) and len(scenario_priority) == 4
+        assert len(set(scenario_priority)) == 4
+        assert scenario_priority[0] == "base"
+        assert {"base", "conservative", "ugly"}.issubset(set(scenario_priority))
+
+        row_ids = {
+            row.get("row_id")
+            for row in profile.get("derived_rows", [])
+            if isinstance(row, dict) and isinstance(row.get("row_id"), str)
+        }
+        subtype_rows = [
+            scenario_id for scenario_id in scenario_priority
+            if scenario_id not in {"base", "conservative", "ugly"}
+        ]
+        assert len(subtype_rows) == 1
+        assert subtype_rows[0] in row_ids
+
+        tight = float(flex_calibration.get("tight_max_pct"))
+        moderate = float(flex_calibration.get("moderate_max_pct"))
+        fallback = float(flex_calibration.get("fallback_pct"))
+        assert tight <= moderate
+        assert fallback >= 0.0
+
+        collapse_metric_families.add(metric)
+        flex_signatures.add((tight, moderate, fallback))
+
+    assert collapse_metric_families == {"value_gap_pct", "value_gap"}
+    assert len(flex_signatures) == len(CIVIC_PROFILE_IDS)
+
+
+def test_civic_profiles_resolve_canonical_di_policy_and_deterministic_contract_provenance():
+    for subtype, expected in CIVIC_PROFILE_IDS.items():
+        profile_id = expected["tile_profile"]
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID.get(profile_id)
+        assert isinstance(policy, dict)
+
+        kwargs = dict(
+            building_type=BuildingType.CIVIC,
+            subtype=subtype,
+            square_footage=75_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        payload_a = unified_engine.calculate_project(**kwargs)
+        payload_b = unified_engine.calculate_project(**kwargs)
+        profile = get_dealshield_profile(profile_id)
+
+        view_a = build_dealshield_view_model(
+            project_id=f"civic-invariant-a-{subtype}",
+            payload=payload_a,
+            profile=profile,
+        )
+        view_b = build_dealshield_view_model(
+            project_id=f"civic-invariant-b-{subtype}",
+            payload=payload_b,
+            profile=profile,
+        )
+
+        di_provenance = view_a.get("decision_insurance_provenance")
+        assert isinstance(di_provenance, dict)
+        policy_block = di_provenance.get("decision_insurance_policy")
+        assert isinstance(policy_block, dict)
+        assert policy_block.get("status") == "available"
+        assert policy_block.get("policy_id") == DECISION_INSURANCE_POLICY_ID
+        assert policy_block.get("profile_id") == profile_id
+
+        status_provenance = view_a.get("decision_status_provenance")
+        assert isinstance(status_provenance, dict)
+        assert isinstance(status_provenance.get("status_source"), str)
+
+        for key in (
+            "decision_status",
+            "decision_reason_code",
+            "first_break_condition",
+            "flex_before_break_pct",
+            "flex_before_break_band",
+            "decision_status_provenance",
+            "decision_insurance_provenance",
+        ):
+            assert view_a.get(key) == view_b.get(key), f"Expected deterministic equality for '{key}'"
+
+
+def test_civic_schedule_source_and_scope_depth_invariants():
+    required_trades = {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+
+    for subtype, floors in CIVIC_SCOPE_DEPTH_FLOOR.items():
+        schedule = build_construction_schedule(BuildingType.CIVIC, subtype)
+        assert schedule.get("building_type") == BuildingType.CIVIC.value
+        assert schedule.get("schedule_source") == "subtype"
+        assert schedule.get("subtype") == subtype
+        phases = schedule.get("phases")
+        assert isinstance(phases, list) and phases
+
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.CIVIC,
+            subtype=subtype,
+            square_footage=80_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        scope_items = payload.get("scope_items")
+        assert isinstance(scope_items, list) and scope_items
+
+        by_trade = {
+            str(trade_block.get("trade", "")).strip().lower(): trade_block
+            for trade_block in scope_items
+            if isinstance(trade_block, dict) and isinstance(trade_block.get("trade"), str)
+        }
+        assert required_trades.issubset(by_trade.keys())
+
+        for trade_key, minimum_items in floors.items():
+            trade_block = by_trade[trade_key]
+            systems = trade_block.get("systems")
+            if not isinstance(systems, list):
+                systems = trade_block.get("items")
+            assert isinstance(systems, list)
+            assert len(systems) >= minimum_items
+
+    unknown_schedule = build_construction_schedule(
+        BuildingType.CIVIC,
+        "unknown_civic_variant",
+    )
+    assert unknown_schedule.get("building_type") == BuildingType.CIVIC.value
+    assert unknown_schedule.get("schedule_source") == "building_type"
+    assert unknown_schedule.get("subtype") is None
+    phases = unknown_schedule.get("phases")
+    assert isinstance(phases, list) and phases
+
+
+def test_civic_di_policy_entries_are_available_for_all_profiles():
+    for expected in CIVIC_PROFILE_IDS.values():
+        profile_id = expected["tile_profile"]
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID.get(profile_id)
+        assert isinstance(policy, dict)
+
+        primary_control = policy.get("primary_control_variable")
+        collapse_trigger = policy.get("collapse_trigger")
+        flex_calibration = policy.get("flex_calibration")
+        assert isinstance(primary_control, dict)
+        assert isinstance(collapse_trigger, dict)
+        assert isinstance(flex_calibration, dict)
+
+        assert collapse_trigger.get("metric") in {"value_gap_pct", "value_gap"}
+        assert collapse_trigger.get("operator") in {"<=", "<"}

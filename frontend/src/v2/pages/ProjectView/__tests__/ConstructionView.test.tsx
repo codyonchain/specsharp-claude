@@ -202,6 +202,34 @@ const EDUCATIONAL_SCHEDULE_CASES = [
   },
 ] as const;
 
+const CIVIC_SCHEDULE_CASES = [
+  {
+    subtype: "library",
+    sitePhaseLabel: "Library Site Utilities + Foundation Reinforcement",
+    structuralPhaseLabel: "Stacks Structure + Makerspace MEP Integration",
+  },
+  {
+    subtype: "courthouse",
+    sitePhaseLabel: "Courthouse Security Site Prep + Foundations",
+    structuralPhaseLabel: "Courtroom Block + Custody Circulation Build",
+  },
+  {
+    subtype: "government_building",
+    sitePhaseLabel: "Government Core Utility Grid + Foundations",
+    structuralPhaseLabel: "Council Chambers + Records Core Buildout",
+  },
+  {
+    subtype: "community_center",
+    sitePhaseLabel: "Community Program Pads + Utility Tie-Ins",
+    structuralPhaseLabel: "Gym + Multipurpose Program Buildout",
+  },
+  {
+    subtype: "public_safety",
+    sitePhaseLabel: "Public Safety Utility Redundancy + Foundations",
+    structuralPhaseLabel: "Apparatus Bay + Dispatch Hardening Build",
+  },
+] as const;
+
 const buildRestaurantProject = (scheduleSource: "subtype" | "building_type") =>
   ({
     id: "proj_restaurant_construction",
@@ -774,6 +802,66 @@ const buildEducationalScheduleProject = (
   return project;
 };
 
+const buildCivicScheduleProject = (
+  subtype: (typeof CIVIC_SCHEDULE_CASES)[number]["subtype"],
+  scheduleSource: "subtype" | "building_type",
+  options?: { unknownFallbackSubtype?: boolean }
+) => {
+  const fixture = CIVIC_SCHEDULE_CASES.find((item) => item.subtype === subtype)!;
+  const fallbackSubtype =
+    scheduleSource === "building_type" && options?.unknownFallbackSubtype
+      ? "unknown_civic_variant"
+      : subtype;
+  const project = buildCrossTypeScheduleProject("civic", fallbackSubtype, scheduleSource);
+  project.analysis.calculations.construction_schedule.total_months =
+    scheduleSource === "subtype"
+      ? subtype === "courthouse"
+        ? 30
+        : subtype === "public_safety"
+          ? 26
+          : subtype === "government_building"
+            ? 24
+            : subtype === "library"
+              ? 22
+              : 20
+      : 24;
+  project.analysis.calculations.construction_schedule.phases =
+    scheduleSource === "subtype"
+      ? [
+          {
+            id: "site_foundation",
+            label: fixture.sitePhaseLabel,
+            start_month: 0,
+            duration_months: 6,
+            end_month: 6,
+          },
+          {
+            id: "structural",
+            label: fixture.structuralPhaseLabel,
+            start_month: 4,
+            duration_months: 12,
+            end_month: 16,
+          },
+        ]
+      : [
+          {
+            id: "site_foundation",
+            label: "Civic Baseline Site Program",
+            start_month: 0,
+            duration_months: 5,
+            end_month: 5,
+          },
+          {
+            id: "structural",
+            label: "Civic Baseline Structural Program",
+            start_month: 3,
+            duration_months: 10,
+            end_month: 13,
+          },
+        ];
+  return project;
+};
+
 const buildOfficeScheduleProject = (
   subtype: (typeof OFFICE_SCHEDULE_CASES)[number]["subtype"],
   scheduleSource: "subtype" | "building_type"
@@ -1168,6 +1256,44 @@ describe("ConstructionView", () => {
       ).toBeInTheDocument();
       expect(screen.getAllByText("Educational Baseline Site Program").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Educational Baseline Structural Program").length).toBeGreaterThan(0);
+    }
+  });
+
+  it("renders civic schedule-source parity for all five subtypes with explicit unknown-subtype fallback messaging", () => {
+    const { rerender } = render(
+      <ConstructionView
+        project={buildCivicScheduleProject(CIVIC_SCHEDULE_CASES[0].subtype, "subtype")}
+      />
+    );
+
+    for (const testCase of CIVIC_SCHEDULE_CASES) {
+      rerender(
+        <ConstructionView
+          project={buildCivicScheduleProject(testCase.subtype, "subtype")}
+        />
+      );
+      expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
+      expect(
+        screen.getByText("Timeline is tailored for this subtype profile.")
+      ).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.sitePhaseLabel).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(testCase.structuralPhaseLabel).length).toBeGreaterThan(0);
+
+      rerender(
+        <ConstructionView
+          project={buildCivicScheduleProject(testCase.subtype, "building_type", {
+            unknownFallbackSubtype: true,
+          })}
+        />
+      );
+      expect(screen.getByText("Building-type baseline")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Timeline uses building-type baseline (subtype override unavailable)."
+        )
+      ).toBeInTheDocument();
+      expect(screen.getAllByText("Civic Baseline Site Program").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Civic Baseline Structural Program").length).toBeGreaterThan(0);
     }
   });
 
@@ -1878,6 +2004,142 @@ describe("ConstructionView", () => {
       rerender(<ConstructionView project={project} />);
 
       expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
+
+      openTradeCard("Structural");
+      expect(screen.getByText("3 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.structuralName)).toBeInTheDocument();
+
+      openTradeCard("Mechanical");
+      expect(screen.getByText("3 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.mechanicalName)).toBeInTheDocument();
+
+      openTradeCard("Electrical");
+      expect(screen.getByText("3 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.electricalName)).toBeInTheDocument();
+
+      openTradeCard("Plumbing");
+      expect(screen.getByText("3 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.plumbingName)).toBeInTheDocument();
+
+      openTradeCard("Finishes");
+      expect(screen.getByText("3 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.finishesName)).toBeInTheDocument();
+    }
+  });
+
+  it("renders civic trade scope depth as subtype-credible and non-generic for all five civic subtypes", () => {
+    const cases = [
+      {
+        subtype: "library" as const,
+        structuralName: "Library Stack Reinforcement + Long-Span Framing",
+        mechanicalName: "Library Makerspace Exhaust + Zone Controls",
+        electricalName: "Library Daylighting Controls + Study Power Grid",
+        plumbingName: "Library Public-Service Restroom Branches",
+        finishesName: "Library Acoustic Panels + Durable Study Finishes",
+      },
+      {
+        subtype: "courthouse" as const,
+        structuralName: "Courthouse Courtroom Slab + Custody Zone Hardening",
+        mechanicalName: "Courthouse Screening Lobby Ventilation + Pressurization",
+        electricalName: "Courthouse Security Screening + Life-Safety Backbone",
+        plumbingName: "Courthouse Public/Judicial Plumbing Separation",
+        finishesName: "Courthouse Durable Public Counter + Chamber Finishes",
+      },
+      {
+        subtype: "government_building" as const,
+        structuralName: "Government Council Chamber + Records Core Framing",
+        mechanicalName: "Government Public Counter HVAC + Zonal Controls",
+        electricalName: "Government Service Hall Power + Security Network",
+        plumbingName: "Government Public Service Plumbing Backbone",
+        finishesName: "Government Counterfront + Council Interior Finishes",
+      },
+      {
+        subtype: "community_center" as const,
+        structuralName: "Community Gym + Multipurpose Hall Structural Grid",
+        mechanicalName: "Community Gym Ventilation + Event Mode Controls",
+        electricalName: "Community Program Lighting + AV Distribution",
+        plumbingName: "Community Kitchen + Locker Plumbing Network",
+        finishesName: "Community Program Flooring + Acoustic Finishes",
+      },
+      {
+        subtype: "public_safety" as const,
+        structuralName: "Public Safety Apparatus Bay + Dispatch Hardening",
+        mechanicalName: "Public Safety Exhaust Capture + Emergency Ventilation",
+        electricalName: "Public Safety Dispatch Power + Generator Transfer",
+        plumbingName: "Public Safety Decon + Domestic Plumbing Segments",
+        finishesName: "Public Safety Durable Ops + Training Finishes",
+      },
+    ];
+
+    const { rerender } = render(
+      <ConstructionView project={buildCivicScheduleProject(cases[0].subtype, "subtype")} />
+    );
+
+    const openTradeCard = (tradeName: string) => {
+      const tradeHeading = screen.getByText(tradeName, { selector: "h4" });
+      const tradeCard = tradeHeading.closest('[role="button"]');
+      expect(tradeCard).not.toBeNull();
+      fireEvent.click(tradeCard as HTMLElement);
+    };
+
+    for (const testCase of cases) {
+      const project = buildCivicScheduleProject(testCase.subtype, "subtype");
+      project.analysis.calculations.trade_breakdown = {
+        structural: 3600000,
+        mechanical: 3900000,
+        electrical: 3500000,
+        plumbing: 2400000,
+        finishes: 2900000,
+      };
+      project.analysis.calculations.scope_items = [
+        {
+          trade: "structural",
+          systems: [
+            { name: testCase.structuralName, quantity: 90000, unit: "SF", unit_cost: 31, total_cost: 2790000 },
+            { name: "Structural Shear Walls + Core Reinforcement", quantity: 90000, unit: "SF", unit_cost: 24, total_cost: 2160000 },
+            { name: "Envelope Support + Stair Core Framing", quantity: 90000, unit: "SF", unit_cost: 18, total_cost: 1620000 },
+          ],
+        },
+        {
+          trade: "mechanical",
+          systems: [
+            { name: testCase.mechanicalName, quantity: 90000, unit: "SF", unit_cost: 28, total_cost: 2520000 },
+            { name: "Dedicated Outside Air + Balancing", quantity: 90000, unit: "SF", unit_cost: 22, total_cost: 1980000 },
+            { name: "Controls Integration + Commissioning Program", quantity: 90000, unit: "SF", unit_cost: 17, total_cost: 1530000 },
+          ],
+        },
+        {
+          trade: "electrical",
+          systems: [
+            { name: testCase.electricalName, quantity: 90000, unit: "SF", unit_cost: 27, total_cost: 2430000 },
+            { name: "Switchgear + Emergency Distribution", quantity: 90000, unit: "SF", unit_cost: 21, total_cost: 1890000 },
+            { name: "Fire Alarm + Access Control Backbone", quantity: 90000, unit: "SF", unit_cost: 16, total_cost: 1440000 },
+          ],
+        },
+        {
+          trade: "plumbing",
+          systems: [
+            { name: testCase.plumbingName, quantity: 90000, unit: "SF", unit_cost: 19, total_cost: 1710000 },
+            { name: "Domestic Water + Sanitary Routing", quantity: 90000, unit: "SF", unit_cost: 15, total_cost: 1350000 },
+            { name: "Fixture Group Rough-In + Final Trim", quantity: 90000, unit: "SF", unit_cost: 11, total_cost: 990000 },
+          ],
+        },
+        {
+          trade: "finishes",
+          systems: [
+            { name: testCase.finishesName, quantity: 90000, unit: "SF", unit_cost: 22, total_cost: 1980000 },
+            { name: "Interior Doors + Hardware Program", quantity: 90000, unit: "SF", unit_cost: 16, total_cost: 1440000 },
+            { name: "Flooring + Ceiling + Wall Finish Scope", quantity: 90000, unit: "SF", unit_cost: 13, total_cost: 1170000 },
+          ],
+        },
+      ];
+
+      rerender(<ConstructionView project={project} />);
+
+      expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
+      expect(
+        screen.queryByText("Timeline uses building-type baseline (subtype override unavailable).")
+      ).not.toBeInTheDocument();
 
       openTradeCard("Structural");
       expect(screen.getByText("3 systems")).toBeInTheDocument();

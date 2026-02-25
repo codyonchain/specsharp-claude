@@ -390,6 +390,99 @@ const EDUCATIONAL_POLICY_CONTRACT_CASES = [
   },
 ] as const;
 
+const CIVIC_POLICY_CONTRACT_CASES = [
+  {
+    subtype: "library",
+    profileId: "civic_library_v1",
+    scopeProfileId: "civic_library_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel: "IC-First Stack Load Drift, Makerspace MEP Variance, and Community Access Control",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 7.5,
+    observedValue: 6.8,
+    flexBeforeBreakPct: 1.7,
+    expectedFlexLabel: "1.70% (Structurally Tight)",
+    baseDscr: 1.35,
+    stressedDscr: 1.12,
+  },
+  {
+    subtype: "courthouse",
+    profileId: "civic_courthouse_v1",
+    scopeProfileId: "civic_courthouse_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+    primaryControlLabel: "IC-First Custody Circulation Integrity, Screening Throughput, and Court Operations Control",
+    breakScenarioLabel: "Ugly",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: -2500000.0,
+    observedValue: -2710000,
+    flexBeforeBreakPct: 1.2,
+    expectedFlexLabel: "1.20% (Structurally Tight)",
+    baseDscr: 1.31,
+    stressedDscr: 1.04,
+  },
+  {
+    subtype: "government_building",
+    profileId: "civic_government_building_v1",
+    scopeProfileId: "civic_government_building_structural_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+    primaryControlLabel: "IC-First Records Burden Growth, Public Counter Throughput, and Service Continuity Control",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 6.0,
+    observedValue: 7.4,
+    flexBeforeBreakPct: 2.2,
+    expectedFlexLabel: "2.20% (Moderate)",
+    baseDscr: 1.42,
+    stressedDscr: 1.2,
+  },
+  {
+    subtype: "community_center",
+    profileId: "civic_community_center_v1",
+    scopeProfileId: "civic_community_center_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel: "IC-First Program Mix Creep, Shared-Use Conflicts, and After-Hours Activation Control",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 10.0,
+    observedValue: 9.2,
+    flexBeforeBreakPct: 2.3,
+    expectedFlexLabel: "2.30% (Moderate)",
+    baseDscr: 1.34,
+    stressedDscr: 1.11,
+  },
+  {
+    subtype: "public_safety",
+    profileId: "civic_public_safety_v1",
+    scopeProfileId: "civic_public_safety_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+    primaryControlLabel: "IC-First Dispatch Resilience, Emergency Power Reliability, and Response Readiness Control",
+    breakScenarioLabel: "Ugly",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: -1000000.0,
+    observedValue: -1125000,
+    flexBeforeBreakPct: 1.1,
+    expectedFlexLabel: "1.10% (Structurally Tight)",
+    baseDscr: 1.29,
+    stressedDscr: 1.03,
+  },
+] as const;
+
 const OFFICE_POLICY_CONTRACT_CASES = [
   {
     subtype: "class_a",
@@ -2220,6 +2313,113 @@ describe("DealShieldView", () => {
       expect(
         screen.getAllByText("Which risk assumptions remain placeholder-based?").length
       ).toBeGreaterThan(0);
+    }
+  });
+
+  it("renders civic parity with canonical decision contract fields, DI metric semantics, and subtype-authored content anchors for all five subtypes", () => {
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_civic_policy_contract_0"
+        data={buildSubtypePolicyPayload(CIVIC_POLICY_CONTRACT_CASES[0]) as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    for (const testCase of CIVIC_POLICY_CONTRACT_CASES) {
+      rerender(
+        <DealShieldView
+          projectId={`proj_${testCase.profileId}`}
+          data={buildSubtypePolicyPayload(testCase) as any}
+          loading={false}
+          error={null}
+        />
+      );
+
+      expect(screen.getByText("Decision Status")).toBeInTheDocument();
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      expect(screen.getByText(DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
+      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText("First Break Condition")).toBeInTheDocument();
+      expect(screen.getByText("Flex Before Break %")).toBeInTheDocument();
+      expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
+
+      const decisionPolicyMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return (
+          text.includes("Decision Policy:") &&
+          text.includes(`Status: ${testCase.decisionStatus}`) &&
+          text.includes(`Reason: ${testCase.decisionReasonCode}`) &&
+          text.includes("Source: dealshield_policy_v1")
+        );
+      });
+      expect(decisionPolicyMatches.length).toBeGreaterThan(0);
+
+      if (testCase.breakMetric === "value_gap_pct") {
+        expect(
+          screen.getByText(
+            `Break occurs in ${testCase.breakScenarioLabel}: value-gap percentage crosses threshold.`
+          )
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("%") && !text.includes("$");
+          })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return (
+              text.includes("Threshold:") &&
+              text.includes(testCase.breakOperator) &&
+              text.includes("%") &&
+              !text.includes("$")
+            );
+          })
+        ).toBeInTheDocument();
+      } else {
+        expect(
+          screen.getByText(
+            `Break occurs in ${testCase.breakScenarioLabel}: value gap crosses threshold.`
+          )
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("$");
+          })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return (
+              text.includes("Threshold:") &&
+              text.includes(testCase.breakOperator) &&
+              text.includes("$")
+            );
+          })
+        ).toBeInTheDocument();
+      }
+
+      expect(screen.getByText("Fastest-Change")).toBeInTheDocument();
+      expect(screen.getByText("Most Likely Wrong")).toBeInTheDocument();
+      expect(screen.getByText("Question Bank")).toBeInTheDocument();
+      expect(screen.getByText("Red Flags")).toBeInTheDocument();
+      expect(
+        screen.getAllByText(`${testCase.subtype} downside concentration is under-modeled.`).length
+      ).toBeGreaterThan(0);
+      expect(
+        screen.queryByText("Decision Insurance unavailable for this profile/run.")
+      ).not.toBeInTheDocument();
     }
   });
 

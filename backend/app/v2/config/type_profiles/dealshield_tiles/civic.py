@@ -1,116 +1,435 @@
 """DealShield tile profiles for civic types."""
 
 
-def _civic_tile_profile(subtype_label: str) -> dict:
-    return {
+DEALSHIELD_TILE_PROFILES = {
+    "civic_library_v1": {
+        "profile_id": "civic_library_v1",
         "version": "v1",
         "decision_table_columns": [
-            {
-                "id": "total_cost",
-                "label": "Total Project Cost",
-                "metric_ref": "totals.total_project_cost",
-            },
-            {
-                "id": "cost_per_sf",
-                "label": "Cost/SF",
-                "metric_ref": "totals.cost_per_sf",
-            },
-            {
-                "id": "schedule_risk",
-                "label": "Schedule Risk",
-                "metric_ref": "row.risk_labels.schedule_risk",
-            },
-            {
-                "id": "procurement_risk",
-                "label": "Procurement Risk",
-                "metric_ref": "row.risk_labels.procurement_risk",
-            },
-            {
-                "id": "permitting_mep_complexity",
-                "label": "Permitting/MEP Complexity",
-                "metric_ref": "row.risk_labels.permitting_mep_complexity",
-            },
+            {"id": "total_cost", "label": "Total Project Cost", "metric_ref": "totals.total_project_cost"},
+            {"id": "cost_per_sf", "label": "Cost/SF", "metric_ref": "totals.cost_per_sf"},
+            {"id": "stack_risk", "label": "Stack Load Risk", "metric_ref": "row.risk_labels.stack_risk"},
+            {"id": "mech_risk", "label": "MEP Risk", "metric_ref": "row.risk_labels.mech_risk"},
+            {"id": "access_risk", "label": "Public Access Risk", "metric_ref": "row.risk_labels.access_risk"},
         ],
         "base_row": {
             "label": "Base",
-            "delta": "Baseline feasibility",
-            "risk_labels": {
-                "schedule_risk": "low",
-                "procurement_risk": "low",
-                "permitting_mep_complexity": "low",
-            },
+            "delta": "Program baseline",
+            "risk_labels": {"stack_risk": "low", "mech_risk": "low", "access_risk": "low"},
         },
         "tiles": [
             {
-                "tile_id": "cost_plus_10",
-                "label": "Cost +10%",
-                "metric_ref": "totals.total_project_cost",
+                "tile_id": "library_stack_reinforcement_plus_12",
+                "label": "Stack Reinforcement +12%",
+                "metric_ref": "trade_breakdown.structural",
+                "transform": {"op": "mul", "value": 1.12},
                 "required": True,
-                "transform": {"op": "mul", "value": 1.10},
             },
             {
-                "tile_id": "revenue_minus_10",
-                "label": "Revenue -10% (not modeled)",
-                "metric_ref": "revenue_analysis.market_factor",
-                "required": True,
-                "transform": {"op": "mul", "value": 0.90},
-            },
-            {
-                "tile_id": "mechanical_plus_10",
-                "label": "MEP Complexity +10%",
+                "tile_id": "library_makerspace_mep_plus_10",
+                "label": "Makerspace MEP +10%",
                 "metric_ref": "trade_breakdown.mechanical",
-                "required": False,
                 "transform": {"op": "mul", "value": 1.10},
+                "required": True,
             },
             {
-                "tile_id": "electrical_plus_10",
-                "label": "Procurement/Power +10%",
+                "tile_id": "library_public_access_security_plus_8",
+                "label": "Public Access Security +8%",
                 "metric_ref": "trade_breakdown.electrical",
-                "required": False,
-                "transform": {"op": "mul", "value": 1.10},
+                "transform": {"op": "mul", "value": 1.08},
+                "required": True,
+            },
+            {
+                "tile_id": "library_operating_revenue_minus_6",
+                "label": "Operating Revenue -6%",
+                "metric_ref": "revenue_analysis.annual_revenue",
+                "transform": {"op": "mul", "value": 0.94},
+                "required": True,
             },
         ],
         "derived_rows": [
             {
                 "row_id": "conservative",
                 "label": "Conservative",
-                "apply_tiles": ["cost_plus_10", "revenue_minus_10"],
-                "delta": "Cost +10% (broad)",
-                "risk_labels": {
-                    "schedule_risk": "med",
-                    "procurement_risk": "med",
-                    "permitting_mep_complexity": "med",
-                },
+                "delta": "Moderate downside",
+                "apply_tiles": ["library_stack_reinforcement_plus_12", "library_operating_revenue_minus_6"],
+                "risk_labels": {"stack_risk": "med", "mech_risk": "low", "access_risk": "med"},
             },
             {
-                "row_id": "permitting_and_mep",
-                "label": "Permitting + MEP Risk",
-                "apply_tiles": ["cost_plus_10"],
-                "plus_tiles": ["mechanical_plus_10"],
-                "delta": "MEP scope stress + schedule risk",
-                "risk_labels": {
-                    "schedule_risk": "med",
-                    "procurement_risk": "low",
-                    "permitting_mep_complexity": "high",
-                },
+                "row_id": "ugly",
+                "label": "Ugly",
+                "delta": "Severe downside",
+                "apply_tiles": [
+                    "library_stack_reinforcement_plus_12",
+                    "library_makerspace_mep_plus_10",
+                    "library_public_access_security_plus_8",
+                    "library_operating_revenue_minus_6",
+                ],
+                "risk_labels": {"stack_risk": "high", "mech_risk": "high", "access_risk": "high"},
             },
             {
-                "row_id": "procurement_stress",
-                "label": "Procurement Stress",
-                "apply_tiles": ["cost_plus_10"],
-                "plus_tiles": ["electrical_plus_10"],
-                "delta": "Lead times + price volatility",
-                "risk_labels": {
-                    "schedule_risk": "low",
-                    "procurement_risk": "high",
-                    "permitting_mep_complexity": "med",
-                },
+                "row_id": "library_program_drift",
+                "label": "Program Drift",
+                "delta": "Late stack/makerspace expansion",
+                "apply_tiles": ["library_stack_reinforcement_plus_12", "library_makerspace_mep_plus_10"],
+                "risk_labels": {"stack_risk": "high", "mech_risk": "med", "access_risk": "low"},
             },
         ],
-        "provenance": {
-            "notes": f"Civic {subtype_label} baseline tile profile v1 (feasibility defaults).",
+        "provenance": {"notes": "Library-authored stress profile with stack and makerspace anchors."},
+    },
+    "civic_courthouse_v1": {
+        "profile_id": "civic_courthouse_v1",
+        "version": "v1",
+        "decision_table_columns": [
+            {"id": "total_cost", "label": "Total Project Cost", "metric_ref": "totals.total_project_cost"},
+            {"id": "cost_per_sf", "label": "Cost/SF", "metric_ref": "totals.cost_per_sf"},
+            {
+                "id": "security_risk",
+                "label": "Security Screening Risk",
+                "metric_ref": "row.risk_labels.security_risk",
+            },
+            {
+                "id": "detention_risk",
+                "label": "Detention Interface Risk",
+                "metric_ref": "row.risk_labels.detention_risk",
+            },
+            {
+                "id": "circulation_risk",
+                "label": "Public/Custody Circulation Risk",
+                "metric_ref": "row.risk_labels.circulation_risk",
+            },
+        ],
+        "base_row": {
+            "label": "Base",
+            "delta": "Program baseline",
+            "risk_labels": {"security_risk": "low", "detention_risk": "low", "circulation_risk": "low"},
         },
-    }
+        "tiles": [
+            {
+                "tile_id": "courthouse_screening_and_sallyport_plus_12",
+                "label": "Screening + Sallyport +12%",
+                "metric_ref": "trade_breakdown.electrical",
+                "transform": {"op": "mul", "value": 1.12},
+                "required": True,
+            },
+            {
+                "tile_id": "courthouse_holding_and_hardening_plus_10",
+                "label": "Holding + Hardening +10%",
+                "metric_ref": "trade_breakdown.structural",
+                "transform": {"op": "mul", "value": 1.10},
+                "required": True,
+            },
+            {
+                "tile_id": "courthouse_judicial_hvac_control_plus_9",
+                "label": "Judicial HVAC/Controls +9%",
+                "metric_ref": "trade_breakdown.mechanical",
+                "transform": {"op": "mul", "value": 1.09},
+                "required": True,
+            },
+            {
+                "tile_id": "courthouse_ops_delay_revenue_minus_5",
+                "label": "Operations Delay -5%",
+                "metric_ref": "revenue_analysis.annual_revenue",
+                "transform": {"op": "mul", "value": 0.95},
+                "required": True,
+            },
+        ],
+        "derived_rows": [
+            {
+                "row_id": "conservative",
+                "label": "Conservative",
+                "delta": "Moderate downside",
+                "apply_tiles": ["courthouse_holding_and_hardening_plus_10", "courthouse_ops_delay_revenue_minus_5"],
+                "risk_labels": {"security_risk": "med", "detention_risk": "med", "circulation_risk": "low"},
+            },
+            {
+                "row_id": "ugly",
+                "label": "Ugly",
+                "delta": "Severe downside",
+                "apply_tiles": [
+                    "courthouse_screening_and_sallyport_plus_12",
+                    "courthouse_holding_and_hardening_plus_10",
+                    "courthouse_judicial_hvac_control_plus_9",
+                    "courthouse_ops_delay_revenue_minus_5",
+                ],
+                "risk_labels": {"security_risk": "high", "detention_risk": "high", "circulation_risk": "high"},
+            },
+            {
+                "row_id": "courthouse_custody_flow_break",
+                "label": "Custody Flow Break",
+                "delta": "Late custody circulation redesign",
+                "apply_tiles": ["courthouse_screening_and_sallyport_plus_12", "courthouse_holding_and_hardening_plus_10"],
+                "risk_labels": {"security_risk": "high", "detention_risk": "high", "circulation_risk": "med"},
+            },
+        ],
+        "provenance": {"notes": "Courthouse-authored stress profile with custody and screening anchors."},
+    },
+    "civic_government_building_v1": {
+        "profile_id": "civic_government_building_v1",
+        "version": "v1",
+        "decision_table_columns": [
+            {"id": "total_cost", "label": "Total Project Cost", "metric_ref": "totals.total_project_cost"},
+            {"id": "cost_per_sf", "label": "Cost/SF", "metric_ref": "totals.cost_per_sf"},
+            {
+                "id": "records_risk",
+                "label": "Records/Archive Risk",
+                "metric_ref": "row.risk_labels.records_risk",
+            },
+            {
+                "id": "public_interface_risk",
+                "label": "Public Interface Risk",
+                "metric_ref": "row.risk_labels.public_interface_risk",
+            },
+            {
+                "id": "chamber_risk",
+                "label": "Council Chamber Risk",
+                "metric_ref": "row.risk_labels.chamber_risk",
+            },
+        ],
+        "base_row": {
+            "label": "Base",
+            "delta": "Program baseline",
+            "risk_labels": {"records_risk": "low", "public_interface_risk": "low", "chamber_risk": "low"},
+        },
+        "tiles": [
+            {
+                "tile_id": "government_records_vault_plus_11",
+                "label": "Records Vault +11%",
+                "metric_ref": "trade_breakdown.structural",
+                "transform": {"op": "mul", "value": 1.11},
+                "required": True,
+            },
+            {
+                "tile_id": "government_public_service_counter_plus_8",
+                "label": "Public Service Counter +8%",
+                "metric_ref": "trade_breakdown.finishes",
+                "transform": {"op": "mul", "value": 1.08},
+                "required": True,
+            },
+            {
+                "tile_id": "government_council_av_controls_plus_9",
+                "label": "Council AV/Controls +9%",
+                "metric_ref": "trade_breakdown.electrical",
+                "transform": {"op": "mul", "value": 1.09},
+                "required": True,
+            },
+            {
+                "tile_id": "government_operational_uptime_minus_4",
+                "label": "Operational Uptime -4%",
+                "metric_ref": "revenue_analysis.annual_revenue",
+                "transform": {"op": "mul", "value": 0.96},
+                "required": True,
+            },
+        ],
+        "derived_rows": [
+            {
+                "row_id": "conservative",
+                "label": "Conservative",
+                "delta": "Moderate downside",
+                "apply_tiles": ["government_records_vault_plus_11", "government_operational_uptime_minus_4"],
+                "risk_labels": {"records_risk": "med", "public_interface_risk": "low", "chamber_risk": "low"},
+            },
+            {
+                "row_id": "ugly",
+                "label": "Ugly",
+                "delta": "Severe downside",
+                "apply_tiles": [
+                    "government_records_vault_plus_11",
+                    "government_public_service_counter_plus_8",
+                    "government_council_av_controls_plus_9",
+                    "government_operational_uptime_minus_4",
+                ],
+                "risk_labels": {"records_risk": "high", "public_interface_risk": "high", "chamber_risk": "high"},
+            },
+            {
+                "row_id": "government_constituent_service_shift",
+                "label": "Constituent Service Shift",
+                "delta": "Late service-window expansion",
+                "apply_tiles": ["government_public_service_counter_plus_8", "government_council_av_controls_plus_9"],
+                "risk_labels": {"records_risk": "low", "public_interface_risk": "high", "chamber_risk": "med"},
+            },
+        ],
+        "provenance": {"notes": "Government-building-authored stress profile with records and public-service anchors."},
+    },
+    "civic_community_center_v1": {
+        "profile_id": "civic_community_center_v1",
+        "version": "v1",
+        "decision_table_columns": [
+            {"id": "total_cost", "label": "Total Project Cost", "metric_ref": "totals.total_project_cost"},
+            {"id": "cost_per_sf", "label": "Cost/SF", "metric_ref": "totals.cost_per_sf"},
+            {
+                "id": "program_mix_risk",
+                "label": "Program Mix Risk",
+                "metric_ref": "row.risk_labels.program_mix_risk",
+            },
+            {
+                "id": "shared_use_risk",
+                "label": "Shared Use Risk",
+                "metric_ref": "row.risk_labels.shared_use_risk",
+            },
+            {
+                "id": "site_activation_risk",
+                "label": "Site Activation Risk",
+                "metric_ref": "row.risk_labels.site_activation_risk",
+            },
+        ],
+        "base_row": {
+            "label": "Base",
+            "delta": "Program baseline",
+            "risk_labels": {
+                "program_mix_risk": "low",
+                "shared_use_risk": "low",
+                "site_activation_risk": "low",
+            },
+        },
+        "tiles": [
+            {
+                "tile_id": "community_multi_program_fitout_plus_10",
+                "label": "Multi-Program Fit-Out +10%",
+                "metric_ref": "trade_breakdown.finishes",
+                "transform": {"op": "mul", "value": 1.10},
+                "required": True,
+            },
+            {
+                "tile_id": "community_kitchen_and_gym_mep_plus_9",
+                "label": "Kitchen/Gym MEP +9%",
+                "metric_ref": "trade_breakdown.mechanical",
+                "transform": {"op": "mul", "value": 1.09},
+                "required": True,
+            },
+            {
+                "tile_id": "community_afterhours_security_plus_8",
+                "label": "After-Hours Security +8%",
+                "metric_ref": "trade_breakdown.electrical",
+                "transform": {"op": "mul", "value": 1.08},
+                "required": True,
+            },
+            {
+                "tile_id": "community_program_funding_minus_7",
+                "label": "Program Funding -7%",
+                "metric_ref": "revenue_analysis.annual_revenue",
+                "transform": {"op": "mul", "value": 0.93},
+                "required": True,
+            },
+        ],
+        "derived_rows": [
+            {
+                "row_id": "conservative",
+                "label": "Conservative",
+                "delta": "Moderate downside",
+                "apply_tiles": ["community_multi_program_fitout_plus_10", "community_program_funding_minus_7"],
+                "risk_labels": {"program_mix_risk": "med", "shared_use_risk": "low", "site_activation_risk": "low"},
+            },
+            {
+                "row_id": "ugly",
+                "label": "Ugly",
+                "delta": "Severe downside",
+                "apply_tiles": [
+                    "community_multi_program_fitout_plus_10",
+                    "community_kitchen_and_gym_mep_plus_9",
+                    "community_afterhours_security_plus_8",
+                    "community_program_funding_minus_7",
+                ],
+                "risk_labels": {"program_mix_risk": "high", "shared_use_risk": "high", "site_activation_risk": "high"},
+            },
+            {
+                "row_id": "community_shared_use_conflict",
+                "label": "Shared-Use Conflict",
+                "delta": "Competing after-hours programs",
+                "apply_tiles": ["community_afterhours_security_plus_8", "community_kitchen_and_gym_mep_plus_9"],
+                "risk_labels": {"program_mix_risk": "med", "shared_use_risk": "high", "site_activation_risk": "med"},
+            },
+        ],
+        "provenance": {"notes": "Community-center-authored stress profile with shared-use anchors."},
+    },
+    "civic_public_safety_v1": {
+        "profile_id": "civic_public_safety_v1",
+        "version": "v1",
+        "decision_table_columns": [
+            {"id": "total_cost", "label": "Total Project Cost", "metric_ref": "totals.total_project_cost"},
+            {"id": "cost_per_sf", "label": "Cost/SF", "metric_ref": "totals.cost_per_sf"},
+            {
+                "id": "response_risk",
+                "label": "Response Readiness Risk",
+                "metric_ref": "row.risk_labels.response_risk",
+            },
+            {
+                "id": "dispatch_risk",
+                "label": "Dispatch Resilience Risk",
+                "metric_ref": "row.risk_labels.dispatch_risk",
+            },
+            {
+                "id": "bay_risk",
+                "label": "Apparatus Bay Risk",
+                "metric_ref": "row.risk_labels.bay_risk",
+            },
+        ],
+        "base_row": {
+            "label": "Base",
+            "delta": "Program baseline",
+            "risk_labels": {"response_risk": "low", "dispatch_risk": "low", "bay_risk": "low"},
+        },
+        "tiles": [
+            {
+                "tile_id": "public_safety_dispatch_redundancy_plus_12",
+                "label": "Dispatch Redundancy +12%",
+                "metric_ref": "trade_breakdown.electrical",
+                "transform": {"op": "mul", "value": 1.12},
+                "required": True,
+            },
+            {
+                "tile_id": "public_safety_apparatus_bay_hardening_plus_11",
+                "label": "Apparatus Bay Hardening +11%",
+                "metric_ref": "trade_breakdown.structural",
+                "transform": {"op": "mul", "value": 1.11},
+                "required": True,
+            },
+            {
+                "tile_id": "public_safety_emergency_power_plus_10",
+                "label": "Emergency Power +10%",
+                "metric_ref": "trade_breakdown.mechanical",
+                "transform": {"op": "mul", "value": 1.10},
+                "required": True,
+            },
+            {
+                "tile_id": "public_safety_service_uptime_minus_6",
+                "label": "Service Uptime -6%",
+                "metric_ref": "revenue_analysis.annual_revenue",
+                "transform": {"op": "mul", "value": 0.94},
+                "required": True,
+            },
+        ],
+        "derived_rows": [
+            {
+                "row_id": "conservative",
+                "label": "Conservative",
+                "delta": "Moderate downside",
+                "apply_tiles": ["public_safety_apparatus_bay_hardening_plus_11", "public_safety_service_uptime_minus_6"],
+                "risk_labels": {"response_risk": "med", "dispatch_risk": "low", "bay_risk": "med"},
+            },
+            {
+                "row_id": "ugly",
+                "label": "Ugly",
+                "delta": "Severe downside",
+                "apply_tiles": [
+                    "public_safety_dispatch_redundancy_plus_12",
+                    "public_safety_apparatus_bay_hardening_plus_11",
+                    "public_safety_emergency_power_plus_10",
+                    "public_safety_service_uptime_minus_6",
+                ],
+                "risk_labels": {"response_risk": "high", "dispatch_risk": "high", "bay_risk": "high"},
+            },
+            {
+                "row_id": "public_safety_dispatch_blackstart",
+                "label": "Dispatch Blackstart",
+                "delta": "Dispatch continuity event",
+                "apply_tiles": ["public_safety_dispatch_redundancy_plus_12", "public_safety_emergency_power_plus_10"],
+                "risk_labels": {"response_risk": "high", "dispatch_risk": "high", "bay_risk": "low"},
+            },
+        ],
+        "provenance": {"notes": "Public-safety-authored stress profile with dispatch and response anchors."},
+    },
+}
 
 
 DEALSHIELD_TILE_DEFAULTS = {
@@ -119,12 +438,4 @@ DEALSHIELD_TILE_DEFAULTS = {
     "government_building": "civic_government_building_v1",
     "library": "civic_library_v1",
     "public_safety": "civic_public_safety_v1",
-}
-
-DEALSHIELD_TILE_PROFILES = {
-    "civic_community_center_v1": _civic_tile_profile("community center"),
-    "civic_courthouse_v1": _civic_tile_profile("courthouse"),
-    "civic_government_building_v1": _civic_tile_profile("government building"),
-    "civic_library_v1": _civic_tile_profile("library"),
-    "civic_public_safety_v1": _civic_tile_profile("public safety"),
 }

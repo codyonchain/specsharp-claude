@@ -1,4 +1,6 @@
 import {
+  CIVIC_FEATURE_COSTS_BY_SUBTYPE,
+  CIVIC_SUBTYPES,
   EDUCATIONAL_FEATURE_COSTS_BY_SUBTYPE,
   EDUCATIONAL_SUBTYPES,
   HEALTHCARE_FEATURE_COSTS_BY_SUBTYPE,
@@ -11,6 +13,9 @@ import {
   RETAIL_SUBTYPES,
   RESTAURANT_FEATURE_COSTS_BY_SUBTYPE,
   RESTAURANT_SUBTYPES,
+  civicSubtypeHasSpecialFeatures,
+  detectCivicFeatureIdsFromDescription,
+  detectCivicSubtypeFromDescription,
   detectEducationalFeatureIdsFromDescription,
   detectEducationalSubtypeFromDescription,
   detectHealthcareFeatureIdsFromDescription,
@@ -21,6 +26,7 @@ import {
   educationalSubtypeHasSpecialFeatures,
   filterSpecialFeaturesBySubtype,
   getAvailableSpecialFeatures,
+  getCivicSpecialFeatures,
   getEducationalSpecialFeatures,
   getHealthcareSpecialFeatures,
   getHospitalitySpecialFeatures,
@@ -262,6 +268,47 @@ const REQUIRED_EDUCATIONAL_MAPPING = {
     computer_lab: 25,
     library: 20,
     student_services: 15,
+  },
+} as const;
+
+const REQUIRED_CIVIC_MAPPING = {
+  library: {
+    stacks_load_reinforcement: 35,
+    acoustic_treatment: 25,
+    daylighting_controls: 20,
+    community_rooms: 20,
+    maker_space_mep: 40,
+  },
+  courthouse: {
+    courtroom: 50,
+    jury_room: 25,
+    holding_cells: 40,
+    judges_chambers: 30,
+    security_screening: 35,
+    magnetometer_screening_lanes: 20,
+    sallyport: 45,
+    ballistic_glazing_package: 30,
+    redundant_life_safety_power: 28,
+  },
+  government_building: {
+    council_chambers: 40,
+    secure_area: 35,
+    public_plaza: 25,
+    records_vault: 30,
+  },
+  community_center: {
+    gymnasium: 35,
+    kitchen: 25,
+    multipurpose_room: 20,
+    fitness_center: 20,
+    outdoor_pavilion: 15,
+  },
+  public_safety: {
+    apparatus_bay: 45,
+    dispatch_center: 50,
+    training_tower: 40,
+    emergency_generator: 35,
+    sally_port: 30,
   },
 } as const;
 
@@ -738,6 +785,153 @@ describe("educational special features catalog", () => {
   it("educational subtype helper returns true for all five educational subtypes", () => {
     for (const subtype of EDUCATIONAL_SUBTYPES) {
       expect(educationalSubtypeHasSpecialFeatures(subtype)).toBe(true);
+    }
+  });
+});
+
+describe("civic special features catalog", () => {
+  it("is non-empty and matches backend-aligned subtype mapping keys/values", () => {
+    const civicFeatures = getCivicSpecialFeatures();
+    expect(civicFeatures.length).toBeGreaterThan(0);
+    expect(CIVIC_FEATURE_COSTS_BY_SUBTYPE).toEqual(REQUIRED_CIVIC_MAPPING);
+  });
+
+  it("resolves expected feature IDs for each civic subtype with no duplicates", () => {
+    for (const subtype of CIVIC_SUBTYPES) {
+      const expectedIds = Object.keys(REQUIRED_CIVIC_MAPPING[subtype]).sort();
+      const resolvedIds = getAvailableSpecialFeatures("civic", subtype).map(
+        (feature) => feature.id
+      );
+      const uniqueResolvedIds = Array.from(new Set(resolvedIds));
+
+      expect(uniqueResolvedIds.length).toBe(resolvedIds.length);
+      expect(uniqueResolvedIds.sort()).toEqual(expectedIds);
+    }
+  });
+
+  it("keeps unknown civic subtype explicit (no silent subtype coercion)", () => {
+    const unknownSubtypeResolved = getAvailableSpecialFeatures(
+      "civic",
+      "unknown_civic_variant"
+    );
+    expect(unknownSubtypeResolved).toEqual([]);
+  });
+
+  it("resolves subtype-specific civic costs only for valid subtype feature IDs", () => {
+    for (const subtype of CIVIC_SUBTYPES) {
+      for (const [featureId, expectedCost] of Object.entries(
+        REQUIRED_CIVIC_MAPPING[subtype]
+      )) {
+        expect(getSpecialFeatureCost("civic", featureId, subtype)).toBe(expectedCost);
+      }
+    }
+
+    expect(
+      getSpecialFeatureCost("civic", "courtroom", "library")
+    ).toBeUndefined();
+    expect(
+      getSpecialFeatureCost("civic", "maker_space_mep", "courthouse")
+    ).toBeUndefined();
+  });
+
+  it("detects civic subtype cues for all five profiles and keeps unknown civic subtype explicit", () => {
+    expect(
+      detectCivicSubtypeFromDescription(
+        "New 42000 sf public library with makerspace and community rooms in Nashville, TN"
+      )
+    ).toBe("library");
+    expect(
+      detectCivicSubtypeFromDescription(
+        "New 85000 sf courthouse and justice center with jury rooms in Nashville, TN"
+      )
+    ).toBe("courthouse");
+    expect(
+      detectCivicSubtypeFromDescription(
+        "Renovate 65000 sf city hall government building with council chambers in Nashville, TN"
+      )
+    ).toBe("government_building");
+    expect(
+      detectCivicSubtypeFromDescription(
+        "New 38000 sf community center with gymnasium and multipurpose rooms in Nashville, TN"
+      )
+    ).toBe("community_center");
+    expect(
+      detectCivicSubtypeFromDescription(
+        "New 52000 sf public safety facility with fire station apparatus bay and dispatch center in Nashville, TN"
+      )
+    ).toBe("public_safety");
+
+    expect(
+      detectCivicSubtypeFromDescription(
+        "New 36000 sf civic building in Nashville, TN"
+      )
+    ).toBeUndefined();
+  });
+
+  it("detects civic feature IDs from subtype-specific keywords", () => {
+    const libraryDetected = detectCivicFeatureIdsFromDescription(
+      "Public library with book stacks reinforcement, maker space MEP, daylighting controls, and acoustic treatment."
+    );
+    expect(libraryDetected).toEqual(
+      expect.arrayContaining([
+        "stacks_load_reinforcement",
+        "maker_space_mep",
+        "daylighting_controls",
+        "acoustic_treatment",
+      ])
+    );
+
+    const courthouseDetected = detectCivicFeatureIdsFromDescription(
+      "Courthouse with courtroom expansion, jury room upgrades, magnetometer screening lanes, and ballistic glazing package."
+    );
+    expect(courthouseDetected).toEqual(
+      expect.arrayContaining([
+        "courtroom",
+        "jury_room",
+        "magnetometer_screening_lanes",
+        "ballistic_glazing_package",
+      ])
+    );
+
+    const publicSafetyDetected = detectCivicFeatureIdsFromDescription(
+      "Public safety station with apparatus bay, dispatch center, emergency generator, and training tower."
+    );
+    expect(publicSafetyDetected).toEqual(
+      expect.arrayContaining([
+        "apparatus_bay",
+        "dispatch_center",
+        "emergency_generator",
+        "training_tower",
+      ])
+    );
+  });
+
+  it("guards civic library detection from educational feature-ID leakage after civic filtering", () => {
+    const subtype = "library";
+    const allowedFeatureIds = new Set(
+      getAvailableSpecialFeatures("civic", subtype).map((feature) => feature.id)
+    );
+    const rawDetected = [
+      ...detectEducationalFeatureIdsFromDescription(
+        "Public library with learning commons, maker space, and reinforced book stacks."
+      ),
+      ...detectCivicFeatureIdsFromDescription(
+        "Public library with learning commons, maker space, and reinforced book stacks."
+      ),
+    ];
+
+    const filteredDetected = rawDetected.filter((featureId) =>
+      allowedFeatureIds.has(featureId)
+    );
+    expect(filteredDetected).not.toContain("library");
+    expect(filteredDetected).toEqual(
+      expect.arrayContaining(["stacks_load_reinforcement", "maker_space_mep"])
+    );
+  });
+
+  it("civic subtype helper returns true for all five civic subtypes", () => {
+    for (const subtype of CIVIC_SUBTYPES) {
+      expect(civicSubtypeHasSpecialFeatures(subtype)).toBe(true);
     }
   });
 });

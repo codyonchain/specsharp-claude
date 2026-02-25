@@ -219,6 +219,39 @@ const EDUCATIONAL_POLICY_CASES = [
   },
 ] as const;
 
+const CIVIC_POLICY_CASES = [
+  {
+    subtype: "library",
+    profileId: "civic_library_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+  },
+  {
+    subtype: "courthouse",
+    profileId: "civic_courthouse_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+  },
+  {
+    subtype: "government_building",
+    profileId: "civic_government_building_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+  },
+  {
+    subtype: "community_center",
+    profileId: "civic_community_center_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+  },
+  {
+    subtype: "public_safety",
+    profileId: "civic_public_safety_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+  },
+] as const;
+
 const buildRestaurantProject = () =>
   ({
     id: "proj_restaurant_exec",
@@ -955,6 +988,59 @@ describe("ExecutiveViewComplete", () => {
           <ExecutiveViewComplete
             project={buildCrossTypeProject(
               "educational",
+              testCase.subtype,
+              testCase.profileId
+            )}
+            dealShieldData={buildCrossTypeDealShieldViewModel(
+              testCase.profileId,
+              testCase.decisionStatus,
+              testCase.decisionReasonCode
+            ) as any}
+          />
+        </MemoryRouter>
+      );
+
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      const policyLineMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return (
+          text.includes("Policy source: dealshield_policy_v1") &&
+          text.includes("decision_insurance_subtype_policy_v1") &&
+          text.includes(`reason: ${testCase.decisionReasonCode}`)
+        );
+      });
+      expect(policyLineMatches.length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: "Scenario" })).toBeInTheDocument();
+    }
+  });
+
+  it("keeps canonical decision status/reason/provenance parity for all five civic subtypes", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject(
+            "civic",
+            CIVIC_POLICY_CASES[0].subtype,
+            CIVIC_POLICY_CASES[0].profileId
+          )}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            CIVIC_POLICY_CASES[0].profileId,
+            CIVIC_POLICY_CASES[0].decisionStatus,
+            CIVIC_POLICY_CASES[0].decisionReasonCode
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    for (const testCase of CIVIC_POLICY_CASES) {
+      rerender(
+        <MemoryRouter>
+          <ExecutiveViewComplete
+            project={buildCrossTypeProject(
+              "civic",
               testCase.subtype,
               testCase.profileId
             )}

@@ -244,6 +244,87 @@ class TestProjectNameGeneration:
         assert parsed["building_subtype"] is None
         assert name == "Educational in Nashville"
 
+    @pytest.mark.parametrize(
+        "description,expected_subtype,expected_name",
+        [
+            (
+                "New 48000 sf public library with makerspace labs and reading halls in Nashville, TN",
+                "library",
+                "Library in Nashville",
+            ),
+            (
+                "New 120000 sf county courthouse with secure holding and courtroom suites in Nashville, TN",
+                "courthouse",
+                "Courthouse in Nashville",
+            ),
+            (
+                "New 65000 sf municipal government building with council chambers in Nashville, TN",
+                "government_building",
+                "Government Building in Nashville",
+            ),
+            (
+                "New 55000 sf community center with gymnasium and multi-purpose rooms in Nashville, TN",
+                "community_center",
+                "Community Center in Nashville",
+            ),
+            (
+                "New 42000 sf public safety facility with fire station bays and dispatch center in Nashville, TN",
+                "public_safety",
+                "Public Safety in Nashville",
+            ),
+        ],
+    )
+    def test_civic_subtype_discoverability_all_five_profiles(
+        self,
+        description,
+        expected_subtype,
+        expected_name,
+    ):
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "civic"
+        assert parsed["subtype"] == expected_subtype
+        assert parsed["building_subtype"] == expected_subtype
+        assert name == expected_name
+
+    def test_civic_unknown_subtype_is_explicit_and_not_silent_government_fallback(self):
+        description = "New 30000 sf civic administration annex in Nashville, TN"
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "civic"
+        assert parsed["subtype"] is None
+        assert parsed["building_subtype"] is None
+        assert name == "Civic in Nashville"
+
+    def test_civic_library_intent_wins_over_educational_and_hospitality_overlap(self):
+        description = (
+            "New 60000 sf public library learning commons with campus-style study suites, "
+            "guest support desks, and after-hours community programming in Nashville, TN"
+        )
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "civic"
+        assert parsed["subtype"] == "library"
+        assert name == "Library in Nashville"
+
+    def test_courthouse_intent_is_not_rerouted_to_generic_office(self):
+        description = "Renovate 85000 sf courthouse office annex and courtroom support areas in Nashville, TN"
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "civic"
+        assert parsed["subtype"] == "courthouse"
+        assert name == "Courthouse in Nashville"
+
+    def test_public_safety_station_dispatch_intent_is_not_rerouted_to_broadcast(self):
+        description = (
+            "New 38000 sf police station and emergency dispatch center with apparatus bay in Nashville, TN"
+        )
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "civic"
+        assert parsed["subtype"] == "public_safety"
+        assert name == "Public Safety in Nashville"
+
     def test_surgical_center_with_features(self):
         description = "Construct 10000 sf addition to medical clinic for outpatient surgery center with 4 procedure rooms"
         parsed, name = self._parse_and_name(description)

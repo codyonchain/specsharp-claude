@@ -6,6 +6,8 @@ import { tracer } from '../../utils/traceSystem';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { BuildingTaxonomy } from '../../../core/buildingTaxonomy';
 import {
+  detectCivicFeatureIdsFromDescription,
+  detectCivicSubtypeFromDescription,
   detectEducationalFeatureIdsFromDescription,
   detectEducationalSubtypeFromDescription,
   detectHealthcareFeatureIdsFromDescription,
@@ -351,7 +353,8 @@ export const NewProject: React.FC = () => {
       buildingType === 'retail' ||
       buildingType === 'restaurant' ||
       buildingType === 'hospitality' ||
-      buildingType === 'specialty'
+      buildingType === 'specialty' ||
+      buildingType === 'civic'
     ) {
       return getAvailableSpecialFeatures(buildingType, subtype);
     }
@@ -471,6 +474,9 @@ export const NewProject: React.FC = () => {
     for (const featureId of detectEducationalFeatureIdsFromDescription(desc)) {
       detectedFeatures.add(featureId);
     }
+    for (const featureId of detectCivicFeatureIdsFromDescription(desc)) {
+      detectedFeatures.add(featureId);
+    }
     
     // Detect finish level (luxury/high-end terms map into premium)
     let detectedFinish: 'standard' | 'premium' = 'standard';
@@ -585,11 +591,13 @@ export const NewProject: React.FC = () => {
     setLocationAutoFilled(true);
   }, [liveDetectedLocation, locationTouched, locationInput, locationAutoFilled]);
   const parsedSubtype = parsedInput?.subtype || parsedInput?.building_subtype;
-  const educationalSubtypeFromCues =
+  const subtypeFromCues =
     parsedInput?.building_type === 'educational' && !parsedSubtype
       ? detectEducationalSubtypeFromDescription(description)
+      : parsedInput?.building_type === 'civic' && !parsedSubtype
+        ? detectCivicSubtypeFromDescription(description)
       : undefined;
-  const currentSubtype = parsedSubtype || educationalSubtypeFromCues;
+  const currentSubtype = parsedSubtype || subtypeFromCues;
   const availableSpecialFeatures = parsedInput
     ? getAvailableFeatures(parsedInput.building_type, currentSubtype)
     : [];
@@ -710,11 +718,13 @@ export const NewProject: React.FC = () => {
       const parsed = parseDescription(description);
       const parsedBuildingType = analysis.parsed_input?.building_type;
       const parsedSubtype = analysis.parsed_input?.subtype || analysis.parsed_input?.building_subtype;
-      const educationalSubtypeFromDescription =
+      const subtypeFromDescription =
         parsedBuildingType === 'educational' && !parsedSubtype
           ? detectEducationalSubtypeFromDescription(description)
+          : parsedBuildingType === 'civic' && !parsedSubtype
+            ? detectCivicSubtypeFromDescription(description)
           : undefined;
-      const resolvedSubtype = parsedSubtype || educationalSubtypeFromDescription;
+      const resolvedSubtype = parsedSubtype || subtypeFromDescription;
       const allowedFeatureIds = new Set(
         getAvailableFeatures(parsedBuildingType || '', resolvedSubtype).map((feature) => feature.id)
       );
@@ -906,12 +916,13 @@ export const NewProject: React.FC = () => {
     isPlaceholder: boolean;
   };
 
-  const usesSubtypeCostPerSF = ['healthcare', 'multifamily', 'restaurant', 'specialty', 'office', 'retail', 'educational'].includes(
+  const usesSubtypeCostPerSF = ['healthcare', 'multifamily', 'restaurant', 'specialty', 'office', 'retail', 'educational', 'civic'].includes(
     parsedInput?.building_type ?? ''
   );
   const isRestaurantProject = parsedInput?.building_type === 'restaurant';
   const isOfficeProject = parsedInput?.building_type === 'office';
   const isEducationalProject = parsedInput?.building_type === 'educational';
+  const isCivicProject = parsedInput?.building_type === 'civic';
   const hasFeatureSquareFootage = typeof squareFootageSummary === 'number' && squareFootageSummary > 0;
 
   const resolveFeatureCostPerSF = (feature: SpecialFeatureOption): number | undefined => {
@@ -931,7 +942,7 @@ export const NewProject: React.FC = () => {
     if (typeof feature.costPerSF === 'number' && Number.isFinite(feature.costPerSF)) {
       return feature.costPerSF;
     }
-    if ((isOfficeProject || isEducationalProject) && !currentSubtype && feature.costPerSFBySubtype) {
+    if ((isOfficeProject || isEducationalProject || isCivicProject) && !currentSubtype && feature.costPerSFBySubtype) {
       return undefined;
     }
     if (currentSubtype && feature.costPerSFBySubtype) {

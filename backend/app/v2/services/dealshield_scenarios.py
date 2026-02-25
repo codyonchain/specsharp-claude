@@ -49,6 +49,11 @@ WAVE1_PROFILES: Set[str] = {
     "educational_high_school_v1",
     "educational_university_v1",
     "educational_community_college_v1",
+    "civic_library_v1",
+    "civic_courthouse_v1",
+    "civic_government_building_v1",
+    "civic_community_center_v1",
+    "civic_public_safety_v1",
 }
 
 _ALLOWED_STRESS_BAND_PCTS: Set[int] = {10, 7, 5, 3}
@@ -386,10 +391,17 @@ def _apply_financial_bundle(
 def _assert_tile_metrics(payload: Dict[str, Any], metric_refs: List[str], scenario_id: str) -> None:
     for metric_ref in metric_refs:
         value = _resolve_metric_ref(payload, metric_ref)
-        if not _is_number(value):
-            raise DealShieldScenarioError(
-                f"Scenario '{scenario_id}' missing numeric metric_ref '{metric_ref}'"
-            )
+        if _is_number(value):
+            continue
+        # Some public-sector profiles do not emit annual_revenue directly; revenue stress is
+        # still modeled through modifiers.revenue_factor and downstream financial recompute.
+        if metric_ref == "revenue_analysis.annual_revenue":
+            revenue_factor = _resolve_metric_ref(payload, "modifiers.revenue_factor")
+            if _is_number(revenue_factor):
+                continue
+        raise DealShieldScenarioError(
+            f"Scenario '{scenario_id}' missing numeric metric_ref '{metric_ref}'"
+        )
 
 
 def _build_ownership_bundle_without_trace_side_effects(
