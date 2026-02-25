@@ -72,6 +72,8 @@ CONFIG = (
             "refrigerated_storage": 35,
             "curbside_pickup": 20,
         },
+        dealshield_tile_profile="retail_big_box_v1",
+        scope_items_profile="retail_big_box_structural_v1",
         base_revenue_per_sf_annual=25,
         base_sales_per_sf_annual=200,
         occupancy_rate_base=0.95,

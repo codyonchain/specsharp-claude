@@ -38,6 +38,8 @@ _WAVE1_PROFILE_IDS: Set[str] = {
     "hospitality_full_service_hotel_v1",
     "office_class_a_v1",
     "office_class_b_v1",
+    "retail_shopping_center_v1",
+    "retail_big_box_v1",
     "specialty_data_center_v1",
     "specialty_laboratory_v1",
     "specialty_self_storage_v1",
@@ -986,12 +988,17 @@ def _is_office_profile(profile_id: Any) -> bool:
     return isinstance(profile_id, str) and profile_id.startswith("office_")
 
 
+def _is_retail_profile(profile_id: Any) -> bool:
+    return isinstance(profile_id, str) and profile_id.startswith("retail_")
+
+
 def _supports_decision_insurance_profile(profile_id: Any) -> bool:
     return (
         _is_multifamily_profile(profile_id)
         or _is_industrial_profile(profile_id)
         or _is_healthcare_profile(profile_id)
         or _is_office_profile(profile_id)
+        or _is_retail_profile(profile_id)
         or _is_restaurant_profile(profile_id)
         or _is_hospitality_profile(profile_id)
         or _is_specialty_profile(profile_id)
@@ -1987,6 +1994,14 @@ def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profil
 
                     specialty_profile = specialty_content.DEALSHIELD_CONTENT_PROFILES.get(content_profile_id)
                     content_profile = copy.deepcopy(specialty_profile) if isinstance(specialty_profile, dict) else None
+                except Exception:
+                    content_profile = None
+            elif _is_retail_profile(content_profile_id):
+                try:
+                    from app.v2.config.type_profiles.dealshield_content import retail as retail_content
+
+                    retail_profile = retail_content.DEALSHIELD_CONTENT_PROFILES.get(content_profile_id)
+                    content_profile = copy.deepcopy(retail_profile) if isinstance(retail_profile, dict) else None
                 except Exception:
                     content_profile = None
             else:

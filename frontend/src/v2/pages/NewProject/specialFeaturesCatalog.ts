@@ -90,6 +90,33 @@ export const HOSPITALITY_FEATURE_COSTS_BY_SUBTYPE: Record<
   },
 };
 
+export const RETAIL_SUBTYPES = ["shopping_center", "big_box"] as const;
+
+export type RetailSubtype = (typeof RETAIL_SUBTYPES)[number];
+
+export const RETAIL_FEATURE_COSTS_BY_SUBTYPE: Record<
+  RetailSubtype,
+  Record<string, number>
+> = {
+  shopping_center: {
+    covered_walkway: 20,
+    loading_dock: 25,
+    monument_signage: 15,
+    outdoor_seating: 20,
+    drive_thru: 40,
+    storage_units: 15,
+  },
+  big_box: {
+    loading_dock: 20,
+    mezzanine: 25,
+    auto_center: 45,
+    garden_center: 30,
+    warehouse_racking: 15,
+    refrigerated_storage: 35,
+    curbside_pickup: 20,
+  },
+};
+
 export const OFFICE_SUBTYPES = ["class_a", "class_b"] as const;
 
 export type OfficeSubtype = (typeof OFFICE_SUBTYPES)[number];
@@ -410,6 +437,60 @@ const HOSPITALITY_FEATURE_METADATA: Record<
   rooftop_bar: {
     name: "Rooftop Bar",
     description: "Rooftop bar venue with structural, weatherproofing, and service utility upgrades.",
+  },
+};
+
+const RETAIL_FEATURE_METADATA: Record<
+  string,
+  { name: string; description: string }
+> = {
+  covered_walkway: {
+    name: "Covered Walkway",
+    description: "Tenant frontage canopy and weather-protected pedestrian circulation package.",
+  },
+  loading_dock: {
+    name: "Loading Dock",
+    description: "Dedicated loading dock and back-of-house receiving improvements.",
+  },
+  monument_signage: {
+    name: "Monument Signage",
+    description: "Center-entry monument signage with lighting and utility coordination.",
+  },
+  outdoor_seating: {
+    name: "Outdoor Seating",
+    description: "Exterior seating pad with storefront utility tie-ins and circulation upgrades.",
+  },
+  drive_thru: {
+    name: "Drive-Thru",
+    description: "Drive-thru lane, order canopy, and service-window infrastructure.",
+  },
+  storage_units: {
+    name: "Storage Units",
+    description: "Tenant back-of-house storage enclosures with access-control integration.",
+  },
+  mezzanine: {
+    name: "Mezzanine",
+    description: "Sales-floor mezzanine structure and vertical-circulation package.",
+  },
+  auto_center: {
+    name: "Auto Center",
+    description: "Integrated auto-service bay and customer-dropoff buildout.",
+  },
+  garden_center: {
+    name: "Garden Center",
+    description: "Open-air garden center pad with irrigation, shade, and yard controls.",
+  },
+  warehouse_racking: {
+    name: "Warehouse Racking",
+    description: "High-bay racking and merchandising support infrastructure.",
+  },
+  refrigerated_storage: {
+    name: "Refrigerated Storage",
+    description: "Walk-in cold storage program with refrigeration and power upgrades.",
+  },
+  curbside_pickup: {
+    name: "Curbside Pickup",
+    description: "Dedicated curbside pickup stalls, signage, and back-of-house staging lanes.",
   },
 };
 
@@ -962,6 +1043,48 @@ export const HOSPITALITY_SPECIAL_FEATURES = createHospitalitySpecialFeatures();
 export const getHospitalitySpecialFeatures = (): SpecialFeatureOption[] =>
   HOSPITALITY_SPECIAL_FEATURES;
 
+const createRetailSpecialFeatures = (): SpecialFeatureOption[] => {
+  const byFeatureId: Record<
+    string,
+    { costPerSFBySubtype: Record<string, number>; allowedSubtypes: string[] }
+  > = {};
+
+  for (const subtype of RETAIL_SUBTYPES) {
+    const entries = RETAIL_FEATURE_COSTS_BY_SUBTYPE[subtype];
+    for (const [featureId, costPerSF] of Object.entries(entries)) {
+      if (!byFeatureId[featureId]) {
+        byFeatureId[featureId] = {
+          costPerSFBySubtype: {},
+          allowedSubtypes: [],
+        };
+      }
+      byFeatureId[featureId].costPerSFBySubtype[subtype] = costPerSF;
+      byFeatureId[featureId].allowedSubtypes.push(subtype);
+    }
+  }
+
+  return Object.entries(byFeatureId)
+    .sort(([featureA], [featureB]) => featureA.localeCompare(featureB))
+    .map(([featureId, featureData]) => {
+      const metadata = RETAIL_FEATURE_METADATA[featureId];
+      return {
+        id: featureId,
+        name: metadata?.name ?? featureId.replace(/_/g, " "),
+        description:
+          metadata?.description ?? "Retail subtype specific special feature.",
+        costPerSFBySubtype: featureData.costPerSFBySubtype,
+        allowedSubtypes: RETAIL_SUBTYPES.filter((subtype) =>
+          featureData.allowedSubtypes.includes(subtype)
+        ),
+      };
+    });
+};
+
+export const RETAIL_SPECIAL_FEATURES = createRetailSpecialFeatures();
+
+export const getRetailSpecialFeatures = (): SpecialFeatureOption[] =>
+  RETAIL_SPECIAL_FEATURES;
+
 const createOfficeSpecialFeatures = (): SpecialFeatureOption[] => {
   const byFeatureId: Record<
     string,
@@ -1197,6 +1320,72 @@ export const detectHospitalityFeatureIdsFromDescription = (
 ): string[] => {
   const detectedFeatureIds = new Set<string>();
   for (const { featureId, patterns } of HOSPITALITY_KEYWORD_DETECTION) {
+    if (patterns.some((pattern) => pattern.test(description))) {
+      detectedFeatureIds.add(featureId);
+    }
+  }
+  return Array.from(detectedFeatureIds);
+};
+
+const RETAIL_KEYWORD_DETECTION: Array<{
+  featureId: string;
+  patterns: RegExp[];
+}> = [
+  {
+    featureId: "covered_walkway",
+    patterns: [/\bcovered walkway\b/i, /\bretail canopy\b/i],
+  },
+  {
+    featureId: "loading_dock",
+    patterns: [/\bloading docks?\b/i, /\breceiving dock\b/i],
+  },
+  {
+    featureId: "monument_signage",
+    patterns: [/\bmonument sign(?:age)?\b/i, /\bpylon sign(?:age)?\b/i],
+  },
+  {
+    featureId: "outdoor_seating",
+    patterns: [/\boutdoor seating\b/i, /\bpatio seating\b/i],
+  },
+  {
+    featureId: "drive_thru",
+    patterns: [/drive[\s-]?thru/i, /drive[\s-]?through/i],
+  },
+  {
+    featureId: "storage_units",
+    patterns: [/\bback[-\s]?of[-\s]?house storage\b/i, /\bstorage units?\b/i],
+  },
+  {
+    featureId: "mezzanine",
+    patterns: [/\bmezzanine\b/i],
+  },
+  {
+    featureId: "auto_center",
+    patterns: [/\bauto center\b/i, /\bservice bays?\b/i],
+  },
+  {
+    featureId: "garden_center",
+    patterns: [/\bgarden center\b/i, /\bseasonal yard\b/i],
+  },
+  {
+    featureId: "warehouse_racking",
+    patterns: [/\bwarehouse racking\b/i, /\bhigh[-\s]?bay racking\b/i],
+  },
+  {
+    featureId: "refrigerated_storage",
+    patterns: [/\brefrigerated storage\b/i, /\bcold storage\b/i],
+  },
+  {
+    featureId: "curbside_pickup",
+    patterns: [/\bcurbside pickup\b/i, /\bpickup lanes?\b/i],
+  },
+];
+
+export const detectRetailFeatureIdsFromDescription = (
+  description: string
+): string[] => {
+  const detectedFeatureIds = new Set<string>();
+  for (const { featureId, patterns } of RETAIL_KEYWORD_DETECTION) {
     if (patterns.some((pattern) => pattern.test(description))) {
       detectedFeatureIds.add(featureId);
     }
@@ -1575,6 +1764,9 @@ export const restaurantSubtypeHasSpecialFeatures = (subtype?: string): boolean =
 
 export const hospitalitySubtypeHasSpecialFeatures = (subtype?: string): boolean =>
   filterSpecialFeaturesBySubtype(HOSPITALITY_SPECIAL_FEATURES, subtype).length > 0;
+
+export const retailSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
+  filterSpecialFeaturesBySubtype(RETAIL_SPECIAL_FEATURES, subtype).length > 0;
 
 export const specialtySubtypeHasSpecialFeatures = (subtype?: string): boolean =>
   filterSpecialFeaturesBySubtype(SPECIALTY_SPECIAL_FEATURES, subtype).length > 0;

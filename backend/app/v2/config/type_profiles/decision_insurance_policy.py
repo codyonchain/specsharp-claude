@@ -244,6 +244,34 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         },
         "flex_calibration": {"tight_max_pct": 1.8, "moderate_max_pct": 4.8, "fallback_pct": 2.2},
     },
+    "retail_shopping_center_v1": {
+        "primary_control_variable": {
+            "tile_id": "tenant_mix_and_cam_recovery_plus_11",
+            "metric_ref": "trade_breakdown.finishes",
+            "label": "IC-First Shopping Center Inline Fit-Out Carry, Rollover Rework, and Turnover Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 9.0,
+            "scenario_priority": ["base", "inline_suite_rollover_drag", "conservative", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.6, "moderate_max_pct": 4.2, "fallback_pct": 1.9},
+    },
+    "retail_big_box_v1": {
+        "primary_control_variable": {
+            "tile_id": "back_of_house_power_and_refrigeration_plus_12",
+            "metric_ref": "trade_breakdown.electrical",
+            "label": "IC-First Big Box Anchor Retenanting, Back-of-House Power, and Refrigeration Retrofit Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap",
+            "operator": "<=",
+            "threshold": 0.0,
+            "scenario_priority": ["base", "anchor_box_retenanting_slip", "conservative", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.3, "moderate_max_pct": 3.6, "fallback_pct": 1.5},
+    },
     "healthcare_surgical_center_v1": {
         "primary_control_variable": {
             "tile_id": "or_turnover_and_sterile_core_plus_12",

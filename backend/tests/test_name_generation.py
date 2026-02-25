@@ -146,6 +146,43 @@ class TestProjectNameGeneration:
         assert parsed["building_subtype"] is None
         assert name == "Office in Memphis"
 
+    @pytest.mark.parametrize(
+        "description,expected_subtype,expected_name",
+        [
+            (
+                "New 95,000 sf neighborhood shopping center with inline suites in Nashville, TN",
+                "shopping_center",
+                "Shopping Center in Nashville",
+            ),
+            (
+                "New 180,000 sf big box retail store with loading docks and garden center in Nashville, TN",
+                "big_box",
+                "Big Box in Nashville",
+            ),
+        ],
+    )
+    def test_retail_subtype_discoverability_for_shopping_center_and_big_box(
+        self,
+        description,
+        expected_subtype,
+        expected_name,
+    ):
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "retail"
+        assert parsed["subtype"] == expected_subtype
+        assert parsed["building_subtype"] == expected_subtype
+        assert name == expected_name
+
+    def test_retail_unknown_subtype_is_explicit_and_not_silent_shopping_center_fallback(self):
+        description = "New 45,000 sf retail shell building in Nashville, TN"
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "retail"
+        assert parsed["subtype"] is None
+        assert parsed["building_subtype"] is None
+        assert name == "Retail in Nashville"
+
     def test_school_addition(self):
         description = "Building extension adding 15000 sf of classroom space to existing high school"
         parsed, name = self._parse_and_name(description)

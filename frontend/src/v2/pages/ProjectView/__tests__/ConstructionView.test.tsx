@@ -108,6 +108,19 @@ const OFFICE_SCHEDULE_CASES = [
   },
 ] as const;
 
+const RETAIL_SCHEDULE_CASES = [
+  {
+    subtype: "shopping_center",
+    sitePhaseLabel: "Retail Pad Prep + Utility Looping",
+    structuralPhaseLabel: "Inline Shell + Canopy Program",
+  },
+  {
+    subtype: "big_box",
+    sitePhaseLabel: "Big Box Grading + Heavy Slab Prep",
+    structuralPhaseLabel: "Long-Span Steel + Dock Apron Build",
+  },
+] as const;
+
 const HEALTHCARE_SCHEDULE_CASES = [
   {
     subtype: "surgical_center",
@@ -722,6 +735,55 @@ const buildOfficeScheduleProject = (
   return project;
 };
 
+const buildRetailScheduleProject = (
+  subtype: (typeof RETAIL_SCHEDULE_CASES)[number]["subtype"],
+  scheduleSource: "subtype" | "building_type"
+) => {
+  const fixture = RETAIL_SCHEDULE_CASES.find((item) => item.subtype === subtype)!;
+  const project = buildCrossTypeScheduleProject("retail", subtype, scheduleSource);
+  project.analysis.calculations.construction_schedule.total_months =
+    scheduleSource === "subtype"
+      ? subtype === "shopping_center"
+        ? 20
+        : 18
+      : 24;
+  project.analysis.calculations.construction_schedule.phases =
+    scheduleSource === "subtype"
+      ? [
+          {
+            id: "site_foundation",
+            label: fixture.sitePhaseLabel,
+            start_month: 0,
+            duration_months: 4,
+            end_month: 4,
+          },
+          {
+            id: "structural",
+            label: fixture.structuralPhaseLabel,
+            start_month: 2,
+            duration_months: 8,
+            end_month: 10,
+          },
+        ]
+      : [
+          {
+            id: "site_foundation",
+            label: "Retail Baseline Site Program",
+            start_month: 0,
+            duration_months: 5,
+            end_month: 5,
+          },
+          {
+            id: "structural",
+            label: "Retail Baseline Structural Program",
+            start_month: 3,
+            duration_months: 10,
+            end_month: 13,
+          },
+        ];
+  return project;
+};
+
 describe("ConstructionView", () => {
   it("renders subtype schedule messaging for restaurant subtype schedules", () => {
     render(<ConstructionView project={buildRestaurantProject("subtype")} />);
@@ -1025,6 +1087,48 @@ describe("ConstructionView", () => {
     }
   });
 
+  it("renders retail schedule-source parity for shopping_center and big_box with subtype-specific phases and truthful fallback messaging", () => {
+    const { rerender } = render(
+      <ConstructionView
+        project={buildRetailScheduleProject(RETAIL_SCHEDULE_CASES[0].subtype, "subtype")}
+      />
+    );
+
+    for (const testCase of RETAIL_SCHEDULE_CASES) {
+      rerender(
+        <ConstructionView
+          project={buildRetailScheduleProject(testCase.subtype, "subtype")}
+        />
+      );
+      expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
+      expect(
+        screen.getByTitle(`Subtype schedule • type: retail • subtype: ${testCase.subtype}`)
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("Timeline is tailored for this subtype profile.")
+      ).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.sitePhaseLabel).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(testCase.structuralPhaseLabel).length).toBeGreaterThan(0);
+
+      rerender(
+        <ConstructionView
+          project={buildRetailScheduleProject(testCase.subtype, "building_type")}
+        />
+      );
+      expect(screen.getByText("Building-type baseline")).toBeInTheDocument();
+      expect(
+        screen.getByTitle("Building-type baseline • type: retail")
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Timeline uses building-type baseline (subtype override unavailable)."
+        )
+      ).toBeInTheDocument();
+      expect(screen.getAllByText("Retail Baseline Site Program").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Retail Baseline Structural Program").length).toBeGreaterThan(0);
+    }
+  });
+
   it("renders office trade scope depth and per-feature breakdown visibility for class_a and class_b without fallback copy", () => {
     const cases = [
       {
@@ -1163,6 +1267,165 @@ describe("ConstructionView", () => {
 
       openTradeCard("Finishes");
       expect(screen.getByText("5 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.finishesName)).toBeInTheDocument();
+    }
+  });
+
+  it("renders retail trade scope depth and per-feature breakdown visibility for shopping_center and big_box", () => {
+    const cases = [
+      {
+        subtype: "shopping_center" as const,
+        structuralName: "Inline Shell Bay Frames + Canopy Steel",
+        mechanicalName: "Multi-Tenant RTU Program + Controls",
+        electricalName: "Tenant Metering + Site Lighting Backbone",
+        plumbingName: "Sanitary Main + Grease Interceptor Network",
+        finishesName: "Storefront Systems + Wayfinding Package",
+        expectedSystems: {
+          structural: "4 systems",
+          mechanical: "4 systems",
+          electrical: "4 systems",
+          plumbing: "3 systems",
+          finishes: "4 systems",
+        },
+        breakdown: [
+          { id: "covered_walkway", label: "Covered Walkway", cost_per_sf: 2.0, total_cost: 160000 },
+          { id: "drive_thru", label: "Drive-Thru", cost_per_sf: 4.0, total_cost: 320000 },
+        ],
+      },
+      {
+        subtype: "big_box" as const,
+        structuralName: "Long-Span Steel + Dock Apron Reinforcement",
+        mechanicalName: "High-Bay HVAC + Refrigeration Support",
+        electricalName: "High-Amp Service + Case Power Distribution",
+        plumbingName: "Domestic Main + Process Waste Routing",
+        finishesName: "Front-End Buildout + Branded Entry Finishes",
+        expectedSystems: {
+          structural: "5 systems",
+          mechanical: "4 systems",
+          electrical: "4 systems",
+          plumbing: "3 systems",
+          finishes: "4 systems",
+        },
+        breakdown: [
+          { id: "mezzanine", label: "Mezzanine", cost_per_sf: 2.5, total_cost: 200000 },
+          { id: "refrigerated_storage", label: "Refrigerated Storage", cost_per_sf: 3.5, total_cost: 280000 },
+        ],
+      },
+    ];
+
+    const { rerender } = render(
+      <ConstructionView project={buildRetailScheduleProject(cases[0].subtype, "subtype")} />
+    );
+
+    const openTradeCard = (tradeName: string) => {
+      const tradeHeading = screen.getByText(tradeName, { selector: "h4" });
+      const tradeCard = tradeHeading.closest('[role="button"]');
+      expect(tradeCard).not.toBeNull();
+      fireEvent.click(tradeCard as HTMLElement);
+    };
+
+    for (const testCase of cases) {
+      const project = buildRetailScheduleProject(testCase.subtype, "subtype");
+      project.analysis.calculations.trade_breakdown = {
+        structural: 4200000,
+        mechanical: 4800000,
+        electrical: 4500000,
+        plumbing: 2400000,
+        finishes: 3600000,
+      };
+      project.analysis.calculations.scope_items = [
+        {
+          trade: "structural",
+          systems:
+            testCase.subtype === "shopping_center"
+              ? [
+                  { name: testCase.structuralName, quantity: 150000, unit: "SF", unit_cost: 26, total_cost: 3900000 },
+                  { name: "Canopy Colonnade Framing", quantity: 150000, unit: "SF", unit_cost: 20, total_cost: 3000000 },
+                  { name: "Pad Foundation + Plaza Slab", quantity: 150000, unit: "SF", unit_cost: 18, total_cost: 2700000 },
+                  { name: "Loading Apron Reinforcement", quantity: 150000, unit: "SF", unit_cost: 12, total_cost: 1800000 },
+                ]
+              : [
+                  { name: testCase.structuralName, quantity: 180000, unit: "SF", unit_cost: 29, total_cost: 5220000 },
+                  { name: "Thickened Slab Loading Zones", quantity: 180000, unit: "SF", unit_cost: 24, total_cost: 4320000 },
+                  { name: "Mezzanine and Stair Core Package", quantity: 180000, unit: "SF", unit_cost: 20, total_cost: 3600000 },
+                  { name: "Dock Wall + Yard Structure", quantity: 180000, unit: "SF", unit_cost: 16, total_cost: 2880000 },
+                  { name: "Garden Center Canopy Steel", quantity: 180000, unit: "SF", unit_cost: 12, total_cost: 2160000 },
+                ],
+        },
+        {
+          trade: "mechanical",
+          systems: [
+            { name: testCase.mechanicalName, quantity: 170000, unit: "SF", unit_cost: 27, total_cost: 4590000 },
+            { name: "Tenant Duct Distribution + Balancing", quantity: 170000, unit: "SF", unit_cost: 22, total_cost: 3740000 },
+            { name: "Controls Integration + TAB", quantity: 170000, unit: "SF", unit_cost: 17, total_cost: 2890000 },
+            { name: "Exhaust and Makeup-Air Package", quantity: 170000, unit: "SF", unit_cost: 14, total_cost: 2380000 },
+          ],
+        },
+        {
+          trade: "electrical",
+          systems: [
+            { name: testCase.electricalName, quantity: 170000, unit: "SF", unit_cost: 26, total_cost: 4420000 },
+            { name: "Switchgear + Feeder Distribution", quantity: 170000, unit: "SF", unit_cost: 21, total_cost: 3570000 },
+            { name: "Life-Safety Fire Alarm Controls", quantity: 170000, unit: "SF", unit_cost: 16, total_cost: 2720000 },
+            { name: "Exterior Lighting + Access Controls", quantity: 170000, unit: "SF", unit_cost: 13, total_cost: 2210000 },
+          ],
+        },
+        {
+          trade: "plumbing",
+          systems: [
+            { name: testCase.plumbingName, quantity: 170000, unit: "SF", unit_cost: 18, total_cost: 3060000 },
+            { name: "Domestic Water Loop + Branches", quantity: 170000, unit: "SF", unit_cost: 14, total_cost: 2380000 },
+            { name: "Restroom Core Fixture Package", quantity: 170000, unit: "SF", unit_cost: 12, total_cost: 2040000 },
+          ],
+        },
+        {
+          trade: "finishes",
+          systems: [
+            { name: testCase.finishesName, quantity: 170000, unit: "SF", unit_cost: 20, total_cost: 3400000 },
+            { name: "Inline White-Box Turnover", quantity: 170000, unit: "SF", unit_cost: 16, total_cost: 2720000 },
+            { name: "Common-Area Ceiling + Paving Finishes", quantity: 170000, unit: "SF", unit_cost: 14, total_cost: 2380000 },
+            { name: "Entry Signage + Branding Finishes", quantity: 170000, unit: "SF", unit_cost: 12, total_cost: 2040000 },
+          ],
+        },
+      ];
+      project.analysis.calculations.construction_costs.special_features_total = testCase.breakdown.reduce(
+        (sum, item) => sum + item.total_cost,
+        0
+      );
+      project.analysis.calculations.construction_costs.special_features_breakdown = testCase.breakdown;
+
+      rerender(<ConstructionView project={project} />);
+
+      expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
+      expect(screen.getByText("Special Features")).toBeInTheDocument();
+      for (const row of testCase.breakdown) {
+        expect(screen.getByText(row.label)).toBeInTheDocument();
+      }
+      expect(
+        screen.queryByText("Selected feature IDs were not provided in project data; showing aggregate only.")
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Per-feature breakdown is unavailable for this project version; showing aggregate total only.")
+      ).not.toBeInTheDocument();
+
+      openTradeCard("Structural");
+      expect(screen.getByText(testCase.expectedSystems.structural)).toBeInTheDocument();
+      expect(screen.getByText(testCase.structuralName)).toBeInTheDocument();
+
+      openTradeCard("Mechanical");
+      expect(screen.getByText(testCase.expectedSystems.mechanical)).toBeInTheDocument();
+      expect(screen.getByText(testCase.mechanicalName)).toBeInTheDocument();
+
+      openTradeCard("Electrical");
+      expect(screen.getByText(testCase.expectedSystems.electrical)).toBeInTheDocument();
+      expect(screen.getByText(testCase.electricalName)).toBeInTheDocument();
+
+      openTradeCard("Plumbing");
+      expect(screen.getByText(testCase.expectedSystems.plumbing)).toBeInTheDocument();
+      expect(screen.getByText(testCase.plumbingName)).toBeInTheDocument();
+
+      openTradeCard("Finishes");
+      expect(screen.getByText(testCase.expectedSystems.finishes)).toBeInTheDocument();
       expect(screen.getByText(testCase.finishesName)).toBeInTheDocument();
     }
   });
