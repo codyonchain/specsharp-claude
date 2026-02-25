@@ -636,3 +636,92 @@ class TestProjectNameGeneration:
         assert parsed["building_type"] == "recreation"
         assert parsed["subtype"] == "stadium"
         assert name == "Stadium in Nashville"
+
+    @pytest.mark.parametrize(
+        "description,expected_subtype,expected_name",
+        [
+            (
+                "New 180000 sf mixed-use office and residential tower in Nashville, TN",
+                "office_residential",
+                "Office Residential in Nashville",
+            ),
+            (
+                "New 145000 sf mixed-use retail and residential podium project in Nashville, TN",
+                "retail_residential",
+                "Retail Residential in Nashville",
+            ),
+            (
+                "New 210000 sf mixed-use hotel and retail destination in Nashville, TN",
+                "hotel_retail",
+                "Hotel Retail in Nashville",
+            ),
+            (
+                "New 240000 sf transit-oriented mixed-use development over a station in Nashville, TN",
+                "transit_oriented",
+                "Transit Oriented in Nashville",
+            ),
+            (
+                "New 200000 sf urban mixed-use district redevelopment in Nashville, TN",
+                "urban_mixed",
+                "Urban Mixed in Nashville",
+            ),
+        ],
+    )
+    def test_mixed_use_subtype_discoverability_all_five_profiles(
+        self,
+        description,
+        expected_subtype,
+        expected_name,
+    ):
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "mixed_use"
+        assert parsed["subtype"] == expected_subtype
+        assert parsed["building_subtype"] == expected_subtype
+        assert name == expected_name
+
+    def test_hotel_residential_alias_maps_to_hotel_retail_with_provenance(self):
+        parsed, name = self._parse_and_name(
+            "New 220000 sf mixed-use hotel residential tower with street retail in Nashville, TN"
+        )
+
+        assert parsed["building_type"] == "mixed_use"
+        assert parsed["subtype"] == "hotel_retail"
+        alias = parsed.get("subtype_alias_mapping")
+        assert isinstance(alias, dict)
+        assert alias.get("from") == "hotel_residential"
+        assert alias.get("to") == "hotel_retail"
+        assert name == "Hotel Retail in Nashville"
+
+    @pytest.mark.parametrize(
+        "description,expected_pattern",
+        [
+            (
+                "Mixed-use office and residential project with a 60/40 program split in Nashville, TN",
+                "ratio_pair",
+            ),
+            (
+                "Mixed-use tower with 70% office / 30% residential allocation in Nashville, TN",
+                "component_percent",
+            ),
+            (
+                "Mixed-use district that is mostly residential with neighborhood retail in Nashville, TN",
+                "mostly_component",
+            ),
+            (
+                "Mixed-use podium with retail-heavy program and apartments above in Nashville, TN",
+                "heavy_component",
+            ),
+            (
+                "Mixed-use redevelopment with balanced program between uses in Nashville, TN",
+                "balanced_pair",
+            ),
+        ],
+    )
+    def test_mixed_use_split_hint_patterns_are_detectable(self, description, expected_pattern):
+        parsed, _ = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "mixed_use"
+        split_hint = parsed.get("mixed_use_split_hint")
+        assert isinstance(split_hint, dict)
+        assert split_hint.get("pattern") == expected_pattern

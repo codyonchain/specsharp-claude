@@ -5,11 +5,13 @@ import pytest
 from app.v2.config.master_config import BuildingType, ProjectClass, get_building_config
 from app.v2.config.type_profiles.dealshield_content import get_dealshield_content_profile
 from app.v2.config.type_profiles.dealshield_content import mixed_use as mixed_use_content_profiles
+from app.v2.config.type_profiles.decision_insurance_policy import DECISION_INSURANCE_POLICY_BY_PROFILE_ID
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.v2.config.type_profiles.dealshield_tiles import mixed_use as mixed_use_tile_profiles
 from app.v2.config.type_profiles import scope_items as shared_scope_registry
 from app.v2.config.type_profiles.scope_items import mixed_use as mixed_use_scope_profiles
 from app.v2.engines.unified_engine import unified_engine
+from app.v2.services.dealshield_scenarios import WAVE1_PROFILES
 from app.v2.services.dealshield_service import build_dealshield_view_model
 
 
@@ -227,3 +229,47 @@ def test_mixed_use_runtime_payload_and_view_model_resolve_profiles():
         assert view_model.get("tile_profile_id") == expected["tile"]
         assert view_model.get("content_profile_id") == expected["tile"]
         assert view_model.get("scope_items_profile_id") == expected["scope"]
+
+
+def test_mixed_use_di_policy_and_wave1_gates_cover_all_profiles():
+    for expected in MIXED_USE_PROFILE_MAP.values():
+        profile_id = expected["tile"]
+        assert profile_id in DECISION_INSURANCE_POLICY_BY_PROFILE_ID
+        assert profile_id in WAVE1_PROFILES
+
+
+def test_mixed_use_scenario_provenance_includes_split_inputs_and_source():
+    payload = unified_engine.calculate_project(
+        building_type=BuildingType.MIXED_USE,
+        subtype="office_residential",
+        square_footage=140_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        parsed_input_overrides={
+            "mixed_use_split": {
+                "components": {"office": 70.0},
+                "pattern": "component_percent",
+            },
+            "description": "Mixed-use office and residential with 70% office split",
+        },
+    )
+
+    split = payload.get("mixed_use_split")
+    assert isinstance(split, dict)
+    assert split.get("source") == "user_input"
+    assert split.get("normalization_applied") is True
+    assert split.get("value", {}).get("office") == pytest.approx(70.0)
+    assert split.get("value", {}).get("residential") == pytest.approx(30.0)
+
+    scenarios = payload.get("dealshield_scenarios")
+    assert isinstance(scenarios, dict)
+    provenance = scenarios.get("provenance")
+    assert isinstance(provenance, dict)
+    scenario_inputs = provenance.get("scenario_inputs")
+    assert isinstance(scenario_inputs, dict) and scenario_inputs
+
+    for scenario_input in scenario_inputs.values():
+        assert scenario_input.get("mixed_use_split_source") == "user_input"
+        split_input = scenario_input.get("mixed_use_split")
+        assert isinstance(split_input, dict)
+        assert split_input.get("value", {}).get("office") == pytest.approx(70.0)

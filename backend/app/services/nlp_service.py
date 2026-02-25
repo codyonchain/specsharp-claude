@@ -17,6 +17,7 @@ class NLPService:
         self.keyword_mappings = self._get_keyword_mappings()
         # Merge patterns
         self._merge_patterns()
+        self._last_detection_metadata: Dict[str, Any] = {}
 
     def _build_patterns_from_config(self) -> Dict:
         """Generate detection patterns from master_config automatically"""
@@ -310,8 +311,37 @@ class NLPService:
             'mixed_use': {
                 'keywords': ['mixed use', 'mixed-use', 'multi-use', 'mixed development'],
                 'subtypes': {
-                    'retail_residential': ['retail and residential', 'shops and apartments', 'retail residential'],
-                    'urban_mixed': ['urban mixed', 'downtown mixed', 'mixed development', 'mixed use development']
+                    'office_residential': [
+                        'office and residential',
+                        'office residential',
+                        'office + residential',
+                        'residential office',
+                        'mixed use office residential',
+                    ],
+                    'retail_residential': [
+                        'retail and residential',
+                        'retail residential',
+                        'shops and apartments',
+                        'retail + residential',
+                    ],
+                    'hotel_retail': [
+                        'hotel and retail',
+                        'hotel retail',
+                        'hotel + retail',
+                        'mixed use hotel retail',
+                    ],
+                    'transit_oriented': [
+                        'transit oriented',
+                        'transit-oriented',
+                        'tod',
+                        'mixed use transit',
+                    ],
+                    'urban_mixed': [
+                        'urban mixed',
+                        'downtown mixed',
+                        'mixed development',
+                        'mixed use development',
+                    ],
                 }
             },
             'multifamily': {
@@ -555,9 +585,173 @@ class NLPService:
 
         return None
 
+    @staticmethod
+    def _default_mixed_use_pair(subtype: Optional[str]) -> Tuple[str, str]:
+        subtype_key = (subtype or "").strip().lower()
+        if subtype_key == "office_residential":
+            return "office", "residential"
+        if subtype_key == "retail_residential":
+            return "retail", "residential"
+        if subtype_key == "hotel_retail":
+            return "hotel", "retail"
+        if subtype_key == "transit_oriented":
+            return "transit", "residential"
+        return "office", "residential"
+
+    def _has_explicit_mixed_use_intent(self, text_lower: str) -> bool:
+        if not isinstance(text_lower, str) or not text_lower.strip():
+            return False
+        explicit_patterns = (
+            r"\bmixed[-\s]?use\b",
+            r"\bmulti[-\s]?use\b",
+            r"\bmixed\s+development\b",
+            r"\boffice\s*(?:\+|and|/)\s*residential\b",
+            r"\bresidential\s*(?:\+|and|/)\s*office\b",
+            r"\bretail\s*(?:\+|and|/)\s*residential\b",
+            r"\bresidential\s*(?:\+|and|/)\s*retail\b",
+            r"\bhotel\s*(?:\+|and|/)\s*retail\b",
+            r"\bretail\s*(?:\+|and|/)\s*hotel\b",
+            r"\bhotel\s*(?:\+|and|/)\s*residential\b",
+            r"\bresidential\s*(?:\+|and|/)\s*hotel\b",
+            r"\btransit[-\s]?oriented\b",
+        )
+        return any(re.search(pattern, text_lower) for pattern in explicit_patterns)
+
+    def _resolve_mixed_use_subtype_from_intent(
+        self,
+        text_lower: str,
+    ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+        if not isinstance(text_lower, str) or not text_lower.strip():
+            return None, None
+
+        hotel_residential_alias_patterns = (
+            r"\bhotel[-\s]?residential\b",
+            r"\bhotel\s*(?:\+|and|/)\s*residential\b",
+            r"\bresidential\s*(?:\+|and|/)\s*hotel\b",
+            r"\bmixed[-\s]?use\s+hotel[-\s]?residential\b",
+        )
+        for pattern in hotel_residential_alias_patterns:
+            if re.search(pattern, text_lower):
+                return "hotel_retail", {
+                    "from": "hotel_residential",
+                    "to": "hotel_retail",
+                    "reason": "hotel_residential_alias",
+                    "matched_pattern": pattern,
+                }
+
+        explicit_subtype_patterns = [
+            ("office_residential", (
+                r"\boffice[-\s]?residential\b",
+                r"\boffice\s*(?:\+|and|/)\s*residential\b",
+                r"\bresidential\s*(?:\+|and|/)\s*office\b",
+            )),
+            ("retail_residential", (
+                r"\bretail[-\s]?residential\b",
+                r"\bretail\s*(?:\+|and|/)\s*residential\b",
+                r"\bresidential\s*(?:\+|and|/)\s*retail\b",
+                r"\bshops?\s+and\s+apartments?\b",
+            )),
+            ("hotel_retail", (
+                r"\bhotel[-\s]?retail\b",
+                r"\bhotel\s*(?:\+|and|/)\s*retail\b",
+                r"\bretail\s*(?:\+|and|/)\s*hotel\b",
+            )),
+            ("transit_oriented", (
+                r"\btransit[-\s]?oriented\b",
+                r"\btransit[-\s]?oriented\s+development\b",
+                r"\btod\b",
+            )),
+            ("urban_mixed", (
+                r"\burban\s+mixed\b",
+                r"\bdowntown\s+mixed\b",
+            )),
+        ]
+        for subtype, patterns in explicit_subtype_patterns:
+            if any(re.search(pattern, text_lower) for pattern in patterns):
+                return subtype, None
+
+        return None, None
+
+    def _extract_mixed_use_split_hint(self, text_lower: str, subtype: Optional[str]) -> Optional[Dict[str, Any]]:
+        if not isinstance(text_lower, str) or not text_lower.strip():
+            return None
+
+        components = ("office", "residential", "retail", "hotel", "transit")
+        component_pattern = r"(office|residential|retail|hotel|transit)"
+        pair_components = self._default_mixed_use_pair(subtype)
+
+        # 70% office / 30% residential
+        labeled = re.findall(rf"(\d{{1,3}}(?:\.\d+)?)\s*%\s*{component_pattern}", text_lower)
+        if labeled:
+            hinted: Dict[str, float] = {}
+            for pct_text, component in labeled:
+                try:
+                    pct_value = float(pct_text)
+                except ValueError:
+                    continue
+                if pct_value < 0:
+                    continue
+                hinted[component] = hinted.get(component, 0.0) + pct_value
+            if hinted:
+                return {"components": hinted, "pattern": "component_percent"}
+
+        # 60/40
+        ratio_match = re.search(r"(?<!\d)(\d{1,3}(?:\.\d+)?)\s*/\s*(\d{1,3}(?:\.\d+)?)(?!\d)", text_lower)
+        if ratio_match:
+            try:
+                first = float(ratio_match.group(1))
+                second = float(ratio_match.group(2))
+            except ValueError:
+                first = second = -1.0
+            if first >= 0 and second >= 0:
+                return {
+                    "components": {
+                        pair_components[0]: first,
+                        pair_components[1]: second,
+                    },
+                    "pattern": "ratio_pair",
+                }
+
+        # mostly residential
+        mostly_match = re.search(rf"\bmostly\s+{component_pattern}\b", text_lower)
+        if mostly_match:
+            dominant = mostly_match.group(1)
+            counterpart = next((candidate for candidate in pair_components if candidate != dominant), None)
+            if counterpart is None:
+                counterpart = next((candidate for candidate in components if candidate != dominant), pair_components[0])
+            return {
+                "components": {dominant: 70.0, counterpart: 30.0},
+                "pattern": "mostly_component",
+            }
+
+        # retail-heavy
+        heavy_match = re.search(rf"\b{component_pattern}[-\s]?heavy\b", text_lower)
+        if heavy_match:
+            dominant = heavy_match.group(1)
+            counterpart = next((candidate for candidate in pair_components if candidate != dominant), None)
+            if counterpart is None:
+                counterpart = next((candidate for candidate in components if candidate != dominant), pair_components[0])
+            return {
+                "components": {dominant: 70.0, counterpart: 30.0},
+                "pattern": "heavy_component",
+            }
+
+        # balanced
+        if re.search(r"\bbalanced\b", text_lower):
+            return {
+                "components": {
+                    pair_components[0]: 50.0,
+                    pair_components[1]: 50.0,
+                },
+                "pattern": "balanced_pair",
+            }
+
+        return None
+
     def detect_building_type_with_subtype(self, text: str) -> Tuple[str, Optional[str], str]:
         """Detect building type and subtype using config-driven patterns"""
         text_lower = text.lower()
+        self._last_detection_metadata = {}
 
         # Detect classification first
         classification = self.detect_project_classification(text)
@@ -629,6 +823,11 @@ class NLPService:
             )
         ):
             return 'civic', None, classification
+
+        mixed_use_subtype, mixed_use_alias = self._resolve_mixed_use_subtype_from_intent(text_lower)
+        if self._has_explicit_mixed_use_intent(text_lower) or mixed_use_subtype is not None:
+            self._last_detection_metadata = {"alias_mapping": mixed_use_alias}
+            return 'mixed_use', (mixed_use_subtype or self._get_default_subtype('mixed_use')), classification
 
         hospitality_intent_pattern = re.compile(
             r"\b(hotel|motel|inn|lodging|hospitality)\b",
@@ -805,6 +1004,7 @@ class NLPService:
         """Main parsing function that returns all extracted information"""
         # Detect building type and subtype
         building_type, building_subtype, classification = self.detect_building_type_with_subtype(text)
+        text_lower = text.lower()
 
         # Extract other details
         square_footage = self._extract_square_footage(text)
@@ -825,6 +1025,16 @@ class NLPService:
             'has_bar': self._has_bar(text),
             'has_drive_thru': self._has_drive_thru(text)
         }
+
+        detection_metadata = self._last_detection_metadata if isinstance(self._last_detection_metadata, dict) else {}
+        alias_mapping = detection_metadata.get("alias_mapping")
+        if isinstance(alias_mapping, dict):
+            extracted['subtype_alias_mapping'] = alias_mapping
+
+        if building_type == 'mixed_use':
+            split_hint = self._extract_mixed_use_split_hint(text_lower, building_subtype)
+            if isinstance(split_hint, dict):
+                extracted['mixed_use_split_hint'] = split_hint
 
         if building_type == 'industrial' and building_subtype == 'flex_space':
             office_share = self._extract_flex_office_share(text)

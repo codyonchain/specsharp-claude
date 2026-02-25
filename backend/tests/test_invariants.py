@@ -695,6 +695,11 @@ def test_policy_curated_decision_insurance_is_applied_for_hardened_profiles():
         (BuildingType.SPECIALTY, "self_storage", 90_000),
         (BuildingType.SPECIALTY, "car_dealership", 65_000),
         (BuildingType.SPECIALTY, "broadcast_facility", 60_000),
+        (BuildingType.MIXED_USE, "office_residential", 140_000),
+        (BuildingType.MIXED_USE, "retail_residential", 140_000),
+        (BuildingType.MIXED_USE, "hotel_retail", 140_000),
+        (BuildingType.MIXED_USE, "transit_oriented", 140_000),
+        (BuildingType.MIXED_USE, "urban_mixed", 140_000),
     ]
 
     for building_type, subtype, square_footage in profile_inputs:
@@ -2473,3 +2478,71 @@ def test_mixed_use_runtime_scope_depth_floor_and_trade_reconciliation():
             assert len(systems) >= minimum
             systems_total = sum(float(system.get("total_cost", 0.0) or 0.0) for system in systems)
             assert systems_total == pytest.approx(float(trade_breakdown.get(trade_key, 0.0) or 0.0), rel=0, abs=1e-6)
+
+
+def test_mixed_use_di_policy_entries_are_available_for_all_profiles():
+    for expected in MIXED_USE_PROFILE_IDS.values():
+        profile_id = expected["tile_profile"]
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID.get(profile_id)
+        assert isinstance(policy, dict)
+
+        primary_control = policy.get("primary_control_variable")
+        collapse_trigger = policy.get("collapse_trigger")
+        flex_calibration = policy.get("flex_calibration")
+        assert isinstance(primary_control, dict)
+        assert isinstance(collapse_trigger, dict)
+        assert isinstance(flex_calibration, dict)
+
+        assert collapse_trigger.get("metric") in {"value_gap_pct", "value_gap"}
+        assert collapse_trigger.get("operator") in {"<=", "<"}
+        scenario_priority = collapse_trigger.get("scenario_priority")
+        assert isinstance(scenario_priority, list) and len(scenario_priority) == 4
+        assert scenario_priority[0] == "base"
+        assert {"base", "conservative", "ugly"}.issubset(set(scenario_priority))
+
+
+def test_mixed_use_schedule_source_and_unknown_fallback_invariants():
+    for subtype in MIXED_USE_PROFILE_IDS.keys():
+        schedule = build_construction_schedule(BuildingType.MIXED_USE, subtype)
+        assert schedule.get("building_type") == BuildingType.MIXED_USE.value
+        assert schedule.get("schedule_source") == "subtype"
+        assert schedule.get("subtype") == subtype
+        phases = schedule.get("phases")
+        assert isinstance(phases, list) and phases
+
+    unknown_schedule = build_construction_schedule(
+        BuildingType.MIXED_USE,
+        "unknown_mixed_use_variant",
+    )
+    assert unknown_schedule.get("building_type") == BuildingType.MIXED_USE.value
+    assert unknown_schedule.get("schedule_source") == "building_type"
+    assert unknown_schedule.get("subtype") is None
+    assert unknown_schedule.get("total_months") == 30
+
+
+def test_mixed_use_split_invalid_mix_falls_back_explicitly_without_silent_coercion():
+    payload = unified_engine.calculate_project(
+        building_type=BuildingType.MIXED_USE,
+        subtype="urban_mixed",
+        square_footage=120_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        parsed_input_overrides={
+            "mixed_use_split": {
+                "components": {"office": 70, "invalid_component": 30},
+            },
+            "description": "mixed-use urban project",
+        },
+    )
+
+    split = payload.get("mixed_use_split")
+    assert isinstance(split, dict)
+    assert split.get("source") == "default"
+    assert split.get("normalization_applied") is False
+    assert isinstance(split.get("invalid_mix"), dict)
+    assert split.get("invalid_mix", {}).get("reason") == "unsupported_component"
+
+    split_value = split.get("value")
+    assert isinstance(split_value, dict)
+    assert split_value.get("office") == pytest.approx(50.0)
+    assert split_value.get("residential") == pytest.approx(50.0)
