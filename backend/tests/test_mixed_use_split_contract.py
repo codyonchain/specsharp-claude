@@ -1,7 +1,14 @@
 import pytest
 
+from app.core.building_taxonomy import validate_building_type
 from app.v2.config.master_config import BuildingType, ProjectClass
 from app.v2.engines.unified_engine import unified_engine
+
+
+def test_mixed_use_taxonomy_validation_preserves_canonical_type_and_subtype():
+    building_type, subtype = validate_building_type("mixed_use", "retail_residential")
+    assert building_type == "mixed_use"
+    assert subtype == "retail_residential"
 
 
 def test_user_input_single_component_infers_counterpart_deterministically():

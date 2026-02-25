@@ -1566,6 +1566,10 @@ describe("ConstructionView", () => {
       expect(
         screen.getByText("Timeline is tailored for this subtype profile.")
       ).toBeInTheDocument();
+      expect(screen.getByText("Mixed-Use Program Split Applied")).toBeInTheDocument();
+      expect(screen.getByText("Office 60% | 30,000 SF")).toBeInTheDocument();
+      expect(screen.getByText("Residential 40% | 20,000 SF")).toBeInTheDocument();
+      expect(screen.getByText(/Split source: user_input/i)).toBeInTheDocument();
       expect(screen.getAllByText(testCase.sitePhaseLabel).length).toBeGreaterThan(0);
       expect(screen.getAllByText(testCase.structuralPhaseLabel).length).toBeGreaterThan(0);
 

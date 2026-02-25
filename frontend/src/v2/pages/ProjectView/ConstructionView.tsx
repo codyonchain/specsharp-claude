@@ -19,6 +19,7 @@ type TradeCostSplit = {
 };
 
 type AnyRecord = Record<string, any>;
+type MixedUseComponent = 'office' | 'residential' | 'retail' | 'hotel' | 'transit';
 
 const toRecord = (value: unknown): AnyRecord =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -33,6 +34,38 @@ const coalesceRecord = (...candidates: unknown[]): AnyRecord => {
   }
   return {};
 };
+
+const toFiniteNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
+const MIXED_USE_COMPONENT_ORDER: MixedUseComponent[] = [
+  'office',
+  'residential',
+  'retail',
+  'hotel',
+  'transit',
+];
+
+const MIXED_USE_COMPONENT_LABELS: Record<MixedUseComponent, string> = {
+  office: 'Office',
+  residential: 'Residential',
+  retail: 'Retail',
+  hotel: 'Hotel',
+  transit: 'Transit',
+};
+
+const formatSplitPercent = (value: number): string =>
+  Number.isInteger(value) ? `${value.toFixed(0)}%` : `${value.toFixed(1)}%`;
 
 const normalizeTradeCostSplit = (split: TradeCostSplit): TradeCostSplit => {
   const { materials, labor, equipment } = split;
@@ -360,6 +393,46 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
         : 0;
   const squareFootage = squareFootageRaw > 0 ? squareFootageRaw : 0;
   const safeSquareFootage = squareFootage > 0 ? squareFootage : 1;
+  const isMixedUseProject = String(parsed_input.building_type || calculations.project_info?.building_type || '').toLowerCase() === 'mixed_use';
+
+  const mixedUseSplitSourceCandidates = [
+    calculations?.mixed_use_split,
+    calculations?.project_info?.mixed_use_split,
+    parsed_input?.mixed_use_split,
+    calculations?.dealshield_scenarios?.provenance?.scenario_inputs?.base?.mixed_use_split,
+  ];
+  const mixedUseSplitBlock = isMixedUseProject
+    ? coalesceRecord(...mixedUseSplitSourceCandidates)
+    : {};
+  const mixedUseSplitValueRaw = coalesceRecord(
+    mixedUseSplitBlock?.value,
+    mixedUseSplitBlock
+  );
+  const mixedUseSplitComponents = MIXED_USE_COMPONENT_ORDER
+    .map((component) => {
+      const pct = toFiniteNumber(mixedUseSplitValueRaw[component]);
+      if (pct === null || pct <= 0) return null;
+      const componentSF = Math.round((squareFootage * pct) / 100);
+      return {
+        key: component,
+        label: MIXED_USE_COMPONENT_LABELS[component],
+        pct,
+        sf: componentSF,
+      };
+    })
+    .filter(Boolean) as Array<{ key: MixedUseComponent; label: string; pct: number; sf: number }>;
+  const mixedUseSplitSource =
+    (typeof mixedUseSplitBlock?.source === 'string' && mixedUseSplitBlock.source.trim()) ||
+    (typeof calculations?.totals?.mixed_use_split_source === 'string'
+      ? calculations.totals.mixed_use_split_source
+      : '') ||
+    'default';
+  const mixedUseSplitPattern =
+    typeof mixedUseSplitBlock?.pattern === 'string' ? mixedUseSplitBlock.pattern : '';
+  const mixedUseSplitCostFactor = toFiniteNumber(mixedUseSplitBlock?.cost_factor_applied);
+  const mixedUseSplitRevenueFactor = toFiniteNumber(mixedUseSplitBlock?.revenue_factor_applied);
+  const mixedUseSplitNormalized =
+    Boolean(mixedUseSplitBlock?.normalization_applied) || false;
 
   const buildingTypeRaw =
     parsed_input.building_type ||
@@ -1529,6 +1602,41 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
             Click on any trade for detailed breakdown
           </button>
         </div>
+
+        {isMixedUseProject && mixedUseSplitComponents.length > 0 && (
+          <div className="mb-6 rounded-lg border border-indigo-200 bg-indigo-50 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-indigo-900">Mixed-Use Program Split Applied</p>
+                <p className="text-xs text-indigo-800">
+                  Split source: {mixedUseSplitSource}
+                  {mixedUseSplitPattern ? ` (${mixedUseSplitPattern})` : ''}
+                  {mixedUseSplitNormalized ? ' | normalized to 100%' : ''}
+                </p>
+              </div>
+              {(mixedUseSplitCostFactor !== null || mixedUseSplitRevenueFactor !== null) && (
+                <p className="text-xs text-indigo-800">
+                  {mixedUseSplitCostFactor !== null ? `Cost factor x${mixedUseSplitCostFactor.toFixed(3)}` : ''}
+                  {mixedUseSplitCostFactor !== null && mixedUseSplitRevenueFactor !== null ? ' | ' : ''}
+                  {mixedUseSplitRevenueFactor !== null ? `Revenue factor x${mixedUseSplitRevenueFactor.toFixed(3)}` : ''}
+                </p>
+              )}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {mixedUseSplitComponents.map((component) => (
+                <span
+                  key={component.key}
+                  className="inline-flex items-center rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-medium text-indigo-900"
+                >
+                  {component.label} {formatSplitPercent(component.pct)} | {formatNumber(component.sf)} SF
+                </span>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-indigo-700">
+              Scope line-item quantities remain gross SF; split weighting is applied to mixed-use cost/revenue math and scenario provenance.
+            </p>
+          </div>
+        )}
         
         <div className="space-y-4">
           {filteredTrades.map(trade => {

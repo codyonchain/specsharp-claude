@@ -1030,6 +1030,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     : undefined;
   const dscrText = typeof dscrValue === 'number' ? `${dscrValue.toFixed(2)}×` : undefined;
   const dscrTargetText = `${resolvedTargetDscr.toFixed(2)}×`;
+  const dscrMeetsTarget = typeof dscrValue === 'number' && Number.isFinite(dscrValue)
+    ? dscrValue >= resolvedTargetDscr
+    : undefined;
   const decisionCopy = (() => {
     const yieldText = formatPct(yieldPctValue);
     const marketText = formatPct(marketCapPctValue);
@@ -1039,7 +1042,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     if (decisionStatus === 'GO') {
       return {
         body: 'Project meets underwriting criteria with strong returns and healthy debt coverage.',
-        detail: `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'}${marketCapPctValue !== undefined ? ` vs market cap ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''}${dscrText ? ` and DSCR ${dscrText} meets the ${dscrTargetText} requirement.` : '.'}`
+        detail: `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'}${marketCapPctValue !== undefined ? ` vs market cap ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''}${
+          dscrText
+            ? ` and DSCR ${dscrText} ${dscrMeetsTarget === false ? `is below` : `meets`} the ${dscrTargetText} requirement.`
+            : '.'
+        }`
       };
     }
     if (decisionStatus === 'Needs Work') {
@@ -1326,8 +1333,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const annualRevenue = 
     calculations?.roi_analysis?.financial_metrics?.annual_revenue ||
     calculations?.revenue_analysis?.annual_revenue ||
+    calculations?.ownership_analysis?.revenue_analysis?.annual_revenue ||
     calculations?.financial_metrics?.annual_revenue ||
     calculations?.annual_revenue ||
+    displayData?.annualRevenue ||
     0; // No hardcoded value, just 0 if missing
     
   if (DEBUG_EXECUTIVE) {
@@ -1338,7 +1347,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const noi = 
     calculations?.roi_analysis?.financial_metrics?.net_income ||
     calculations?.revenue_analysis?.net_income ||
+    calculations?.ownership_analysis?.revenue_analysis?.net_income ||
     calculations?.return_metrics?.estimated_annual_noi ||
+    calculations?.ownership_analysis?.return_metrics?.estimated_annual_noi ||
+    displayData?.noi ||
     calculations?.net_income || 
     0;
   
@@ -1346,6 +1358,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const operatingMargin = 
     calculations?.roi_analysis?.financial_metrics?.operating_margin ||
     calculations?.revenue_analysis?.operating_margin ||
+    calculations?.ownership_analysis?.revenue_analysis?.operating_margin ||
+    displayData?.operatingMargin ||
     calculations?.operating_margin ||
     0.08; // Default 8% for unknown types
     
