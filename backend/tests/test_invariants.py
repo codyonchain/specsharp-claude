@@ -27,10 +27,12 @@ from app.v2.config.type_profiles.dealshield_content import healthcare as healthc
 from app.v2.config.type_profiles.dealshield_content import office as office_content
 from app.v2.config.type_profiles.dealshield_content import specialty as specialty_content
 from app.v2.config.type_profiles.dealshield_content import civic as civic_content
+from app.v2.config.type_profiles.dealshield_content import recreation as recreation_content
 from app.v2.config.type_profiles.scope_items import healthcare as healthcare_scope_profiles
 from app.v2.config.type_profiles.scope_items import office as office_scope_profiles
 from app.v2.config.type_profiles.scope_items import specialty as specialty_scope_profiles
 from app.v2.config.type_profiles.scope_items import civic as civic_scope_profiles
+from app.v2.config.type_profiles.scope_items import recreation as recreation_scope_profiles
 from app.v2.services.dealshield_service import build_dealshield_view_model
 
 INDUSTRIAL_POLICY_EXPECTATIONS_BY_PROFILE_ID = {
@@ -172,6 +174,37 @@ CIVIC_SCOPE_DEPTH_FLOOR = {
     "government_building": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
     "community_center": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
     "public_safety": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+}
+
+RECREATION_PROFILE_IDS = {
+    "fitness_center": {
+        "tile_profile": "recreation_fitness_center_v1",
+        "scope_profile": "recreation_fitness_center_structural_v1",
+    },
+    "sports_complex": {
+        "tile_profile": "recreation_sports_complex_v1",
+        "scope_profile": "recreation_sports_complex_structural_v1",
+    },
+    "aquatic_center": {
+        "tile_profile": "recreation_aquatic_center_v1",
+        "scope_profile": "recreation_aquatic_center_structural_v1",
+    },
+    "recreation_center": {
+        "tile_profile": "recreation_recreation_center_v1",
+        "scope_profile": "recreation_recreation_center_structural_v1",
+    },
+    "stadium": {
+        "tile_profile": "recreation_stadium_v1",
+        "scope_profile": "recreation_stadium_structural_v1",
+    },
+}
+
+RECREATION_SCOPE_DEPTH_FLOOR = {
+    "fitness_center": {"structural": 4, "mechanical": 5, "electrical": 4, "plumbing": 3, "finishes": 4},
+    "sports_complex": {"structural": 5, "mechanical": 4, "electrical": 4, "plumbing": 3, "finishes": 4},
+    "aquatic_center": {"structural": 4, "mechanical": 6, "electrical": 5, "plumbing": 5, "finishes": 4},
+    "recreation_center": {"structural": 4, "mechanical": 5, "electrical": 4, "plumbing": 3, "finishes": 4},
+    "stadium": {"structural": 6, "mechanical": 5, "electrical": 5, "plumbing": 4, "finishes": 5},
 }
 
 
@@ -1971,3 +2004,92 @@ def test_civic_di_policy_entries_are_available_for_all_profiles():
 
         assert collapse_trigger.get("metric") in {"value_gap_pct", "value_gap"}
         assert collapse_trigger.get("operator") in {"<=", "<"}
+
+
+def test_recreation_first_mlw_text_is_unique_across_all_subtypes():
+    first_mlw_texts = []
+
+    for expected in RECREATION_PROFILE_IDS.values():
+        content = recreation_content.DEALSHIELD_CONTENT_PROFILES[expected["tile_profile"]]
+        mlw_entries = content.get("most_likely_wrong")
+        assert isinstance(mlw_entries, list) and mlw_entries
+
+        first_entry = mlw_entries[0]
+        assert isinstance(first_entry, dict)
+        first_text = first_entry.get("text")
+        assert isinstance(first_text, str) and first_text.strip()
+        first_mlw_texts.append(first_text.strip())
+
+    assert len(first_mlw_texts) == len(set(first_mlw_texts))
+
+
+def test_recreation_subtypes_do_not_leak_baseline_alias_wiring():
+    for subtype, expected in RECREATION_PROFILE_IDS.items():
+        cfg = get_building_config(BuildingType.RECREATION, subtype)
+        assert cfg is not None
+
+        assert cfg.dealshield_tile_profile == expected["tile_profile"]
+        assert cfg.scope_items_profile == expected["scope_profile"]
+
+        assert cfg.dealshield_tile_profile != "recreation_baseline_v1"
+        assert cfg.scope_items_profile != "recreation_baseline_structural_v1"
+
+
+def test_recreation_profile_resolution_is_present_and_deterministic():
+    scope_defaults = recreation_scope_profiles.SCOPE_ITEM_DEFAULTS.get("default_profile_by_subtype")
+    assert isinstance(scope_defaults, dict)
+
+    for subtype, expected in RECREATION_PROFILE_IDS.items():
+        tile_profile_id = expected["tile_profile"]
+        scope_profile_id = expected["scope_profile"]
+
+        first_tile = get_dealshield_profile(tile_profile_id)
+        second_tile = get_dealshield_profile(tile_profile_id)
+        assert first_tile == second_tile
+        assert first_tile.get("profile_id") == tile_profile_id
+
+        content_first = recreation_content.DEALSHIELD_CONTENT_PROFILES[tile_profile_id]
+        content_second = recreation_content.DEALSHIELD_CONTENT_PROFILES[tile_profile_id]
+        assert content_first == content_second
+        assert content_first.get("profile_id") == tile_profile_id
+
+        scope_profile = recreation_scope_profiles.SCOPE_ITEM_PROFILES[scope_profile_id]
+        assert scope_profile.get("profile_id") == scope_profile_id
+        assert scope_defaults.get(subtype) == scope_profile_id
+
+        cfg = get_building_config(BuildingType.RECREATION, subtype)
+        assert cfg is not None
+        assert cfg.dealshield_tile_profile == tile_profile_id
+        assert cfg.scope_items_profile == scope_profile_id
+
+
+def test_recreation_profile_existence_and_scope_depth_invariants():
+    required_trades = {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+
+    for subtype, expected in RECREATION_PROFILE_IDS.items():
+        profile_id = expected["tile_profile"]
+        scope_profile_id = expected["scope_profile"]
+        floors = RECREATION_SCOPE_DEPTH_FLOOR[subtype]
+
+        tile_profile = get_dealshield_profile(profile_id)
+        assert tile_profile.get("profile_id") == profile_id
+
+        content_profile = recreation_content.DEALSHIELD_CONTENT_PROFILES[profile_id]
+        assert content_profile.get("profile_id") == profile_id
+
+        scope_profile = recreation_scope_profiles.SCOPE_ITEM_PROFILES[scope_profile_id]
+        assert scope_profile.get("profile_id") == scope_profile_id
+
+        trade_profiles = scope_profile.get("trade_profiles")
+        assert isinstance(trade_profiles, list) and len(trade_profiles) == 5
+        by_trade = {
+            trade.get("trade_key"): trade
+            for trade in trade_profiles
+            if isinstance(trade, dict) and isinstance(trade.get("trade_key"), str)
+        }
+        assert required_trades == set(by_trade.keys())
+
+        for trade_key, minimum_items in floors.items():
+            items = by_trade[trade_key].get("items")
+            assert isinstance(items, list)
+            assert len(items) >= minimum_items
