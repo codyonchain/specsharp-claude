@@ -285,6 +285,54 @@ const RECREATION_POLICY_CASES = [
   },
 ] as const;
 
+const MIXED_USE_POLICY_CASES = [
+  {
+    subtype: "office_residential",
+    profileId: "mixed_use_office_residential_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    mixedUseSplitSource: "user_input",
+    mixedUseSplitValue: { office: 70, residential: 30 },
+    mixedUseSplitMetricRef: "mixed_use_split.office",
+  },
+  {
+    subtype: "retail_residential",
+    profileId: "mixed_use_retail_residential_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+    mixedUseSplitSource: "nlp_detected",
+    mixedUseSplitValue: { retail: 40, residential: 60 },
+    mixedUseSplitMetricRef: "mixed_use_split.retail",
+  },
+  {
+    subtype: "hotel_retail",
+    profileId: "mixed_use_hotel_retail_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+    mixedUseSplitSource: "user_input",
+    mixedUseSplitValue: { hotel: 65, retail: 35 },
+    mixedUseSplitMetricRef: "mixed_use_split.hotel",
+  },
+  {
+    subtype: "transit_oriented",
+    profileId: "mixed_use_transit_oriented_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+    mixedUseSplitSource: "default",
+    mixedUseSplitValue: { transit: 25, residential: 45, retail: 30 },
+    mixedUseSplitMetricRef: "mixed_use_split.transit",
+  },
+  {
+    subtype: "urban_mixed",
+    profileId: "mixed_use_urban_mixed_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    mixedUseSplitSource: "nlp_detected",
+    mixedUseSplitValue: { office: 20, residential: 50, retail: 20, hotel: 10 },
+    mixedUseSplitMetricRef: "mixed_use_split.residential",
+  },
+] as const;
+
 const buildRestaurantProject = () =>
   ({
     id: "proj_restaurant_exec",
@@ -560,7 +608,8 @@ const buildHospitalityDealShieldViewModel = (profileId: string) => ({
 const buildCrossTypeProject = (
   buildingType: string,
   subtype: string,
-  profileId: string
+  profileId: string,
+  mixedUseSplit?: Record<string, number>
 ) => {
   const project = buildRestaurantProject();
   project.id = `proj_exec_${profileId}`;
@@ -571,19 +620,43 @@ const buildCrossTypeProject = (
   project.analysis.calculations.project_info.building_type = buildingType;
   project.analysis.calculations.project_info.subtype = subtype;
   project.analysis.calculations.dealshield_scenarios.profile_id = profileId;
+  if (mixedUseSplit) {
+    project.analysis.parsed_input.mixed_use_split = {
+      source: "user_input",
+      normalization_applied: true,
+      value: mixedUseSplit,
+    };
+    const scenarioInputs = project.analysis.calculations.dealshield_scenarios.provenance.scenario_inputs;
+    if (scenarioInputs?.base) {
+      scenarioInputs.base.mixed_use_split_source = "user_input";
+      scenarioInputs.base.mixed_use_split = {
+        source: "user_input",
+        normalization_applied: true,
+        value: mixedUseSplit,
+      };
+    }
+  }
   return project;
 };
 
 const buildCrossTypeDealShieldViewModel = (
   profileId: string,
   decisionStatus: string,
-  decisionReasonCode: string
+  decisionReasonCode: string,
+  options?: {
+    mixedUseSplitSource?: "user_input" | "nlp_detected" | "default";
+    mixedUseSplitValue?: Record<string, number>;
+    mixedUseSplitMetricRef?: string;
+  }
 ) => ({
   decision_status: decisionStatus,
   decision_reason_code: decisionReasonCode,
   decision_status_provenance: {
     status_source: "dealshield_policy_v1",
     policy_id: "decision_insurance_subtype_policy_v1",
+    ...(options?.mixedUseSplitSource
+      ? { mixed_use_split_source: options.mixedUseSplitSource }
+      : {}),
   },
   decision_insurance_provenance: {
     enabled: true,
@@ -592,6 +665,26 @@ const buildCrossTypeDealShieldViewModel = (
   tile_profile_id: profileId,
   content_profile_id: profileId,
   scope_items_profile_id: `${profileId.replace(/_v1$/, "")}_structural_v1`,
+  ...(options?.mixedUseSplitValue
+    ? {
+        provenance: {
+          scenario_inputs: {
+            base: {
+              scenario_label: "Base",
+              mixed_use_split_source: options.mixedUseSplitSource ?? "user_input",
+              mixed_use_split: {
+                source: options.mixedUseSplitSource ?? "user_input",
+                normalization_applied: true,
+                value: options.mixedUseSplitValue,
+              },
+              driver: {
+                metric_ref: options.mixedUseSplitMetricRef ?? "mixed_use_split.office",
+              },
+            },
+          },
+        },
+      }
+    : {}),
 });
 
 describe("ExecutiveViewComplete", () => {
@@ -1136,6 +1229,84 @@ describe("ExecutiveViewComplete", () => {
               testCase.decisionReasonCode
             ) as any}
           />
+        </MemoryRouter>
+      );
+
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      const policyLineMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return (
+          text.includes("Policy source: dealshield_policy_v1") &&
+          text.includes("decision_insurance_subtype_policy_v1") &&
+          text.includes(`reason: ${testCase.decisionReasonCode}`)
+        );
+      });
+      expect(policyLineMatches.length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: "Scenario" })).toBeInTheDocument();
+    }
+  });
+
+  it("keeps mixed_use canonical status/reason/provenance parity for all five subtypes and carries split provenance through fixtures", () => {
+    const first = MIXED_USE_POLICY_CASES[0];
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject(
+            "mixed_use",
+            first.subtype,
+            first.profileId,
+            first.mixedUseSplitValue
+          )}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            first.profileId,
+            first.decisionStatus,
+            first.decisionReasonCode,
+            {
+              mixedUseSplitSource: first.mixedUseSplitSource,
+              mixedUseSplitValue: first.mixedUseSplitValue,
+              mixedUseSplitMetricRef: first.mixedUseSplitMetricRef,
+            }
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    for (const testCase of MIXED_USE_POLICY_CASES) {
+      const project = buildCrossTypeProject(
+        "mixed_use",
+        testCase.subtype,
+        testCase.profileId,
+        testCase.mixedUseSplitValue
+      );
+      const viewModel = buildCrossTypeDealShieldViewModel(
+        testCase.profileId,
+        testCase.decisionStatus,
+        testCase.decisionReasonCode,
+        {
+          mixedUseSplitSource: testCase.mixedUseSplitSource,
+          mixedUseSplitValue: testCase.mixedUseSplitValue,
+          mixedUseSplitMetricRef: testCase.mixedUseSplitMetricRef,
+        }
+      );
+
+      expect(project.analysis.parsed_input.mixed_use_split.value).toEqual(testCase.mixedUseSplitValue);
+      expect(
+        project.analysis.calculations.dealshield_scenarios.provenance.scenario_inputs.base
+          .mixed_use_split_source
+      ).toBe("user_input");
+      expect((viewModel as any).decision_status_provenance.mixed_use_split_source).toBe(
+        testCase.mixedUseSplitSource
+      );
+      expect((viewModel as any).provenance.scenario_inputs.base.mixed_use_split.value).toEqual(
+        testCase.mixedUseSplitValue
+      );
+
+      rerender(
+        <MemoryRouter>
+          <ExecutiveViewComplete project={project} dealShieldData={viewModel as any} />
         </MemoryRouter>
       );
 

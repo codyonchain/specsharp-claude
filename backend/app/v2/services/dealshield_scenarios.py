@@ -59,6 +59,11 @@ WAVE1_PROFILES: Set[str] = {
     "recreation_aquatic_center_v1",
     "recreation_recreation_center_v1",
     "recreation_stadium_v1",
+    "mixed_use_office_residential_v1",
+    "mixed_use_retail_residential_v1",
+    "mixed_use_hotel_retail_v1",
+    "mixed_use_transit_oriented_v1",
+    "mixed_use_urban_mixed_v1",
 }
 
 _ALLOWED_STRESS_BAND_PCTS: Set[int] = {10, 7, 5, 3}
@@ -363,6 +368,7 @@ def _build_calculation_context(
         'regional_context': payload.get('regional'),
         'location': project_info.get('location'),
         'scenario': scenario_id,
+        'mixed_use_split': payload.get('mixed_use_split'),
     })
     return context
 
@@ -524,6 +530,12 @@ def build_dealshield_scenarios(
         "cost_anchor_value": float(cost_anchor_value) if cost_anchor_used else None,
         "revenue_anchor_used": revenue_anchor_used,
         "revenue_anchor_value": float(revenue_anchor_value) if revenue_anchor_used else None,
+        "mixed_use_split": base_payload.get("mixed_use_split"),
+        "mixed_use_split_source": (
+            base_payload.get("mixed_use_split", {}).get("source")
+            if isinstance(base_payload.get("mixed_use_split"), dict)
+            else None
+        ),
         "explain": {
             "short": "Base scenario (no profile levers applied; financials recomputed).",
             "levers": [],
@@ -591,6 +603,12 @@ def build_dealshield_scenarios(
             "cost_anchor_value": float(cost_anchor_value) if cost_anchor_used else None,
             "revenue_anchor_used": revenue_anchor_used,
             "revenue_anchor_value": float(revenue_anchor_value) if revenue_anchor_used else None,
+            "mixed_use_split": scenario_payload.get("mixed_use_split"),
+            "mixed_use_split_source": (
+                scenario_payload.get("mixed_use_split", {}).get("source")
+                if isinstance(scenario_payload.get("mixed_use_split"), dict)
+                else None
+            ),
             "explain": {
                 "short": f"{display_name} scenario (profile-defined levers applied; financials recomputed).",
                 "levers": levers,

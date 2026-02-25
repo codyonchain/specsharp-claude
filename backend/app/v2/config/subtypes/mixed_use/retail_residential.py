@@ -66,6 +66,8 @@ CONFIG = (
             "Chicago": 1.25,
             "Miami": 1.18,
         },
+        dealshield_tile_profile="mixed_use_retail_residential_v1",
+        scope_items_profile="mixed_use_retail_residential_structural_v1",
         special_features={
             "rooftop_deck": 30,
             "parking_podium": 40,

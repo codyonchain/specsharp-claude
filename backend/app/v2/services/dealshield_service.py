@@ -55,6 +55,11 @@ _WAVE1_PROFILE_IDS: Set[str] = {
     "recreation_aquatic_center_v1",
     "recreation_recreation_center_v1",
     "recreation_stadium_v1",
+    "mixed_use_office_residential_v1",
+    "mixed_use_retail_residential_v1",
+    "mixed_use_hotel_retail_v1",
+    "mixed_use_transit_oriented_v1",
+    "mixed_use_urban_mixed_v1",
 }
 
 _DEFAULT_DECISION_TABLE_COLUMNS: List[Dict[str, str]] = [
@@ -1018,6 +1023,10 @@ def _is_recreation_profile(profile_id: Any) -> bool:
     return isinstance(profile_id, str) and profile_id.startswith("recreation_")
 
 
+def _is_mixed_use_profile(profile_id: Any) -> bool:
+    return isinstance(profile_id, str) and profile_id.startswith("mixed_use_")
+
+
 def _supports_decision_insurance_profile(profile_id: Any) -> bool:
     return (
         _is_multifamily_profile(profile_id)
@@ -1031,6 +1040,7 @@ def _supports_decision_insurance_profile(profile_id: Any) -> bool:
         or _is_specialty_profile(profile_id)
         or _is_civic_profile(profile_id)
         or _is_recreation_profile(profile_id)
+        or _is_mixed_use_profile(profile_id)
     )
 
 

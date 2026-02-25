@@ -27,14 +27,39 @@ from app.v2.config.construction_schedule import (
     build_construction_schedule as _build_construction_schedule,
 )
 from app.v2.config.type_profiles import scope_items
+from app.services.nlp_service import NLPService
 # from app.v2.services.financial_analyzer import FinancialAnalyzer  # TODO: Implement this
 from typing import Optional, Dict, Any, List, Tuple
 from copy import deepcopy
 from dataclasses import asdict, replace
 import math
 import logging
+import re
 
 logger = logging.getLogger(__name__)
+
+MIXED_USE_SPLIT_COMPONENTS: Tuple[str, ...] = ("office", "residential", "retail", "hotel", "transit")
+MIXED_USE_DEFAULT_SPLIT_BY_SUBTYPE: Dict[str, Tuple[str, str]] = {
+    "office_residential": ("office", "residential"),
+    "retail_residential": ("retail", "residential"),
+    "hotel_retail": ("hotel", "retail"),
+    "transit_oriented": ("transit", "residential"),
+    "urban_mixed": ("office", "residential"),
+}
+MIXED_USE_COST_COMPONENT_MULTIPLIERS: Dict[str, float] = {
+    "office": 1.08,
+    "residential": 1.00,
+    "retail": 1.04,
+    "hotel": 1.12,
+    "transit": 1.10,
+}
+MIXED_USE_REVENUE_COMPONENT_MULTIPLIERS: Dict[str, float] = {
+    "office": 1.00,
+    "residential": 0.97,
+    "retail": 1.08,
+    "hotel": 1.12,
+    "transit": 0.93,
+}
 
 
 def _humanize_special_feature_label(feature_id: str) -> str:
@@ -853,6 +878,7 @@ class UnifiedEngine:
         """Initialize the unified engine"""
         self.config = MASTER_CONFIG
         self.calculation_trace = []  # Track every calculation for debugging
+        self._nlp_service = NLPService()
         # self.financial_analyzer = FinancialAnalyzer()  # TODO: Add financial analyzer
         
     def calculate_project(self, 
@@ -1063,6 +1089,43 @@ class UnifiedEngine:
             'revenue_factor': round(modifiers['revenue_factor'], 4),
             'margin_pct': round(modifiers['margin_pct'], 4)
         })
+
+        mixed_use_split_contract: Optional[Dict[str, Any]] = None
+        if building_type == BuildingType.MIXED_USE:
+            description_for_split = None
+            if isinstance(parsed_input_overrides, dict):
+                raw_description = parsed_input_overrides.get("description")
+                if isinstance(raw_description, str) and raw_description.strip():
+                    description_for_split = raw_description.strip()
+            mixed_use_split_contract = self._resolve_mixed_use_split_contract(
+                subtype=subtype,
+                parsed_input_overrides=parsed_input_overrides,
+                description=description_for_split,
+            )
+            split_value = mixed_use_split_contract.get("value") if isinstance(mixed_use_split_contract, dict) else None
+            split_cost_factor = self._mixed_use_weighted_factor(
+                split_value if isinstance(split_value, dict) else {},
+                MIXED_USE_COST_COMPONENT_MULTIPLIERS,
+            )
+            split_revenue_factor = self._mixed_use_weighted_factor(
+                split_value if isinstance(split_value, dict) else {},
+                MIXED_USE_REVENUE_COMPONENT_MULTIPLIERS,
+            )
+            if split_cost_factor <= 0:
+                split_cost_factor = 1.0
+            if split_revenue_factor <= 0:
+                split_revenue_factor = 1.0
+            final_cost_per_sf = final_cost_per_sf * split_cost_factor
+            mixed_use_split_contract["cost_factor_applied"] = round(split_cost_factor, 6)
+            mixed_use_split_contract["revenue_factor_applied"] = round(split_revenue_factor, 6)
+            self._log_trace("mixed_use_split_resolved", {
+                "source": mixed_use_split_contract.get("source"),
+                "normalization_applied": bool(mixed_use_split_contract.get("normalization_applied")),
+                "cost_factor_applied": round(split_cost_factor, 6),
+                "revenue_factor_applied": round(split_revenue_factor, 6),
+                "value": split_value,
+                "invalid_mix": mixed_use_split_contract.get("invalid_mix"),
+            })
         
         # Calculate base construction cost
         construction_cost = final_cost_per_sf * square_footage
@@ -1246,6 +1309,7 @@ class UnifiedEngine:
                 'regional_context': regional_context,
                 'location': location,
                 'scenario': scenario_key,
+                'mixed_use_split': mixed_use_split_contract,
             },
         )
         ownership_analysis = ownership_bundle['ownership_analysis']
@@ -1355,6 +1419,8 @@ class UnifiedEngine:
         }
         if scenario_key:
             totals_payload['scenario_key'] = scenario_key
+        if isinstance(mixed_use_split_contract, dict):
+            totals_payload['mixed_use_split_source'] = mixed_use_split_contract.get('source')
 
         if (
             flex_revenue_per_sf is not None
@@ -1378,7 +1444,8 @@ class UnifiedEngine:
                 'typical_floors': building_config.typical_floors,
                 'finish_level': normalized_finish_level or 'standard',
                 'finish_level_source': finish_source,
-                'available_special_features': list(building_config.special_features.keys()) if building_config.special_features else []
+                'available_special_features': list(building_config.special_features.keys()) if building_config.special_features else [],
+                'mixed_use_split': mixed_use_split_contract,
             },
             'profile': {
                 'building_type': building_type.value,
@@ -1387,6 +1454,7 @@ class UnifiedEngine:
                 'target_dscr': profile.get('target_dscr'),
             },
             'modifiers': modifiers,
+            'mixed_use_split': mixed_use_split_contract,
             'regional': regional_payload,
             # Flatten calculations to top level to match frontend CalculationResult interface
             'construction_costs': {
@@ -1485,6 +1553,11 @@ class UnifiedEngine:
                 "recreation_aquatic_center_v1",
                 "recreation_recreation_center_v1",
                 "recreation_stadium_v1",
+                "mixed_use_office_residential_v1",
+                "mixed_use_retail_residential_v1",
+                "mixed_use_hotel_retail_v1",
+                "mixed_use_transit_oriented_v1",
+                "mixed_use_urban_mixed_v1",
             }:
                 from app.v2.services.dealshield_scenarios import (
                     build_dealshield_scenarios,
@@ -1810,6 +1883,363 @@ class UnifiedEngine:
         if percent > 1.0:
             percent = percent / 100.0
         return max(percent, 0.0)
+
+    @staticmethod
+    def _default_mixed_use_pair(subtype: Any) -> Tuple[str, str]:
+        subtype_key = (str(subtype) if subtype is not None else "").strip().lower()
+        return MIXED_USE_DEFAULT_SPLIT_BY_SUBTYPE.get(subtype_key, ("office", "residential"))
+
+    def _default_mixed_use_split_value(self, subtype: Any) -> Dict[str, float]:
+        primary, secondary = self._default_mixed_use_pair(subtype)
+        value = {component: 0.0 for component in MIXED_USE_SPLIT_COMPONENTS}
+        value[primary] = 50.0
+        value[secondary] = 50.0
+        return value
+
+    @staticmethod
+    def _coerce_mixed_use_split_value(raw_value: Any) -> Optional[float]:
+        if raw_value is None:
+            return None
+        if isinstance(raw_value, bool):
+            return None
+        if isinstance(raw_value, (int, float)):
+            value = float(raw_value)
+        elif isinstance(raw_value, str):
+            cleaned = raw_value.strip().replace("%", "").replace(",", "")
+            if not cleaned:
+                return None
+            try:
+                value = float(cleaned)
+            except ValueError:
+                return None
+        else:
+            return None
+        if not math.isfinite(value):
+            return None
+        return value
+
+    def _extract_mixed_use_split_components(
+        self,
+        split_source: Dict[str, Any],
+    ) -> Tuple[Optional[Dict[str, float]], bool, Optional[str]]:
+        components_source: Dict[str, Any] = {}
+        if isinstance(split_source.get("components"), dict):
+            components_source = dict(split_source.get("components") or {})
+        else:
+            components_source = dict(split_source)
+
+        allowed_keys = set()
+        for component in MIXED_USE_SPLIT_COMPONENTS:
+            allowed_keys.update({
+                component,
+                f"{component}_pct",
+                f"{component}_percent",
+                f"{component}_share",
+            })
+        unknown_keys = [
+            key for key in components_source.keys()
+            if isinstance(key, str) and key not in allowed_keys and key not in {"pattern", "source", "normalization_applied"}
+        ]
+        if unknown_keys:
+            return None, False, "unsupported_component"
+
+        extracted: Dict[str, float] = {}
+        for component in MIXED_USE_SPLIT_COMPONENTS:
+            raw_value = None
+            for key in (
+                component,
+                f"{component}_pct",
+                f"{component}_percent",
+                f"{component}_share",
+            ):
+                if key in components_source:
+                    raw_value = components_source.get(key)
+                    break
+            coerced = self._coerce_mixed_use_split_value(raw_value)
+            if coerced is None:
+                continue
+            if coerced < 0:
+                return None, False, "negative_component_value"
+            extracted[component] = coerced
+
+        if not extracted:
+            return None, False, "missing_components"
+
+        total = sum(extracted.values())
+        fraction_notation = total > 0 and total <= 1.0001 and all(value <= 1.0001 for value in extracted.values())
+        if fraction_notation:
+            extracted = {component: value * 100.0 for component, value in extracted.items()}
+
+        return extracted, fraction_notation, None
+
+    def _normalize_mixed_use_split_components(
+        self,
+        components: Dict[str, float],
+        subtype: Any,
+    ) -> Tuple[Optional[Dict[str, float]], bool, bool, Optional[str]]:
+        if not isinstance(components, dict) or not components:
+            return None, False, False, "missing_components"
+
+        unknown_components = [key for key in components.keys() if key not in MIXED_USE_SPLIT_COMPONENTS]
+        if unknown_components:
+            return None, False, False, "unsupported_component"
+
+        normalized: Dict[str, float] = {}
+        for component, raw_value in components.items():
+            value = self._coerce_mixed_use_split_value(raw_value)
+            if value is None:
+                return None, False, False, "non_numeric_component"
+            if value < 0:
+                return None, False, False, "negative_component_value"
+            normalized[component] = value
+
+        normalization_applied = False
+        inference_applied = False
+
+        if len(normalized) == 1:
+            component, value = next(iter(normalized.items()))
+            if value > 100.0:
+                return None, False, False, "single_component_exceeds_100"
+            primary, secondary = self._default_mixed_use_pair(subtype)
+            counterpart = secondary if component == primary else primary
+            if counterpart == component:
+                counterpart = next(
+                    (candidate for candidate in MIXED_USE_SPLIT_COMPONENTS if candidate != component),
+                    "residential",
+                )
+            normalized[counterpart] = max(0.0, 100.0 - value)
+            inference_applied = True
+            normalization_applied = True
+
+        total = sum(normalized.values())
+        if total <= 0:
+            return None, False, inference_applied, "non_positive_total"
+
+        if not math.isclose(total, 100.0, rel_tol=0.0, abs_tol=1e-9):
+            scale = 100.0 / total
+            normalized = {
+                component: (value * scale)
+                for component, value in normalized.items()
+            }
+            normalization_applied = True
+
+        rounded = {
+            component: round(value, 2)
+            for component, value in normalized.items()
+        }
+        rounded_total = sum(rounded.values())
+        if not math.isclose(rounded_total, 100.0, rel_tol=0.0, abs_tol=1e-9):
+            largest_component = max(rounded.keys(), key=lambda key: rounded[key])
+            rounded[largest_component] = round(rounded[largest_component] + (100.0 - rounded_total), 2)
+            normalization_applied = True
+
+        final_total = sum(rounded.values())
+        if not math.isclose(final_total, 100.0, rel_tol=0.0, abs_tol=0.05):
+            return None, normalization_applied, inference_applied, "unable_to_normalize_to_100"
+
+        canonical = {component: 0.0 for component in MIXED_USE_SPLIT_COMPONENTS}
+        for component, value in rounded.items():
+            canonical[component] = value
+        return canonical, normalization_applied, inference_applied, None
+
+    def _parse_mixed_use_split_from_description(
+        self,
+        description: Any,
+        subtype: Any,
+    ) -> Optional[Dict[str, Any]]:
+        if not isinstance(description, str) or not description.strip():
+            return None
+
+        text_lower = description.lower()
+        component_pattern = r"(office|residential|retail|hotel|transit)"
+        pair_components = self._default_mixed_use_pair(subtype)
+
+        labeled_matches = re.findall(
+            rf"(\d{{1,3}}(?:\.\d+)?)\s*%\s*{component_pattern}\b",
+            text_lower,
+        )
+        if labeled_matches:
+            components: Dict[str, float] = {}
+            for pct_text, component in labeled_matches:
+                try:
+                    pct_value = float(pct_text)
+                except ValueError:
+                    continue
+                components[component] = components.get(component, 0.0) + pct_value
+            if components:
+                return {
+                    "components": components,
+                    "pattern": "component_percent",
+                }
+
+        ratio_match = re.search(
+            r"(?<!\d)(\d{1,3}(?:\.\d+)?)\s*/\s*(\d{1,3}(?:\.\d+)?)(?!\d)",
+            text_lower,
+        )
+        if ratio_match:
+            return {
+                "components": {
+                    pair_components[0]: float(ratio_match.group(1)),
+                    pair_components[1]: float(ratio_match.group(2)),
+                },
+                "pattern": "ratio_pair",
+            }
+
+        mostly_match = re.search(rf"\bmostly\s+{component_pattern}\b", text_lower)
+        if mostly_match:
+            dominant = mostly_match.group(1)
+            counterpart = next(
+                (candidate for candidate in pair_components if candidate != dominant),
+                pair_components[0],
+            )
+            if counterpart == dominant:
+                counterpart = next(
+                    (candidate for candidate in MIXED_USE_SPLIT_COMPONENTS if candidate != dominant),
+                    "residential",
+                )
+            return {
+                "components": {dominant: 70.0, counterpart: 30.0},
+                "pattern": "mostly_component",
+            }
+
+        heavy_match = re.search(rf"\b{component_pattern}[-\s]?heavy\b", text_lower)
+        if heavy_match:
+            dominant = heavy_match.group(1)
+            counterpart = next(
+                (candidate for candidate in pair_components if candidate != dominant),
+                pair_components[0],
+            )
+            if counterpart == dominant:
+                counterpart = next(
+                    (candidate for candidate in MIXED_USE_SPLIT_COMPONENTS if candidate != dominant),
+                    "residential",
+                )
+            return {
+                "components": {dominant: 70.0, counterpart: 30.0},
+                "pattern": "heavy_component",
+            }
+
+        if re.search(r"\bbalanced\b", text_lower):
+            return {
+                "components": {
+                    pair_components[0]: 50.0,
+                    pair_components[1]: 50.0,
+                },
+                "pattern": "balanced_pair",
+            }
+
+        return None
+
+    def _resolve_mixed_use_split_contract(
+        self,
+        subtype: Any,
+        parsed_input_overrides: Optional[Dict[str, Any]],
+        description: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        default_value = self._default_mixed_use_split_value(subtype)
+        contract: Dict[str, Any] = {
+            "value": default_value,
+            "source": "default",
+            "normalization_applied": False,
+        }
+
+        candidate_source = "default"
+        candidate_payload: Optional[Dict[str, Any]] = None
+        candidate_pattern: Optional[str] = None
+
+        if isinstance(parsed_input_overrides, dict):
+            explicit_split = parsed_input_overrides.get("mixed_use_split")
+            nlp_split_hint = parsed_input_overrides.get("mixed_use_split_hint")
+            if isinstance(explicit_split, dict):
+                candidate_source = "user_input"
+                candidate_payload = explicit_split
+                candidate_pattern = explicit_split.get("pattern") if isinstance(explicit_split.get("pattern"), str) else None
+            elif isinstance(nlp_split_hint, dict):
+                candidate_source = "nlp_detected"
+                candidate_payload = nlp_split_hint
+                candidate_pattern = nlp_split_hint.get("pattern") if isinstance(nlp_split_hint.get("pattern"), str) else None
+            else:
+                direct_components = {
+                    key: parsed_input_overrides.get(key)
+                    for key in (
+                        "office",
+                        "residential",
+                        "retail",
+                        "hotel",
+                        "transit",
+                        "office_pct",
+                        "residential_pct",
+                        "retail_pct",
+                        "hotel_pct",
+                        "transit_pct",
+                    )
+                    if key in parsed_input_overrides
+                }
+                if direct_components:
+                    candidate_source = "user_input"
+                    candidate_payload = direct_components
+
+        if candidate_payload is None:
+            parsed_candidate = self._parse_mixed_use_split_from_description(description, subtype)
+            if isinstance(parsed_candidate, dict):
+                candidate_source = "nlp_detected"
+                candidate_payload = parsed_candidate
+                candidate_pattern = parsed_candidate.get("pattern") if isinstance(parsed_candidate.get("pattern"), str) else None
+
+        if candidate_payload is None:
+            return contract
+
+        extracted_components, fraction_notation, extraction_error = self._extract_mixed_use_split_components(candidate_payload)
+        if extraction_error or extracted_components is None:
+            contract["invalid_mix"] = {
+                "reason": extraction_error or "invalid_candidate",
+                "source": candidate_source,
+            }
+            return contract
+
+        normalized_value, normalized_applied, inference_applied, normalization_error = self._normalize_mixed_use_split_components(
+            extracted_components,
+            subtype,
+        )
+        if normalization_error or normalized_value is None:
+            contract["invalid_mix"] = {
+                "reason": normalization_error or "invalid_candidate",
+                "source": candidate_source,
+                "input": extracted_components,
+            }
+            return contract
+
+        contract["value"] = normalized_value
+        contract["source"] = candidate_source
+        contract["normalization_applied"] = bool(normalized_applied or fraction_notation)
+        if inference_applied:
+            contract["inference_applied"] = True
+        if candidate_pattern:
+            contract["pattern"] = candidate_pattern
+        return contract
+
+    @staticmethod
+    def _mixed_use_weighted_factor(
+        split_value: Dict[str, Any],
+        multiplier_by_component: Dict[str, float],
+    ) -> float:
+        if not isinstance(split_value, dict):
+            return 1.0
+        weighted = 0.0
+        total_share = 0.0
+        for component in MIXED_USE_SPLIT_COMPONENTS:
+            raw_share = split_value.get(component, 0.0)
+            try:
+                share_pct = float(raw_share)
+            except (TypeError, ValueError):
+                continue
+            if share_pct <= 0:
+                continue
+            weighted += (share_pct / 100.0) * float(multiplier_by_component.get(component, 1.0))
+            total_share += share_pct
+        if total_share <= 0:
+            return 1.0
+        return weighted
 
     def _get_healthcare_financial_metrics(self, subtype_config: Any) -> Dict[str, Any]:
         if subtype_config is None:
@@ -3706,7 +4136,67 @@ class UnifiedEngine:
         # Civic - no revenue (government funded)
         elif building_enum == BuildingType.CIVIC:
             return 0
-        
+
+        # Mixed-use - split-aware revenue with deterministic normalization/inference fallback.
+        elif building_enum == BuildingType.MIXED_USE:
+            base_psf = getattr(config, 'base_revenue_per_sf_annual', 0) or 0
+            base_revenue = square_footage * float(base_psf)
+
+            split_block = context.get("mixed_use_split")
+            if not isinstance(split_block, dict):
+                project_info = context.get("project_info")
+                if isinstance(project_info, dict) and isinstance(project_info.get("mixed_use_split"), dict):
+                    split_block = project_info.get("mixed_use_split")
+
+            split_source = "default"
+            split_value: Dict[str, float] = self._default_mixed_use_split_value(subtype_key)
+            normalization_applied = False
+            invalid_mix = None
+
+            if isinstance(split_block, dict):
+                split_source = (
+                    split_block.get("source")
+                    if isinstance(split_block.get("source"), str) and split_block.get("source").strip()
+                    else split_source
+                )
+                candidate_source = split_block.get("value") if isinstance(split_block.get("value"), dict) else split_block
+                extracted_components, fraction_notation, extraction_error = self._extract_mixed_use_split_components(
+                    candidate_source if isinstance(candidate_source, dict) else {}
+                )
+                if extraction_error or extracted_components is None:
+                    invalid_mix = {
+                        "reason": extraction_error or "invalid_split_payload",
+                        "source": split_source,
+                    }
+                else:
+                    normalized_split, normalized_applied, _inference_applied, normalization_error = (
+                        self._normalize_mixed_use_split_components(extracted_components, subtype_key)
+                    )
+                    if normalization_error or normalized_split is None:
+                        invalid_mix = {
+                            "reason": normalization_error or "invalid_split_payload",
+                            "source": split_source,
+                            "input": extracted_components,
+                        }
+                    else:
+                        split_value = normalized_split
+                        normalization_applied = bool(
+                            split_block.get("normalization_applied") or normalized_applied or fraction_notation
+                        )
+
+            revenue_split_factor = self._mixed_use_weighted_factor(
+                split_value,
+                MIXED_USE_REVENUE_COMPONENT_MULTIPLIERS,
+            )
+            base_revenue = base_revenue * revenue_split_factor
+            context["mixed_use_split_applied"] = {
+                "value": split_value,
+                "source": split_source,
+                "normalization_applied": normalization_applied,
+                "revenue_factor_applied": round(revenue_split_factor, 6),
+                "invalid_mix": invalid_mix,
+            }
+
         # Default - uses revenue per SF (Office, Retail, Restaurant, etc.)
         else:
             # Industrial revenue is tied directly to square footage rents (NNN).
@@ -4929,17 +5419,38 @@ class UnifiedEngine:
         Returns:
             Cost estimate with detected building type
         """
-        # Detect building type from description
+        parsed_details = self._nlp_service.extract_project_details(description)
         detection = detect_building_type_with_method(description)
 
-        if not detection:
+        parsed_building_type = parsed_details.get("building_type") if isinstance(parsed_details, dict) else None
+        parsed_subtype = parsed_details.get("subtype") if isinstance(parsed_details, dict) else None
+        parsed_alias_mapping = parsed_details.get("subtype_alias_mapping") if isinstance(parsed_details, dict) else None
+        parsed_split_hint = parsed_details.get("mixed_use_split_hint") if isinstance(parsed_details, dict) else None
+
+        building_type = None
+        subtype = parsed_subtype if isinstance(parsed_subtype, str) and parsed_subtype.strip() else None
+        detection_method = "nlp_service"
+
+        if isinstance(parsed_building_type, str) and parsed_building_type.strip():
+            try:
+                building_type = BuildingType(parsed_building_type.strip())
+            except ValueError:
+                building_type = None
+
+        if detection:
+            detected_type, detected_subtype, detected_method = detection
+            if building_type is None:
+                building_type = detected_type
+            detection_method = detected_method
+            if subtype is None and isinstance(detected_subtype, str) and detected_subtype.strip():
+                subtype = detected_subtype
+
+        if building_type is None or subtype is None:
             return {
                 'error': 'Could not detect building type from description',
                 'description': description
             }
-        
-        building_type, subtype, detection_method = detection
-        
+
         # Detect project class from keywords
         description_lower = description.lower()
         if 'renovation' in description_lower or 'remodel' in description_lower:
@@ -4962,6 +5473,17 @@ class UnifiedEngine:
             finish_for_calculation = inferred_finish_level
             finish_source = 'description'
 
+        parsed_input_overrides: Dict[str, Any] = {
+            "description": description,
+        }
+        if isinstance(parsed_split_hint, dict):
+            parsed_input_overrides["mixed_use_split_hint"] = parsed_split_hint
+        if isinstance(parsed_alias_mapping, dict):
+            parsed_input_overrides["subtype_alias_mapping"] = parsed_alias_mapping
+        office_share = parsed_details.get("office_share") if isinstance(parsed_details, dict) else None
+        if isinstance(office_share, (int, float)):
+            parsed_input_overrides["office_share"] = float(office_share)
+
         # Calculate with detected parameters
         result = self.calculate_project(
             building_type=building_type,
@@ -4970,7 +5492,8 @@ class UnifiedEngine:
             location=location,
             project_class=project_class,
             finish_level=finish_for_calculation,
-            finish_level_source=finish_source
+            finish_level_source=finish_source,
+            parsed_input_overrides=parsed_input_overrides,
         )
 
         self._log_trace("nlp_detected", {
@@ -4996,9 +5519,12 @@ class UnifiedEngine:
             'detected_subtype': subtype,
             'detected_class': project_class.value,
             'original_description': description,
-            'method': detection_method
+            'method': detection_method,
+            'subtype_alias_mapping': parsed_alias_mapping if isinstance(parsed_alias_mapping, dict) else None,
         }
-        
+        if isinstance(result.get('mixed_use_split'), dict):
+            result['detection_info']['mixed_use_split_source'] = result['mixed_use_split'].get('source')
+
         return result
     
     # REMOVED DUPLICATE calculate_revenue_requirements - using the one at line 710

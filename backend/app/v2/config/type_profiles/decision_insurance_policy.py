@@ -622,6 +622,76 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         },
         "flex_calibration": {"tight_max_pct": 1.7, "moderate_max_pct": 4.3, "fallback_pct": 1.9},
     },
+    "mixed_use_office_residential_v1": {
+        "primary_control_variable": {
+            "tile_id": "amenity_and_core_fitout_plus_12",
+            "metric_ref": "trade_breakdown.finishes",
+            "label": "Amenity/Core Fit-Out +12%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 6.0,
+            "scenario_priority": ["base", "office_leaseup_drag", "conservative", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.7, "moderate_max_pct": 4.6, "fallback_pct": 2.0},
+    },
+    "mixed_use_retail_residential_v1": {
+        "primary_control_variable": {
+            "tile_id": "retail_frontage_and_podium_plus_11",
+            "metric_ref": "trade_breakdown.structural",
+            "label": "Retail Frontage + Podium +11%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 8.0,
+            "scenario_priority": ["base", "tenant_turnover_pressure", "conservative", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.8, "moderate_max_pct": 4.8, "fallback_pct": 2.1},
+    },
+    "mixed_use_hotel_retail_v1": {
+        "primary_control_variable": {
+            "tile_id": "guestrooms_and_fnb_fitout_plus_14",
+            "metric_ref": "trade_breakdown.finishes",
+            "label": "Guestrooms + F&B Fit-Out +14%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 5.0,
+            "scenario_priority": ["base", "seasonal_demand_shock", "conservative", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.6, "moderate_max_pct": 4.4, "fallback_pct": 1.9},
+    },
+    "mixed_use_transit_oriented_v1": {
+        "primary_control_variable": {
+            "tile_id": "station_interface_and_circulation_plus_13",
+            "metric_ref": "trade_breakdown.structural",
+            "label": "Station Interface + Circulation +13%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 7.0,
+            "scenario_priority": ["base", "ridership_ramp_delay", "conservative", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.6, "moderate_max_pct": 4.5, "fallback_pct": 2.0},
+    },
+    "mixed_use_urban_mixed_v1": {
+        "primary_control_variable": {
+            "tile_id": "vertical_mobility_and_public_realm_plus_12",
+            "metric_ref": "trade_breakdown.mechanical",
+            "label": "Vertical Mobility + Public Realm +12%",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 9.0,
+            "scenario_priority": ["base", "activation_program_slip", "conservative", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.8, "moderate_max_pct": 4.9, "fallback_pct": 2.2},
+    },
     "specialty_data_center_v1": {
         "primary_control_variable": {
             "tile_id": "power_train_redundancy_rework_plus_15",

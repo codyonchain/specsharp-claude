@@ -7,6 +7,8 @@ import {
   HEALTHCARE_SUBTYPES,
   HOSPITALITY_FEATURE_COSTS_BY_SUBTYPE,
   HOSPITALITY_SUBTYPES,
+  MIXED_USE_FEATURE_COSTS_BY_SUBTYPE,
+  MIXED_USE_SUBTYPES,
   OFFICE_FEATURE_COSTS_BY_SUBTYPE,
   OFFICE_SUBTYPES,
   RECREATION_FEATURE_COSTS_BY_SUBTYPE,
@@ -22,6 +24,7 @@ import {
   detectEducationalSubtypeFromDescription,
   detectHealthcareFeatureIdsFromDescription,
   detectHospitalityFeatureIdsFromDescription,
+  detectMixedUseFeatureIdsFromDescription,
   detectOfficeFeatureIdsFromDescription,
   detectRecreationFeatureIdsFromDescription,
   detectRecreationSubtypeFromDescription,
@@ -34,6 +37,7 @@ import {
   getEducationalSpecialFeatures,
   getHealthcareSpecialFeatures,
   getHospitalitySpecialFeatures,
+  getMixedUseSpecialFeatures,
   getOfficeSpecialFeatures,
   getRecreationSpecialFeatures,
   getRetailSpecialFeatures,
@@ -42,6 +46,7 @@ import {
   getSpecialtySpecialFeatures,
   healthcareSubtypeHasSpecialFeatures,
   hospitalitySubtypeHasSpecialFeatures,
+  mixedUseSubtypeHasSpecialFeatures,
   officeSubtypeHasSpecialFeatures,
   recreationSubtypeHasSpecialFeatures,
   retailSubtypeHasSpecialFeatures,
@@ -353,6 +358,37 @@ const REQUIRED_RECREATION_MAPPING = {
     press_box: 40,
     video_board: 100,
     retractable_roof: 200,
+  },
+} as const;
+
+const REQUIRED_MIXED_USE_MAPPING = {
+  office_residential: {
+    amenity_deck: 35,
+    business_center: 20,
+    conference_facility: 30,
+  },
+  retail_residential: {
+    rooftop_deck: 30,
+    parking_podium: 40,
+    retail_plaza: 25,
+  },
+  hotel_retail: {
+    conference_center: 45,
+    restaurant: 50,
+    spa: 55,
+    retail_arcade: 30,
+  },
+  transit_oriented: {
+    transit_plaza: 35,
+    bike_facility: 20,
+    pedestrian_bridge: 45,
+    public_art: 15,
+  },
+  urban_mixed: {
+    public_plaza: 40,
+    green_roof: 35,
+    parking_structure: 45,
+    transit_connection: 30,
   },
 } as const;
 
@@ -1119,6 +1155,96 @@ describe("recreation special features catalog", () => {
     for (const subtype of RECREATION_SUBTYPES) {
       expect(recreationSubtypeHasSpecialFeatures(subtype)).toBe(true);
     }
+  });
+});
+
+describe("mixed_use special features catalog", () => {
+  it("is non-empty and matches backend-aligned subtype mapping keys/values", () => {
+    const mixedUseFeatures = getMixedUseSpecialFeatures();
+    expect(mixedUseFeatures.length).toBeGreaterThan(0);
+    expect(MIXED_USE_FEATURE_COSTS_BY_SUBTYPE).toEqual(REQUIRED_MIXED_USE_MAPPING);
+  });
+
+  it("resolves expected feature IDs for each mixed_use subtype with no duplicates", () => {
+    const mixedUseFeatures = getMixedUseSpecialFeatures();
+
+    for (const subtype of MIXED_USE_SUBTYPES) {
+      const expectedIds = Object.keys(REQUIRED_MIXED_USE_MAPPING[subtype]).sort();
+      const resolvedIds = filterSpecialFeaturesBySubtype(mixedUseFeatures, subtype).map(
+        (feature) => feature.id
+      );
+      const uniqueResolvedIds = Array.from(new Set(resolvedIds));
+
+      expect(uniqueResolvedIds.length).toBe(resolvedIds.length);
+      expect(uniqueResolvedIds.sort()).toEqual(expectedIds);
+    }
+  });
+
+  it("keeps unknown mixed_use subtype explicit and preserves hotel_residential alias", () => {
+    const unknownSubtypeResolved = getAvailableSpecialFeatures(
+      "mixed_use",
+      "unknown_mixed_use_variant"
+    );
+    expect(unknownSubtypeResolved).toEqual([]);
+
+    const aliasResolved = getAvailableSpecialFeatures("mixed_use", "hotel_residential").map(
+      (feature) => feature.id
+    );
+    const canonicalResolved = getAvailableSpecialFeatures("mixed_use", "hotel_retail").map(
+      (feature) => feature.id
+    );
+    expect(aliasResolved.sort()).toEqual(canonicalResolved.sort());
+  });
+
+  it("resolves mixed_use subtype-specific costs only for valid subtype feature IDs", () => {
+    for (const subtype of MIXED_USE_SUBTYPES) {
+      const expectedEntries = REQUIRED_MIXED_USE_MAPPING[subtype];
+      for (const [featureId, expectedCost] of Object.entries(expectedEntries)) {
+        expect(getSpecialFeatureCost("mixed_use", featureId, subtype)).toBe(expectedCost);
+      }
+    }
+
+    expect(
+      getSpecialFeatureCost("mixed_use", "retail_arcade", "office_residential")
+    ).toBeUndefined();
+    expect(
+      getSpecialFeatureCost("mixed_use", "pedestrian_bridge", "hotel_retail")
+    ).toBeUndefined();
+  });
+
+  it("detects mixed_use feature IDs from subtype-specific scope keywords", () => {
+    const officeResidentialDetected = detectMixedUseFeatureIdsFromDescription(
+      "Mixed-use office residential tower with amenity deck, business center, and conference facility."
+    );
+    expect(officeResidentialDetected).toEqual(
+      expect.arrayContaining(["amenity_deck", "business_center", "conference_facility"])
+    );
+
+    const hotelRetailDetected = detectMixedUseFeatureIdsFromDescription(
+      "Hotel retail podium with conference center, on-site restaurant, spa, and retail arcade."
+    );
+    expect(hotelRetailDetected).toEqual(
+      expect.arrayContaining(["conference_center", "restaurant", "spa", "retail_arcade"])
+    );
+
+    const transitDetected = detectMixedUseFeatureIdsFromDescription(
+      "Transit oriented project with transit plaza, bike facility, pedestrian bridge, and public art."
+    );
+    expect(transitDetected).toEqual(
+      expect.arrayContaining([
+        "transit_plaza",
+        "bike_facility",
+        "pedestrian_bridge",
+        "public_art",
+      ])
+    );
+  });
+
+  it("mixed_use subtype helper returns true for all canonical mixed_use subtypes", () => {
+    for (const subtype of MIXED_USE_SUBTYPES) {
+      expect(mixedUseSubtypeHasSpecialFeatures(subtype)).toBe(true);
+    }
+    expect(mixedUseSubtypeHasSpecialFeatures("hotel_residential")).toBe(true);
   });
 });
 

@@ -2,6 +2,7 @@ from . import civic
 from . import industrial
 from . import healthcare
 from . import hospitality
+from . import mixed_use
 from . import multifamily
 from . import office
 from . import recreation
@@ -18,6 +19,7 @@ SCOPE_ITEM_PROFILE_SOURCES = [
     industrial.SCOPE_ITEM_PROFILES,
     healthcare.SCOPE_ITEM_PROFILES,
     hospitality.SCOPE_ITEM_PROFILES,
+    mixed_use.SCOPE_ITEM_PROFILES,
     multifamily.SCOPE_ITEM_PROFILES,
     office.SCOPE_ITEM_PROFILES,
     recreation.SCOPE_ITEM_PROFILES,
@@ -30,6 +32,7 @@ SCOPE_ITEM_DEFAULT_SOURCES = [
     industrial.SCOPE_ITEM_DEFAULTS,
     healthcare.SCOPE_ITEM_DEFAULTS,
     hospitality.SCOPE_ITEM_DEFAULTS,
+    mixed_use.SCOPE_ITEM_DEFAULTS,
     multifamily.SCOPE_ITEM_DEFAULTS,
     office.SCOPE_ITEM_DEFAULTS,
     recreation.SCOPE_ITEM_DEFAULTS,

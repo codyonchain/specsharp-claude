@@ -75,6 +75,8 @@ CONFIG = (
             "Chicago": 1.35,
             "Miami": 1.20,
         },
+        dealshield_tile_profile="mixed_use_transit_oriented_v1",
+        scope_items_profile="mixed_use_transit_oriented_structural_v1",
         special_features={
             "transit_plaza": 35,
             "bike_facility": 20,

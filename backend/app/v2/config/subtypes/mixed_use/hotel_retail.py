@@ -66,6 +66,8 @@ CONFIG = (
             "Chicago": 1.25,
             "Miami": 1.22,
         },
+        dealshield_tile_profile="mixed_use_hotel_retail_v1",
+        scope_items_profile="mixed_use_hotel_retail_structural_v1",
         special_features={
             "conference_center": 45,
             "restaurant": 50,

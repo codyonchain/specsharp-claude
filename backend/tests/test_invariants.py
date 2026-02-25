@@ -27,11 +27,13 @@ from app.v2.config.type_profiles.dealshield_content import healthcare as healthc
 from app.v2.config.type_profiles.dealshield_content import office as office_content
 from app.v2.config.type_profiles.dealshield_content import specialty as specialty_content
 from app.v2.config.type_profiles.dealshield_content import civic as civic_content
+from app.v2.config.type_profiles.dealshield_content import mixed_use as mixed_use_content
 from app.v2.config.type_profiles.dealshield_content import recreation as recreation_content
 from app.v2.config.type_profiles.scope_items import healthcare as healthcare_scope_profiles
 from app.v2.config.type_profiles.scope_items import office as office_scope_profiles
 from app.v2.config.type_profiles.scope_items import specialty as specialty_scope_profiles
 from app.v2.config.type_profiles.scope_items import civic as civic_scope_profiles
+from app.v2.config.type_profiles.scope_items import mixed_use as mixed_use_scope_profiles
 from app.v2.config.type_profiles.scope_items import recreation as recreation_scope_profiles
 from app.v2.services.dealshield_service import build_dealshield_view_model
 
@@ -213,6 +215,37 @@ RECREATION_PCV_GENERIC_TERMS = {
     "margin control",
     "primary control variable",
     "generic",
+}
+
+MIXED_USE_PROFILE_IDS = {
+    "office_residential": {
+        "tile_profile": "mixed_use_office_residential_v1",
+        "scope_profile": "mixed_use_office_residential_structural_v1",
+    },
+    "retail_residential": {
+        "tile_profile": "mixed_use_retail_residential_v1",
+        "scope_profile": "mixed_use_retail_residential_structural_v1",
+    },
+    "hotel_retail": {
+        "tile_profile": "mixed_use_hotel_retail_v1",
+        "scope_profile": "mixed_use_hotel_retail_structural_v1",
+    },
+    "transit_oriented": {
+        "tile_profile": "mixed_use_transit_oriented_v1",
+        "scope_profile": "mixed_use_transit_oriented_structural_v1",
+    },
+    "urban_mixed": {
+        "tile_profile": "mixed_use_urban_mixed_v1",
+        "scope_profile": "mixed_use_urban_mixed_structural_v1",
+    },
+}
+
+MIXED_USE_SCOPE_DEPTH_FLOOR = {
+    "office_residential": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    "retail_residential": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    "hotel_retail": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    "transit_oriented": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    "urban_mixed": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
 }
 
 
@@ -662,6 +695,11 @@ def test_policy_curated_decision_insurance_is_applied_for_hardened_profiles():
         (BuildingType.SPECIALTY, "self_storage", 90_000),
         (BuildingType.SPECIALTY, "car_dealership", 65_000),
         (BuildingType.SPECIALTY, "broadcast_facility", 60_000),
+        (BuildingType.MIXED_USE, "office_residential", 140_000),
+        (BuildingType.MIXED_USE, "retail_residential", 140_000),
+        (BuildingType.MIXED_USE, "hotel_retail", 140_000),
+        (BuildingType.MIXED_USE, "transit_oriented", 140_000),
+        (BuildingType.MIXED_USE, "urban_mixed", 140_000),
     ]
 
     for building_type, subtype, square_footage in profile_inputs:
@@ -2300,3 +2338,324 @@ def test_recreation_di_policy_entries_are_available_for_all_profiles():
 
         assert collapse_trigger.get("metric") in {"value_gap_pct", "value_gap"}
         assert collapse_trigger.get("operator") in {"<=", "<"}
+
+
+def test_mixed_use_profiles_are_wired_and_content_maps_to_tiles():
+    first_mlw_texts = []
+
+    for subtype, expected in MIXED_USE_PROFILE_IDS.items():
+        cfg = get_building_config(BuildingType.MIXED_USE, subtype)
+        assert cfg is not None
+        assert cfg.dealshield_tile_profile == expected["tile_profile"]
+        assert cfg.scope_items_profile == expected["scope_profile"]
+
+        profile = get_dealshield_profile(expected["tile_profile"])
+        assert profile.get("profile_id") == expected["tile_profile"]
+        tile_ids = {
+            tile.get("tile_id")
+            for tile in profile.get("tiles", [])
+            if isinstance(tile, dict) and isinstance(tile.get("tile_id"), str)
+        }
+        assert tile_ids
+
+        content = mixed_use_content.DEALSHIELD_CONTENT_PROFILES[expected["tile_profile"]]
+        drivers = content.get("fastest_change", {}).get("drivers")
+        assert isinstance(drivers, list) and len(drivers) == 3
+        for driver in drivers:
+            assert isinstance(driver, dict)
+            assert driver.get("tile_id") in tile_ids
+
+        mlw = content.get("most_likely_wrong")
+        assert isinstance(mlw, list) and len(mlw) >= 3
+        first_mlw_texts.append(mlw[0].get("text"))
+        for entry in mlw:
+            assert isinstance(entry, dict)
+            assert entry.get("driver_tile_id") in tile_ids
+
+        question_bank = content.get("question_bank")
+        assert isinstance(question_bank, list) and len(question_bank) == 3
+        for question_entry in question_bank:
+            assert isinstance(question_entry, dict)
+            assert question_entry.get("driver_tile_id") in tile_ids
+
+    assert len(first_mlw_texts) == len(set(first_mlw_texts))
+
+
+def test_mixed_use_scope_profiles_keep_depth_and_allocation_integrity():
+    for subtype, expected in MIXED_USE_PROFILE_IDS.items():
+        profile_id = expected["scope_profile"]
+        cfg = get_building_config(BuildingType.MIXED_USE, subtype)
+        assert cfg is not None
+        assert cfg.scope_items_profile == profile_id
+        assert mixed_use_scope_profiles.SCOPE_ITEM_DEFAULTS[subtype] == profile_id
+
+        profile = mixed_use_scope_profiles.SCOPE_ITEM_PROFILES[profile_id]
+        trade_profiles = profile.get("trade_profiles")
+        assert isinstance(trade_profiles, list) and len(trade_profiles) == 5
+
+        by_trade = {
+            trade.get("trade_key"): trade
+            for trade in trade_profiles
+            if isinstance(trade, dict) and isinstance(trade.get("trade_key"), str)
+        }
+        assert set(by_trade.keys()) == {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+
+        for trade_key, trade in by_trade.items():
+            items = trade.get("items")
+            assert isinstance(items, list)
+            assert len(items) >= MIXED_USE_SCOPE_DEPTH_FLOOR[subtype][trade_key]
+            total_share = sum(
+                float(item.get("allocation", {}).get("share", 0.0))
+                for item in items
+            )
+            assert math.isclose(total_share, 1.0, rel_tol=1e-9, abs_tol=1e-9), (
+                f"{profile_id}::{trade_key} share total expected 1.0, got {total_share}"
+            )
+
+
+def test_mixed_use_no_clone_invariants_across_tiles_content_and_scope():
+    unique_tile_ids = set()
+    unique_row_ids = set()
+    scope_signatures = set()
+
+    for expected in MIXED_USE_PROFILE_IDS.values():
+        tile_profile = get_dealshield_profile(expected["tile_profile"])
+        tile_ids = {
+            tile.get("tile_id")
+            for tile in tile_profile.get("tiles", [])
+            if isinstance(tile, dict) and isinstance(tile.get("tile_id"), str)
+        }
+        subtype_tile_ids = tile_ids - {"cost_plus_10", "revenue_minus_10"}
+        assert len(subtype_tile_ids) == 1
+        unique_tile_ids.update(subtype_tile_ids)
+
+        subtype_rows = {
+            row.get("row_id")
+            for row in tile_profile.get("derived_rows", [])
+            if isinstance(row, dict) and isinstance(row.get("row_id"), str)
+        } - {"conservative", "ugly"}
+        assert len(subtype_rows) == 1
+        unique_row_ids.update(subtype_rows)
+
+        scope_profile = mixed_use_scope_profiles.SCOPE_ITEM_PROFILES[expected["scope_profile"]]
+        signature = tuple(
+            (
+                trade.get("trade_key"),
+                tuple(item.get("key") for item in trade.get("items", []) if isinstance(item, dict)),
+            )
+            for trade in scope_profile.get("trade_profiles", [])
+            if isinstance(trade, dict)
+        )
+        scope_signatures.add(signature)
+
+    assert len(unique_tile_ids) == len(MIXED_USE_PROFILE_IDS)
+    assert len(unique_row_ids) == len(MIXED_USE_PROFILE_IDS)
+    assert len(scope_signatures) == len(MIXED_USE_PROFILE_IDS)
+
+
+def test_mixed_use_runtime_scope_depth_floor_and_trade_reconciliation():
+    for subtype, expected in MIXED_USE_SCOPE_DEPTH_FLOOR.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.MIXED_USE,
+            subtype=subtype,
+            square_footage=125_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        scope_items = payload.get("scope_items")
+        assert isinstance(scope_items, list) and scope_items
+        by_trade = {
+            str(trade.get("trade") or "").strip().lower(): trade
+            for trade in scope_items
+            if isinstance(trade, dict)
+        }
+        assert set(by_trade.keys()) == {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+
+        trade_breakdown = payload.get("trade_breakdown") or {}
+        for trade_key, minimum in expected.items():
+            systems = by_trade[trade_key].get("systems")
+            assert isinstance(systems, list)
+            assert len(systems) >= minimum
+            systems_total = sum(float(system.get("total_cost", 0.0) or 0.0) for system in systems)
+            assert systems_total == pytest.approx(float(trade_breakdown.get(trade_key, 0.0) or 0.0), rel=0, abs=1e-6)
+
+
+def test_mixed_use_di_policy_entries_are_available_for_all_profiles():
+    for expected in MIXED_USE_PROFILE_IDS.values():
+        profile_id = expected["tile_profile"]
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID.get(profile_id)
+        assert isinstance(policy, dict)
+
+        primary_control = policy.get("primary_control_variable")
+        collapse_trigger = policy.get("collapse_trigger")
+        flex_calibration = policy.get("flex_calibration")
+        assert isinstance(primary_control, dict)
+        assert isinstance(collapse_trigger, dict)
+        assert isinstance(flex_calibration, dict)
+
+        assert collapse_trigger.get("metric") in {"value_gap_pct", "value_gap"}
+        assert collapse_trigger.get("operator") in {"<=", "<"}
+        scenario_priority = collapse_trigger.get("scenario_priority")
+        assert isinstance(scenario_priority, list) and len(scenario_priority) == 4
+        assert scenario_priority[0] == "base"
+        assert {"base", "conservative", "ugly"}.issubset(set(scenario_priority))
+
+
+def test_mixed_use_profiles_resolve_canonical_di_policy_and_deterministic_contract_provenance():
+    for subtype, expected in MIXED_USE_PROFILE_IDS.items():
+        profile_id = expected["tile_profile"]
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID.get(profile_id)
+        assert isinstance(policy, dict)
+
+        kwargs = dict(
+            building_type=BuildingType.MIXED_USE,
+            subtype=subtype,
+            square_footage=100_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        payload_a = unified_engine.calculate_project(**kwargs)
+        payload_b = unified_engine.calculate_project(**kwargs)
+        profile = get_dealshield_profile(profile_id)
+
+        view_a = build_dealshield_view_model(
+            project_id=f"mixed-use-invariant-a-{subtype}",
+            payload=payload_a,
+            profile=profile,
+        )
+        view_b = build_dealshield_view_model(
+            project_id=f"mixed-use-invariant-b-{subtype}",
+            payload=payload_b,
+            profile=profile,
+        )
+
+        di_provenance = view_a.get("decision_insurance_provenance")
+        assert isinstance(di_provenance, dict)
+        policy_block = di_provenance.get("decision_insurance_policy")
+        assert isinstance(policy_block, dict)
+        assert policy_block.get("status") == "available"
+        assert policy_block.get("policy_id") == DECISION_INSURANCE_POLICY_ID
+        assert policy_block.get("profile_id") == profile_id
+
+        status_provenance = view_a.get("decision_status_provenance")
+        assert isinstance(status_provenance, dict)
+        assert isinstance(status_provenance.get("status_source"), str)
+
+        first_break = view_a.get("first_break_condition")
+        assert isinstance(first_break, dict)
+        assert first_break.get("break_metric") in {"value_gap_pct", "value_gap"}
+        assert isinstance(first_break.get("threshold"), (int, float))
+        assert isinstance(first_break.get("observed_value"), (int, float))
+
+        for key in (
+            "decision_status",
+            "decision_reason_code",
+            "first_break_condition",
+            "flex_before_break_pct",
+            "flex_before_break_band",
+            "decision_status_provenance",
+            "decision_insurance_provenance",
+        ):
+            assert view_a.get(key) == view_b.get(key), f"Expected deterministic equality for '{key}'"
+
+
+def test_mixed_use_schedule_source_and_unknown_fallback_invariants():
+    for subtype in MIXED_USE_PROFILE_IDS.keys():
+        schedule = build_construction_schedule(BuildingType.MIXED_USE, subtype)
+        assert schedule.get("building_type") == BuildingType.MIXED_USE.value
+        assert schedule.get("schedule_source") == "subtype"
+        assert schedule.get("subtype") == subtype
+        phases = schedule.get("phases")
+        assert isinstance(phases, list) and phases
+
+    unknown_schedule = build_construction_schedule(
+        BuildingType.MIXED_USE,
+        "unknown_mixed_use_variant",
+    )
+    assert unknown_schedule.get("building_type") == BuildingType.MIXED_USE.value
+    assert unknown_schedule.get("schedule_source") == "building_type"
+    assert unknown_schedule.get("subtype") is None
+    assert unknown_schedule.get("total_months") == 30
+
+
+def test_mixed_use_split_provenance_surfaces_in_scenarios_and_view_model_context():
+    payload = unified_engine.calculate_project(
+        building_type=BuildingType.MIXED_USE,
+        subtype="office_residential",
+        square_footage=130_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        parsed_input_overrides={
+            "mixed_use_split": {
+                "components": {"office": 65},
+                "pattern": "component_percent",
+            },
+            "description": "mixed-use office and residential stack with 65 office share",
+        },
+    )
+
+    split = payload.get("mixed_use_split")
+    assert isinstance(split, dict)
+    assert split.get("source") == "user_input"
+    assert split.get("normalization_applied") is True
+    assert split.get("value", {}).get("office") == pytest.approx(65.0)
+    assert split.get("value", {}).get("residential") == pytest.approx(35.0)
+
+    scenario_inputs = (
+        payload.get("dealshield_scenarios", {})
+        .get("provenance", {})
+        .get("scenario_inputs", {})
+    )
+    assert isinstance(scenario_inputs, dict) and scenario_inputs
+    for scenario_input in scenario_inputs.values():
+        assert scenario_input.get("mixed_use_split_source") == "user_input"
+        scenario_split = scenario_input.get("mixed_use_split")
+        assert isinstance(scenario_split, dict)
+        assert scenario_split.get("value", {}).get("office") == pytest.approx(65.0)
+        assert scenario_split.get("value", {}).get("residential") == pytest.approx(35.0)
+
+    profile_id = MIXED_USE_PROFILE_IDS["office_residential"]["tile_profile"]
+    profile = get_dealshield_profile(profile_id)
+    view_model = build_dealshield_view_model(
+        project_id="mixed-use-view-model-split-provenance",
+        payload=payload,
+        profile=profile,
+    )
+    view_provenance = view_model.get("provenance")
+    assert isinstance(view_provenance, dict)
+    view_scenario_inputs = view_provenance.get("scenario_inputs")
+    assert isinstance(view_scenario_inputs, dict) and view_scenario_inputs
+    for scenario_input in view_scenario_inputs.values():
+        assert scenario_input.get("mixed_use_split_source") == "user_input"
+        scenario_split = scenario_input.get("mixed_use_split")
+        assert isinstance(scenario_split, dict)
+        assert scenario_split.get("value", {}).get("office") == pytest.approx(65.0)
+        assert scenario_split.get("value", {}).get("residential") == pytest.approx(35.0)
+
+
+def test_mixed_use_split_invalid_mix_falls_back_explicitly_without_silent_coercion():
+    payload = unified_engine.calculate_project(
+        building_type=BuildingType.MIXED_USE,
+        subtype="urban_mixed",
+        square_footage=120_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        parsed_input_overrides={
+            "mixed_use_split": {
+                "components": {"office": 70, "invalid_component": 30},
+            },
+            "description": "mixed-use urban project",
+        },
+    )
+
+    split = payload.get("mixed_use_split")
+    assert isinstance(split, dict)
+    assert split.get("source") == "default"
+    assert split.get("normalization_applied") is False
+    assert isinstance(split.get("invalid_mix"), dict)
+    assert split.get("invalid_mix", {}).get("reason") == "unsupported_component"
+
+    split_value = split.get("value")
+    assert isinstance(split_value, dict)
+    assert split_value.get("office") == pytest.approx(50.0)
+    assert split_value.get("residential") == pytest.approx(50.0)
