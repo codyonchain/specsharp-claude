@@ -423,8 +423,10 @@ export class BackendDataMapper {
     
     // Extract revenue metrics - pass calculations to include roi_analysis
     const annualRevenue = this.extractAnnualRevenue(returnMetrics, projectInfo, calculations);
-    const noi = safeGet(returnMetrics, 'estimated_annual_noi', 0) || 
-                safeGet(ownership, 'noi', 0);
+    const noi =
+      safeGet(returnMetrics, 'estimated_annual_noi', 0) ||
+      safeGet(ownership, 'revenue_analysis.net_income', 0) ||
+      safeGet(ownership, 'noi', 0);
     const operatingMargin = operationalEfficiency?.operating_margin || 
                            safeGet(ownership, 'operational_efficiency.operating_margin', 0.6);
     
@@ -890,11 +892,11 @@ export class BackendDataMapper {
       irr,
       paybackPeriod,
       dscr,
-      annualRevenue,
+      annualRevenue: resolvedAnnualRevenue ?? 0,
       monthlyRevenue: safeGet(operationalEfficiency, 'monthly_revenue', 0) || 
                      safeGet(projectInfo, 'monthly_revenue', 0) || 
-                     (annualRevenue / 12),
-      noi,
+                     ((resolvedAnnualRevenue ?? 0) / 12),
+      noi: resolvedNoi ?? 0,
       operatingMargin,
       operatingExpenses: typeof operatingExpensesValue === 'number' ? operatingExpensesValue : 0,
       camCharges: typeof camChargesValue === 'number' ? camChargesValue : 0,
@@ -1058,11 +1060,29 @@ export class BackendDataMapper {
     };
   }
   
+  private static normalizeRateToRatio(value: unknown): number | undefined {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return undefined;
+    }
+    // Backend payloads can provide rates either as ratios (0.082) or percent-points (8.2).
+    return Math.abs(value) > 1 ? value / 100 : value;
+  }
+
   private static extractROI(returnMetrics: any): number {
-    // Try multiple possible locations for ROI
-    return safeGet(returnMetrics, 'estimated_roi', 0) ||
-           safeGet(returnMetrics, 'cash_on_cash_return', 0) ||
-           safeGet(returnMetrics, 'roi', 0);
+    const candidates = [
+      safeGet(returnMetrics, 'estimated_roi', undefined),
+      safeGet(returnMetrics, 'cash_on_cash_return', undefined),
+      safeGet(returnMetrics, 'roi', undefined),
+    ];
+
+    for (const candidate of candidates) {
+      const normalized = this.normalizeRateToRatio(candidate);
+      if (typeof normalized === 'number') {
+        return normalized;
+      }
+    }
+
+    return 0;
   }
   
   private static extractPaybackPeriod(returnMetrics: any, calculations: any): number {
@@ -1097,7 +1117,12 @@ export class BackendDataMapper {
       console.log('=== END EXTRACT DEBUG ===');
     }
     
+    const ownershipRevenueAnalysis = ownership?.revenue_analysis || {};
+    const topLevelRevenueAnalysis = calculations?.revenue_analysis || {};
+
     return financialMetrics?.annual_revenue ||
+           ownershipRevenueAnalysis?.annual_revenue ||
+           topLevelRevenueAnalysis?.annual_revenue ||
            safeGet(ownership, 'annual_revenue', 0) ||
            safeGet(returnMetrics, 'annual_revenue', 0) ||
            safeGet(projectInfo, 'annual_revenue', 0) ||

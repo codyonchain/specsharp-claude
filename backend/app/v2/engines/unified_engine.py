@@ -997,6 +997,28 @@ class UnifiedEngine:
         building_config = get_building_config(building_type, subtype)
         if not building_config:
             raise ValueError(f"No configuration found for {building_type.value}/{subtype}")
+
+        # Normalize ownership type and gracefully fall back when the requested
+        # ownership type is not configured for this subtype.
+        if isinstance(ownership_type, str):
+            try:
+                ownership_type = OwnershipType(ownership_type)
+            except ValueError:
+                ownership_type = OwnershipType.FOR_PROFIT
+
+        if isinstance(getattr(building_config, "ownership_types", None), dict) and building_config.ownership_types:
+            if ownership_type not in building_config.ownership_types:
+                fallback_ownership = next(iter(building_config.ownership_types.keys()))
+                self._log_trace(
+                    "ownership_type_fallback",
+                    {
+                        "requested": getattr(ownership_type, "value", str(ownership_type)),
+                        "fallback": getattr(fallback_ownership, "value", str(fallback_ownership)),
+                        "building_type": building_type.value,
+                        "subtype": subtype,
+                    },
+                )
+                ownership_type = fallback_ownership
         
         # Validate and adjust project class if incompatible
         original_class = project_class

@@ -360,6 +360,7 @@ async def analyze_project(request: AnalyzeRequest):
         # Normalize building type using taxonomy
         if parsed.get('building_type'):
             original_type = parsed['building_type']
+            original_subtype = parsed.get('subtype')
             canonical_type, canonical_subtype = validate_building_type(
                 parsed['building_type'],
                 parsed.get('subtype')
@@ -367,9 +368,20 @@ async def analyze_project(request: AnalyzeRequest):
             parsed['building_type'] = canonical_type
             if canonical_subtype:
                 parsed['subtype'] = canonical_subtype
-            
+                parsed['building_subtype'] = canonical_subtype
+            else:
+                # Prevent invalid cross-type pairs from reaching the engine.
+                parsed.pop('subtype', None)
+                parsed.pop('building_subtype', None)
+
             if original_type != canonical_type:
                 logger.info(f"Normalized building type from '{original_type}' to '{canonical_type}'")
+            if original_subtype and not canonical_subtype:
+                logger.info(
+                    "Dropped invalid subtype '%s' for canonical type '%s'",
+                    original_subtype,
+                    canonical_type,
+                )
         
         # Apply explicit overrides and defaults
         if request.square_footage:
@@ -1068,6 +1080,7 @@ async def generate_scope(
         
         # Normalize building type using taxonomy
         if parsed.get('building_type'):
+            original_subtype = parsed.get('subtype')
             canonical_type, canonical_subtype = validate_building_type(
                 parsed['building_type'],
                 parsed.get('subtype')
@@ -1075,10 +1088,17 @@ async def generate_scope(
             parsed['building_type'] = canonical_type
             if canonical_subtype:
                 parsed['subtype'] = canonical_subtype
-            
-            # Log normalization for debugging
-            if parsed.get('building_type') != canonical_type:
-                logger.info(f"Normalized building type from '{parsed.get('building_type')}' to '{canonical_type}'")
+                parsed['building_subtype'] = canonical_subtype
+            else:
+                parsed.pop('subtype', None)
+                parsed.pop('building_subtype', None)
+
+            if original_subtype and not canonical_subtype:
+                logger.info(
+                    "Dropped invalid subtype '%s' for canonical type '%s' in /generate",
+                    original_subtype,
+                    canonical_type,
+                )
         
         # Use unified engine for calculations
         building_type_enum = BuildingType(parsed.get('building_type', 'office'))

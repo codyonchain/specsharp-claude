@@ -67,12 +67,13 @@ class BuildingTaxonomy:
         """
         if not type_string:
             return 'office'  # Default
-            
-        type_lower = type_string.lower().replace('_', ' ').strip()
-        
-        # Check if it's already canonical
-        if type_lower in TAXONOMY['building_types']:
-            return type_lower
+
+        # Preserve underscore canonical IDs (e.g. mixed_use) before loose matching.
+        canonical_candidate = type_string.lower().strip().replace('-', '_').replace(' ', '_')
+        if canonical_candidate in TAXONOMY['building_types']:
+            return canonical_candidate
+
+        type_lower = type_string.lower().replace('_', ' ').replace('-', ' ').strip()
         
         # Check aliases
         for canonical, config in TAXONOMY['building_types'].items():
@@ -107,7 +108,8 @@ class BuildingTaxonomy:
             'hotel': 'hospitality',
             'lodging': 'hospitality',
             'dining': 'restaurant',
-            'food service': 'restaurant'
+            'food service': 'restaurant',
+            'mixed use': 'mixed_use',
         }
         
         for pattern, canonical in special_mappings.items():
