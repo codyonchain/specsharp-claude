@@ -14,6 +14,8 @@ CONFIG = (
     BuildingType.RECREATION,
     "recreation_center",
     BuildingConfig(
+        dealshield_tile_profile="recreation_recreation_center_v1",
+        scope_items_profile="recreation_recreation_center_structural_v1",
         display_name="Recreation Center",
         base_cost_per_sf=215,
         cost_range=(190, 240),

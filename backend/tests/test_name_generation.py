@@ -556,3 +556,83 @@ class TestProjectNameGeneration:
         parsed, _ = self._parse_and_name(description)
 
         assert parsed["building_type"] == "recreation"
+
+    @pytest.mark.parametrize(
+        "description,expected_subtype,expected_name",
+        [
+            (
+                "New 42000 sf fitness center with cardio deck and strength rooms in Nashville, TN",
+                "fitness_center",
+                "Fitness Center in Nashville",
+            ),
+            (
+                "Build a 95000 sf sports complex with multiple courts and indoor track in Nashville, TN",
+                "sports_complex",
+                "Sports Complex in Nashville",
+            ),
+            (
+                "New 80000 sf aquatic center with competition pool and natatorium in Nashville, TN",
+                "aquatic_center",
+                "Aquatic Center in Nashville",
+            ),
+            (
+                "Renovate a 60000 sf recreation center with gymnasium and activity rooms in Nashville, TN",
+                "recreation_center",
+                "Recreation Center in Nashville",
+            ),
+            (
+                "Build a 320000 sf stadium with seating bowl and event concourse in Nashville, TN",
+                "stadium",
+                "Stadium in Nashville",
+            ),
+        ],
+    )
+    def test_recreation_subtype_discoverability_all_five_profiles(
+        self,
+        description,
+        expected_subtype,
+        expected_name,
+    ):
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "recreation"
+        assert parsed["subtype"] == expected_subtype
+        assert parsed["building_subtype"] == expected_subtype
+        assert name == expected_name
+
+    def test_recreation_unknown_subtype_is_explicit_and_not_silent_recreation_center_fallback(self):
+        description = "New 50000 sf recreation facility in Nashville, TN"
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "recreation"
+        assert parsed["subtype"] is None
+        assert parsed["building_subtype"] is None
+        assert name == "Recreation in Nashville"
+
+    def test_sports_complex_intent_is_not_rerouted_to_civic_community_center(self):
+        description = "Build a 90000 sf sports complex with tournament courts and field house in Nashville, TN"
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "recreation"
+        assert parsed["subtype"] == "sports_complex"
+        assert name == "Sports Complex in Nashville"
+
+    def test_aquatic_center_intent_is_not_rerouted_to_hospitality_pool_language(self):
+        description = (
+            "Build a municipal aquatic center with competition pool, lap lanes, and natatorium in Nashville, TN"
+        )
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "recreation"
+        assert parsed["subtype"] == "aquatic_center"
+        assert name == "Aquatic Center in Nashville"
+
+    def test_stadium_intent_is_not_rerouted_to_parking_or_retail_event_language(self):
+        description = (
+            "New stadium with event concourse, ticketing, and adjacent parking lots in Nashville, TN"
+        )
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "recreation"
+        assert parsed["subtype"] == "stadium"
+        assert name == "Stadium in Nashville"

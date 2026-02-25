@@ -49,6 +49,11 @@ TARGET_SUBTYPE_EXPECTATIONS = [
     (BuildingType.CIVIC, "government_building", 24),
     (BuildingType.CIVIC, "community_center", 20),
     (BuildingType.CIVIC, "public_safety", 22),
+    (BuildingType.RECREATION, "fitness_center", 16),
+    (BuildingType.RECREATION, "sports_complex", 24),
+    (BuildingType.RECREATION, "aquatic_center", 22),
+    (BuildingType.RECREATION, "recreation_center", 20),
+    (BuildingType.RECREATION, "stadium", 36),
 ]
 
 
@@ -91,6 +96,7 @@ def test_subtype_schedules_resolve_for_target_verticals(
         (BuildingType.HEALTHCARE, "unknown_healthcare_variant", 16),
         (BuildingType.EDUCATIONAL, "unknown_educational_variant", 30),
         (BuildingType.CIVIC, "unknown_civic_variant", 27),
+        (BuildingType.RECREATION, "unknown_recreation_variant", 27),
     ],
 )
 def test_unknown_subtype_falls_back_to_building_type_schedule(

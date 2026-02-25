@@ -14,6 +14,8 @@ CONFIG = (
     BuildingType.RECREATION,
     "sports_complex",
     BuildingConfig(
+        dealshield_tile_profile="recreation_sports_complex_v1",
+        scope_items_profile="recreation_sports_complex_structural_v1",
         display_name="Sports Complex",
         base_cost_per_sf=225,
         cost_range=(200, 250),

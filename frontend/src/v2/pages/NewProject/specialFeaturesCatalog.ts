@@ -406,6 +406,57 @@ export const CIVIC_FEATURE_COSTS_BY_SUBTYPE: Record<
   },
 };
 
+export const RECREATION_SUBTYPES = [
+  "fitness_center",
+  "sports_complex",
+  "aquatic_center",
+  "recreation_center",
+  "stadium",
+] as const;
+
+export type RecreationSubtype = (typeof RECREATION_SUBTYPES)[number];
+
+export const RECREATION_FEATURE_COSTS_BY_SUBTYPE: Record<
+  RecreationSubtype,
+  Record<string, number>
+> = {
+  fitness_center: {
+    pool: 45,
+    basketball_court: 30,
+    group_fitness: 20,
+    spa_area: 35,
+    juice_bar: 15,
+  },
+  sports_complex: {
+    indoor_track: 35,
+    multiple_courts: 40,
+    weight_room: 25,
+    locker_complex: 30,
+    concessions: 20,
+  },
+  aquatic_center: {
+    competition_pool: 60,
+    diving_well: 50,
+    lazy_river: 40,
+    water_slides: 45,
+    therapy_pool: 35,
+  },
+  recreation_center: {
+    gymnasium: 30,
+    game_room: 15,
+    craft_room: 12,
+    dance_studio: 20,
+    outdoor_courts: 25,
+  },
+  stadium: {
+    luxury_boxes: 75,
+    club_level: 50,
+    press_box: 40,
+    video_board: 100,
+    retractable_roof: 200,
+  },
+};
+
 const RESTAURANT_FEATURE_METADATA: Record<
   string,
   { name: string; description: string }
@@ -1250,6 +1301,112 @@ const CIVIC_FEATURE_METADATA: Record<
   },
 };
 
+const RECREATION_FEATURE_METADATA: Record<
+  string,
+  { name: string; description: string }
+> = {
+  pool: {
+    name: "Pool",
+    description: "Aquatics-ready pool basin, deck, and support systems for recreation use.",
+  },
+  basketball_court: {
+    name: "Basketball Court",
+    description: "Full-court athletic buildout with resilient flooring and spectator support.",
+  },
+  group_fitness: {
+    name: "Group Fitness Studios",
+    description: "Dedicated group-fitness studio zones with acoustics and specialty flooring.",
+  },
+  spa_area: {
+    name: "Spa Area",
+    description: "Wellness/spa suite with wet-area controls and upgraded finishes.",
+  },
+  juice_bar: {
+    name: "Juice Bar",
+    description: "Fitness-adjacent beverage counter with utility and queue support.",
+  },
+  indoor_track: {
+    name: "Indoor Track",
+    description: "Indoor running track with structural support and sports-surface systems.",
+  },
+  multiple_courts: {
+    name: "Multiple Courts",
+    description: "Multi-court athletics program with markings, divider systems, and equipment support.",
+  },
+  weight_room: {
+    name: "Weight Room",
+    description: "Strength-training room with equipment-ready structural and MEP upgrades.",
+  },
+  locker_complex: {
+    name: "Locker Complex",
+    description: "Expanded locker and team support complex with wet-core coordination.",
+  },
+  concessions: {
+    name: "Concessions",
+    description: "Concession points with food-service utility rough-ins and circulation planning.",
+  },
+  competition_pool: {
+    name: "Competition Pool",
+    description: "Competition-grade pool package with lane geometry and natatorium support systems.",
+  },
+  diving_well: {
+    name: "Diving Well",
+    description: "Dedicated diving well basin with specialty safety and circulation systems.",
+  },
+  lazy_river: {
+    name: "Lazy River",
+    description: "Recirculating lazy-river feature with themed aquatic systems and controls.",
+  },
+  water_slides: {
+    name: "Water Slides",
+    description: "Integrated slide structures with specialty support steel and splash-zone systems.",
+  },
+  therapy_pool: {
+    name: "Therapy Pool",
+    description: "Warm-water therapy pool with accessibility, treatment, and control systems.",
+  },
+  gymnasium: {
+    name: "Gymnasium",
+    description: "Community gymnasium with multi-sport flooring and durable interior systems.",
+  },
+  game_room: {
+    name: "Game Room",
+    description: "Indoor recreation game-room program with flexible utility infrastructure.",
+  },
+  craft_room: {
+    name: "Craft Room",
+    description: "Dedicated maker/craft room with washable finishes and storage integration.",
+  },
+  dance_studio: {
+    name: "Dance Studio",
+    description: "Dance studio with sprung flooring, mirrors, and acoustic conditioning.",
+  },
+  outdoor_courts: {
+    name: "Outdoor Courts",
+    description: "Outdoor athletics court package with surfacing, lighting, and site drainage.",
+  },
+  luxury_boxes: {
+    name: "Luxury Boxes",
+    description: "Premium suite-level spectator boxes with elevated finishes and hospitality support.",
+  },
+  club_level: {
+    name: "Club Level",
+    description: "Premium club-level spectator concourse and lounge infrastructure.",
+  },
+  press_box: {
+    name: "Press Box",
+    description: "Broadcast-ready press box with media utilities and sightline integration.",
+  },
+  video_board: {
+    name: "Video Board",
+    description: "Large-format video display system with structural and power backbone upgrades.",
+  },
+  retractable_roof: {
+    name: "Retractable Roof",
+    description: "Retractable-roof superstructure with high-complexity mechanical controls.",
+  },
+};
+
 export const filterSpecialFeaturesBySubtype = (
   features: SpecialFeatureOption[],
   subtype?: string
@@ -1600,6 +1757,48 @@ export const CIVIC_SPECIAL_FEATURES = createCivicSpecialFeatures();
 
 export const getCivicSpecialFeatures = (): SpecialFeatureOption[] =>
   CIVIC_SPECIAL_FEATURES;
+
+const createRecreationSpecialFeatures = (): SpecialFeatureOption[] => {
+  const byFeatureId: Record<
+    string,
+    { costPerSFBySubtype: Record<string, number>; allowedSubtypes: string[] }
+  > = {};
+
+  for (const subtype of RECREATION_SUBTYPES) {
+    const entries = RECREATION_FEATURE_COSTS_BY_SUBTYPE[subtype];
+    for (const [featureId, costPerSF] of Object.entries(entries)) {
+      if (!byFeatureId[featureId]) {
+        byFeatureId[featureId] = {
+          costPerSFBySubtype: {},
+          allowedSubtypes: [],
+        };
+      }
+      byFeatureId[featureId].costPerSFBySubtype[subtype] = costPerSF;
+      byFeatureId[featureId].allowedSubtypes.push(subtype);
+    }
+  }
+
+  return Object.entries(byFeatureId)
+    .sort(([featureA], [featureB]) => featureA.localeCompare(featureB))
+    .map(([featureId, featureData]) => {
+      const metadata = RECREATION_FEATURE_METADATA[featureId];
+      return {
+        id: featureId,
+        name: metadata?.name ?? featureId.replace(/_/g, " "),
+        description:
+          metadata?.description ?? "Recreation subtype specific special feature.",
+        costPerSFBySubtype: featureData.costPerSFBySubtype,
+        allowedSubtypes: RECREATION_SUBTYPES.filter((subtype) =>
+          featureData.allowedSubtypes.includes(subtype)
+        ),
+      };
+    });
+};
+
+export const RECREATION_SPECIAL_FEATURES = createRecreationSpecialFeatures();
+
+export const getRecreationSpecialFeatures = (): SpecialFeatureOption[] =>
+  RECREATION_SPECIAL_FEATURES;
 
 const RESTAURANT_KEYWORD_DETECTION: Array<{
   featureId: string;
@@ -2130,6 +2329,152 @@ export const detectCivicSubtypeFromDescription = (
   return undefined;
 };
 
+const RECREATION_KEYWORD_DETECTION: Array<{
+  featureId: string;
+  patterns: RegExp[];
+}> = [
+  { featureId: "pool", patterns: [/\bfitness pool\b/i, /\btraining pool\b/i] },
+  { featureId: "basketball_court", patterns: [/\bbasketball courts?\b/i] },
+  { featureId: "group_fitness", patterns: [/\bgroup fitness\b/i] },
+  { featureId: "spa_area", patterns: [/\bspa area\b/i, /\bwellness spa\b/i] },
+  { featureId: "juice_bar", patterns: [/\bjuice bar\b/i] },
+  { featureId: "indoor_track", patterns: [/\bindoor track\b/i] },
+  { featureId: "multiple_courts", patterns: [/\bmultiple courts?\b/i, /\bmulti[-\s]?court\b/i] },
+  { featureId: "weight_room", patterns: [/\bweight room\b/i, /\bstrength room\b/i] },
+  { featureId: "locker_complex", patterns: [/\blocker complex\b/i, /\blocker rooms?\b/i] },
+  { featureId: "concessions", patterns: [/\bconcessions?\b/i] },
+  {
+    featureId: "competition_pool",
+    patterns: [/\bcompetition pool\b/i, /\blap lanes?\b/i, /\bnatatorium\b/i],
+  },
+  { featureId: "diving_well", patterns: [/\bdiving well\b/i] },
+  { featureId: "lazy_river", patterns: [/\blazy river\b/i] },
+  { featureId: "water_slides", patterns: [/\bwater slides?\b/i] },
+  { featureId: "therapy_pool", patterns: [/\btherapy pool\b/i, /\bhydrotherapy pool\b/i] },
+  { featureId: "gymnasium", patterns: [/\bgymnasium\b/i, /\brecreation gym\b/i] },
+  { featureId: "game_room", patterns: [/\bgame rooms?\b/i] },
+  { featureId: "craft_room", patterns: [/\bcraft rooms?\b/i, /\bmakers? room\b/i] },
+  { featureId: "dance_studio", patterns: [/\bdance studio\b/i] },
+  { featureId: "outdoor_courts", patterns: [/\boutdoor courts?\b/i] },
+  { featureId: "luxury_boxes", patterns: [/\bluxury boxes?\b/i, /\bpremium suites?\b/i] },
+  { featureId: "club_level", patterns: [/\bclub level\b/i] },
+  { featureId: "press_box", patterns: [/\bpress box\b/i] },
+  { featureId: "video_board", patterns: [/\bvideo board\b/i, /\bscoreboard\b/i] },
+  { featureId: "retractable_roof", patterns: [/\bretractable roof\b/i] },
+];
+
+export const detectRecreationFeatureIdsFromDescription = (
+  description: string
+): string[] => {
+  const detectedFeatureIds = new Set<string>();
+  for (const { featureId, patterns } of RECREATION_KEYWORD_DETECTION) {
+    if (patterns.some((pattern) => pattern.test(description))) {
+      detectedFeatureIds.add(featureId);
+    }
+  }
+  return Array.from(detectedFeatureIds);
+};
+
+const RECREATION_SUBTYPE_CUE_ORDER: Array<{
+  subtype: RecreationSubtype;
+  patterns: RegExp[];
+}> = [
+  {
+    subtype: "stadium",
+    patterns: [
+      /\bstadium\b/i,
+      /\bballpark\b/i,
+      /\bcoliseum\b/i,
+      /\barena\b/i,
+      /\bseating bowl\b/i,
+    ],
+  },
+  {
+    subtype: "aquatic_center",
+    patterns: [
+      /\baquatic center\b/i,
+      /\bnatatorium\b/i,
+      /\bcompetition pool\b/i,
+      /\bdiving well\b/i,
+      /\btherapy pool\b/i,
+      /\bswim(?:ming)? center\b/i,
+    ],
+  },
+  {
+    subtype: "sports_complex",
+    patterns: [
+      /\bsports complex\b/i,
+      /\bsportsplex\b/i,
+      /\bathletic complex\b/i,
+      /\bindoor sports\b/i,
+      /\bfield house\b/i,
+    ],
+  },
+  {
+    subtype: "fitness_center",
+    patterns: [
+      /\bfitness center\b/i,
+      /\bhealth club\b/i,
+      /\bathletic club\b/i,
+      /\bcrossfit\b/i,
+      /\bgym\b/i,
+    ],
+  },
+  {
+    subtype: "recreation_center",
+    patterns: [
+      /\brecreation center\b/i,
+      /\brec center\b/i,
+      /\bcommunity recreation center\b/i,
+      /\bparks?\s+and\s+recreation\b/i,
+      /\bleisure center\b/i,
+    ],
+  },
+];
+
+export const detectRecreationSubtypeFromDescription = (
+  description: string
+): RecreationSubtype | undefined => {
+  const text = description.toLowerCase();
+
+  const hasHotelCue =
+    /\b(hotel|motel|resort|hospitality|guest rooms?|keys?)\b/i.test(description);
+  const hasGenericPoolCue = /\bpool\b/i.test(description);
+  const hasStrongAquaticCue =
+    /\b(aquatic center|natatorium|competition pool|diving well|therapy pool|lap lanes?)\b/i.test(
+      description
+    );
+  if (hasHotelCue && hasGenericPoolCue && !hasStrongAquaticCue) {
+    return undefined;
+  }
+
+  const hasCommunityCenterCue = /\bcommunity center\b/i.test(description);
+  const hasCivicStrengthCue =
+    /\b(municipal|city hall|government|courthouse|public safety|library|civic)\b/i.test(
+      description
+    );
+  const hasRecreationStrengthCue =
+    /\b(recreation|rec center|parks?\s+and\s+recreation|sports complex|athletic complex)\b/i.test(
+      description
+    );
+  if (hasCommunityCenterCue && hasCivicStrengthCue && !hasRecreationStrengthCue) {
+    return undefined;
+  }
+
+  for (const { subtype, patterns } of RECREATION_SUBTYPE_CUE_ORDER) {
+    if (patterns.some((pattern) => pattern.test(description))) {
+      return subtype;
+    }
+  }
+  if (/\brecreation\b/i.test(description)) {
+    return undefined;
+  }
+  if (/\bcommunity center\b/i.test(description) && !/\brec(?:reation)?\b/i.test(text)) {
+    return undefined;
+  }
+  return undefined;
+};
+
 const SPECIALTY_KEYWORD_DETECTION: Array<{
   featureId: string;
   patterns: RegExp[];
@@ -2435,6 +2780,7 @@ const SPECIAL_FEATURES_BY_BUILDING_TYPE: Record<string, SpecialFeatureOption[]> 
   healthcare: HEALTHCARE_SPECIAL_FEATURES,
   educational: EDUCATIONAL_SPECIAL_FEATURES,
   civic: CIVIC_SPECIAL_FEATURES,
+  recreation: RECREATION_SPECIAL_FEATURES,
 };
 
 const VALID_SUBTYPES_BY_BUILDING_TYPE: Record<string, readonly string[]> = {
@@ -2446,6 +2792,7 @@ const VALID_SUBTYPES_BY_BUILDING_TYPE: Record<string, readonly string[]> = {
   healthcare: HEALTHCARE_SUBTYPES,
   educational: EDUCATIONAL_SUBTYPES,
   civic: CIVIC_SUBTYPES,
+  recreation: RECREATION_SUBTYPES,
 };
 
 export const getAvailableSpecialFeatures = (
@@ -2521,3 +2868,6 @@ export const educationalSubtypeHasSpecialFeatures = (subtype?: string): boolean 
 
 export const civicSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
   filterSpecialFeaturesBySubtype(CIVIC_SPECIAL_FEATURES, subtype).length > 0;
+
+export const recreationSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
+  filterSpecialFeaturesBySubtype(RECREATION_SPECIAL_FEATURES, subtype).length > 0;

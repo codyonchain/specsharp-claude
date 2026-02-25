@@ -14,6 +14,8 @@ CONFIG = (
     BuildingType.RECREATION,
     "stadium",
     BuildingConfig(
+        dealshield_tile_profile="recreation_stadium_v1",
+        scope_items_profile="recreation_stadium_structural_v1",
         display_name="Stadium / Arena",
         base_cost_per_sf=425,
         cost_range=(375, 475),

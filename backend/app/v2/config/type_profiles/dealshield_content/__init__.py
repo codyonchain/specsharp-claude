@@ -9,6 +9,7 @@ from . import hospitality
 from . import industrial
 from . import multifamily
 from . import office
+from . import recreation
 from . import retail
 from . import restaurant
 
@@ -30,6 +31,7 @@ DEALSHIELD_CONTENT_PROFILE_SOURCES: list[dict] = [
     retail.DEALSHIELD_CONTENT_PROFILES,
     educational.DEALSHIELD_CONTENT_PROFILES,
     civic.DEALSHIELD_CONTENT_PROFILES,
+    recreation.DEALSHIELD_CONTENT_PROFILES,
     CIVIC_CONTENT_PROFILE_ALIASES,
 ]
 

@@ -14,6 +14,8 @@ CONFIG = (
     BuildingType.RECREATION,
     "fitness_center",
     BuildingConfig(
+        dealshield_tile_profile="recreation_fitness_center_v1",
+        scope_items_profile="recreation_fitness_center_structural_v1",
         display_name="Fitness Center / Gym",
         base_cost_per_sf=185,
         cost_range=(165, 205),

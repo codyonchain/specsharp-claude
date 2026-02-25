@@ -14,6 +14,8 @@ CONFIG = (
     BuildingType.RECREATION,
     "aquatic_center",
     BuildingConfig(
+        dealshield_tile_profile="recreation_aquatic_center_v1",
+        scope_items_profile="recreation_aquatic_center_structural_v1",
         display_name="Aquatic Center",
         base_cost_per_sf=325,
         cost_range=(300, 350),

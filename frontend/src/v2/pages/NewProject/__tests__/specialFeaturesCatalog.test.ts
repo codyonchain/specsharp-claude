@@ -9,6 +9,8 @@ import {
   HOSPITALITY_SUBTYPES,
   OFFICE_FEATURE_COSTS_BY_SUBTYPE,
   OFFICE_SUBTYPES,
+  RECREATION_FEATURE_COSTS_BY_SUBTYPE,
+  RECREATION_SUBTYPES,
   RETAIL_FEATURE_COSTS_BY_SUBTYPE,
   RETAIL_SUBTYPES,
   RESTAURANT_FEATURE_COSTS_BY_SUBTYPE,
@@ -21,6 +23,8 @@ import {
   detectHealthcareFeatureIdsFromDescription,
   detectHospitalityFeatureIdsFromDescription,
   detectOfficeFeatureIdsFromDescription,
+  detectRecreationFeatureIdsFromDescription,
+  detectRecreationSubtypeFromDescription,
   detectRetailFeatureIdsFromDescription,
   detectSpecialtyFeatureIdsFromDescription,
   educationalSubtypeHasSpecialFeatures,
@@ -31,6 +35,7 @@ import {
   getHealthcareSpecialFeatures,
   getHospitalitySpecialFeatures,
   getOfficeSpecialFeatures,
+  getRecreationSpecialFeatures,
   getRetailSpecialFeatures,
   getRestaurantSpecialFeatures,
   getSpecialFeatureCost,
@@ -38,6 +43,7 @@ import {
   healthcareSubtypeHasSpecialFeatures,
   hospitalitySubtypeHasSpecialFeatures,
   officeSubtypeHasSpecialFeatures,
+  recreationSubtypeHasSpecialFeatures,
   retailSubtypeHasSpecialFeatures,
   restaurantSubtypeHasSpecialFeatures,
 } from "../specialFeaturesCatalog";
@@ -309,6 +315,44 @@ const REQUIRED_CIVIC_MAPPING = {
     training_tower: 40,
     emergency_generator: 35,
     sally_port: 30,
+  },
+} as const;
+
+const REQUIRED_RECREATION_MAPPING = {
+  fitness_center: {
+    pool: 45,
+    basketball_court: 30,
+    group_fitness: 20,
+    spa_area: 35,
+    juice_bar: 15,
+  },
+  sports_complex: {
+    indoor_track: 35,
+    multiple_courts: 40,
+    weight_room: 25,
+    locker_complex: 30,
+    concessions: 20,
+  },
+  aquatic_center: {
+    competition_pool: 60,
+    diving_well: 50,
+    lazy_river: 40,
+    water_slides: 45,
+    therapy_pool: 35,
+  },
+  recreation_center: {
+    gymnasium: 30,
+    game_room: 15,
+    craft_room: 12,
+    dance_studio: 20,
+    outdoor_courts: 25,
+  },
+  stadium: {
+    luxury_boxes: 75,
+    club_level: 50,
+    press_box: 40,
+    video_board: 100,
+    retractable_roof: 200,
   },
 } as const;
 
@@ -932,6 +976,148 @@ describe("civic special features catalog", () => {
   it("civic subtype helper returns true for all five civic subtypes", () => {
     for (const subtype of CIVIC_SUBTYPES) {
       expect(civicSubtypeHasSpecialFeatures(subtype)).toBe(true);
+    }
+  });
+});
+
+describe("recreation special features catalog", () => {
+  it("is non-empty and matches backend-aligned subtype mapping keys/values", () => {
+    const recreationFeatures = getRecreationSpecialFeatures();
+    expect(recreationFeatures.length).toBeGreaterThan(0);
+    expect(RECREATION_FEATURE_COSTS_BY_SUBTYPE).toEqual(REQUIRED_RECREATION_MAPPING);
+  });
+
+  it("resolves expected feature IDs for each recreation subtype with no duplicates", () => {
+    for (const subtype of RECREATION_SUBTYPES) {
+      const expectedIds = Object.keys(REQUIRED_RECREATION_MAPPING[subtype]).sort();
+      const resolvedIds = getAvailableSpecialFeatures("recreation", subtype).map(
+        (feature) => feature.id
+      );
+      const uniqueResolvedIds = Array.from(new Set(resolvedIds));
+
+      expect(uniqueResolvedIds.length).toBe(resolvedIds.length);
+      expect(uniqueResolvedIds.sort()).toEqual(expectedIds);
+    }
+  });
+
+  it("keeps unknown recreation subtype explicit (no silent subtype coercion)", () => {
+    const unknownSubtypeResolved = getAvailableSpecialFeatures(
+      "recreation",
+      "unknown_recreation_variant"
+    );
+    expect(unknownSubtypeResolved).toEqual([]);
+
+    expect(
+      getSpecialFeatureCost("recreation", "competition_pool", "unknown_recreation_variant")
+    ).toBeUndefined();
+  });
+
+  it("resolves recreation costs only for valid subtype feature IDs", () => {
+    for (const subtype of RECREATION_SUBTYPES) {
+      for (const [featureId, expectedCost] of Object.entries(
+        REQUIRED_RECREATION_MAPPING[subtype]
+      )) {
+        expect(getSpecialFeatureCost("recreation", featureId, subtype)).toBe(expectedCost);
+      }
+    }
+
+    expect(
+      getSpecialFeatureCost("recreation", "retractable_roof", "fitness_center")
+    ).toBeUndefined();
+    expect(
+      getSpecialFeatureCost("recreation", "pool", "stadium")
+    ).toBeUndefined();
+  });
+
+  it("detects recreation subtype cues for all five profiles and keeps unknown explicit", () => {
+    expect(
+      detectRecreationSubtypeFromDescription(
+        "New 42000 sf fitness center with cardio deck and strength rooms in Nashville, TN"
+      )
+    ).toBe("fitness_center");
+    expect(
+      detectRecreationSubtypeFromDescription(
+        "Build a 95000 sf sports complex with multiple courts and indoor track in Nashville, TN"
+      )
+    ).toBe("sports_complex");
+    expect(
+      detectRecreationSubtypeFromDescription(
+        "New 80000 sf aquatic center with competition pool and natatorium in Nashville, TN"
+      )
+    ).toBe("aquatic_center");
+    expect(
+      detectRecreationSubtypeFromDescription(
+        "Renovate a 60000 sf recreation center with gymnasium and activity rooms in Nashville, TN"
+      )
+    ).toBe("recreation_center");
+    expect(
+      detectRecreationSubtypeFromDescription(
+        "Build a 320000 sf stadium with seating bowl and event concourse in Nashville, TN"
+      )
+    ).toBe("stadium");
+
+    expect(
+      detectRecreationSubtypeFromDescription(
+        "New 38000 sf recreation facility in Nashville, TN"
+      )
+    ).toBeUndefined();
+  });
+
+  it("guards recreation subtype detection from hospitality and civic collisions", () => {
+    expect(
+      detectRecreationSubtypeFromDescription(
+        "Build a limited service hotel with rooftop pool and breakfast area in Nashville, TN"
+      )
+    ).toBeUndefined();
+    expect(
+      detectRecreationSubtypeFromDescription(
+        "New municipal community center with council chambers in Nashville, TN"
+      )
+    ).toBeUndefined();
+  });
+
+  it("detects recreation feature IDs from subtype-specific keywords", () => {
+    const fitnessDetected = detectRecreationFeatureIdsFromDescription(
+      "Fitness center with basketball courts, group fitness studio, spa area, and juice bar."
+    );
+    expect(fitnessDetected).toEqual(
+      expect.arrayContaining([
+        "basketball_court",
+        "group_fitness",
+        "spa_area",
+        "juice_bar",
+      ])
+    );
+
+    const aquaticDetected = detectRecreationFeatureIdsFromDescription(
+      "Aquatic center with competition pool, diving well, lazy river, and water slides."
+    );
+    expect(aquaticDetected).toEqual(
+      expect.arrayContaining([
+        "competition_pool",
+        "diving_well",
+        "lazy_river",
+        "water_slides",
+      ])
+    );
+
+    const stadiumDetected = detectRecreationFeatureIdsFromDescription(
+      "Stadium with luxury boxes, club level, press box, video board, and retractable roof."
+    );
+    expect(stadiumDetected).toEqual(
+      expect.arrayContaining([
+        "luxury_boxes",
+        "club_level",
+        "press_box",
+        "video_board",
+        "retractable_roof",
+      ])
+    );
+  });
+
+  it("recreation subtype helper returns true for all five recreation subtypes", () => {
+    for (const subtype of RECREATION_SUBTYPES) {
+      expect(recreationSubtypeHasSpecialFeatures(subtype)).toBe(true);
     }
   });
 });

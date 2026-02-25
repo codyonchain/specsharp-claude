@@ -230,6 +230,34 @@ const CIVIC_SCHEDULE_CASES = [
   },
 ] as const;
 
+const RECREATION_SCHEDULE_CASES = [
+  {
+    subtype: "fitness_center",
+    sitePhaseLabel: "Site Utilities + Locker Core Foundations",
+    structuralPhaseLabel: "Gym Floor Structure + Rooftop Support",
+  },
+  {
+    subtype: "sports_complex",
+    sitePhaseLabel: "Site + Utility Loops + Foundations",
+    structuralPhaseLabel: "Long-Span Roof + Court Bowl Structure",
+  },
+  {
+    subtype: "aquatic_center",
+    sitePhaseLabel: "Site + Pool Shell Foundations",
+    structuralPhaseLabel: "Natatorium Structure + Spectator Frame",
+  },
+  {
+    subtype: "recreation_center",
+    sitePhaseLabel: "Site + Multipurpose Core Foundations",
+    structuralPhaseLabel: "Gym + Program Wing Structure",
+  },
+  {
+    subtype: "stadium",
+    sitePhaseLabel: "Site, Utilities + Deep Foundations",
+    structuralPhaseLabel: "Seating Bowl + Roof/Cantilever Structure",
+  },
+] as const;
+
 const buildRestaurantProject = (scheduleSource: "subtype" | "building_type") =>
   ({
     id: "proj_restaurant_construction",
@@ -862,6 +890,66 @@ const buildCivicScheduleProject = (
   return project;
 };
 
+const buildRecreationScheduleProject = (
+  subtype: (typeof RECREATION_SCHEDULE_CASES)[number]["subtype"],
+  scheduleSource: "subtype" | "building_type",
+  options?: { unknownFallbackSubtype?: boolean }
+) => {
+  const fixture = RECREATION_SCHEDULE_CASES.find((item) => item.subtype === subtype)!;
+  const fallbackSubtype =
+    scheduleSource === "building_type" && options?.unknownFallbackSubtype
+      ? "unknown_recreation_variant"
+      : subtype;
+  const project = buildCrossTypeScheduleProject("recreation", fallbackSubtype, scheduleSource);
+  project.analysis.calculations.construction_schedule.total_months =
+    scheduleSource === "subtype"
+      ? subtype === "fitness_center"
+        ? 16
+        : subtype === "sports_complex"
+          ? 24
+          : subtype === "aquatic_center"
+            ? 22
+            : subtype === "recreation_center"
+              ? 20
+              : 36
+      : 27;
+  project.analysis.calculations.construction_schedule.phases =
+    scheduleSource === "subtype"
+      ? [
+          {
+            id: "site_foundation",
+            label: fixture.sitePhaseLabel,
+            start_month: 0,
+            duration_months: 6,
+            end_month: 6,
+          },
+          {
+            id: "structural",
+            label: fixture.structuralPhaseLabel,
+            start_month: 4,
+            duration_months: 12,
+            end_month: 16,
+          },
+        ]
+      : [
+          {
+            id: "site_foundation",
+            label: "Recreation Baseline Site Program",
+            start_month: 0,
+            duration_months: 5,
+            end_month: 5,
+          },
+          {
+            id: "structural",
+            label: "Recreation Baseline Structural Program",
+            start_month: 3,
+            duration_months: 10,
+            end_month: 13,
+          },
+        ];
+  return project;
+};
+
 const buildOfficeScheduleProject = (
   subtype: (typeof OFFICE_SCHEDULE_CASES)[number]["subtype"],
   scheduleSource: "subtype" | "building_type"
@@ -1294,6 +1382,44 @@ describe("ConstructionView", () => {
       ).toBeInTheDocument();
       expect(screen.getAllByText("Civic Baseline Site Program").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Civic Baseline Structural Program").length).toBeGreaterThan(0);
+    }
+  });
+
+  it("renders recreation schedule-source parity for all five subtypes with explicit unknown-subtype fallback messaging", () => {
+    const { rerender } = render(
+      <ConstructionView
+        project={buildRecreationScheduleProject(RECREATION_SCHEDULE_CASES[0].subtype, "subtype")}
+      />
+    );
+
+    for (const testCase of RECREATION_SCHEDULE_CASES) {
+      rerender(
+        <ConstructionView
+          project={buildRecreationScheduleProject(testCase.subtype, "subtype")}
+        />
+      );
+      expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
+      expect(
+        screen.getByText("Timeline is tailored for this subtype profile.")
+      ).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.sitePhaseLabel).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(testCase.structuralPhaseLabel).length).toBeGreaterThan(0);
+
+      rerender(
+        <ConstructionView
+          project={buildRecreationScheduleProject(testCase.subtype, "building_type", {
+            unknownFallbackSubtype: true,
+          })}
+        />
+      );
+      expect(screen.getByText("Building-type baseline")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Timeline uses building-type baseline (subtype override unavailable)."
+        )
+      ).toBeInTheDocument();
+      expect(screen.getAllByText("Recreation Baseline Site Program").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Recreation Baseline Structural Program").length).toBeGreaterThan(0);
     }
   });
 
@@ -2130,6 +2256,142 @@ describe("ConstructionView", () => {
             { name: testCase.finishesName, quantity: 90000, unit: "SF", unit_cost: 22, total_cost: 1980000 },
             { name: "Interior Doors + Hardware Program", quantity: 90000, unit: "SF", unit_cost: 16, total_cost: 1440000 },
             { name: "Flooring + Ceiling + Wall Finish Scope", quantity: 90000, unit: "SF", unit_cost: 13, total_cost: 1170000 },
+          ],
+        },
+      ];
+
+      rerender(<ConstructionView project={project} />);
+
+      expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
+      expect(
+        screen.queryByText("Timeline uses building-type baseline (subtype override unavailable).")
+      ).not.toBeInTheDocument();
+
+      openTradeCard("Structural");
+      expect(screen.getByText("3 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.structuralName)).toBeInTheDocument();
+
+      openTradeCard("Mechanical");
+      expect(screen.getByText("3 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.mechanicalName)).toBeInTheDocument();
+
+      openTradeCard("Electrical");
+      expect(screen.getByText("3 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.electricalName)).toBeInTheDocument();
+
+      openTradeCard("Plumbing");
+      expect(screen.getByText("3 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.plumbingName)).toBeInTheDocument();
+
+      openTradeCard("Finishes");
+      expect(screen.getByText("3 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.finishesName)).toBeInTheDocument();
+    }
+  });
+
+  it("renders recreation trade scope depth as subtype-credible and non-generic for all five recreation subtypes", () => {
+    const cases = [
+      {
+        subtype: "fitness_center" as const,
+        structuralName: "Fitness Training Floor + Locker Core Framing",
+        mechanicalName: "Fitness Ventilation + Humidity Control Backbone",
+        electricalName: "Fitness Equipment Power + Controls Distribution",
+        plumbingName: "Fitness Locker + Shower Plumbing Network",
+        finishesName: "Fitness Resilient Flooring + Acoustic Wall Finishes",
+      },
+      {
+        subtype: "sports_complex" as const,
+        structuralName: "Sports Long-Span Court Structure + Roof Steel",
+        mechanicalName: "Sports Bowl Ventilation + Event Mode Controls",
+        electricalName: "Sports Event Lighting + Scoreboard Distribution",
+        plumbingName: "Sports Locker + Public Fixture Plumbing Backbone",
+        finishesName: "Sports Concourse + Court-Side Finish Package",
+      },
+      {
+        subtype: "aquatic_center" as const,
+        structuralName: "Aquatic Natatorium Shell + Spectator Structure",
+        mechanicalName: "Aquatic Dehumidification + Chloramine Exhaust Systems",
+        electricalName: "Aquatic Pool Plant Power + Natatorium Lighting",
+        plumbingName: "Aquatic Pool Filtration + Therapy Loop Plumbing",
+        finishesName: "Aquatic Deck Coatings + Moisture-Resistant Finishes",
+      },
+      {
+        subtype: "recreation_center" as const,
+        structuralName: "Recreation Multipurpose Hall + Gym Framing",
+        mechanicalName: "Recreation Shared-Zone HVAC + Program Controls",
+        electricalName: "Recreation Program Lighting + AV Power Network",
+        plumbingName: "Recreation Community Kitchen + Locker Plumbing",
+        finishesName: "Recreation Activity Rooms + Durable Finish Package",
+      },
+      {
+        subtype: "stadium" as const,
+        structuralName: "Stadium Seating Bowl + Cantilever Structure",
+        mechanicalName: "Stadium Concourse Ventilation + Suite Conditioning",
+        electricalName: "Stadium Event Power + Broadcast Lighting Backbone",
+        plumbingName: "Stadium Concourse Fixtures + Team Plumbing Branches",
+        finishesName: "Stadium Concourse + Premium Suite Finishes",
+      },
+    ];
+
+    const { rerender } = render(
+      <ConstructionView project={buildRecreationScheduleProject(cases[0].subtype, "subtype")} />
+    );
+
+    const openTradeCard = (tradeName: string) => {
+      const tradeHeading = screen.getByText(tradeName, { selector: "h4" });
+      const tradeCard = tradeHeading.closest('[role="button"]');
+      expect(tradeCard).not.toBeNull();
+      fireEvent.click(tradeCard as HTMLElement);
+    };
+
+    for (const testCase of cases) {
+      const project = buildRecreationScheduleProject(testCase.subtype, "subtype");
+      project.analysis.calculations.trade_breakdown = {
+        structural: 5400000,
+        mechanical: 5600000,
+        electrical: 4700000,
+        plumbing: 3300000,
+        finishes: 4200000,
+      };
+      project.analysis.calculations.scope_items = [
+        {
+          trade: "structural",
+          systems: [
+            { name: testCase.structuralName, quantity: 110000, unit: "SF", unit_cost: 34, total_cost: 3740000 },
+            { name: "Structural Shear + Lateral Reinforcement", quantity: 110000, unit: "SF", unit_cost: 26, total_cost: 2860000 },
+            { name: "Roof/Canopy Support + Core Framing", quantity: 110000, unit: "SF", unit_cost: 20, total_cost: 2200000 },
+          ],
+        },
+        {
+          trade: "mechanical",
+          systems: [
+            { name: testCase.mechanicalName, quantity: 110000, unit: "SF", unit_cost: 36, total_cost: 3960000 },
+            { name: "Airside Distribution + Balancing", quantity: 110000, unit: "SF", unit_cost: 28, total_cost: 3080000 },
+            { name: "Controls Integration + Commissioning", quantity: 110000, unit: "SF", unit_cost: 22, total_cost: 2420000 },
+          ],
+        },
+        {
+          trade: "electrical",
+          systems: [
+            { name: testCase.electricalName, quantity: 110000, unit: "SF", unit_cost: 31, total_cost: 3410000 },
+            { name: "Switchgear + Distribution Panels", quantity: 110000, unit: "SF", unit_cost: 24, total_cost: 2640000 },
+            { name: "Life-Safety + Data Backbone", quantity: 110000, unit: "SF", unit_cost: 19, total_cost: 2090000 },
+          ],
+        },
+        {
+          trade: "plumbing",
+          systems: [
+            { name: testCase.plumbingName, quantity: 110000, unit: "SF", unit_cost: 23, total_cost: 2530000 },
+            { name: "Domestic + Sanitary Routing", quantity: 110000, unit: "SF", unit_cost: 17, total_cost: 1870000 },
+            { name: "Fixture Group Rough-In + Final Trim", quantity: 110000, unit: "SF", unit_cost: 13, total_cost: 1430000 },
+          ],
+        },
+        {
+          trade: "finishes",
+          systems: [
+            { name: testCase.finishesName, quantity: 110000, unit: "SF", unit_cost: 27, total_cost: 2970000 },
+            { name: "Interior Doors + Hardware Program", quantity: 110000, unit: "SF", unit_cost: 20, total_cost: 2200000 },
+            { name: "Flooring + Ceiling + Wall Finish Scope", quantity: 110000, unit: "SF", unit_cost: 16, total_cost: 1760000 },
           ],
         },
       ];

@@ -267,11 +267,16 @@ class NLPService:
                 }
             },
             'recreation': {
-                'keywords': ['fitness', 'gym', 'sports', 'recreation', 'athletic', 'pool', 'basketball'],
+                'keywords': [
+                    'fitness', 'gym', 'sports', 'recreation', 'athletic',
+                    'aquatic', 'natatorium', 'stadium', 'arena'
+                ],
                 'subtypes': {
                     'fitness_center': ['fitness center', 'gym', 'health club', 'fitness facility', 'workout'],
-                    'sports_complex': ['sports complex', 'athletic center', 'sports facility', 'arena'],
-                    'aquatic_center': ['aquatic center', 'pool', 'natatorium', 'swimming pool', 'water park']
+                    'sports_complex': ['sports complex', 'athletic center', 'sports facility', 'field house', 'sportsplex'],
+                    'aquatic_center': ['aquatic center', 'natatorium', 'swimming pool', 'swim center', 'competition pool'],
+                    'recreation_center': ['recreation center', 'rec center', 'community recreation center', 'parks and recreation center'],
+                    'stadium': ['stadium', 'ballpark', 'coliseum', 'sports stadium', 'football stadium', 'baseball stadium']
                 }
             },
             'parking': {
@@ -452,7 +457,6 @@ class NLPService:
 
         community_center_patterns = (
             r"\bcommunity\s+cent(?:er|re)\b",
-            r"\brec(?:reation)?\s+cent(?:er|re)\b",
             r"\bmulti[-\s]?purpose\s+cent(?:er|re)\b",
             r"\byouth\s+cent(?:er|re)\b",
         )
@@ -477,6 +481,76 @@ class NLPService:
             r"\bpublic\s+facility\b",
         )
         if any(re.search(pattern, text_lower) for pattern in generic_civic_patterns):
+            return None
+
+        return None
+
+    def _resolve_recreation_subtype_from_intent(self, text_lower: str) -> Optional[str]:
+        """Resolve high-confidence recreation intents before civic/hospitality/parking overlap routes."""
+        if not isinstance(text_lower, str) or not text_lower.strip():
+            return None
+
+        stadium_patterns = (
+            r"\bstadium\b",
+            r"\bballpark\b",
+            r"\bcoliseum\b",
+            r"\barena\b",
+            r"\bfootball\s+stadium\b",
+            r"\bbaseball\s+stadium\b",
+            r"\bsports\s+stadium\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in stadium_patterns):
+            return "stadium"
+
+        aquatic_patterns = (
+            r"\baquatic\s+cent(?:er|re)\b",
+            r"\bnatatorium\b",
+            r"\bswim(?:ming)?\s+cent(?:er|re)\b",
+            r"\bcompetition\s+pool\b",
+            r"\bpublic\s+pool\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in aquatic_patterns):
+            return "aquatic_center"
+
+        sports_complex_patterns = (
+            r"\bsports\s+complex\b",
+            r"\bsportsplex\b",
+            r"\bathletic\s+complex\b",
+            r"\bindoor\s+sports\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in sports_complex_patterns):
+            return "sports_complex"
+
+        fitness_patterns = (
+            r"\bfitness\s+cent(?:er|re)\b",
+            r"\bhealth\s+club\b",
+            r"\bathletic\s+club\b",
+            r"\bcrossfit\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in fitness_patterns):
+            return "fitness_center"
+
+        recreation_center_patterns = (
+            r"\brecreation\s+cent(?:er|re)\b",
+            r"\brec\s+cent(?:er|re)\b",
+            r"\bcommunity\s+recreation\b",
+            r"\bleisure\s+cent(?:er|re)\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in recreation_center_patterns):
+            sports_or_civic_overrides = (
+                "sports complex",
+                "field house",
+                "courthouse",
+                "city hall",
+            )
+            if not any(override in text_lower for override in sports_or_civic_overrides):
+                return "recreation_center"
+
+        recreation_generic_patterns = (
+            r"\brecreation\b",
+            r"\bathletic\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in recreation_generic_patterns):
             return None
 
         return None
@@ -541,14 +615,18 @@ class NLPService:
         if any(keyword in text_lower for keyword in mob_keywords):
             return 'healthcare', 'medical_office_building', classification
 
+        recreation_subtype = self._resolve_recreation_subtype_from_intent(text_lower)
         civic_subtype = self._resolve_civic_subtype_from_intent(text_lower)
         if civic_subtype is not None:
             return 'civic', civic_subtype, classification
         if (
-            re.search(r"\bcivic\b", text_lower)
-            or re.search(r"\bmunicipal\b", text_lower)
-            or re.search(r"\bgovernment\b", text_lower)
-            or re.search(r"\bpublic\s+facility\b", text_lower)
+            recreation_subtype is None
+            and (
+                re.search(r"\bcivic\b", text_lower)
+                or re.search(r"\bmunicipal\b", text_lower)
+                or re.search(r"\bgovernment\b", text_lower)
+                or re.search(r"\bpublic\s+facility\b", text_lower)
+            )
         ):
             return 'civic', None, classification
 
@@ -615,6 +693,15 @@ class NLPService:
         if re.search(r'\btier[\s-]?(3|iii|4|iv)\b', text_lower):
             return 'specialty', 'data_center', classification
 
+        if recreation_subtype is not None:
+            return 'recreation', recreation_subtype, classification
+        if (
+            re.search(r"\brecreation\b", text_lower)
+            or re.search(r"\bathletic\s+facility\b", text_lower)
+            or re.search(r"\bparks?\s+and\s+recreation\b", text_lower)
+        ):
+            return 'recreation', None, classification
+
         # Priority order (check specific before general)
         PRIORITY_ORDER = [
             'mixed_use',       # Check first - often contains other keywords
@@ -649,7 +736,7 @@ class NLPService:
             for keyword in patterns['keywords']:
                 if keyword in text_lower:
                     # Found building type, get default subtype
-                    if building_type in {'office', 'retail', 'educational', 'civic'}:
+                    if building_type in {'office', 'retail', 'educational', 'civic', 'recreation'}:
                         return building_type, None, classification
                     subtype = self._get_default_subtype(building_type)
                     return building_type, subtype, classification

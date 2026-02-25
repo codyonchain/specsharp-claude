@@ -244,6 +244,76 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         },
         "flex_calibration": {"tight_max_pct": 1.1, "moderate_max_pct": 3.6, "fallback_pct": 1.5},
     },
+    "recreation_fitness_center_v1": {
+        "primary_control_variable": {
+            "tile_id": "fitness_center_hvac_load_plus_11",
+            "metric_ref": "trade_breakdown.mechanical",
+            "label": "IC-First Peak Utilization Drift, Ventilation Load Volatility, and Membership Throughput Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 8.0,
+            "scenario_priority": ["base", "conservative", "ugly", "fitness_center_peak_utilization_crunch"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.6, "moderate_max_pct": 4.2, "fallback_pct": 1.9},
+    },
+    "recreation_sports_complex_v1": {
+        "primary_control_variable": {
+            "tile_id": "sports_complex_long_span_structure_plus_12",
+            "metric_ref": "trade_breakdown.structural",
+            "label": "IC-First Tournament Calendar Compression, Long-Span Drift, and Event Turnover Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 6.0,
+            "scenario_priority": ["base", "conservative", "ugly", "sports_complex_tournament_schedule_slip"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.4, "moderate_max_pct": 3.9, "fallback_pct": 1.7},
+    },
+    "recreation_aquatic_center_v1": {
+        "primary_control_variable": {
+            "tile_id": "aquatic_center_dehumidification_plus_14",
+            "metric_ref": "trade_breakdown.mechanical",
+            "label": "IC-First Natatorium Humidity Stability, Water Chemistry Rework, and Corrosion Exposure Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap",
+            "operator": "<=",
+            "threshold": -1500000.0,
+            "scenario_priority": ["base", "conservative", "ugly", "aquatic_center_water_chemistry_rework"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.1, "moderate_max_pct": 3.1, "fallback_pct": 1.3},
+    },
+    "recreation_recreation_center_v1": {
+        "primary_control_variable": {
+            "tile_id": "recreation_center_multiprogram_finishes_plus_10",
+            "metric_ref": "trade_breakdown.finishes",
+            "label": "IC-First Program Mix Drift, Shared-Zone Utilization Conflict, and Throughput Balancing Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 5.0,
+            "scenario_priority": ["base", "conservative", "ugly", "recreation_center_program_mix_shift"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.8, "moderate_max_pct": 4.6, "fallback_pct": 2.1},
+    },
+    "recreation_stadium_v1": {
+        "primary_control_variable": {
+            "tile_id": "stadium_seating_bowl_structure_plus_15",
+            "metric_ref": "trade_breakdown.structural",
+            "label": "IC-First Event Calendar Disruption, Seating-Bowl Structural Drift, and Attendance Volatility Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap",
+            "operator": "<=",
+            "threshold": -9000000.0,
+            "scenario_priority": ["base", "conservative", "ugly", "stadium_event_calendar_disruption"],
+        },
+        "flex_calibration": {"tight_max_pct": 0.9, "moderate_max_pct": 2.7, "fallback_pct": 1.1},
+    },
     "multifamily_market_rate_apartments_v1": {
         "primary_control_variable": {
             "tile_id": "structural_carry_proxy_plus_5",
