@@ -3,6 +3,7 @@ import math
 from app.v2.config.master_config import BuildingType, ProjectClass, get_building_config
 from app.v2.config.construction_schedule import build_construction_schedule
 from app.v2.config.type_profiles.decision_insurance_policy import (
+    DECISION_INSURANCE_POLICY_BY_PROFILE_ID,
     DECISION_INSURANCE_POLICY_ID,
     get_decision_insurance_policy,
 )
@@ -430,3 +431,63 @@ def test_civic_schedule_source_is_subtype_specific_with_unknown_subtype_fallback
     assert unknown_schedule.get("subtype") is None
     phases = unknown_schedule.get("phases")
     assert isinstance(phases, list) and phases
+
+
+def test_civic_runtime_scope_depth_and_trade_presence_in_payload():
+    required_trades = {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+
+    for subtype, expected in CIVIC_PROFILE_MAP.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.CIVIC,
+            subtype=subtype,
+            square_footage=70_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        scope_items = payload.get("scope_items")
+        assert isinstance(scope_items, list) and scope_items
+
+        by_trade = {
+            str(trade_block.get("trade", "")).strip().lower(): trade_block
+            for trade_block in scope_items
+            if isinstance(trade_block, dict) and isinstance(trade_block.get("trade"), str)
+        }
+        assert set(by_trade.keys()) == required_trades
+
+        trade_breakdown = payload.get("trade_breakdown") or {}
+        for trade_key, minimum_items in CIVIC_SCOPE_MIN_ITEMS_BY_SUBTYPE[subtype].items():
+            trade_block = by_trade[trade_key]
+            systems = trade_block.get("systems")
+            if not isinstance(systems, list):
+                systems = trade_block.get("items")
+            assert isinstance(systems, list)
+            assert len(systems) >= minimum_items
+
+            systems_total = sum(
+                float(system.get("total_cost", 0.0) or 0.0)
+                for system in systems
+                if isinstance(system, dict)
+            )
+            assert math.isclose(
+                systems_total,
+                float(trade_breakdown.get(trade_key, 0.0) or 0.0),
+                rel_tol=0,
+                abs_tol=1e-6,
+            )
+
+        assert payload.get("dealshield_tile_profile") == expected["tile"]
+
+
+def test_civic_decision_insurance_policy_entries_are_available_for_all_profiles():
+    for expected in CIVIC_PROFILE_MAP.values():
+        profile_id = expected["tile"]
+        by_lookup = DECISION_INSURANCE_POLICY_BY_PROFILE_ID.get(profile_id)
+        by_getter = get_decision_insurance_policy(profile_id)
+
+        assert isinstance(by_lookup, dict)
+        assert isinstance(by_getter, dict)
+        assert by_lookup == by_getter
+
+        collapse_trigger = by_lookup.get("collapse_trigger")
+        assert isinstance(collapse_trigger, dict)
+        assert collapse_trigger.get("metric") in {"value_gap_pct", "value_gap"}

@@ -166,6 +166,14 @@ CIVIC_PCV_GENERIC_TERMS = {
     "generic",
 }
 
+CIVIC_SCOPE_DEPTH_FLOOR = {
+    "library": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    "courthouse": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    "government_building": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    "community_center": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+    "public_safety": {"structural": 3, "mechanical": 3, "electrical": 3, "plumbing": 3, "finishes": 3},
+}
+
 
 def test_state_required_for_multiplier():
     """City-only handling should follow active location contract: known override/no warning, unknown city/warning."""
@@ -1899,3 +1907,67 @@ def test_civic_profiles_resolve_canonical_di_policy_and_deterministic_contract_p
             "decision_insurance_provenance",
         ):
             assert view_a.get(key) == view_b.get(key), f"Expected deterministic equality for '{key}'"
+
+
+def test_civic_schedule_source_and_scope_depth_invariants():
+    required_trades = {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+
+    for subtype, floors in CIVIC_SCOPE_DEPTH_FLOOR.items():
+        schedule = build_construction_schedule(BuildingType.CIVIC, subtype)
+        assert schedule.get("building_type") == BuildingType.CIVIC.value
+        assert schedule.get("schedule_source") == "subtype"
+        assert schedule.get("subtype") == subtype
+        phases = schedule.get("phases")
+        assert isinstance(phases, list) and phases
+
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.CIVIC,
+            subtype=subtype,
+            square_footage=80_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        scope_items = payload.get("scope_items")
+        assert isinstance(scope_items, list) and scope_items
+
+        by_trade = {
+            str(trade_block.get("trade", "")).strip().lower(): trade_block
+            for trade_block in scope_items
+            if isinstance(trade_block, dict) and isinstance(trade_block.get("trade"), str)
+        }
+        assert required_trades.issubset(by_trade.keys())
+
+        for trade_key, minimum_items in floors.items():
+            trade_block = by_trade[trade_key]
+            systems = trade_block.get("systems")
+            if not isinstance(systems, list):
+                systems = trade_block.get("items")
+            assert isinstance(systems, list)
+            assert len(systems) >= minimum_items
+
+    unknown_schedule = build_construction_schedule(
+        BuildingType.CIVIC,
+        "unknown_civic_variant",
+    )
+    assert unknown_schedule.get("building_type") == BuildingType.CIVIC.value
+    assert unknown_schedule.get("schedule_source") == "building_type"
+    assert unknown_schedule.get("subtype") is None
+    phases = unknown_schedule.get("phases")
+    assert isinstance(phases, list) and phases
+
+
+def test_civic_di_policy_entries_are_available_for_all_profiles():
+    for expected in CIVIC_PROFILE_IDS.values():
+        profile_id = expected["tile_profile"]
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID.get(profile_id)
+        assert isinstance(policy, dict)
+
+        primary_control = policy.get("primary_control_variable")
+        collapse_trigger = policy.get("collapse_trigger")
+        flex_calibration = policy.get("flex_calibration")
+        assert isinstance(primary_control, dict)
+        assert isinstance(collapse_trigger, dict)
+        assert isinstance(flex_calibration, dict)
+
+        assert collapse_trigger.get("metric") in {"value_gap_pct", "value_gap"}
+        assert collapse_trigger.get("operator") in {"<=", "<"}
