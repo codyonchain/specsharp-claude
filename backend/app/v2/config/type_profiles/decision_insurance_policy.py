@@ -174,6 +174,76 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         },
         "flex_calibration": {"tight_max_pct": 1.8, "moderate_max_pct": 4.7, "fallback_pct": 2.1},
     },
+    "civic_library_v1": {
+        "primary_control_variable": {
+            "tile_id": "library_stack_reinforcement_plus_12",
+            "metric_ref": "trade_breakdown.structural",
+            "label": "IC-First Stack Load Drift, Makerspace MEP Variance, and Community Access Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 7.5,
+            "scenario_priority": ["base", "conservative", "ugly", "library_program_drift"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.7, "moderate_max_pct": 4.4, "fallback_pct": 2.0},
+    },
+    "civic_courthouse_v1": {
+        "primary_control_variable": {
+            "tile_id": "courthouse_holding_and_hardening_plus_10",
+            "metric_ref": "trade_breakdown.structural",
+            "label": "IC-First Custody Circulation Integrity, Screening Throughput, and Court Operations Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap",
+            "operator": "<=",
+            "threshold": -2500000.0,
+            "scenario_priority": ["base", "conservative", "ugly", "courthouse_custody_flow_break"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.2, "moderate_max_pct": 3.8, "fallback_pct": 1.4},
+    },
+    "civic_government_building_v1": {
+        "primary_control_variable": {
+            "tile_id": "government_records_vault_plus_11",
+            "metric_ref": "trade_breakdown.structural",
+            "label": "IC-First Records Burden Growth, Public Counter Throughput, and Service Continuity Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 6.0,
+            "scenario_priority": ["base", "conservative", "ugly", "government_constituent_service_shift"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.9, "moderate_max_pct": 5.0, "fallback_pct": 2.2},
+    },
+    "civic_community_center_v1": {
+        "primary_control_variable": {
+            "tile_id": "community_multi_program_fitout_plus_10",
+            "metric_ref": "trade_breakdown.finishes",
+            "label": "IC-First Program Mix Creep, Shared-Use Conflicts, and After-Hours Activation Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 10.0,
+            "scenario_priority": ["base", "conservative", "ugly", "community_shared_use_conflict"],
+        },
+        "flex_calibration": {"tight_max_pct": 2.3, "moderate_max_pct": 5.8, "fallback_pct": 2.6},
+    },
+    "civic_public_safety_v1": {
+        "primary_control_variable": {
+            "tile_id": "public_safety_dispatch_redundancy_plus_12",
+            "metric_ref": "trade_breakdown.electrical",
+            "label": "IC-First Dispatch Resilience, Emergency Power Reliability, and Response Readiness Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap",
+            "operator": "<=",
+            "threshold": -1000000.0,
+            "scenario_priority": ["base", "conservative", "ugly", "public_safety_dispatch_blackstart"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.1, "moderate_max_pct": 3.6, "fallback_pct": 1.5},
+    },
     "multifamily_market_rate_apartments_v1": {
         "primary_control_variable": {
             "tile_id": "structural_carry_proxy_plus_5",

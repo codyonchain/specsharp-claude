@@ -45,6 +45,11 @@ _WAVE1_PROFILE_IDS: Set[str] = {
     "specialty_self_storage_v1",
     "specialty_car_dealership_v1",
     "specialty_broadcast_facility_v1",
+    "civic_library_v1",
+    "civic_courthouse_v1",
+    "civic_government_building_v1",
+    "civic_community_center_v1",
+    "civic_public_safety_v1",
 }
 
 _DEFAULT_DECISION_TABLE_COLUMNS: List[Dict[str, str]] = [
@@ -743,6 +748,10 @@ def build_dealshield_scenario_table(project_id: str, payload: Dict[str, Any], pr
             raise DealShieldResolutionError(f"Tile '{tile_id}' metric_ref missing or invalid")
 
         raw = _resolve_metric_ref(payload, metric_ref)
+        if (raw is _MISSING or not _is_number(raw)) and metric_ref == "revenue_analysis.annual_revenue":
+            # Public-sector profiles can model revenue stress via modifiers.revenue_factor
+            # without emitting annual_revenue directly in the base payload.
+            raw = _resolve_metric_ref(payload, "modifiers.revenue_factor")
         if raw is _MISSING or not _is_number(raw):
             raise DealShieldResolutionError(f"Missing/non-numeric base metric_ref '{metric_ref}' for tile '{tile_id}'")
 
@@ -996,6 +1005,10 @@ def _is_educational_profile(profile_id: Any) -> bool:
     return isinstance(profile_id, str) and profile_id.startswith("educational_")
 
 
+def _is_civic_profile(profile_id: Any) -> bool:
+    return isinstance(profile_id, str) and profile_id.startswith("civic_")
+
+
 def _supports_decision_insurance_profile(profile_id: Any) -> bool:
     return (
         _is_multifamily_profile(profile_id)
@@ -1007,6 +1020,7 @@ def _supports_decision_insurance_profile(profile_id: Any) -> bool:
         or _is_restaurant_profile(profile_id)
         or _is_hospitality_profile(profile_id)
         or _is_specialty_profile(profile_id)
+        or _is_civic_profile(profile_id)
     )
 
 

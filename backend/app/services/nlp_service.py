@@ -244,12 +244,26 @@ class NLPService:
                 }
             },
             'civic': {
-                'keywords': ['government', 'public', 'civic', 'municipal', 'city hall', 'fire station', 'police'],
+                'keywords': [
+                    'government', 'public', 'civic', 'municipal', 'city hall',
+                    'courthouse', 'library', 'community center', 'public safety',
+                    'fire station', 'police station', 'dispatch center'
+                ],
                 'subtypes': {
-                    'public_safety': ['fire station', 'police station', 'ems station', 'emergency services'],
-                    'government_building': ['city hall', 'government building', 'municipal building', 'federal building'],
+                    'public_safety': [
+                        'fire station', 'police station', 'ems station', 'emergency services',
+                        'dispatch center', '911 center', 'public safety facility'
+                    ],
+                    'government_building': [
+                        'city hall', 'government building', 'municipal building', 'federal building',
+                        'county administration building', 'public works building'
+                    ],
                     'courthouse': ['courthouse', 'court building', 'justice center'],
-                    'library': ['library', 'public library', 'community library']
+                    'library': ['library', 'public library', 'community library'],
+                    'community_center': [
+                        'community center', 'community centre', 'recreation center',
+                        'rec center', 'multi purpose center', 'multi-purpose center'
+                    ],
                 }
             },
             'recreation': {
@@ -383,6 +397,90 @@ class NLPService:
             return "class_b"
         return None
 
+    def _resolve_civic_subtype_from_intent(self, text_lower: str) -> Optional[str]:
+        """Resolve high-confidence civic intents before generic pattern routing."""
+        if not isinstance(text_lower, str) or not text_lower.strip():
+            return None
+
+        courthouse_patterns = (
+            r"\bcourthouse\b",
+            r"\bcourt\s+building\b",
+            r"\bjustice\s+center\b",
+            r"\bcourt(?:room|rooms?)\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in courthouse_patterns):
+            return "courthouse"
+
+        public_safety_patterns = (
+            r"\b(fire|police|ems)\s+station\b",
+            r"\bpublic\s+safety\b",
+            r"\bdispatch\s+(?:center|facility|operations?|hub)\b",
+            r"\bemergency\s+(?:services|operations?)\b",
+            r"\b911\s+(?:center|dispatch)\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in public_safety_patterns):
+            broadcast_signals = (
+                "broadcast",
+                "soundstage",
+                "television studio",
+                "radio studio",
+                "production facility",
+            )
+            explicit_public_safety_signals = (
+                "fire station",
+                "police station",
+                "ems station",
+                "public safety",
+                "911",
+                "emergency services",
+                "dispatch center",
+            )
+            if any(signal in text_lower for signal in broadcast_signals) and not any(
+                signal in text_lower for signal in explicit_public_safety_signals
+            ):
+                return None
+            return "public_safety"
+
+        library_patterns = (
+            r"\bpublic\s+library\b",
+            r"\bcommunity\s+library\b",
+            r"\blibrary\b",
+            r"\blearning\s+commons\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in library_patterns):
+            return "library"
+
+        community_center_patterns = (
+            r"\bcommunity\s+cent(?:er|re)\b",
+            r"\brec(?:reation)?\s+cent(?:er|re)\b",
+            r"\bmulti[-\s]?purpose\s+cent(?:er|re)\b",
+            r"\byouth\s+cent(?:er|re)\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in community_center_patterns):
+            return "community_center"
+
+        government_patterns = (
+            r"\bcity\s+hall\b",
+            r"\bgovernment\s+building\b",
+            r"\bmunicipal\s+building\b",
+            r"\bfederal\s+building\b",
+            r"\bcounty\s+administration\b",
+            r"\bpublic\s+works\s+building\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in government_patterns):
+            return "government_building"
+
+        generic_civic_patterns = (
+            r"\bcivic\b",
+            r"\bmunicipal\b",
+            r"\bgovernment\b",
+            r"\bpublic\s+facility\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in generic_civic_patterns):
+            return None
+
+        return None
+
     def detect_building_type_with_subtype(self, text: str) -> Tuple[str, Optional[str], str]:
         """Detect building type and subtype using config-driven patterns"""
         text_lower = text.lower()
@@ -442,6 +540,17 @@ class NLPService:
         ]
         if any(keyword in text_lower for keyword in mob_keywords):
             return 'healthcare', 'medical_office_building', classification
+
+        civic_subtype = self._resolve_civic_subtype_from_intent(text_lower)
+        if civic_subtype is not None:
+            return 'civic', civic_subtype, classification
+        if (
+            re.search(r"\bcivic\b", text_lower)
+            or re.search(r"\bmunicipal\b", text_lower)
+            or re.search(r"\bgovernment\b", text_lower)
+            or re.search(r"\bpublic\s+facility\b", text_lower)
+        ):
+            return 'civic', None, classification
 
         hospitality_intent_pattern = re.compile(
             r"\b(hotel|motel|inn|lodging|hospitality)\b",
@@ -540,7 +649,7 @@ class NLPService:
             for keyword in patterns['keywords']:
                 if keyword in text_lower:
                     # Found building type, get default subtype
-                    if building_type in {'office', 'retail', 'educational'}:
+                    if building_type in {'office', 'retail', 'educational', 'civic'}:
                         return building_type, None, classification
                     subtype = self._get_default_subtype(building_type)
                     return building_type, subtype, classification

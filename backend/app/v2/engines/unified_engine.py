@@ -1475,6 +1475,11 @@ class UnifiedEngine:
                 "educational_high_school_v1",
                 "educational_university_v1",
                 "educational_community_college_v1",
+                "civic_library_v1",
+                "civic_courthouse_v1",
+                "civic_government_building_v1",
+                "civic_community_center_v1",
+                "civic_public_safety_v1",
             }:
                 from app.v2.services.dealshield_scenarios import (
                     build_dealshield_scenarios,
