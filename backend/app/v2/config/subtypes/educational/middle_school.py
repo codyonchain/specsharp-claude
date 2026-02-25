@@ -67,6 +67,8 @@ CONFIG = (
             "Chicago": 1.18,
             "Miami": 1.10,
         },
+        dealshield_tile_profile="educational_middle_school_v1",
+        scope_items_profile="educational_middle_school_structural_v1",
         special_features={
             "gymnasium": 40,
             "cafeteria": 30,

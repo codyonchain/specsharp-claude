@@ -67,6 +67,8 @@ CONFIG = (
             "Chicago": 1.15,
             "Miami": 1.08,
         },
+        dealshield_tile_profile="educational_community_college_v1",
+        scope_items_profile="educational_community_college_structural_v1",
         special_features={
             "vocational_lab": 40,
             "computer_lab": 25,

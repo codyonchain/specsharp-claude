@@ -77,6 +77,8 @@ CONFIG = (
             "Chicago": 1.22,
             "Miami": 1.15,
         },
+        dealshield_tile_profile="educational_university_v1",
+        scope_items_profile="educational_university_structural_v1",
         special_features={
             "lecture_hall": 45,
             "research_lab": 75,

@@ -67,6 +67,8 @@ CONFIG = (
             "Chicago": 1.20,
             "Miami": 1.12,
         },
+        dealshield_tile_profile="educational_high_school_v1",
+        scope_items_profile="educational_high_school_structural_v1",
         special_features={
             "stadium": 60,
             "field_house": 50,
