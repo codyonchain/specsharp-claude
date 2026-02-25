@@ -581,6 +581,85 @@ const RECREATION_POLICY_CONTRACT_CASES = [
   },
 ] as const;
 
+const PARKING_POLICY_CONTRACT_CASES = [
+  {
+    subtype: "surface_parking",
+    profileId: "parking_surface_parking_v1",
+    scopeProfileId: "parking_surface_parking_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel:
+      "IC-First Surface Stall Yield + Site-Lighting Reliability +8%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 6.5,
+    observedValue: 5.8,
+    flexBeforeBreakPct: 1.9,
+    expectedFlexLabel: "1.90% (Structurally Tight)",
+    baseDscr: 1.33,
+    stressedDscr: 1.11,
+  },
+  {
+    subtype: "parking_garage",
+    profileId: "parking_parking_garage_v1",
+    scopeProfileId: "parking_parking_garage_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+    primaryControlLabel:
+      "IC-First Structural Bay Efficiency + Ramp Throughput +10%",
+    breakScenarioLabel: "Ugly",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: 0.0,
+    observedValue: -140000,
+    flexBeforeBreakPct: 1.6,
+    expectedFlexLabel: "1.60% (Structurally Tight)",
+    baseDscr: 1.29,
+    stressedDscr: 1.04,
+  },
+  {
+    subtype: "underground_parking",
+    profileId: "parking_underground_parking_v1",
+    scopeProfileId: "parking_underground_parking_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+    primaryControlLabel:
+      "IC-First Waterproofing + Ventilation System Stability +11%",
+    breakScenarioLabel: "Ugly",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: 25000.0,
+    observedValue: 12000,
+    flexBeforeBreakPct: 1.5,
+    expectedFlexLabel: "1.50% (Structurally Tight)",
+    baseDscr: 1.31,
+    stressedDscr: 1.06,
+  },
+  {
+    subtype: "automated_parking",
+    profileId: "parking_automated_parking_v1",
+    scopeProfileId: "parking_automated_parking_structural_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+    primaryControlLabel:
+      "IC-First Retrieval Throughput + Redundancy Uptime Control +9%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 5.0,
+    observedValue: 6.3,
+    flexBeforeBreakPct: 4.8,
+    expectedFlexLabel: "4.80% (Moderate)",
+    baseDscr: 1.45,
+    stressedDscr: 1.22,
+  },
+] as const;
+
 const MIXED_USE_POLICY_CONTRACT_CASES = [
   {
     subtype: "office_residential",
@@ -2750,6 +2829,117 @@ describe("DealShieldView", () => {
             `Break occurs in ${testCase.breakScenarioLabel}: value gap crosses threshold.`
           )
         ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("$");
+          })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return (
+              text.includes("Threshold:") &&
+              text.includes(testCase.breakOperator) &&
+              text.includes("$")
+            );
+          })
+        ).toBeInTheDocument();
+      }
+
+      expect(screen.getByText("Fastest-Change")).toBeInTheDocument();
+      expect(screen.getByText("Most Likely Wrong")).toBeInTheDocument();
+      expect(screen.getByText("Question Bank")).toBeInTheDocument();
+      expect(screen.getByText("Red Flags")).toBeInTheDocument();
+      expect(
+        screen.getAllByText(`${testCase.subtype} downside concentration is under-modeled.`).length
+      ).toBeGreaterThan(0);
+      expect(
+        screen.queryByText("Decision Insurance unavailable for this profile/run.")
+      ).not.toBeInTheDocument();
+    }
+  });
+
+  it("renders parking parity with canonical decision contract fields, DI metric semantics, and subtype-authored content anchors for all four subtypes", () => {
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_parking_policy_contract_0"
+        data={buildSubtypePolicyPayload(PARKING_POLICY_CONTRACT_CASES[0]) as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    for (const testCase of PARKING_POLICY_CONTRACT_CASES) {
+      rerender(
+        <DealShieldView
+          projectId={`proj_${testCase.profileId}`}
+          data={buildSubtypePolicyPayload(testCase) as any}
+          loading={false}
+          error={null}
+        />
+      );
+
+      expect(screen.getByText("Decision Status")).toBeInTheDocument();
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      expect(screen.getByText(DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
+      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText("First Break Condition")).toBeInTheDocument();
+      expect(screen.getByText("Flex Before Break %")).toBeInTheDocument();
+      expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
+      expect(screen.getByText(testCase.baseDscr.toFixed(2))).toBeInTheDocument();
+      expect(
+        screen.getByText("DSCR and Yield reflect the underwriting/debt terms in this run — see Provenance.")
+      ).toBeInTheDocument();
+
+      const decisionPolicyMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return (
+          text.includes("Decision Policy:") &&
+          text.includes(`Status: ${testCase.decisionStatus}`) &&
+          text.includes(`Reason: ${testCase.decisionReasonCode}`) &&
+          text.includes("Source: dealshield_policy_v1")
+        );
+      });
+      expect(decisionPolicyMatches.length).toBeGreaterThan(0);
+
+      if (testCase.breakMetric === "value_gap_pct") {
+        expect(
+          screen.getByText(
+            `Break occurs in ${testCase.breakScenarioLabel}: value-gap percentage crosses threshold.`
+          )
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("%") && !text.includes("$");
+          })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return (
+              text.includes("Threshold:") &&
+              text.includes(testCase.breakOperator) &&
+              text.includes("%") &&
+              !text.includes("$")
+            );
+          })
+        ).toBeInTheDocument();
+      } else {
+        const expectedSummary =
+          testCase.threshold === 0
+            ? `Break occurs in ${testCase.breakScenarioLabel}: value gap turns negative.`
+            : `Break occurs in ${testCase.breakScenarioLabel}: value gap crosses threshold.`;
+        expect(screen.getByText(expectedSummary)).toBeInTheDocument();
         expect(
           screen.getByText((_, element) => {
             if (element?.tagName.toLowerCase() !== "p") return false;

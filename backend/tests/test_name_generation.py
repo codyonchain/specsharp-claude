@@ -640,6 +640,57 @@ class TestProjectNameGeneration:
     @pytest.mark.parametrize(
         "description,expected_subtype,expected_name",
         [
+            ("new standalone parking garage in Nashville, TN", "parking_garage", "Parking Garage in Nashville"),
+            ("automated parking structure in Nashville, TN", "automated_parking", "Automated Parking in Nashville"),
+            ("surface parking lot expansion in Nashville, TN", "surface_parking", "Surface Parking in Nashville"),
+        ],
+    )
+    def test_parking_primary_intent_routes_to_parking_subtypes(
+        self,
+        description,
+        expected_subtype,
+        expected_name,
+    ):
+        parsed, name = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "parking"
+        assert parsed["subtype"] == expected_subtype
+        assert parsed["building_subtype"] == expected_subtype
+        assert parsed["detection_source"] == "nlp_service.parking_primary_intent"
+        assert name == expected_name
+
+    def test_parking_unknown_subtype_is_explicit_when_only_generic_facility_signal_exists(self):
+        parsed, name = self._parse_and_name("new standalone parking facility in Nashville, TN")
+
+        assert parsed["building_type"] == "parking"
+        assert parsed["subtype"] is None
+        assert parsed["building_subtype"] is None
+        assert parsed["detection_conflict_resolution"] == "parking_primary_standalone"
+        assert name == "Parking in Nashville"
+
+    @pytest.mark.parametrize(
+        "description,expected_type,expected_subtype",
+        [
+            ("luxury apartments with parking garage in Nashville, TN", "multifamily", "luxury_apartments"),
+            ("hotel with underground parking in Nashville, TN", "hospitality", "limited_service_hotel"),
+            ("office tower with structured parking in Nashville, TN", "office", None),
+        ],
+    )
+    def test_parking_mentions_do_not_override_non_parking_primary_intent(
+        self,
+        description,
+        expected_type,
+        expected_subtype,
+    ):
+        parsed, _ = self._parse_and_name(description)
+
+        assert parsed["building_type"] == expected_type
+        assert parsed["subtype"] == expected_subtype
+        assert parsed["building_type"] != "parking"
+
+    @pytest.mark.parametrize(
+        "description,expected_subtype,expected_name",
+        [
             (
                 "New 180000 sf mixed-use office and residential tower in Nashville, TN",
                 "office_residential",

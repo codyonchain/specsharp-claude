@@ -14,6 +14,7 @@ import {
   detectHospitalityFeatureIdsFromDescription,
   detectMixedUseFeatureIdsFromDescription,
   detectOfficeFeatureIdsFromDescription,
+  detectParkingFeatureIdsFromDescription,
   detectRecreationFeatureIdsFromDescription,
   detectRecreationSubtypeFromDescription,
   detectRetailFeatureIdsFromDescription,
@@ -27,10 +28,12 @@ import {
 import {
   MIXED_USE_COMPONENTS,
   appendMixedUseSplitHintToDescription,
+  detectParkingSubtypeFromDescription,
   detectMixedUseIntent,
   detectMixedUseSubtypeFromDescription,
   formatMixedUseSplitValue,
   normalizeMixedUseSubtypeAlias,
+  resolveParkingIntentFromDescription,
   resolveMixedUseSplitContract,
   type MixedUseComponent,
   type MixedUseSplitContract,
@@ -240,6 +243,10 @@ export const NewProject: React.FC = () => {
     mixedUseSubtypeDetection.subtype
   );
   const isMixedUseIntentDetected = useMemo(() => detectMixedUseIntent(description), [description]);
+  const parkingIntentResolution = useMemo(
+    () => resolveParkingIntentFromDescription(description),
+    [description]
+  );
   
   // NLP detection state
   const [detectedFeatures, setDetectedFeatures] = useState({
@@ -254,10 +261,13 @@ export const NewProject: React.FC = () => {
     const cityKeywordDetected = /(nashville|franklin|brentwood|murfreesboro|manchester|nashua|concord|bedford|salem)/i.test(input);
     setDetectedFeatures({
       size: /\d+[\s,]*(?:sf|square|feet|unit|key|bed|room)/i.test(description),
-      type: detectBuildingTypeInDescription(input) || isMixedUseIntentDetected,
+      type:
+        detectBuildingTypeInDescription(input) ||
+        isMixedUseIntentDetected ||
+        parkingIntentResolution.shouldRouteToParking,
       location: Boolean(liveDetectedLocation || cityKeywordDetected)
     });
-  }, [description, isMixedUseIntentDetected, liveDetectedLocation]);
+  }, [description, isMixedUseIntentDetected, liveDetectedLocation, parkingIntentResolution.shouldRouteToParking]);
   
   // Example prompts covering all 13 building types
   const examplePrompts = [
@@ -395,6 +405,7 @@ export const NewProject: React.FC = () => {
       buildingType === 'specialty' ||
       buildingType === 'civic' ||
       buildingType === 'recreation' ||
+      buildingType === 'parking' ||
       buildingType === 'mixed_use'
     ) {
       return getAvailableSpecialFeatures(buildingType, subtype);
@@ -524,6 +535,9 @@ export const NewProject: React.FC = () => {
     for (const featureId of detectMixedUseFeatureIdsFromDescription(desc)) {
       detectedFeatures.add(featureId);
     }
+    for (const featureId of detectParkingFeatureIdsFromDescription(desc)) {
+      detectedFeatures.add(featureId);
+    }
     
     // Detect finish level (luxury/high-end terms map into premium)
     let detectedFinish: 'standard' | 'premium' = 'standard';
@@ -638,33 +652,38 @@ export const NewProject: React.FC = () => {
     setLocationAutoFilled(true);
   }, [liveDetectedLocation, locationTouched, locationInput, locationAutoFilled]);
   const parsedSubtypeRaw = parsedInput?.subtype || parsedInput?.building_subtype;
+  const parsedBuildingType = parsedInput?.building_type;
   const parsedSubtype =
-    parsedInput?.building_type === 'mixed_use'
+    parsedBuildingType === 'mixed_use'
       ? normalizeMixedUseSubtypeAlias(parsedSubtypeRaw)
       : parsedSubtypeRaw;
   const subtypeFromCues =
-    parsedInput?.building_type === 'mixed_use' && !parsedSubtype
+    parsedBuildingType === 'mixed_use' && !parsedSubtype
       ? mixedUseSubtypeFromDescription
-    : parsedInput?.building_type === 'educational' && !parsedSubtype
+    : parsedBuildingType === 'educational' && !parsedSubtype
       ? detectEducationalSubtypeFromDescription(description)
-      : parsedInput?.building_type === 'civic' && !parsedSubtype
+    : parsedBuildingType === 'civic' && !parsedSubtype
         ? detectCivicSubtypeFromDescription(description)
-      : parsedInput?.building_type === 'recreation' && !parsedSubtype
+      : parsedBuildingType === 'recreation' && !parsedSubtype
         ? detectRecreationSubtypeFromDescription(description)
+      : parsedBuildingType === 'parking' && !parsedSubtype
+        ? detectParkingSubtypeFromDescription(description)
       : undefined;
   const currentSubtypeRaw = parsedSubtype || subtypeFromCues;
   const currentSubtype =
-    parsedInput?.building_type === 'mixed_use'
+    parsedBuildingType === 'mixed_use'
       ? normalizeMixedUseSubtypeAlias(currentSubtypeRaw)
       : currentSubtypeRaw;
   const isMixedUseProject =
-    parsedInput?.building_type === 'mixed_use' || (!parsedInput && isMixedUseIntentDetected);
+    parsedBuildingType === 'mixed_use' || (!parsedInput && isMixedUseIntentDetected);
+  const effectiveBuildingType =
+    parsedBuildingType || (parkingIntentResolution.shouldRouteToParking ? 'parking' : undefined);
   const mixedUseSubtypeForSplit =
     parsedInput?.building_type === 'mixed_use'
       ? normalizeMixedUseSubtypeAlias(currentSubtype) || mixedUseSubtypeFromDescription
       : mixedUseSubtypeFromDescription;
   const availableSpecialFeatures = parsedInput
-    ? getAvailableFeatures(parsedInput.building_type, currentSubtype)
+    ? getAvailableFeatures(effectiveBuildingType || '', currentSubtype)
     : [];
   const applicableSpecialFeatures = availableSpecialFeatures;
   const effectiveMixedUseSplitContract = useMemo(() => {
@@ -866,6 +885,9 @@ export const NewProject: React.FC = () => {
       const parsed = parseDescription(description);
       const parsedBuildingType = analysis.parsed_input?.building_type;
       const parsedSubtype = analysis.parsed_input?.subtype || analysis.parsed_input?.building_subtype;
+      const parkingIntent = resolveParkingIntentFromDescription(description);
+      const effectiveBuildingType =
+        parsedBuildingType || (parkingIntent.shouldRouteToParking ? 'parking' : undefined);
       const subtypeFromDescription =
         parsedBuildingType === 'mixed_use' && !parsedSubtype
           ? normalizeMixedUseSubtypeAlias(detectMixedUseSubtypeFromDescription(description).subtype)
@@ -875,13 +897,15 @@ export const NewProject: React.FC = () => {
             ? detectCivicSubtypeFromDescription(description)
           : parsedBuildingType === 'recreation' && !parsedSubtype
             ? detectRecreationSubtypeFromDescription(description)
+          : parsedBuildingType === 'parking' && !parsedSubtype
+            ? parkingIntent.subtype
           : undefined;
       const resolvedSubtype =
-        parsedBuildingType === 'mixed_use'
+        effectiveBuildingType === 'mixed_use'
           ? normalizeMixedUseSubtypeAlias(parsedSubtype || subtypeFromDescription)
           : parsedSubtype || subtypeFromDescription;
       const allowedFeatureIds = new Set(
-        getAvailableFeatures(parsedBuildingType || '', resolvedSubtype).map((feature) => feature.id)
+        getAvailableFeatures(effectiveBuildingType || '', resolvedSubtype).map((feature) => feature.id)
       );
       const parsedSpecialFeatures = parsed.specialFeatures.filter((featureId) =>
         allowedFeatureIds.has(featureId)

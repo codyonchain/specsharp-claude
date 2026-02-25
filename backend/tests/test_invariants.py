@@ -28,12 +28,14 @@ from app.v2.config.type_profiles.dealshield_content import office as office_cont
 from app.v2.config.type_profiles.dealshield_content import specialty as specialty_content
 from app.v2.config.type_profiles.dealshield_content import civic as civic_content
 from app.v2.config.type_profiles.dealshield_content import mixed_use as mixed_use_content
+from app.v2.config.type_profiles.dealshield_content import parking as parking_content
 from app.v2.config.type_profiles.dealshield_content import recreation as recreation_content
 from app.v2.config.type_profiles.scope_items import healthcare as healthcare_scope_profiles
 from app.v2.config.type_profiles.scope_items import office as office_scope_profiles
 from app.v2.config.type_profiles.scope_items import specialty as specialty_scope_profiles
 from app.v2.config.type_profiles.scope_items import civic as civic_scope_profiles
 from app.v2.config.type_profiles.scope_items import mixed_use as mixed_use_scope_profiles
+from app.v2.config.type_profiles.scope_items import parking as parking_scope_profiles
 from app.v2.config.type_profiles.scope_items import recreation as recreation_scope_profiles
 from app.v2.services.dealshield_service import build_dealshield_view_model
 
@@ -210,6 +212,40 @@ RECREATION_SCOPE_DEPTH_FLOOR = {
 }
 
 RECREATION_PCV_GENERIC_TERMS = {
+    "cost control",
+    "revenue control",
+    "margin control",
+    "primary control variable",
+    "generic",
+}
+
+PARKING_PROFILE_IDS = {
+    "surface_parking": {
+        "tile_profile": "parking_surface_parking_v1",
+        "scope_profile": "parking_surface_parking_structural_v1",
+    },
+    "parking_garage": {
+        "tile_profile": "parking_parking_garage_v1",
+        "scope_profile": "parking_parking_garage_structural_v1",
+    },
+    "underground_parking": {
+        "tile_profile": "parking_underground_parking_v1",
+        "scope_profile": "parking_underground_parking_structural_v1",
+    },
+    "automated_parking": {
+        "tile_profile": "parking_automated_parking_v1",
+        "scope_profile": "parking_automated_parking_structural_v1",
+    },
+}
+
+PARKING_SCOPE_DEPTH_FLOOR = {
+    "surface_parking": {"structural": 4, "mechanical": 3, "electrical": 4, "plumbing": 2, "finishes": 2},
+    "parking_garage": {"structural": 5, "mechanical": 4, "electrical": 5, "plumbing": 2, "finishes": 3},
+    "underground_parking": {"structural": 6, "mechanical": 5, "electrical": 5, "plumbing": 3, "finishes": 3},
+    "automated_parking": {"structural": 5, "mechanical": 5, "electrical": 6, "plumbing": 2, "finishes": 3},
+}
+
+PARKING_PCV_GENERIC_TERMS = {
     "cost control",
     "revenue control",
     "margin control",
@@ -2338,6 +2374,295 @@ def test_recreation_di_policy_entries_are_available_for_all_profiles():
 
         assert collapse_trigger.get("metric") in {"value_gap_pct", "value_gap"}
         assert collapse_trigger.get("operator") in {"<=", "<"}
+
+
+def test_parking_profiles_are_wired_and_content_maps_to_tiles():
+    first_mlw_texts = []
+
+    for subtype, expected in PARKING_PROFILE_IDS.items():
+        cfg = get_building_config(BuildingType.PARKING, subtype)
+        assert cfg is not None
+        assert cfg.dealshield_tile_profile == expected["tile_profile"]
+        assert cfg.scope_items_profile == expected["scope_profile"]
+
+        profile = get_dealshield_profile(expected["tile_profile"])
+        assert profile.get("profile_id") == expected["tile_profile"]
+        tile_ids = {
+            tile.get("tile_id")
+            for tile in profile.get("tiles", [])
+            if isinstance(tile, dict) and isinstance(tile.get("tile_id"), str)
+        }
+        assert tile_ids
+
+        content = parking_content.DEALSHIELD_CONTENT_PROFILES[expected["tile_profile"]]
+        drivers = content.get("fastest_change", {}).get("drivers")
+        assert isinstance(drivers, list) and len(drivers) == 3
+        for driver in drivers:
+            assert isinstance(driver, dict)
+            assert driver.get("tile_id") in tile_ids
+
+        mlw = content.get("most_likely_wrong")
+        assert isinstance(mlw, list) and len(mlw) >= 3
+        first_mlw_texts.append(mlw[0].get("text"))
+        for entry in mlw:
+            assert isinstance(entry, dict)
+            assert entry.get("driver_tile_id") in tile_ids
+
+        question_bank = content.get("question_bank")
+        assert isinstance(question_bank, list) and len(question_bank) == 3
+        for question_entry in question_bank:
+            assert isinstance(question_entry, dict)
+            assert question_entry.get("driver_tile_id") in tile_ids
+
+    assert len(first_mlw_texts) == len(set(first_mlw_texts))
+
+
+def test_parking_scope_profiles_keep_depth_and_allocation_integrity():
+    for subtype, expected in PARKING_PROFILE_IDS.items():
+        profile_id = expected["scope_profile"]
+        cfg = get_building_config(BuildingType.PARKING, subtype)
+        assert cfg is not None
+        assert cfg.scope_items_profile == profile_id
+        assert parking_scope_profiles.SCOPE_ITEM_DEFAULTS[subtype] == profile_id
+
+        profile = parking_scope_profiles.SCOPE_ITEM_PROFILES[profile_id]
+        trade_profiles = profile.get("trade_profiles")
+        assert isinstance(trade_profiles, list) and len(trade_profiles) == 5
+
+        by_trade = {
+            trade.get("trade_key"): trade
+            for trade in trade_profiles
+            if isinstance(trade, dict) and isinstance(trade.get("trade_key"), str)
+        }
+        assert set(by_trade.keys()) == {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+
+        for trade_key, minimum in PARKING_SCOPE_DEPTH_FLOOR[subtype].items():
+            items = by_trade[trade_key].get("items")
+            assert isinstance(items, list)
+            assert len(items) >= minimum
+            total_share = sum(float(item.get("allocation", {}).get("share", 0.0)) for item in items)
+            assert math.isclose(total_share, 1.0, rel_tol=1e-9, abs_tol=1e-9), (
+                f"{profile_id}::{trade_key} share total expected 1.0, got {total_share}"
+            )
+
+
+def test_parking_no_clone_invariants_across_tiles_content_and_scope():
+    unique_tile_ids = set()
+    unique_row_ids = set()
+    scope_signatures = set()
+
+    for expected in PARKING_PROFILE_IDS.values():
+        tile_profile = get_dealshield_profile(expected["tile_profile"])
+        tile_ids = {
+            tile.get("tile_id")
+            for tile in tile_profile.get("tiles", [])
+            if isinstance(tile, dict) and isinstance(tile.get("tile_id"), str)
+        }
+        subtype_tile_ids = tile_ids - {"cost_plus_10", "revenue_minus_10"}
+        assert len(subtype_tile_ids) == 1
+        unique_tile_ids.update(subtype_tile_ids)
+
+        subtype_rows = {
+            row.get("row_id")
+            for row in tile_profile.get("derived_rows", [])
+            if isinstance(row, dict) and isinstance(row.get("row_id"), str)
+        } - {"conservative", "ugly"}
+        assert len(subtype_rows) == 1
+        unique_row_ids.update(subtype_rows)
+
+        scope_profile = parking_scope_profiles.SCOPE_ITEM_PROFILES[expected["scope_profile"]]
+        signature = tuple(
+            (
+                trade.get("trade_key"),
+                tuple(item.get("key") for item in trade.get("items", []) if isinstance(item, dict)),
+            )
+            for trade in scope_profile.get("trade_profiles", [])
+            if isinstance(trade, dict)
+        )
+        scope_signatures.add(signature)
+
+    assert len(unique_tile_ids) == len(PARKING_PROFILE_IDS)
+    assert len(unique_row_ids) == len(PARKING_PROFILE_IDS)
+    assert len(scope_signatures) == len(PARKING_PROFILE_IDS)
+
+
+def test_parking_runtime_scope_depth_floor_and_trade_reconciliation():
+    for subtype, expected in PARKING_SCOPE_DEPTH_FLOOR.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.PARKING,
+            subtype=subtype,
+            square_footage=110_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        scope_items = payload.get("scope_items")
+        assert isinstance(scope_items, list) and scope_items
+        by_trade = {
+            str(trade.get("trade") or "").strip().lower(): trade
+            for trade in scope_items
+            if isinstance(trade, dict)
+        }
+        assert set(by_trade.keys()) == {"structural", "mechanical", "electrical", "plumbing", "finishes"}
+
+        trade_breakdown = payload.get("trade_breakdown") or {}
+        for trade_key, minimum in expected.items():
+            systems = by_trade[trade_key].get("systems")
+            if not isinstance(systems, list):
+                systems = by_trade[trade_key].get("items")
+            assert isinstance(systems, list)
+            assert len(systems) >= minimum
+            systems_total = sum(float(system.get("total_cost", 0.0) or 0.0) for system in systems)
+            assert systems_total == pytest.approx(float(trade_breakdown.get(trade_key, 0.0) or 0.0), rel=0, abs=1e-6)
+
+
+def test_parking_di_policy_labels_are_ic_first_and_non_generic():
+    labels = []
+    for expected in PARKING_PROFILE_IDS.values():
+        profile_id = expected["tile_profile"]
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+        primary_control = policy.get("primary_control_variable", {})
+        label = primary_control.get("label")
+        assert isinstance(label, str) and label.strip()
+        normalized_label = label.strip().lower()
+        assert normalized_label.startswith("ic-first ")
+        for generic_term in PARKING_PCV_GENERIC_TERMS:
+            assert generic_term not in normalized_label
+        labels.append(normalized_label)
+
+    assert len(labels) == len(set(labels))
+
+
+def test_parking_policy_collapse_metrics_are_mixed_and_semantically_wired():
+    collapse_metric_families = set()
+
+    for expected in PARKING_PROFILE_IDS.values():
+        profile_id = expected["tile_profile"]
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+        primary_control = policy.get("primary_control_variable")
+        collapse_trigger = policy.get("collapse_trigger")
+        flex_calibration = policy.get("flex_calibration")
+
+        assert isinstance(primary_control, dict)
+        assert isinstance(collapse_trigger, dict)
+        assert isinstance(flex_calibration, dict)
+
+        profile = get_dealshield_profile(profile_id)
+        tile_map = {
+            tile.get("tile_id"): tile
+            for tile in profile.get("tiles", [])
+            if isinstance(tile, dict) and isinstance(tile.get("tile_id"), str)
+        }
+        tile_id = primary_control.get("tile_id")
+        assert tile_id in tile_map
+        assert primary_control.get("metric_ref") == tile_map[tile_id].get("metric_ref")
+
+        metric = collapse_trigger.get("metric")
+        operator = collapse_trigger.get("operator")
+        threshold = collapse_trigger.get("threshold")
+        scenario_priority = collapse_trigger.get("scenario_priority")
+
+        assert metric in {"value_gap_pct", "value_gap"}
+        assert operator in {"<=", "<"}
+        assert isinstance(threshold, (int, float))
+        assert isinstance(scenario_priority, list) and len(scenario_priority) == 4
+        assert len(set(scenario_priority)) == 4
+        assert scenario_priority[0] == "base"
+        assert {"base", "conservative", "ugly"}.issubset(set(scenario_priority))
+
+        row_ids = {
+            row.get("row_id")
+            for row in profile.get("derived_rows", [])
+            if isinstance(row, dict) and isinstance(row.get("row_id"), str)
+        }
+        subtype_rows = [
+            scenario_id for scenario_id in scenario_priority
+            if scenario_id not in {"base", "conservative", "ugly"}
+        ]
+        assert len(subtype_rows) == 1
+        assert subtype_rows[0] in row_ids
+
+        tight = float(flex_calibration.get("tight_max_pct"))
+        moderate = float(flex_calibration.get("moderate_max_pct"))
+        fallback = float(flex_calibration.get("fallback_pct"))
+        assert tight <= moderate
+        assert fallback >= 0.0
+
+        collapse_metric_families.add(metric)
+
+    assert collapse_metric_families == {"value_gap_pct", "value_gap"}
+
+
+def test_parking_profiles_resolve_canonical_di_policy_and_deterministic_contract_provenance():
+    for subtype, expected in PARKING_PROFILE_IDS.items():
+        profile_id = expected["tile_profile"]
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID.get(profile_id)
+        assert isinstance(policy, dict)
+
+        kwargs = dict(
+            building_type=BuildingType.PARKING,
+            subtype=subtype,
+            square_footage=110_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        payload_a = unified_engine.calculate_project(**kwargs)
+        payload_b = unified_engine.calculate_project(**kwargs)
+        profile = get_dealshield_profile(profile_id)
+
+        view_a = build_dealshield_view_model(
+            project_id=f"parking-invariant-a-{subtype}",
+            payload=payload_a,
+            profile=profile,
+        )
+        view_b = build_dealshield_view_model(
+            project_id=f"parking-invariant-b-{subtype}",
+            payload=payload_b,
+            profile=profile,
+        )
+
+        di_provenance = view_a.get("decision_insurance_provenance")
+        assert isinstance(di_provenance, dict)
+        policy_block = di_provenance.get("decision_insurance_policy")
+        assert isinstance(policy_block, dict)
+        assert policy_block.get("status") == "available"
+        assert policy_block.get("policy_id") == DECISION_INSURANCE_POLICY_ID
+        assert policy_block.get("profile_id") == profile_id
+
+        status_provenance = view_a.get("decision_status_provenance")
+        assert isinstance(status_provenance, dict)
+        assert isinstance(status_provenance.get("status_source"), str)
+
+        for key in (
+            "decision_status",
+            "decision_reason_code",
+            "first_break_condition",
+            "flex_before_break_pct",
+            "flex_before_break_band",
+            "decision_status_provenance",
+            "decision_insurance_provenance",
+        ):
+            assert view_a.get(key) == view_b.get(key), f"Expected deterministic equality for '{key}'"
+
+
+def test_parking_schedule_source_and_unknown_fallback_invariants():
+    for subtype in PARKING_PROFILE_IDS.keys():
+        schedule = build_construction_schedule(BuildingType.PARKING, subtype)
+        assert schedule.get("building_type") == BuildingType.PARKING.value
+        assert schedule.get("schedule_source") == "subtype"
+        assert schedule.get("subtype") == subtype
+        phases = schedule.get("phases")
+        assert isinstance(phases, list) and phases
+
+    unknown_schedule = build_construction_schedule(
+        BuildingType.PARKING,
+        "unknown_parking_variant",
+    )
+    industrial_default = build_construction_schedule(BuildingType.INDUSTRIAL)
+    assert unknown_schedule.get("building_type") == BuildingType.PARKING.value
+    assert unknown_schedule.get("schedule_source") == "building_type"
+    assert unknown_schedule.get("subtype") is None
+    assert unknown_schedule.get("total_months") == industrial_default.get("total_months")
+    assert unknown_schedule.get("phases") == industrial_default.get("phases")
 
 
 def test_mixed_use_profiles_are_wired_and_content_maps_to_tiles():

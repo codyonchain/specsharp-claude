@@ -285,6 +285,33 @@ const RECREATION_POLICY_CASES = [
   },
 ] as const;
 
+const PARKING_POLICY_CASES = [
+  {
+    subtype: "surface_parking",
+    profileId: "parking_surface_parking_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+  },
+  {
+    subtype: "parking_garage",
+    profileId: "parking_parking_garage_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+  },
+  {
+    subtype: "underground_parking",
+    profileId: "parking_underground_parking_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+  },
+  {
+    subtype: "automated_parking",
+    profileId: "parking_automated_parking_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+  },
+] as const;
+
 const MIXED_USE_POLICY_CASES = [
   {
     subtype: "office_residential",
@@ -1220,6 +1247,59 @@ describe("ExecutiveViewComplete", () => {
           <ExecutiveViewComplete
             project={buildCrossTypeProject(
               "recreation",
+              testCase.subtype,
+              testCase.profileId
+            )}
+            dealShieldData={buildCrossTypeDealShieldViewModel(
+              testCase.profileId,
+              testCase.decisionStatus,
+              testCase.decisionReasonCode
+            ) as any}
+          />
+        </MemoryRouter>
+      );
+
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      const policyLineMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return (
+          text.includes("Policy source: dealshield_policy_v1") &&
+          text.includes("decision_insurance_subtype_policy_v1") &&
+          text.includes(`reason: ${testCase.decisionReasonCode}`)
+        );
+      });
+      expect(policyLineMatches.length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: "Scenario" })).toBeInTheDocument();
+    }
+  });
+
+  it("keeps canonical decision status/reason/provenance parity for all four parking subtypes with policy-source consistency", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject(
+            "parking",
+            PARKING_POLICY_CASES[0].subtype,
+            PARKING_POLICY_CASES[0].profileId
+          )}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            PARKING_POLICY_CASES[0].profileId,
+            PARKING_POLICY_CASES[0].decisionStatus,
+            PARKING_POLICY_CASES[0].decisionReasonCode
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    for (const testCase of PARKING_POLICY_CASES) {
+      rerender(
+        <MemoryRouter>
+          <ExecutiveViewComplete
+            project={buildCrossTypeProject(
+              "parking",
               testCase.subtype,
               testCase.profileId
             )}

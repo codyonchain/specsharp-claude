@@ -459,6 +459,47 @@ export const RECREATION_FEATURE_COSTS_BY_SUBTYPE: Record<
   },
 };
 
+export const PARKING_SUBTYPES = [
+  "surface_parking",
+  "parking_garage",
+  "underground_parking",
+  "automated_parking",
+] as const;
+
+export type ParkingSubtype = (typeof PARKING_SUBTYPES)[number];
+
+export const PARKING_FEATURE_COSTS_BY_SUBTYPE: Record<
+  ParkingSubtype,
+  Record<string, number>
+> = {
+  surface_parking: {
+    covered_parking: 25,
+    valet_booth: 15,
+    ev_charging: 10,
+    security_system: 8,
+  },
+  parking_garage: {
+    automated_system: 45,
+    ev_charging: 12,
+    car_wash: 25,
+    retail_space: 30,
+    green_roof: 20,
+  },
+  underground_parking: {
+    waterproofing: 35,
+    sump_pumps: 20,
+    vehicle_lifts: 30,
+    security_booth: 15,
+    ventilation_upgrade: 25,
+  },
+  automated_parking: {
+    retrieval_speed: 40,
+    redundant_systems: 35,
+    valet_interface: 20,
+    ev_charging_integration: 15,
+  },
+};
+
 export const MIXED_USE_SUBTYPES = [
   "office_residential",
   "retail_residential",
@@ -1531,6 +1572,80 @@ const MIXED_USE_FEATURE_METADATA: Record<
   },
 };
 
+const PARKING_FEATURE_METADATA: Record<
+  string,
+  { name: string; description: string }
+> = {
+  covered_parking: {
+    name: "Covered Parking",
+    description: "Canopy and weather-protected stall upgrades for surface parking operations.",
+  },
+  valet_booth: {
+    name: "Valet Booth",
+    description: "Dedicated valet/check-in booth with access-control and service support utilities.",
+  },
+  ev_charging: {
+    name: "EV Charging",
+    description: "Distributed EV charging pedestals with electrical capacity and controls integration.",
+  },
+  security_system: {
+    name: "Security System",
+    description: "Lot-wide CCTV, call-box, and perimeter monitoring infrastructure.",
+  },
+  automated_system: {
+    name: "Automated System",
+    description: "Mechanized parking and retrieval system package for structured facilities.",
+  },
+  car_wash: {
+    name: "Car Wash",
+    description: "Integrated car-wash bay with drainage, MEP, and queue management scope.",
+  },
+  retail_space: {
+    name: "Retail Space",
+    description: "Ground-floor retail shell integrated into the parking garage footprint.",
+  },
+  green_roof: {
+    name: "Green Roof",
+    description: "Garage roof greening assembly with waterproofing and drainage detailing.",
+  },
+  waterproofing: {
+    name: "Waterproofing",
+    description: "Enhanced below-grade waterproofing package for underground parking durability.",
+  },
+  sump_pumps: {
+    name: "Sump Pumps",
+    description: "Underground drainage sump and pump system for water-management resilience.",
+  },
+  vehicle_lifts: {
+    name: "Vehicle Lifts",
+    description: "Vehicle lift equipment and pit integration for constrained-site circulation.",
+  },
+  security_booth: {
+    name: "Security Booth",
+    description: "Controlled underground security checkpoint and monitoring booth buildout.",
+  },
+  ventilation_upgrade: {
+    name: "Ventilation Upgrade",
+    description: "High-performance ventilation and life-safety airflow upgrade scope.",
+  },
+  retrieval_speed: {
+    name: "Retrieval Speed Package",
+    description: "Automated-parking retrieval optimization package with queue-time controls.",
+  },
+  redundant_systems: {
+    name: "Redundant Systems",
+    description: "Redundant controls and mechanical backups for automated parking uptime.",
+  },
+  valet_interface: {
+    name: "Valet Interface",
+    description: "Driver/valet transfer interface with kiosk, staging, and access-control systems.",
+  },
+  ev_charging_integration: {
+    name: "EV Charging Integration",
+    description: "Integrated EV charging coordination within automated parking operations.",
+  },
+};
+
 export const filterSpecialFeaturesBySubtype = (
   features: SpecialFeatureOption[],
   subtype?: string
@@ -1923,6 +2038,48 @@ export const RECREATION_SPECIAL_FEATURES = createRecreationSpecialFeatures();
 
 export const getRecreationSpecialFeatures = (): SpecialFeatureOption[] =>
   RECREATION_SPECIAL_FEATURES;
+
+const createParkingSpecialFeatures = (): SpecialFeatureOption[] => {
+  const byFeatureId: Record<
+    string,
+    { costPerSFBySubtype: Record<string, number>; allowedSubtypes: string[] }
+  > = {};
+
+  for (const subtype of PARKING_SUBTYPES) {
+    const entries = PARKING_FEATURE_COSTS_BY_SUBTYPE[subtype];
+    for (const [featureId, costPerSF] of Object.entries(entries)) {
+      if (!byFeatureId[featureId]) {
+        byFeatureId[featureId] = {
+          costPerSFBySubtype: {},
+          allowedSubtypes: [],
+        };
+      }
+      byFeatureId[featureId].costPerSFBySubtype[subtype] = costPerSF;
+      byFeatureId[featureId].allowedSubtypes.push(subtype);
+    }
+  }
+
+  return Object.entries(byFeatureId)
+    .sort(([featureA], [featureB]) => featureA.localeCompare(featureB))
+    .map(([featureId, featureData]) => {
+      const metadata = PARKING_FEATURE_METADATA[featureId];
+      return {
+        id: featureId,
+        name: metadata?.name ?? featureId.replace(/_/g, " "),
+        description:
+          metadata?.description ?? "Parking subtype specific special feature.",
+        costPerSFBySubtype: featureData.costPerSFBySubtype,
+        allowedSubtypes: PARKING_SUBTYPES.filter((subtype) =>
+          featureData.allowedSubtypes.includes(subtype)
+        ),
+      };
+    });
+};
+
+export const PARKING_SPECIAL_FEATURES = createParkingSpecialFeatures();
+
+export const getParkingSpecialFeatures = (): SpecialFeatureOption[] =>
+  PARKING_SPECIAL_FEATURES;
 
 const createMixedUseSpecialFeatures = (): SpecialFeatureOption[] => {
   const byFeatureId: Record<
@@ -2731,6 +2888,92 @@ export const detectMixedUseFeatureIdsFromDescription = (
   return Array.from(detectedFeatureIds);
 };
 
+const PARKING_KEYWORD_DETECTION: Array<{
+  featureId: string;
+  patterns: RegExp[];
+}> = [
+  {
+    featureId: "covered_parking",
+    patterns: [/\bcovered parking\b/i, /\bparking canopy\b/i],
+  },
+  {
+    featureId: "valet_booth",
+    patterns: [/\bvalet booth\b/i, /\battendant booth\b/i],
+  },
+  {
+    featureId: "ev_charging",
+    patterns: [/\bev charging\b/i, /\bev chargers?\b/i],
+  },
+  {
+    featureId: "security_system",
+    patterns: [/\bparking security system\b/i, /\bcctv\b/i],
+  },
+  {
+    featureId: "automated_system",
+    patterns: [/\bautomated system\b/i, /\brobotic parking system\b/i],
+  },
+  {
+    featureId: "car_wash",
+    patterns: [/\bcar wash\b/i],
+  },
+  {
+    featureId: "retail_space",
+    patterns: [/\bretail space\b/i, /\bground floor retail\b/i],
+  },
+  {
+    featureId: "green_roof",
+    patterns: [/\bgreen roof\b/i],
+  },
+  {
+    featureId: "waterproofing",
+    patterns: [/\bwaterproofing\b/i],
+  },
+  {
+    featureId: "sump_pumps",
+    patterns: [/\bsump pumps?\b/i],
+  },
+  {
+    featureId: "vehicle_lifts",
+    patterns: [/\bvehicle lifts?\b/i],
+  },
+  {
+    featureId: "security_booth",
+    patterns: [/\bsecurity booth\b/i],
+  },
+  {
+    featureId: "ventilation_upgrade",
+    patterns: [/\bventilation upgrade\b/i, /\bgarage ventilation\b/i],
+  },
+  {
+    featureId: "retrieval_speed",
+    patterns: [/\bretrieval speed\b/i, /\bfast retrieval\b/i],
+  },
+  {
+    featureId: "redundant_systems",
+    patterns: [/\bredundant systems?\b/i],
+  },
+  {
+    featureId: "valet_interface",
+    patterns: [/\bvalet interface\b/i, /\bdriver interface kiosk\b/i],
+  },
+  {
+    featureId: "ev_charging_integration",
+    patterns: [/\bev charging integration\b/i, /\bintegrated ev charging\b/i],
+  },
+];
+
+export const detectParkingFeatureIdsFromDescription = (
+  description: string
+): string[] => {
+  const detectedFeatureIds = new Set<string>();
+  for (const { featureId, patterns } of PARKING_KEYWORD_DETECTION) {
+    if (patterns.some((pattern) => pattern.test(description))) {
+      detectedFeatureIds.add(featureId);
+    }
+  }
+  return Array.from(detectedFeatureIds);
+};
+
 const SPECIALTY_KEYWORD_DETECTION: Array<{
   featureId: string;
   patterns: RegExp[];
@@ -3037,6 +3280,7 @@ const SPECIAL_FEATURES_BY_BUILDING_TYPE: Record<string, SpecialFeatureOption[]> 
   educational: EDUCATIONAL_SPECIAL_FEATURES,
   civic: CIVIC_SPECIAL_FEATURES,
   recreation: RECREATION_SPECIAL_FEATURES,
+  parking: PARKING_SPECIAL_FEATURES,
   mixed_use: MIXED_USE_SPECIAL_FEATURES,
 };
 
@@ -3050,6 +3294,7 @@ const VALID_SUBTYPES_BY_BUILDING_TYPE: Record<string, readonly string[]> = {
   educational: EDUCATIONAL_SUBTYPES,
   civic: CIVIC_SUBTYPES,
   recreation: RECREATION_SUBTYPES,
+  parking: PARKING_SUBTYPES,
   mixed_use: MIXED_USE_SUBTYPES,
 };
 
@@ -3133,6 +3378,9 @@ export const civicSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
 
 export const recreationSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
   filterSpecialFeaturesBySubtype(RECREATION_SPECIAL_FEATURES, subtype).length > 0;
+
+export const parkingSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
+  filterSpecialFeaturesBySubtype(PARKING_SPECIAL_FEATURES, subtype).length > 0;
 
 export const mixedUseSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
   filterSpecialFeaturesBySubtype(

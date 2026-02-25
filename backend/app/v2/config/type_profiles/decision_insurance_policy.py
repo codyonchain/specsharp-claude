@@ -314,6 +314,62 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         },
         "flex_calibration": {"tight_max_pct": 0.9, "moderate_max_pct": 2.7, "fallback_pct": 1.1},
     },
+    "parking_surface_parking_v1": {
+        "primary_control_variable": {
+            "tile_id": "surface_lighting_and_drainage_rework_plus_8",
+            "metric_ref": "trade_breakdown.finishes",
+            "label": "IC-First Surface Lot Drainage Reliability, Turnover Striping Drift, and Closure Sequencing Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 7.0,
+            "scenario_priority": ["base", "lot_turnover_and_restripe_delay", "conservative", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.7, "moderate_max_pct": 4.4, "fallback_pct": 2.0},
+    },
+    "parking_parking_garage_v1": {
+        "primary_control_variable": {
+            "tile_id": "garage_post_tension_and_coating_plus_11",
+            "metric_ref": "trade_breakdown.structural",
+            "label": "IC-First Deck Rehabilitation Exposure, Post-Tension Repair Variance, and Revenue Continuity Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap",
+            "operator": "<=",
+            "threshold": 0.0,
+            "scenario_priority": ["base", "garage_deck_repair_window_shift", "conservative", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.4, "moderate_max_pct": 3.9, "fallback_pct": 1.7},
+    },
+    "parking_underground_parking_v1": {
+        "primary_control_variable": {
+            "tile_id": "underground_dewatering_and_ventilation_plus_14",
+            "metric_ref": "trade_breakdown.mechanical",
+            "label": "IC-First Water-Table Volatility, Dewatering Duty Drift, and Ventilation Resilience Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap",
+            "operator": "<=",
+            "threshold": -1500000.0,
+            "scenario_priority": ["base", "water_table_protection_resequence", "conservative", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.1, "moderate_max_pct": 3.0, "fallback_pct": 1.3},
+    },
+    "parking_automated_parking_v1": {
+        "primary_control_variable": {
+            "tile_id": "automated_controls_and_redundancy_plus_16",
+            "metric_ref": "trade_breakdown.electrical",
+            "label": "IC-First Retrieval Uptime Stability, Controls Integration Risk, and Redundancy Validation Control",
+        },
+        "collapse_trigger": {
+            "metric": "value_gap_pct",
+            "operator": "<=",
+            "threshold": 4.0,
+            "scenario_priority": ["base", "retrieval_system_commissioning_slip", "conservative", "ugly"],
+        },
+        "flex_calibration": {"tight_max_pct": 1.2, "moderate_max_pct": 3.3, "fallback_pct": 1.4},
+    },
     "multifamily_market_rate_apartments_v1": {
         "primary_control_variable": {
             "tile_id": "structural_carry_proxy_plus_5",

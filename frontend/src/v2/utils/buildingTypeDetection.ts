@@ -60,9 +60,26 @@ export type MixedUseSplitContract = {
   invalid_mix?: MixedUseSplitInvalid;
 };
 
+export const PARKING_SUBTYPES = [
+  "surface_parking",
+  "parking_garage",
+  "underground_parking",
+  "automated_parking",
+] as const;
+
+export type ParkingSubtype = (typeof PARKING_SUBTYPES)[number];
+
+export type ParkingIntentResolution = {
+  shouldRouteToParking: boolean;
+  subtype?: ParkingSubtype;
+  detectionSource: string;
+  conflictOutcome: string;
+};
+
 const MIXED_USE_COMPONENT_SET = new Set<string>(MIXED_USE_COMPONENTS);
 const MIXED_USE_SUBTYPE_SET = new Set<string>(MIXED_USE_SUBTYPES);
 const MIXED_USE_HINT_SUFFIX = /\s*\[mixed_use_split:[^\]]+\]\s*$/i;
+const PARKING_SUBTYPE_SET = new Set<string>(PARKING_SUBTYPES);
 
 const HOTEL_RESIDENTIAL_ALIAS_PATTERNS = [
   /\bhotel[-\s]?residential\b/i,
@@ -156,6 +173,174 @@ const formatPercent = (value: number): string => {
     return `${rounded}`;
   }
   return rounded.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+};
+
+export const detectParkingSubtypeFromDescription = (
+  description: string
+): ParkingSubtype | undefined => {
+  if (!description || typeof description !== "string") {
+    return undefined;
+  }
+
+  const subtypeCueOrder: Array<{ subtype: ParkingSubtype; patterns: readonly RegExp[] }> = [
+    {
+      subtype: "automated_parking",
+      patterns: [
+        /\bautomated parking\b/i,
+        /\bautomated parking structure\b/i,
+        /\brobotic parking\b/i,
+        /\bmechanized parking\b/i,
+      ],
+    },
+    {
+      subtype: "underground_parking",
+      patterns: [
+        /\bunderground parking\b/i,
+        /\bbelow[-\s]?grade parking\b/i,
+        /\bsubterranean parking\b/i,
+      ],
+    },
+    {
+      subtype: "surface_parking",
+      patterns: [
+        /\bsurface parking\b/i,
+        /\bsurface lot\b/i,
+        /\bparking lot\b/i,
+      ],
+    },
+    {
+      subtype: "parking_garage",
+      patterns: [
+        /\bparking garage\b/i,
+        /\bparking structure\b/i,
+        /\bstructured parking\b/i,
+        /\bparking deck\b/i,
+        /\bparking ramp\b/i,
+        /\bstandalone garage\b/i,
+      ],
+    },
+  ];
+
+  for (const { subtype, patterns } of subtypeCueOrder) {
+    if (patterns.some((pattern) => pattern.test(description))) {
+      return subtype;
+    }
+  }
+  return undefined;
+};
+
+export const resolveParkingIntentFromDescription = (
+  description: string
+): ParkingIntentResolution => {
+  if (!description || typeof description !== "string") {
+    return {
+      shouldRouteToParking: false,
+      detectionSource: "buildingTypeDetection.parking_intent",
+      conflictOutcome: "no_signal",
+    };
+  }
+
+  const subtype = detectParkingSubtypeFromDescription(description);
+  const hasParkingSignal =
+    /\bparking\b/i.test(description) ||
+    /\bparking garage\b/i.test(description) ||
+    /\bparking structure\b/i.test(description) ||
+    /\bparking lot\b/i.test(description) ||
+    /\bstructured parking\b/i.test(description);
+
+  if (!hasParkingSignal) {
+    return {
+      shouldRouteToParking: false,
+      subtype,
+      detectionSource: "buildingTypeDetection.parking_intent",
+      conflictOutcome: "no_signal",
+    };
+  }
+
+  const hasStandaloneSignal =
+    /\bstandalone parking\b/i.test(description) ||
+    /\bstandalone parking garage\b/i.test(description) ||
+    /\bdedicated parking (?:facility|structure|garage)\b/i.test(description) ||
+    /\bparking (?:facility|structure|garage) only\b/i.test(description);
+
+  const hasPrimaryActionSignal = /\b(new|build|construct|develop|redevelop|expand|expansion|replacement)\b.{0,40}\bparking\b/i.test(
+    description
+  );
+
+  const hasExplicitParkingAssetSignal =
+    /\bautomated parking\b/i.test(description) ||
+    /\bunderground parking\b/i.test(description) ||
+    /\bsurface parking\b/i.test(description) ||
+    /\bparking garage\b/i.test(description) ||
+    /\bparking structure\b/i.test(description) ||
+    /\bstructured parking\b/i.test(description) ||
+    /\bparking lot\b/i.test(description);
+
+  if (
+    /\b(apartment|apartments|multifamily|multi-family|residential tower)\b/i.test(description) &&
+    !hasStandaloneSignal
+  ) {
+    return {
+      shouldRouteToParking: false,
+      subtype,
+      detectionSource: "buildingTypeDetection.parking_intent",
+      conflictOutcome: "parking_demoted_multifamily_primary",
+    };
+  }
+  if (
+    /\b(hotel|motel|inn|hospitality|lodging)\b/i.test(description) &&
+    !hasStandaloneSignal
+  ) {
+    return {
+      shouldRouteToParking: false,
+      subtype,
+      detectionSource: "buildingTypeDetection.parking_intent",
+      conflictOutcome: "parking_demoted_hospitality_primary",
+    };
+  }
+  if (
+    /\b(class a|class b|office tower|office building|corporate office)\b/i.test(description) &&
+    !hasStandaloneSignal
+  ) {
+    return {
+      shouldRouteToParking: false,
+      subtype,
+      detectionSource: "buildingTypeDetection.parking_intent",
+      conflictOutcome: "parking_demoted_office_primary",
+    };
+  }
+
+  if (hasStandaloneSignal) {
+    return {
+      shouldRouteToParking: true,
+      subtype,
+      detectionSource: "buildingTypeDetection.parking_intent",
+      conflictOutcome: "parking_primary_standalone",
+    };
+  }
+  if (hasPrimaryActionSignal) {
+    return {
+      shouldRouteToParking: true,
+      subtype,
+      detectionSource: "buildingTypeDetection.parking_intent",
+      conflictOutcome: "parking_primary_action",
+    };
+  }
+  if (hasExplicitParkingAssetSignal) {
+    return {
+      shouldRouteToParking: true,
+      subtype,
+      detectionSource: "buildingTypeDetection.parking_intent",
+      conflictOutcome: "parking_primary_asset_intent",
+    };
+  }
+
+  return {
+    shouldRouteToParking: false,
+    subtype,
+    detectionSource: "buildingTypeDetection.parking_intent",
+    conflictOutcome: "parking_context_only",
+  };
 };
 
 export const normalizeMixedUseSubtypeAlias = (subtype?: string): string | undefined => {
@@ -525,4 +710,11 @@ export const isCanonicalMixedUseSubtype = (subtype?: string): subtype is MixedUs
     return false;
   }
   return MIXED_USE_SUBTYPE_SET.has(subtype);
+};
+
+export const isCanonicalParkingSubtype = (subtype?: string): subtype is ParkingSubtype => {
+  if (!subtype) {
+    return false;
+  }
+  return PARKING_SUBTYPE_SET.has(subtype);
 };

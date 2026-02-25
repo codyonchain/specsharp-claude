@@ -11,6 +11,8 @@ import {
   MIXED_USE_SUBTYPES,
   OFFICE_FEATURE_COSTS_BY_SUBTYPE,
   OFFICE_SUBTYPES,
+  PARKING_FEATURE_COSTS_BY_SUBTYPE,
+  PARKING_SUBTYPES,
   RECREATION_FEATURE_COSTS_BY_SUBTYPE,
   RECREATION_SUBTYPES,
   RETAIL_FEATURE_COSTS_BY_SUBTYPE,
@@ -26,6 +28,7 @@ import {
   detectHospitalityFeatureIdsFromDescription,
   detectMixedUseFeatureIdsFromDescription,
   detectOfficeFeatureIdsFromDescription,
+  detectParkingFeatureIdsFromDescription,
   detectRecreationFeatureIdsFromDescription,
   detectRecreationSubtypeFromDescription,
   detectRetailFeatureIdsFromDescription,
@@ -39,6 +42,7 @@ import {
   getHospitalitySpecialFeatures,
   getMixedUseSpecialFeatures,
   getOfficeSpecialFeatures,
+  getParkingSpecialFeatures,
   getRecreationSpecialFeatures,
   getRetailSpecialFeatures,
   getRestaurantSpecialFeatures,
@@ -48,6 +52,7 @@ import {
   hospitalitySubtypeHasSpecialFeatures,
   mixedUseSubtypeHasSpecialFeatures,
   officeSubtypeHasSpecialFeatures,
+  parkingSubtypeHasSpecialFeatures,
   recreationSubtypeHasSpecialFeatures,
   retailSubtypeHasSpecialFeatures,
   restaurantSubtypeHasSpecialFeatures,
@@ -389,6 +394,35 @@ const REQUIRED_MIXED_USE_MAPPING = {
     green_roof: 35,
     parking_structure: 45,
     transit_connection: 30,
+  },
+} as const;
+
+const REQUIRED_PARKING_MAPPING = {
+  surface_parking: {
+    covered_parking: 25,
+    valet_booth: 15,
+    ev_charging: 10,
+    security_system: 8,
+  },
+  parking_garage: {
+    automated_system: 45,
+    ev_charging: 12,
+    car_wash: 25,
+    retail_space: 30,
+    green_roof: 20,
+  },
+  underground_parking: {
+    waterproofing: 35,
+    sump_pumps: 20,
+    vehicle_lifts: 30,
+    security_booth: 15,
+    ventilation_upgrade: 25,
+  },
+  automated_parking: {
+    retrieval_speed: 40,
+    redundant_systems: 35,
+    valet_interface: 20,
+    ev_charging_integration: 15,
   },
 } as const;
 
@@ -1245,6 +1279,81 @@ describe("mixed_use special features catalog", () => {
       expect(mixedUseSubtypeHasSpecialFeatures(subtype)).toBe(true);
     }
     expect(mixedUseSubtypeHasSpecialFeatures("hotel_residential")).toBe(true);
+  });
+});
+
+describe("parking special features catalog", () => {
+  it("is non-empty and matches backend-aligned subtype mapping keys/values", () => {
+    const parkingFeatures = getParkingSpecialFeatures();
+    expect(parkingFeatures.length).toBeGreaterThan(0);
+    expect(PARKING_FEATURE_COSTS_BY_SUBTYPE).toEqual(REQUIRED_PARKING_MAPPING);
+  });
+
+  it("resolves expected feature IDs for every parking subtype with no duplicates", () => {
+    const parkingFeatures = getParkingSpecialFeatures();
+
+    for (const subtype of PARKING_SUBTYPES) {
+      const expectedIds = Object.keys(REQUIRED_PARKING_MAPPING[subtype]).sort();
+      const resolvedIds = filterSpecialFeaturesBySubtype(parkingFeatures, subtype).map(
+        (feature) => feature.id
+      );
+      const uniqueResolvedIds = Array.from(new Set(resolvedIds));
+
+      expect(uniqueResolvedIds.length).toBe(resolvedIds.length);
+      expect(uniqueResolvedIds.sort()).toEqual(expectedIds);
+    }
+  });
+
+  it("keeps unknown parking subtype explicit", () => {
+    const unknownSubtypeResolved = getAvailableSpecialFeatures(
+      "parking",
+      "unknown_parking_variant"
+    );
+    expect(unknownSubtypeResolved).toEqual([]);
+  });
+
+  it("resolves subtype-aware parking feature costs and rejects mismatched subtype feature IDs", () => {
+    for (const subtype of PARKING_SUBTYPES) {
+      const expectedEntries = REQUIRED_PARKING_MAPPING[subtype];
+      for (const [featureId, expectedCost] of Object.entries(expectedEntries)) {
+        expect(getSpecialFeatureCost("parking", featureId, subtype)).toBe(expectedCost);
+      }
+    }
+
+    expect(getSpecialFeatureCost("parking", "car_wash", "surface_parking")).toBeUndefined();
+    expect(getSpecialFeatureCost("parking", "vehicle_lifts", "parking_garage")).toBeUndefined();
+  });
+
+  it("detects parking feature IDs from subtype-specific parking scope cues", () => {
+    const surfaceDetected = detectParkingFeatureIdsFromDescription(
+      "Surface parking lot expansion with covered parking, valet booth, EV charging, and parking security system."
+    );
+    expect(surfaceDetected).toEqual(
+      expect.arrayContaining([
+        "covered_parking",
+        "valet_booth",
+        "ev_charging",
+        "security_system",
+      ])
+    );
+
+    const undergroundDetected = detectParkingFeatureIdsFromDescription(
+      "Underground parking addition with waterproofing package, sump pumps, security booth, and garage ventilation upgrade."
+    );
+    expect(undergroundDetected).toEqual(
+      expect.arrayContaining([
+        "waterproofing",
+        "sump_pumps",
+        "security_booth",
+        "ventilation_upgrade",
+      ])
+    );
+  });
+
+  it("parking subtype helper returns true for all canonical parking subtypes", () => {
+    for (const subtype of PARKING_SUBTYPES) {
+      expect(parkingSubtypeHasSpecialFeatures(subtype)).toBe(true);
+    }
   });
 });
 
