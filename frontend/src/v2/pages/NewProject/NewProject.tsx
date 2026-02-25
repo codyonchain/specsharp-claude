@@ -12,6 +12,7 @@ import {
   detectEducationalSubtypeFromDescription,
   detectHealthcareFeatureIdsFromDescription,
   detectHospitalityFeatureIdsFromDescription,
+  detectMixedUseFeatureIdsFromDescription,
   detectOfficeFeatureIdsFromDescription,
   detectRecreationFeatureIdsFromDescription,
   detectRecreationSubtypeFromDescription,
@@ -23,6 +24,17 @@ import {
   getSpecialFeatureCost,
   type SpecialFeatureOption,
 } from './specialFeaturesCatalog';
+import {
+  MIXED_USE_COMPONENTS,
+  appendMixedUseSplitHintToDescription,
+  detectMixedUseIntent,
+  detectMixedUseSubtypeFromDescription,
+  formatMixedUseSplitValue,
+  normalizeMixedUseSubtypeAlias,
+  resolveMixedUseSplitContract,
+  type MixedUseComponent,
+  type MixedUseSplitContract,
+} from '../../utils/buildingTypeDetection';
 
 // Lucide icons
 import { 
@@ -161,6 +173,14 @@ const detectCityStateInDescription = (text: string): string | null => {
   return lastValid ? `${lastValid.city}, ${lastValid.state}` : null;
 };
 
+const MIXED_USE_COMPONENT_LABELS: Record<MixedUseComponent, string> = {
+  office: 'Office',
+  residential: 'Residential',
+  retail: 'Retail',
+  hotel: 'Hotel',
+  transit: 'Transit',
+};
+
 
 
 export const NewProject: React.FC = () => {
@@ -181,6 +201,8 @@ export const NewProject: React.FC = () => {
   const [finishLevelLocked, setFinishLevelLocked] = useState(false);
   const [projectComplexity, setProjectComplexity] = useState<'ground_up' | 'renovation' | 'addition'>('ground_up');
   const [projectClassLocked, setProjectClassLocked] = useState(false);
+  const [mixedUseSplitContract, setMixedUseSplitContract] = useState<MixedUseSplitContract | null>(null);
+  const [mixedUseSplitEdited, setMixedUseSplitEdited] = useState(false);
   const [locationTouched, setLocationTouched] = useState(false);
   const [locationAutoFilled, setLocationAutoFilled] = useState(false);
   const [locationSubmitAttempted, setLocationSubmitAttempted] = useState(false);
@@ -210,6 +232,14 @@ export const NewProject: React.FC = () => {
     (!isLocationFormatValid && (locationSubmitAttempted || normalizedLocationInput.length > 0));
   const canAnalyze = Boolean(normalizedDescription) && isLocationFormatValid && !analyzing;
   const liveDetectedLocation = useMemo(() => detectCityStateInDescription(description), [description]);
+  const mixedUseSubtypeDetection = useMemo(
+    () => detectMixedUseSubtypeFromDescription(description),
+    [description]
+  );
+  const mixedUseSubtypeFromDescription = normalizeMixedUseSubtypeAlias(
+    mixedUseSubtypeDetection.subtype
+  );
+  const isMixedUseIntentDetected = useMemo(() => detectMixedUseIntent(description), [description]);
   
   // NLP detection state
   const [detectedFeatures, setDetectedFeatures] = useState({
@@ -224,10 +254,10 @@ export const NewProject: React.FC = () => {
     const cityKeywordDetected = /(nashville|franklin|brentwood|murfreesboro|manchester|nashua|concord|bedford|salem)/i.test(input);
     setDetectedFeatures({
       size: /\d+[\s,]*(?:sf|square|feet|unit|key|bed|room)/i.test(description),
-      type: detectBuildingTypeInDescription(input),
+      type: detectBuildingTypeInDescription(input) || isMixedUseIntentDetected,
       location: Boolean(liveDetectedLocation || cityKeywordDetected)
     });
-  }, [description, liveDetectedLocation]);
+  }, [description, isMixedUseIntentDetected, liveDetectedLocation]);
   
   // Example prompts covering all 13 building types
   const examplePrompts = [
@@ -364,7 +394,8 @@ export const NewProject: React.FC = () => {
       buildingType === 'hospitality' ||
       buildingType === 'specialty' ||
       buildingType === 'civic' ||
-      buildingType === 'recreation'
+      buildingType === 'recreation' ||
+      buildingType === 'mixed_use'
     ) {
       return getAvailableSpecialFeatures(buildingType, subtype);
     }
@@ -490,6 +521,9 @@ export const NewProject: React.FC = () => {
     for (const featureId of detectRecreationFeatureIdsFromDescription(desc)) {
       detectedFeatures.add(featureId);
     }
+    for (const featureId of detectMixedUseFeatureIdsFromDescription(desc)) {
+      detectedFeatures.add(featureId);
+    }
     
     // Detect finish level (luxury/high-end terms map into premium)
     let detectedFinish: 'standard' | 'premium' = 'standard';
@@ -603,20 +637,117 @@ export const NewProject: React.FC = () => {
     setLocationInput(liveDetectedLocation);
     setLocationAutoFilled(true);
   }, [liveDetectedLocation, locationTouched, locationInput, locationAutoFilled]);
-  const parsedSubtype = parsedInput?.subtype || parsedInput?.building_subtype;
+  const parsedSubtypeRaw = parsedInput?.subtype || parsedInput?.building_subtype;
+  const parsedSubtype =
+    parsedInput?.building_type === 'mixed_use'
+      ? normalizeMixedUseSubtypeAlias(parsedSubtypeRaw)
+      : parsedSubtypeRaw;
   const subtypeFromCues =
-    parsedInput?.building_type === 'educational' && !parsedSubtype
+    parsedInput?.building_type === 'mixed_use' && !parsedSubtype
+      ? mixedUseSubtypeFromDescription
+    : parsedInput?.building_type === 'educational' && !parsedSubtype
       ? detectEducationalSubtypeFromDescription(description)
       : parsedInput?.building_type === 'civic' && !parsedSubtype
         ? detectCivicSubtypeFromDescription(description)
       : parsedInput?.building_type === 'recreation' && !parsedSubtype
         ? detectRecreationSubtypeFromDescription(description)
       : undefined;
-  const currentSubtype = parsedSubtype || subtypeFromCues;
+  const currentSubtypeRaw = parsedSubtype || subtypeFromCues;
+  const currentSubtype =
+    parsedInput?.building_type === 'mixed_use'
+      ? normalizeMixedUseSubtypeAlias(currentSubtypeRaw)
+      : currentSubtypeRaw;
+  const isMixedUseProject =
+    parsedInput?.building_type === 'mixed_use' || (!parsedInput && isMixedUseIntentDetected);
+  const mixedUseSubtypeForSplit =
+    parsedInput?.building_type === 'mixed_use'
+      ? normalizeMixedUseSubtypeAlias(currentSubtype) || mixedUseSubtypeFromDescription
+      : mixedUseSubtypeFromDescription;
   const availableSpecialFeatures = parsedInput
     ? getAvailableFeatures(parsedInput.building_type, currentSubtype)
     : [];
   const applicableSpecialFeatures = availableSpecialFeatures;
+  const effectiveMixedUseSplitContract = useMemo(() => {
+    if (!isMixedUseProject) {
+      return null;
+    }
+    return (
+      mixedUseSplitContract ||
+      resolveMixedUseSplitContract({
+        description,
+        subtype: mixedUseSubtypeForSplit,
+      })
+    );
+  }, [description, isMixedUseProject, mixedUseSplitContract, mixedUseSubtypeForSplit]);
+  const mixedUseSplitSummary = effectiveMixedUseSplitContract
+    ? formatMixedUseSplitValue(effectiveMixedUseSplitContract.value)
+    : undefined;
+  const descriptionForAnalysis = useMemo(() => {
+    if (!isMixedUseProject || !effectiveMixedUseSplitContract) {
+      return description;
+    }
+    return appendMixedUseSplitHintToDescription(description, effectiveMixedUseSplitContract);
+  }, [description, effectiveMixedUseSplitContract, isMixedUseProject]);
+
+  useEffect(() => {
+    if (!isMixedUseProject) {
+      setMixedUseSplitContract(null);
+      setMixedUseSplitEdited(false);
+      return;
+    }
+    if (mixedUseSplitEdited) {
+      return;
+    }
+    setMixedUseSplitContract(
+      resolveMixedUseSplitContract({
+        description,
+        subtype: mixedUseSubtypeForSplit,
+      })
+    );
+  }, [description, isMixedUseProject, mixedUseSplitEdited, mixedUseSubtypeForSplit]);
+
+  const updateMixedUseSplitComponent = (component: MixedUseComponent, rawValue: string) => {
+    if (!isMixedUseProject) {
+      return;
+    }
+    const nextComponents: Partial<Record<string, number>> = {};
+    for (const candidate of MIXED_USE_COMPONENTS) {
+      const currentValue = effectiveMixedUseSplitContract?.value[candidate];
+      if (typeof currentValue === 'number' && Number.isFinite(currentValue) && currentValue > 0) {
+        nextComponents[candidate] = currentValue;
+      }
+    }
+
+    const trimmed = rawValue.trim();
+    if (trimmed.length > 0) {
+      const parsedValue = Number(trimmed);
+      nextComponents[component] =
+        Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : 0;
+    } else {
+      nextComponents[component] = 0;
+    }
+
+    setMixedUseSplitContract(
+      resolveMixedUseSplitContract({
+        subtype: mixedUseSubtypeForSplit,
+        userComponents: nextComponents,
+      })
+    );
+    setMixedUseSplitEdited(true);
+  };
+
+  const resetMixedUseSplitToDetected = () => {
+    if (!isMixedUseProject) {
+      return;
+    }
+    setMixedUseSplitEdited(false);
+    setMixedUseSplitContract(
+      resolveMixedUseSplitContract({
+        description,
+        subtype: mixedUseSubtypeForSplit,
+      })
+    );
+  };
 
   // Live preview effect
   useEffect(() => {
@@ -646,7 +777,7 @@ export const NewProject: React.FC = () => {
       try {
         const squareValue = parseSquareFootageValue(squareFootageInput);
         const locationValue = normalizedLocationInput || undefined;
-        const analysis = await api.analyzeProject(description, {
+        const analysis = await api.analyzeProject(descriptionForAnalysis, {
           square_footage: squareValue,
           location: locationValue,
           finishLevel: finishLevelForApi(finishLevel),
@@ -691,7 +822,7 @@ export const NewProject: React.FC = () => {
         previewAbortRef.current = null;
       }
     };
-  }, [normalizedDescription, squareFootageInput, normalizedLocationInput, isLocationFormatValid, finishLevel, finishLevelLocked, projectComplexity, specialFeatures]);
+  }, [descriptionForAnalysis, normalizedDescription, squareFootageInput, normalizedLocationInput, isLocationFormatValid, finishLevel, finishLevelLocked, projectComplexity, specialFeatures]);
   
   // Calculate total cost including features
   const handleExampleClick = (example: any) => {
@@ -707,6 +838,8 @@ export const NewProject: React.FC = () => {
     setFinishLevelLocked(false);
     setProjectComplexity('ground_up');
     setProjectClassLocked(false);
+    setMixedUseSplitEdited(false);
+    setMixedUseSplitContract(null);
     // Auto-scroll to show the form is filled
     window.scrollTo({ top: 200, behavior: 'smooth' });
   };
@@ -717,10 +850,10 @@ export const NewProject: React.FC = () => {
     if (!isLocationFormatValid) return;
     
     setActiveStep('analyzing');
-    tracer.trace('ANALYZE_START', 'Starting analysis', { description });
+    tracer.trace('ANALYZE_START', 'Starting analysis', { description: descriptionForAnalysis });
     
     const squareValue = parseSquareFootageValue(squareFootageInput);
-    const analysis = await analyzeDescription(description, {
+    const analysis = await analyzeDescription(descriptionForAnalysis, {
       squareFootage: squareValue,
       location: normalizedLocationInput,
       finishLevel,
@@ -734,14 +867,19 @@ export const NewProject: React.FC = () => {
       const parsedBuildingType = analysis.parsed_input?.building_type;
       const parsedSubtype = analysis.parsed_input?.subtype || analysis.parsed_input?.building_subtype;
       const subtypeFromDescription =
-        parsedBuildingType === 'educational' && !parsedSubtype
+        parsedBuildingType === 'mixed_use' && !parsedSubtype
+          ? normalizeMixedUseSubtypeAlias(detectMixedUseSubtypeFromDescription(description).subtype)
+        : parsedBuildingType === 'educational' && !parsedSubtype
           ? detectEducationalSubtypeFromDescription(description)
           : parsedBuildingType === 'civic' && !parsedSubtype
             ? detectCivicSubtypeFromDescription(description)
           : parsedBuildingType === 'recreation' && !parsedSubtype
             ? detectRecreationSubtypeFromDescription(description)
           : undefined;
-      const resolvedSubtype = parsedSubtype || subtypeFromDescription;
+      const resolvedSubtype =
+        parsedBuildingType === 'mixed_use'
+          ? normalizeMixedUseSubtypeAlias(parsedSubtype || subtypeFromDescription)
+          : parsedSubtype || subtypeFromDescription;
       const allowedFeatureIds = new Set(
         getAvailableFeatures(parsedBuildingType || '', resolvedSubtype).map((feature) => feature.id)
       );
@@ -869,6 +1007,8 @@ export const NewProject: React.FC = () => {
     setFinishLevelLocked(false);
     setProjectComplexity('ground_up');
     setProjectClassLocked(false);
+    setMixedUseSplitContract(null);
+    setMixedUseSplitEdited(false);
     setPreviewData(null);
     setPreviewStatus('idle');
     setPreviewError(null);
@@ -933,7 +1073,7 @@ export const NewProject: React.FC = () => {
     isPlaceholder: boolean;
   };
 
-  const usesSubtypeCostPerSF = ['healthcare', 'multifamily', 'restaurant', 'specialty', 'office', 'retail', 'educational', 'civic', 'recreation'].includes(
+  const usesSubtypeCostPerSF = ['healthcare', 'multifamily', 'restaurant', 'specialty', 'office', 'retail', 'educational', 'civic', 'recreation', 'mixed_use'].includes(
     parsedInput?.building_type ?? ''
   );
   const isRestaurantProject = parsedInput?.building_type === 'restaurant';
@@ -1184,6 +1324,69 @@ export const NewProject: React.FC = () => {
               )}
             </div>
           </div>
+
+          {isMixedUseProject && effectiveMixedUseSplitContract && (
+            <div className="mt-6 rounded-lg border border-indigo-200 bg-indigo-50 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-indigo-900">Mixed-Use Program Split</p>
+                  <p className="text-xs text-indigo-700">
+                    Parsed split is included in analysis handoff as: {mixedUseSplitSummary}
+                  </p>
+                  {mixedUseSubtypeForSplit && (
+                    <p className="text-xs text-indigo-700">
+                      Subtype cue: {mixedUseSubtypeForSplit.replace(/_/g, ' ')}
+                    </p>
+                  )}
+                  {mixedUseSubtypeDetection.aliasMapping && (
+                    <p className="text-xs text-indigo-700">
+                      Alias mapped: {mixedUseSubtypeDetection.aliasMapping.from}{' -> '}
+                      {mixedUseSubtypeDetection.aliasMapping.to}
+                    </p>
+                  )}
+                </div>
+                {mixedUseSplitEdited && (
+                  <button
+                    type="button"
+                    onClick={resetMixedUseSplitToDetected}
+                    className="rounded-md border border-indigo-300 bg-white px-3 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+                    disabled={analyzing}
+                  >
+                    Use detected split
+                  </button>
+                )}
+              </div>
+              <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-2">
+                {MIXED_USE_COMPONENTS.map((component) => {
+                  const value = effectiveMixedUseSplitContract.value[component];
+                  return (
+                    <label key={component} className="flex flex-col gap-1 text-xs text-indigo-800">
+                      <span className="font-semibold">{MIXED_USE_COMPONENT_LABELS[component]}</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={value > 0 ? value : ''}
+                        placeholder="0"
+                        onChange={(event) => updateMixedUseSplitComponent(component, event.target.value)}
+                        className="w-full rounded-md border border-indigo-200 bg-white px-2 py-1 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                        disabled={analyzing}
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-[11px] text-indigo-700">
+                Split source: {effectiveMixedUseSplitContract.source}
+                {effectiveMixedUseSplitContract.pattern ? ` (${effectiveMixedUseSplitContract.pattern})` : ''}
+              </p>
+              {effectiveMixedUseSplitContract.invalid_mix && (
+                <p className="mt-1 text-[11px] text-amber-700">
+                  Invalid split input ({effectiveMixedUseSplitContract.invalid_mix.reason}); using subtype default.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Live preview */}
           <div className="mt-6">

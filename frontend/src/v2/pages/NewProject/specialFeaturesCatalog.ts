@@ -1,3 +1,5 @@
+import { normalizeMixedUseSubtypeAlias } from "../../utils/buildingTypeDetection";
+
 export type SpecialFeatureOption = {
   id: string;
   name: string;
@@ -454,6 +456,50 @@ export const RECREATION_FEATURE_COSTS_BY_SUBTYPE: Record<
     press_box: 40,
     video_board: 100,
     retractable_roof: 200,
+  },
+};
+
+export const MIXED_USE_SUBTYPES = [
+  "office_residential",
+  "retail_residential",
+  "hotel_retail",
+  "transit_oriented",
+  "urban_mixed",
+] as const;
+
+export type MixedUseSubtype = (typeof MIXED_USE_SUBTYPES)[number];
+
+export const MIXED_USE_FEATURE_COSTS_BY_SUBTYPE: Record<
+  MixedUseSubtype,
+  Record<string, number>
+> = {
+  office_residential: {
+    amenity_deck: 35,
+    business_center: 20,
+    conference_facility: 30,
+  },
+  retail_residential: {
+    rooftop_deck: 30,
+    parking_podium: 40,
+    retail_plaza: 25,
+  },
+  hotel_retail: {
+    conference_center: 45,
+    restaurant: 50,
+    spa: 55,
+    retail_arcade: 30,
+  },
+  transit_oriented: {
+    transit_plaza: 35,
+    bike_facility: 20,
+    pedestrian_bridge: 45,
+    public_art: 15,
+  },
+  urban_mixed: {
+    public_plaza: 40,
+    green_roof: 35,
+    parking_structure: 45,
+    transit_connection: 30,
   },
 };
 
@@ -1407,6 +1453,84 @@ const RECREATION_FEATURE_METADATA: Record<
   },
 };
 
+const MIXED_USE_FEATURE_METADATA: Record<
+  string,
+  { name: string; description: string }
+> = {
+  amenity_deck: {
+    name: "Amenity Deck",
+    description: "Shared mixed-use amenity deck with coordinated life-safety and utility support.",
+  },
+  business_center: {
+    name: "Business Center",
+    description: "Resident and tenant business center with meeting, print, and IT-ready spaces.",
+  },
+  conference_facility: {
+    name: "Conference Facility",
+    description: "Flexible conference suite supporting office and residential program overlap.",
+  },
+  rooftop_deck: {
+    name: "Rooftop Deck",
+    description: "Rooftop deck package with weatherproofing, structure, and service tie-ins.",
+  },
+  parking_podium: {
+    name: "Parking Podium",
+    description: "Podium parking structure integrated with mixed-use vertical circulation.",
+  },
+  retail_plaza: {
+    name: "Retail Plaza",
+    description: "Ground-floor retail plaza scope with circulation and site utility coordination.",
+  },
+  conference_center: {
+    name: "Conference Center",
+    description: "Hospitality-grade conference center supporting hotel and retail traffic.",
+  },
+  restaurant: {
+    name: "Restaurant",
+    description: "Integrated signature restaurant buildout with BOH and front-of-house systems.",
+  },
+  spa: {
+    name: "Spa",
+    description: "Wellness and spa suite with premium MEP and finish requirements.",
+  },
+  retail_arcade: {
+    name: "Retail Arcade",
+    description: "Internal retail arcade with storefront utilities and circulation upgrades.",
+  },
+  transit_plaza: {
+    name: "Transit Plaza",
+    description: "Transit-linked public plaza with wayfinding, lighting, and hardscape systems.",
+  },
+  bike_facility: {
+    name: "Bike Facility",
+    description: "Secure bicycle storage and support amenities tied to TOD mobility goals.",
+  },
+  pedestrian_bridge: {
+    name: "Pedestrian Bridge",
+    description: "Structured pedestrian connection with access control and life-safety integration.",
+  },
+  public_art: {
+    name: "Public Art",
+    description: "Integrated public-art infrastructure with lighting and installation support.",
+  },
+  public_plaza: {
+    name: "Public Plaza",
+    description: "Urban mixed-use plaza with landscape, hardscape, and utility coordination.",
+  },
+  green_roof: {
+    name: "Green Roof",
+    description: "Green roof assembly with drainage layers and maintainability upgrades.",
+  },
+  parking_structure: {
+    name: "Parking Structure",
+    description: "Structured parking scope with vertical circulation and access control systems.",
+  },
+  transit_connection: {
+    name: "Transit Connection",
+    description: "Dedicated transit-connection upgrades linking the site to nearby stations.",
+  },
+};
+
 export const filterSpecialFeaturesBySubtype = (
   features: SpecialFeatureOption[],
   subtype?: string
@@ -1799,6 +1923,48 @@ export const RECREATION_SPECIAL_FEATURES = createRecreationSpecialFeatures();
 
 export const getRecreationSpecialFeatures = (): SpecialFeatureOption[] =>
   RECREATION_SPECIAL_FEATURES;
+
+const createMixedUseSpecialFeatures = (): SpecialFeatureOption[] => {
+  const byFeatureId: Record<
+    string,
+    { costPerSFBySubtype: Record<string, number>; allowedSubtypes: string[] }
+  > = {};
+
+  for (const subtype of MIXED_USE_SUBTYPES) {
+    const entries = MIXED_USE_FEATURE_COSTS_BY_SUBTYPE[subtype];
+    for (const [featureId, costPerSF] of Object.entries(entries)) {
+      if (!byFeatureId[featureId]) {
+        byFeatureId[featureId] = {
+          costPerSFBySubtype: {},
+          allowedSubtypes: [],
+        };
+      }
+      byFeatureId[featureId].costPerSFBySubtype[subtype] = costPerSF;
+      byFeatureId[featureId].allowedSubtypes.push(subtype);
+    }
+  }
+
+  return Object.entries(byFeatureId)
+    .sort(([featureA], [featureB]) => featureA.localeCompare(featureB))
+    .map(([featureId, featureData]) => {
+      const metadata = MIXED_USE_FEATURE_METADATA[featureId];
+      return {
+        id: featureId,
+        name: metadata?.name ?? featureId.replace(/_/g, " "),
+        description:
+          metadata?.description ?? "Mixed-use subtype specific special feature.",
+        costPerSFBySubtype: featureData.costPerSFBySubtype,
+        allowedSubtypes: MIXED_USE_SUBTYPES.filter((subtype) =>
+          featureData.allowedSubtypes.includes(subtype)
+        ),
+      };
+    });
+};
+
+export const MIXED_USE_SPECIAL_FEATURES = createMixedUseSpecialFeatures();
+
+export const getMixedUseSpecialFeatures = (): SpecialFeatureOption[] =>
+  MIXED_USE_SPECIAL_FEATURES;
 
 const RESTAURANT_KEYWORD_DETECTION: Array<{
   featureId: string;
@@ -2475,6 +2641,96 @@ export const detectRecreationSubtypeFromDescription = (
   return undefined;
 };
 
+const MIXED_USE_KEYWORD_DETECTION: Array<{
+  featureId: string;
+  patterns: RegExp[];
+}> = [
+  {
+    featureId: "amenity_deck",
+    patterns: [/\bamenity deck\b/i, /\broof amenity\b/i],
+  },
+  {
+    featureId: "business_center",
+    patterns: [/\bbusiness center\b/i, /\bcoworking lounge\b/i],
+  },
+  {
+    featureId: "conference_facility",
+    patterns: [/\bconference facility\b/i, /\bconference suite\b/i],
+  },
+  {
+    featureId: "rooftop_deck",
+    patterns: [/\brooftop deck\b/i, /\broof deck\b/i],
+  },
+  {
+    featureId: "parking_podium",
+    patterns: [/\bparking podium\b/i, /\bpodium parking\b/i],
+  },
+  {
+    featureId: "retail_plaza",
+    patterns: [/\bretail plaza\b/i, /\bshopping plaza\b/i],
+  },
+  {
+    featureId: "conference_center",
+    patterns: [/\bconference center\b/i],
+  },
+  {
+    featureId: "restaurant",
+    patterns: [/\bhotel restaurant\b/i, /\bon[-\s]?site restaurant\b/i],
+  },
+  {
+    featureId: "spa",
+    patterns: [/\bspa\b/i, /\bwellness suite\b/i],
+  },
+  {
+    featureId: "retail_arcade",
+    patterns: [/\bretail arcade\b/i, /\bshopping arcade\b/i],
+  },
+  {
+    featureId: "transit_plaza",
+    patterns: [/\btransit plaza\b/i, /\bstation plaza\b/i],
+  },
+  {
+    featureId: "bike_facility",
+    patterns: [/\bbike facility\b/i, /\bbicycle storage\b/i, /\bbike room\b/i],
+  },
+  {
+    featureId: "pedestrian_bridge",
+    patterns: [/\bpedestrian bridge\b/i, /\bskybridge\b/i],
+  },
+  {
+    featureId: "public_art",
+    patterns: [/\bpublic art\b/i, /\bart installation\b/i],
+  },
+  {
+    featureId: "public_plaza",
+    patterns: [/\bpublic plaza\b/i],
+  },
+  {
+    featureId: "green_roof",
+    patterns: [/\bgreen roof\b/i],
+  },
+  {
+    featureId: "parking_structure",
+    patterns: [/\bparking structure\b/i, /\bstructured parking\b/i],
+  },
+  {
+    featureId: "transit_connection",
+    patterns: [/\btransit connection\b/i, /\bstation connection\b/i],
+  },
+];
+
+export const detectMixedUseFeatureIdsFromDescription = (
+  description: string
+): string[] => {
+  const detectedFeatureIds = new Set<string>();
+  for (const { featureId, patterns } of MIXED_USE_KEYWORD_DETECTION) {
+    if (patterns.some((pattern) => pattern.test(description))) {
+      detectedFeatureIds.add(featureId);
+    }
+  }
+  return Array.from(detectedFeatureIds);
+};
+
 const SPECIALTY_KEYWORD_DETECTION: Array<{
   featureId: string;
   patterns: RegExp[];
@@ -2781,6 +3037,7 @@ const SPECIAL_FEATURES_BY_BUILDING_TYPE: Record<string, SpecialFeatureOption[]> 
   educational: EDUCATIONAL_SPECIAL_FEATURES,
   civic: CIVIC_SPECIAL_FEATURES,
   recreation: RECREATION_SPECIAL_FEATURES,
+  mixed_use: MIXED_USE_SPECIAL_FEATURES,
 };
 
 const VALID_SUBTYPES_BY_BUILDING_TYPE: Record<string, readonly string[]> = {
@@ -2793,6 +3050,7 @@ const VALID_SUBTYPES_BY_BUILDING_TYPE: Record<string, readonly string[]> = {
   educational: EDUCATIONAL_SUBTYPES,
   civic: CIVIC_SUBTYPES,
   recreation: RECREATION_SUBTYPES,
+  mixed_use: MIXED_USE_SUBTYPES,
 };
 
 export const getAvailableSpecialFeatures = (
@@ -2803,15 +3061,17 @@ export const getAvailableSpecialFeatures = (
     return [];
   }
   const features = SPECIAL_FEATURES_BY_BUILDING_TYPE[buildingType] || [];
-  if (!subtype) {
+  const normalizedSubtype =
+    buildingType === "mixed_use" ? normalizeMixedUseSubtypeAlias(subtype) : subtype;
+  if (!normalizedSubtype) {
     return features;
   }
   const validSubtypes = VALID_SUBTYPES_BY_BUILDING_TYPE[buildingType];
-  if (Array.isArray(validSubtypes) && !validSubtypes.includes(subtype)) {
+  if (Array.isArray(validSubtypes) && !validSubtypes.includes(normalizedSubtype)) {
     // Explicitly preserve unknown-subtype behavior; do not coerce to a known subtype.
     return [];
   }
-  return filterSpecialFeaturesBySubtype(features, subtype);
+  return filterSpecialFeaturesBySubtype(features, normalizedSubtype);
 };
 
 export const getSpecialFeatureCost = (
@@ -2822,6 +3082,8 @@ export const getSpecialFeatureCost = (
   if (!buildingType || !featureId) {
     return undefined;
   }
+  const normalizedSubtype =
+    buildingType === "mixed_use" ? normalizeMixedUseSubtypeAlias(subtype) : subtype;
   const feature = getAvailableSpecialFeatures(buildingType, subtype).find(
     (entry) => entry.id === featureId
   );
@@ -2830,8 +3092,8 @@ export const getSpecialFeatureCost = (
   }
 
   const subtypeCost =
-    subtype && feature.costPerSFBySubtype
-      ? feature.costPerSFBySubtype[subtype]
+    normalizedSubtype && feature.costPerSFBySubtype
+      ? feature.costPerSFBySubtype[normalizedSubtype]
       : undefined;
   if (typeof subtypeCost === "number" && Number.isFinite(subtypeCost)) {
     return subtypeCost;
@@ -2871,3 +3133,9 @@ export const civicSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
 
 export const recreationSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
   filterSpecialFeaturesBySubtype(RECREATION_SPECIAL_FEATURES, subtype).length > 0;
+
+export const mixedUseSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
+  filterSpecialFeaturesBySubtype(
+    MIXED_USE_SPECIAL_FEATURES,
+    normalizeMixedUseSubtypeAlias(subtype)
+  ).length > 0;
