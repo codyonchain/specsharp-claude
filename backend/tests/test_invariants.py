@@ -26,9 +26,11 @@ from app.v2.config.type_profiles.decision_insurance_policy import (
 from app.v2.config.type_profiles.dealshield_content import healthcare as healthcare_content
 from app.v2.config.type_profiles.dealshield_content import office as office_content
 from app.v2.config.type_profiles.dealshield_content import specialty as specialty_content
+from app.v2.config.type_profiles.dealshield_content import civic as civic_content
 from app.v2.config.type_profiles.scope_items import healthcare as healthcare_scope_profiles
 from app.v2.config.type_profiles.scope_items import office as office_scope_profiles
 from app.v2.config.type_profiles.scope_items import specialty as specialty_scope_profiles
+from app.v2.config.type_profiles.scope_items import civic as civic_scope_profiles
 from app.v2.services.dealshield_service import build_dealshield_view_model
 
 INDUSTRIAL_POLICY_EXPECTATIONS_BY_PROFILE_ID = {
@@ -131,6 +133,29 @@ OFFICE_PCV_GENERIC_TERMS = {
     "margin control",
     "primary control variable",
     "generic",
+}
+
+CIVIC_PROFILE_IDS = {
+    "library": {
+        "tile_profile": "civic_library_v1",
+        "scope_profile": "civic_library_structural_v1",
+    },
+    "courthouse": {
+        "tile_profile": "civic_courthouse_v1",
+        "scope_profile": "civic_courthouse_structural_v1",
+    },
+    "government_building": {
+        "tile_profile": "civic_government_building_v1",
+        "scope_profile": "civic_government_building_structural_v1",
+    },
+    "community_center": {
+        "tile_profile": "civic_community_center_v1",
+        "scope_profile": "civic_community_center_structural_v1",
+    },
+    "public_safety": {
+        "tile_profile": "civic_public_safety_v1",
+        "scope_profile": "civic_public_safety_structural_v1",
+    },
 }
 
 
@@ -1674,3 +1699,60 @@ def test_educational_schedule_source_and_scope_depth_invariants():
     assert unknown_schedule.get("subtype") is None
     phases = unknown_schedule.get("phases")
     assert isinstance(phases, list) and phases
+
+
+def test_civic_first_mlw_text_is_unique_across_all_subtypes():
+    first_mlw_texts = []
+
+    for expected in CIVIC_PROFILE_IDS.values():
+        content = civic_content.DEALSHIELD_CONTENT_PROFILES[expected["tile_profile"]]
+        mlw_entries = content.get("most_likely_wrong")
+        assert isinstance(mlw_entries, list) and mlw_entries
+
+        first_entry = mlw_entries[0]
+        assert isinstance(first_entry, dict)
+        first_text = first_entry.get("text")
+        assert isinstance(first_text, str) and first_text.strip()
+        first_mlw_texts.append(first_text.strip())
+
+    assert len(first_mlw_texts) == len(set(first_mlw_texts))
+
+
+def test_civic_subtypes_do_not_leak_baseline_alias_wiring():
+    for subtype, expected in CIVIC_PROFILE_IDS.items():
+        cfg = get_building_config(BuildingType.CIVIC, subtype)
+        assert cfg is not None
+
+        assert cfg.dealshield_tile_profile == expected["tile_profile"]
+        assert cfg.scope_items_profile == expected["scope_profile"]
+
+        assert cfg.dealshield_tile_profile != "civic_baseline_v1"
+        assert cfg.scope_items_profile != "civic_baseline_structural_v1"
+
+
+def test_civic_profile_resolution_is_present_and_deterministic():
+    scope_defaults = civic_scope_profiles.SCOPE_ITEM_DEFAULTS.get("default_profile_by_subtype")
+    assert isinstance(scope_defaults, dict)
+
+    for subtype, expected in CIVIC_PROFILE_IDS.items():
+        tile_profile_id = expected["tile_profile"]
+        scope_profile_id = expected["scope_profile"]
+
+        first_tile = get_dealshield_profile(tile_profile_id)
+        second_tile = get_dealshield_profile(tile_profile_id)
+        assert first_tile == second_tile
+        assert first_tile.get("profile_id") == tile_profile_id
+
+        content_first = civic_content.DEALSHIELD_CONTENT_PROFILES[tile_profile_id]
+        content_second = civic_content.DEALSHIELD_CONTENT_PROFILES[tile_profile_id]
+        assert content_first == content_second
+        assert content_first.get("profile_id") == tile_profile_id
+
+        scope_profile = civic_scope_profiles.SCOPE_ITEM_PROFILES[scope_profile_id]
+        assert scope_profile.get("profile_id") == scope_profile_id
+        assert scope_defaults.get(subtype) == scope_profile_id
+
+        cfg = get_building_config(BuildingType.CIVIC, subtype)
+        assert cfg is not None
+        assert cfg.dealshield_tile_profile == tile_profile_id
+        assert cfg.scope_items_profile == scope_profile_id
