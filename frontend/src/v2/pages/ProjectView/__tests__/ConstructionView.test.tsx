@@ -258,6 +258,34 @@ const RECREATION_SCHEDULE_CASES = [
   },
 ] as const;
 
+const MIXED_USE_SCHEDULE_CASES = [
+  {
+    subtype: "office_residential",
+    sitePhaseLabel: "Mixed-Use Office Podium + Residential Utility Enablement",
+    structuralPhaseLabel: "Office Core + Residential Tower Integration",
+  },
+  {
+    subtype: "retail_residential",
+    sitePhaseLabel: "Mixed-Use Retail Podium + Residential Site Prep",
+    structuralPhaseLabel: "Retail Shell + Residential Vertical Build",
+  },
+  {
+    subtype: "hotel_retail",
+    sitePhaseLabel: "Mixed-Use Hotel Podium + Retail Site Utilities",
+    structuralPhaseLabel: "Hotel Tower + Retail Concourse Integration",
+  },
+  {
+    subtype: "transit_oriented",
+    sitePhaseLabel: "Transit Interface + Mixed-Use Foundations",
+    structuralPhaseLabel: "Podium Program + Transit Concourse Build",
+  },
+  {
+    subtype: "urban_mixed",
+    sitePhaseLabel: "Urban Mixed Podium + Utility Backbone",
+    structuralPhaseLabel: "Stacked Program Structure + Core Coordination",
+  },
+] as const;
+
 const buildRestaurantProject = (scheduleSource: "subtype" | "building_type") =>
   ({
     id: "proj_restaurant_construction",
@@ -950,6 +978,91 @@ const buildRecreationScheduleProject = (
   return project;
 };
 
+const buildMixedUseScheduleProject = (
+  subtype: (typeof MIXED_USE_SCHEDULE_CASES)[number]["subtype"],
+  scheduleSource: "subtype" | "building_type",
+  options?: {
+    unknownFallbackSubtype?: boolean;
+    mixedUseSplit?: {
+      source: "user_input" | "nlp_detected" | "default";
+      value: Record<string, number>;
+      normalization_applied: boolean;
+    };
+  }
+) => {
+  const fixture = MIXED_USE_SCHEDULE_CASES.find((item) => item.subtype === subtype)!;
+  const fallbackSubtype =
+    scheduleSource === "building_type" && options?.unknownFallbackSubtype
+      ? "unknown_mixed_use_variant"
+      : subtype;
+  const project = buildCrossTypeScheduleProject("mixed_use", fallbackSubtype, scheduleSource);
+  project.analysis.calculations.construction_schedule.total_months =
+    scheduleSource === "subtype"
+      ? subtype === "office_residential"
+        ? 30
+        : subtype === "retail_residential"
+          ? 28
+          : subtype === "hotel_retail"
+            ? 32
+            : subtype === "transit_oriented"
+              ? 34
+              : 31
+      : 30;
+  project.analysis.calculations.construction_schedule.phases =
+    scheduleSource === "subtype"
+      ? [
+          {
+            id: "site_foundation",
+            label: fixture.sitePhaseLabel,
+            start_month: 0,
+            duration_months: 6,
+            end_month: 6,
+          },
+          {
+            id: "structural",
+            label: fixture.structuralPhaseLabel,
+            start_month: 4,
+            duration_months: 14,
+            end_month: 18,
+          },
+        ]
+      : [
+          {
+            id: "site_foundation",
+            label: "Mixed-Use Baseline Site Program",
+            start_month: 0,
+            duration_months: 6,
+            end_month: 6,
+          },
+          {
+            id: "structural",
+            label: "Mixed-Use Baseline Structural Program",
+            start_month: 4,
+            duration_months: 12,
+            end_month: 16,
+          },
+        ];
+
+  if (options?.mixedUseSplit) {
+    project.analysis.parsed_input.mixed_use_split = options.mixedUseSplit;
+    const scenarioInputs = project.analysis.calculations.dealshield_scenarios.provenance.scenario_inputs;
+    if (scenarioInputs?.base) {
+      scenarioInputs.base.mixed_use_split_source = options.mixedUseSplit.source;
+      scenarioInputs.base.mixed_use_split = options.mixedUseSplit;
+    }
+    if (scenarioInputs?.conservative) {
+      scenarioInputs.conservative.mixed_use_split_source = options.mixedUseSplit.source;
+      scenarioInputs.conservative.mixed_use_split = options.mixedUseSplit;
+    }
+    if (scenarioInputs?.ugly) {
+      scenarioInputs.ugly.mixed_use_split_source = options.mixedUseSplit.source;
+      scenarioInputs.ugly.mixed_use_split = options.mixedUseSplit;
+    }
+  }
+
+  return project;
+};
+
 const buildOfficeScheduleProject = (
   subtype: (typeof OFFICE_SCHEDULE_CASES)[number]["subtype"],
   scheduleSource: "subtype" | "building_type"
@@ -1420,6 +1533,58 @@ describe("ConstructionView", () => {
       ).toBeInTheDocument();
       expect(screen.getAllByText("Recreation Baseline Site Program").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Recreation Baseline Structural Program").length).toBeGreaterThan(0);
+    }
+  });
+
+  it("renders mixed_use schedule-source parity for all five subtypes with explicit unknown-subtype fallback messaging and split-context provenance fixtures", () => {
+    const splitContext = {
+      source: "user_input" as const,
+      normalization_applied: true,
+      value: { office: 60, residential: 40 },
+    };
+
+    const { rerender } = render(
+      <ConstructionView
+        project={buildMixedUseScheduleProject(MIXED_USE_SCHEDULE_CASES[0].subtype, "subtype", {
+          mixedUseSplit: splitContext,
+        })}
+      />
+    );
+
+    for (const testCase of MIXED_USE_SCHEDULE_CASES) {
+      const subtypeProject = buildMixedUseScheduleProject(testCase.subtype, "subtype", {
+        mixedUseSplit: splitContext,
+      });
+      expect(subtypeProject.analysis.parsed_input.mixed_use_split).toEqual(splitContext);
+      expect(
+        subtypeProject.analysis.calculations.dealshield_scenarios.provenance.scenario_inputs.base
+          .mixed_use_split_source
+      ).toBe("user_input");
+
+      rerender(<ConstructionView project={subtypeProject} />);
+      expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
+      expect(
+        screen.getByText("Timeline is tailored for this subtype profile.")
+      ).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.sitePhaseLabel).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(testCase.structuralPhaseLabel).length).toBeGreaterThan(0);
+
+      rerender(
+        <ConstructionView
+          project={buildMixedUseScheduleProject(testCase.subtype, "building_type", {
+            unknownFallbackSubtype: true,
+            mixedUseSplit: splitContext,
+          })}
+        />
+      );
+      expect(screen.getByText("Building-type baseline")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Timeline uses building-type baseline (subtype override unavailable)."
+        )
+      ).toBeInTheDocument();
+      expect(screen.getAllByText("Mixed-Use Baseline Site Program").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Mixed-Use Baseline Structural Program").length).toBeGreaterThan(0);
     }
   });
 
@@ -2396,6 +2561,155 @@ describe("ConstructionView", () => {
         },
       ];
 
+      rerender(<ConstructionView project={project} />);
+
+      expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
+      expect(
+        screen.queryByText("Timeline uses building-type baseline (subtype override unavailable).")
+      ).not.toBeInTheDocument();
+
+      openTradeCard("Structural");
+      expect(screen.getByText("3 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.structuralName)).toBeInTheDocument();
+
+      openTradeCard("Mechanical");
+      expect(screen.getByText("3 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.mechanicalName)).toBeInTheDocument();
+
+      openTradeCard("Electrical");
+      expect(screen.getByText("3 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.electricalName)).toBeInTheDocument();
+
+      openTradeCard("Plumbing");
+      expect(screen.getByText("3 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.plumbingName)).toBeInTheDocument();
+
+      openTradeCard("Finishes");
+      expect(screen.getByText("3 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.finishesName)).toBeInTheDocument();
+    }
+  });
+
+  it("renders mixed_use trade scope depth as subtype-credible across structural/mechanical/electrical/plumbing/finishes with split-context fixtures", () => {
+    const cases = [
+      {
+        subtype: "office_residential" as const,
+        structuralName: "Office Podium + Residential Tower Transfer Structure",
+        mechanicalName: "Office DOAS + Residential Heat-Pump Distribution",
+        electricalName: "Office Tenant Power + Residential Riser Backbone",
+        plumbingName: "Residential Wet-Stack + Office Core Plumbing",
+        finishesName: "Office Lobby + Residential Corridor Finish Program",
+      },
+      {
+        subtype: "retail_residential" as const,
+        structuralName: "Retail Podium Span + Residential Tower Framing",
+        mechanicalName: "Retail Exhaust + Residential HVAC Coordination",
+        electricalName: "Retail Tenant Service + Residential Metering Grid",
+        plumbingName: "Retail Grease/Sanitary + Residential Branch Routing",
+        finishesName: "Retail Frontage + Residential Amenity Finishes",
+      },
+      {
+        subtype: "hotel_retail" as const,
+        structuralName: "Hotel Tower Core + Retail Podium Transfer Deck",
+        mechanicalName: "Hotel Guestroom Conditioning + Retail Make-Up Air",
+        electricalName: "Hotel Back-of-House Power + Retail Distribution",
+        plumbingName: "Hotel Fixture Group + Retail Tenant Plumbing Tie-Ins",
+        finishesName: "Hotel Public Realm + Retail Concourse Finishes",
+      },
+      {
+        subtype: "transit_oriented" as const,
+        structuralName: "Transit Interface Slab + Mixed-Use Platform Structure",
+        mechanicalName: "Transit Ventilation Interface + Mixed-Use HVAC",
+        electricalName: "Transit Coordination Power + Program Distribution",
+        plumbingName: "Transit Concourse Plumbing + Program Branch Network",
+        finishesName: "Transit Hall + Mixed-Use Tenant Finish Package",
+      },
+      {
+        subtype: "urban_mixed" as const,
+        structuralName: "Urban Program Stack Core + Transfer Framing",
+        mechanicalName: "Stacked Program HVAC + Smoke Control Coordination",
+        electricalName: "Program-Specific Distribution + Shared Backbone",
+        plumbingName: "Stacked Fixture Routing + Utility Core Integration",
+        finishesName: "Multi-Program Lobby + Amenity Finish Package",
+      },
+    ];
+
+    const splitContext = {
+      source: "nlp_detected" as const,
+      normalization_applied: true,
+      value: { office: 20, residential: 50, retail: 20, hotel: 10 },
+    };
+
+    const { rerender } = render(
+      <ConstructionView
+        project={buildMixedUseScheduleProject(cases[0].subtype, "subtype", {
+          mixedUseSplit: splitContext,
+        })}
+      />
+    );
+
+    const openTradeCard = (tradeName: string) => {
+      const tradeHeading = screen.getByText(tradeName, { selector: "h4" });
+      const tradeCard = tradeHeading.closest('[role="button"]');
+      expect(tradeCard).not.toBeNull();
+      fireEvent.click(tradeCard as HTMLElement);
+    };
+
+    for (const testCase of cases) {
+      const project = buildMixedUseScheduleProject(testCase.subtype, "subtype", {
+        mixedUseSplit: splitContext,
+      });
+      project.analysis.calculations.trade_breakdown = {
+        structural: 5200000,
+        mechanical: 5100000,
+        electrical: 4800000,
+        plumbing: 3900000,
+        finishes: 4600000,
+      };
+      project.analysis.calculations.scope_items = [
+        {
+          trade: "structural",
+          systems: [
+            { name: testCase.structuralName, quantity: 130000, unit: "SF", unit_cost: 31, total_cost: 4030000 },
+            { name: "Transfer Beam + Core Reinforcement", quantity: 130000, unit: "SF", unit_cost: 24, total_cost: 3120000 },
+            { name: "Envelope Support + Podium Framing", quantity: 130000, unit: "SF", unit_cost: 17, total_cost: 2210000 },
+          ],
+        },
+        {
+          trade: "mechanical",
+          systems: [
+            { name: testCase.mechanicalName, quantity: 130000, unit: "SF", unit_cost: 29, total_cost: 3770000 },
+            { name: "Central Plant + Zone Distribution", quantity: 130000, unit: "SF", unit_cost: 23, total_cost: 2990000 },
+            { name: "Controls + Commissioning Integration", quantity: 130000, unit: "SF", unit_cost: 16, total_cost: 2080000 },
+          ],
+        },
+        {
+          trade: "electrical",
+          systems: [
+            { name: testCase.electricalName, quantity: 130000, unit: "SF", unit_cost: 28, total_cost: 3640000 },
+            { name: "Main Service + Distribution Panels", quantity: 130000, unit: "SF", unit_cost: 21, total_cost: 2730000 },
+            { name: "Life-Safety + Low-Voltage Backbone", quantity: 130000, unit: "SF", unit_cost: 15, total_cost: 1950000 },
+          ],
+        },
+        {
+          trade: "plumbing",
+          systems: [
+            { name: testCase.plumbingName, quantity: 130000, unit: "SF", unit_cost: 22, total_cost: 2860000 },
+            { name: "Domestic + Sanitary Distribution", quantity: 130000, unit: "SF", unit_cost: 16, total_cost: 2080000 },
+            { name: "Fixture Group Rough-In + Trim", quantity: 130000, unit: "SF", unit_cost: 12, total_cost: 1560000 },
+          ],
+        },
+        {
+          trade: "finishes",
+          systems: [
+            { name: testCase.finishesName, quantity: 130000, unit: "SF", unit_cost: 26, total_cost: 3380000 },
+            { name: "Interior Doors + Hardware Program", quantity: 130000, unit: "SF", unit_cost: 20, total_cost: 2600000 },
+            { name: "Flooring + Ceiling + Wall Finish Scope", quantity: 130000, unit: "SF", unit_cost: 14, total_cost: 1820000 },
+          ],
+        },
+      ];
+
+      expect(project.analysis.parsed_input.mixed_use_split).toEqual(splitContext);
       rerender(<ConstructionView project={project} />);
 
       expect(screen.getByText("Subtype schedule")).toBeInTheDocument();

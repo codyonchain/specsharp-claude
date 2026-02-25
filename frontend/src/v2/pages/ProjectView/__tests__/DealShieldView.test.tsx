@@ -581,6 +581,119 @@ const RECREATION_POLICY_CONTRACT_CASES = [
   },
 ] as const;
 
+const MIXED_USE_POLICY_CONTRACT_CASES = [
+  {
+    subtype: "office_residential",
+    profileId: "mixed_use_office_residential_v1",
+    scopeProfileId: "mixed_use_office_residential_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel:
+      "IC-First Office Lease-Up + Residential Stabilization Coupling +11%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 8.0,
+    observedValue: 6.9,
+    flexBeforeBreakPct: 1.7,
+    expectedFlexLabel: "1.70% (Structurally Tight)",
+    baseDscr: 1.36,
+    stressedDscr: 1.13,
+    mixedUseSplitSource: "user_input",
+    mixedUseSplitValue: { office: 70, residential: 30 },
+    mixedUseSplitMetricRef: "mixed_use_split.office",
+  },
+  {
+    subtype: "retail_residential",
+    profileId: "mixed_use_retail_residential_v1",
+    scopeProfileId: "mixed_use_retail_residential_structural_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+    primaryControlLabel:
+      "IC-First Inline Retail Turnover + Residential Throughput Control +9%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: 0.0,
+    observedValue: 54000,
+    flexBeforeBreakPct: 4.3,
+    expectedFlexLabel: "4.30% (Moderate)",
+    baseDscr: 1.44,
+    stressedDscr: 1.22,
+    mixedUseSplitSource: "nlp_detected",
+    mixedUseSplitValue: { retail: 40, residential: 60 },
+    mixedUseSplitMetricRef: "mixed_use_split.retail",
+  },
+  {
+    subtype: "hotel_retail",
+    profileId: "mixed_use_hotel_retail_v1",
+    scopeProfileId: "mixed_use_hotel_retail_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+    primaryControlLabel:
+      "IC-First Hotel Occupancy Variance + Retail Turnover Correlation +10%",
+    breakScenarioLabel: "Ugly",
+    breakMetric: "value_gap",
+    breakMetricRef: "decision_summary.value_gap",
+    breakOperator: "<=",
+    threshold: 25000.0,
+    observedValue: 12000,
+    flexBeforeBreakPct: 1.8,
+    expectedFlexLabel: "1.80% (Structurally Tight)",
+    baseDscr: 1.34,
+    stressedDscr: 1.09,
+    mixedUseSplitSource: "user_input",
+    mixedUseSplitValue: { hotel: 65, retail: 35 },
+    mixedUseSplitMetricRef: "mixed_use_split.hotel",
+  },
+  {
+    subtype: "transit_oriented",
+    profileId: "mixed_use_transit_oriented_v1",
+    scopeProfileId: "mixed_use_transit_oriented_structural_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+    primaryControlLabel:
+      "IC-First Transit Ridership Coupling + Podium Activation Reliability +8%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 5.0,
+    observedValue: 6.7,
+    flexBeforeBreakPct: 5.2,
+    expectedFlexLabel: "5.20% (Flexible)",
+    baseDscr: 1.47,
+    stressedDscr: 1.24,
+    mixedUseSplitSource: "default",
+    mixedUseSplitValue: { transit: 25, residential: 45, retail: 30 },
+    mixedUseSplitMetricRef: "mixed_use_split.transit",
+  },
+  {
+    subtype: "urban_mixed",
+    profileId: "mixed_use_urban_mixed_v1",
+    scopeProfileId: "mixed_use_urban_mixed_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel:
+      "IC-First Urban Program Stack Interdependence + Cost Carry Control +10%",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: 7.0,
+    observedValue: 6.2,
+    flexBeforeBreakPct: 1.9,
+    expectedFlexLabel: "1.90% (Structurally Tight)",
+    baseDscr: 1.35,
+    stressedDscr: 1.11,
+    mixedUseSplitSource: "nlp_detected",
+    mixedUseSplitValue: { office: 20, residential: 50, retail: 20, hotel: 10 },
+    mixedUseSplitMetricRef: "mixed_use_split.residential",
+  },
+] as const;
+
 const OFFICE_POLICY_CONTRACT_CASES = [
   {
     subtype: "class_a",
@@ -1366,6 +1479,9 @@ type SubtypePolicyContractCase = {
   expectedFlexLabel: string;
   baseDscr: number;
   stressedDscr: number;
+  mixedUseSplitSource?: "user_input" | "nlp_detected" | "default";
+  mixedUseSplitValue?: Record<string, number>;
+  mixedUseSplitMetricRef?: string;
 };
 
 const buildSubtypePolicyPayload = (
@@ -1552,6 +1668,19 @@ const buildSubtypePolicyPayload = (
           stress_band_pct: 10,
           cost_scalar: 1.0,
           revenue_scalar: 1.0,
+          ...(input.mixedUseSplitValue
+            ? {
+                mixed_use_split_source: input.mixedUseSplitSource ?? "user_input",
+                mixed_use_split: {
+                  source: input.mixedUseSplitSource ?? "user_input",
+                  normalization_applied: true,
+                  value: input.mixedUseSplitValue,
+                },
+                driver: {
+                  metric_ref: input.mixedUseSplitMetricRef ?? "mixed_use_split.office",
+                },
+              }
+            : {}),
         },
         conservative: {
           scenario_label: "Conservative",
@@ -1559,6 +1688,19 @@ const buildSubtypePolicyPayload = (
           stress_band_pct: 10,
           cost_scalar: 1.1,
           revenue_scalar: 0.9,
+          ...(input.mixedUseSplitValue
+            ? {
+                mixed_use_split_source: input.mixedUseSplitSource ?? "user_input",
+                mixed_use_split: {
+                  source: input.mixedUseSplitSource ?? "user_input",
+                  normalization_applied: true,
+                  value: input.mixedUseSplitValue,
+                },
+                driver: {
+                  metric_ref: input.mixedUseSplitMetricRef ?? "mixed_use_split.office",
+                },
+              }
+            : {}),
         },
         ugly: {
           scenario_label: "Ugly",
@@ -1566,6 +1708,19 @@ const buildSubtypePolicyPayload = (
           stress_band_pct: 10,
           cost_scalar: 1.15,
           revenue_scalar: 0.88,
+          ...(input.mixedUseSplitValue
+            ? {
+                mixed_use_split_source: input.mixedUseSplitSource ?? "user_input",
+                mixed_use_split: {
+                  source: input.mixedUseSplitSource ?? "user_input",
+                  normalization_applied: true,
+                  value: input.mixedUseSplitValue,
+                },
+                driver: {
+                  metric_ref: input.mixedUseSplitMetricRef ?? "mixed_use_split.office",
+                },
+              }
+            : {}),
         },
       },
       metric_refs_used: [
@@ -2625,6 +2780,89 @@ describe("DealShieldView", () => {
       expect(
         screen.queryByText("Decision Insurance unavailable for this profile/run.")
       ).not.toBeInTheDocument();
+    }
+  });
+
+  it("renders mixed_use parity with canonical decision fields, first-break metric truthfulness, and split provenance visibility for all five subtypes", () => {
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_mixed_use_policy_contract_0"
+        data={buildSubtypePolicyPayload(MIXED_USE_POLICY_CONTRACT_CASES[0]) as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    for (const testCase of MIXED_USE_POLICY_CONTRACT_CASES) {
+      rerender(
+        <DealShieldView
+          projectId={`proj_${testCase.profileId}`}
+          data={buildSubtypePolicyPayload(testCase) as any}
+          loading={false}
+          error={null}
+        />
+      );
+
+      expect(screen.getByText("Decision Status")).toBeInTheDocument();
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      expect(screen.getByText(DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
+      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText("First Break Condition")).toBeInTheDocument();
+      expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
+
+      const decisionPolicyMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return (
+          text.includes("Decision Policy:") &&
+          text.includes(`Status: ${testCase.decisionStatus}`) &&
+          text.includes(`Reason: ${testCase.decisionReasonCode}`) &&
+          text.includes("Source: dealshield_policy_v1")
+        );
+      });
+      expect(decisionPolicyMatches.length).toBeGreaterThan(0);
+
+      if (testCase.breakMetric === "value_gap_pct") {
+        expect(
+          screen.getByText(
+            `Break occurs in ${testCase.breakScenarioLabel}: value-gap percentage crosses threshold.`
+          )
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("%") && !text.includes("$");
+          })
+        ).toBeInTheDocument();
+      } else {
+        const expectedSummary =
+          testCase.threshold === 0
+            ? `Break occurs in ${testCase.breakScenarioLabel}: value gap turns negative.`
+            : `Break occurs in ${testCase.breakScenarioLabel}: value gap crosses threshold.`;
+        expect(screen.getByText(expectedSummary)).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Observed:") && text.includes("$");
+          })
+        ).toBeInTheDocument();
+      }
+
+      expect(screen.getByText("Fastest-Change")).toBeInTheDocument();
+      expect(screen.getByText("Most Likely Wrong")).toBeInTheDocument();
+      expect(screen.getByText("Question Bank")).toBeInTheDocument();
+      expect(screen.getByText("Red Flags")).toBeInTheDocument();
+      expect(
+        screen.getAllByText(`${testCase.subtype} downside concentration is under-modeled.`).length
+      ).toBeGreaterThan(0);
+      if (testCase.mixedUseSplitMetricRef) {
+        expect(screen.getAllByText(testCase.mixedUseSplitMetricRef).length).toBeGreaterThan(0);
+      }
     }
   });
 

@@ -2501,6 +2501,64 @@ def test_mixed_use_di_policy_entries_are_available_for_all_profiles():
         assert {"base", "conservative", "ugly"}.issubset(set(scenario_priority))
 
 
+def test_mixed_use_profiles_resolve_canonical_di_policy_and_deterministic_contract_provenance():
+    for subtype, expected in MIXED_USE_PROFILE_IDS.items():
+        profile_id = expected["tile_profile"]
+        policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID.get(profile_id)
+        assert isinstance(policy, dict)
+
+        kwargs = dict(
+            building_type=BuildingType.MIXED_USE,
+            subtype=subtype,
+            square_footage=100_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        payload_a = unified_engine.calculate_project(**kwargs)
+        payload_b = unified_engine.calculate_project(**kwargs)
+        profile = get_dealshield_profile(profile_id)
+
+        view_a = build_dealshield_view_model(
+            project_id=f"mixed-use-invariant-a-{subtype}",
+            payload=payload_a,
+            profile=profile,
+        )
+        view_b = build_dealshield_view_model(
+            project_id=f"mixed-use-invariant-b-{subtype}",
+            payload=payload_b,
+            profile=profile,
+        )
+
+        di_provenance = view_a.get("decision_insurance_provenance")
+        assert isinstance(di_provenance, dict)
+        policy_block = di_provenance.get("decision_insurance_policy")
+        assert isinstance(policy_block, dict)
+        assert policy_block.get("status") == "available"
+        assert policy_block.get("policy_id") == DECISION_INSURANCE_POLICY_ID
+        assert policy_block.get("profile_id") == profile_id
+
+        status_provenance = view_a.get("decision_status_provenance")
+        assert isinstance(status_provenance, dict)
+        assert isinstance(status_provenance.get("status_source"), str)
+
+        first_break = view_a.get("first_break_condition")
+        assert isinstance(first_break, dict)
+        assert first_break.get("break_metric") in {"value_gap_pct", "value_gap"}
+        assert isinstance(first_break.get("threshold"), (int, float))
+        assert isinstance(first_break.get("observed_value"), (int, float))
+
+        for key in (
+            "decision_status",
+            "decision_reason_code",
+            "first_break_condition",
+            "flex_before_break_pct",
+            "flex_before_break_band",
+            "decision_status_provenance",
+            "decision_insurance_provenance",
+        ):
+            assert view_a.get(key) == view_b.get(key), f"Expected deterministic equality for '{key}'"
+
+
 def test_mixed_use_schedule_source_and_unknown_fallback_invariants():
     for subtype in MIXED_USE_PROFILE_IDS.keys():
         schedule = build_construction_schedule(BuildingType.MIXED_USE, subtype)
@@ -2518,6 +2576,61 @@ def test_mixed_use_schedule_source_and_unknown_fallback_invariants():
     assert unknown_schedule.get("schedule_source") == "building_type"
     assert unknown_schedule.get("subtype") is None
     assert unknown_schedule.get("total_months") == 30
+
+
+def test_mixed_use_split_provenance_surfaces_in_scenarios_and_view_model_context():
+    payload = unified_engine.calculate_project(
+        building_type=BuildingType.MIXED_USE,
+        subtype="office_residential",
+        square_footage=130_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        parsed_input_overrides={
+            "mixed_use_split": {
+                "components": {"office": 65},
+                "pattern": "component_percent",
+            },
+            "description": "mixed-use office and residential stack with 65 office share",
+        },
+    )
+
+    split = payload.get("mixed_use_split")
+    assert isinstance(split, dict)
+    assert split.get("source") == "user_input"
+    assert split.get("normalization_applied") is True
+    assert split.get("value", {}).get("office") == pytest.approx(65.0)
+    assert split.get("value", {}).get("residential") == pytest.approx(35.0)
+
+    scenario_inputs = (
+        payload.get("dealshield_scenarios", {})
+        .get("provenance", {})
+        .get("scenario_inputs", {})
+    )
+    assert isinstance(scenario_inputs, dict) and scenario_inputs
+    for scenario_input in scenario_inputs.values():
+        assert scenario_input.get("mixed_use_split_source") == "user_input"
+        scenario_split = scenario_input.get("mixed_use_split")
+        assert isinstance(scenario_split, dict)
+        assert scenario_split.get("value", {}).get("office") == pytest.approx(65.0)
+        assert scenario_split.get("value", {}).get("residential") == pytest.approx(35.0)
+
+    profile_id = MIXED_USE_PROFILE_IDS["office_residential"]["tile_profile"]
+    profile = get_dealshield_profile(profile_id)
+    view_model = build_dealshield_view_model(
+        project_id="mixed-use-view-model-split-provenance",
+        payload=payload,
+        profile=profile,
+    )
+    view_provenance = view_model.get("provenance")
+    assert isinstance(view_provenance, dict)
+    view_scenario_inputs = view_provenance.get("scenario_inputs")
+    assert isinstance(view_scenario_inputs, dict) and view_scenario_inputs
+    for scenario_input in view_scenario_inputs.values():
+        assert scenario_input.get("mixed_use_split_source") == "user_input"
+        scenario_split = scenario_input.get("mixed_use_split")
+        assert isinstance(scenario_split, dict)
+        assert scenario_split.get("value", {}).get("office") == pytest.approx(65.0)
+        assert scenario_split.get("value", {}).get("residential") == pytest.approx(35.0)
 
 
 def test_mixed_use_split_invalid_mix_falls_back_explicitly_without_silent_coercion():

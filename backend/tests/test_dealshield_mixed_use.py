@@ -273,3 +273,89 @@ def test_mixed_use_scenario_provenance_includes_split_inputs_and_source():
         split_input = scenario_input.get("mixed_use_split")
         assert isinstance(split_input, dict)
         assert split_input.get("value", {}).get("office") == pytest.approx(70.0)
+
+
+def test_mixed_use_first_break_metric_units_are_truthful_per_profile():
+    for subtype, expected in MIXED_USE_PROFILE_MAP.items():
+        payload = unified_engine.calculate_project(
+            building_type=BuildingType.MIXED_USE,
+            subtype=subtype,
+            square_footage=125_000,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        profile = get_dealshield_profile(expected["tile"])
+        view_model = build_dealshield_view_model(
+            project_id=f"mixed-use-stage4-first-break-{subtype}",
+            payload=payload,
+            profile=profile,
+        )
+
+        first_break = view_model.get("first_break_condition")
+        assert isinstance(first_break, dict)
+        break_metric = first_break.get("break_metric")
+        assert break_metric in {"value_gap_pct", "value_gap"}
+        assert isinstance(first_break.get("threshold"), (int, float))
+        assert isinstance(first_break.get("observed_value"), (int, float))
+
+        observed_value_pct = first_break.get("observed_value_pct")
+        if break_metric == "value_gap_pct":
+            assert isinstance(observed_value_pct, (int, float))
+        else:
+            assert observed_value_pct is None or isinstance(observed_value_pct, (int, float))
+
+
+def test_mixed_use_split_provenance_is_deterministic_across_recompute():
+    kwargs = dict(
+        building_type=BuildingType.MIXED_USE,
+        subtype="retail_residential",
+        square_footage=110_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        parsed_input_overrides={
+            "mixed_use_split": {
+                "components": {"retail": 40},
+                "pattern": "component_percent",
+            },
+            "description": "mixed-use retail and residential podium with 40 percent retail",
+        },
+    )
+    payload_a = unified_engine.calculate_project(**kwargs)
+    payload_b = unified_engine.calculate_project(**kwargs)
+
+    split_a = payload_a.get("mixed_use_split")
+    split_b = payload_b.get("mixed_use_split")
+    assert isinstance(split_a, dict)
+    assert split_a == split_b
+    assert split_a.get("source") == "user_input"
+    assert split_a.get("normalization_applied") is True
+    assert split_a.get("value", {}).get("retail") == pytest.approx(40.0)
+    assert split_a.get("value", {}).get("residential") == pytest.approx(60.0)
+
+    scenario_inputs_a = (
+        payload_a.get("dealshield_scenarios", {})
+        .get("provenance", {})
+        .get("scenario_inputs", {})
+    )
+    scenario_inputs_b = (
+        payload_b.get("dealshield_scenarios", {})
+        .get("provenance", {})
+        .get("scenario_inputs", {})
+    )
+    assert isinstance(scenario_inputs_a, dict) and scenario_inputs_a
+    assert isinstance(scenario_inputs_b, dict) and scenario_inputs_b
+    assert sorted(scenario_inputs_a.keys()) == sorted(scenario_inputs_b.keys())
+
+    for scenario_id in scenario_inputs_a.keys():
+        scenario_a = scenario_inputs_a[scenario_id]
+        scenario_b = scenario_inputs_b[scenario_id]
+        assert scenario_a.get("mixed_use_split_source") == "user_input"
+        assert scenario_a.get("mixed_use_split_source") == scenario_b.get("mixed_use_split_source")
+
+        split_input_a = scenario_a.get("mixed_use_split")
+        split_input_b = scenario_b.get("mixed_use_split")
+        assert isinstance(split_input_a, dict)
+        assert isinstance(split_input_b, dict)
+        assert split_input_a == split_input_b
+        assert split_input_a.get("value", {}).get("retail") == pytest.approx(40.0)
+        assert split_input_a.get("value", {}).get("residential") == pytest.approx(60.0)
