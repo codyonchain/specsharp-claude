@@ -352,6 +352,60 @@ export const EDUCATIONAL_FEATURE_COSTS_BY_SUBTYPE: Record<
   },
 };
 
+export const CIVIC_SUBTYPES = [
+  "library",
+  "courthouse",
+  "government_building",
+  "community_center",
+  "public_safety",
+] as const;
+
+export type CivicSubtype = (typeof CIVIC_SUBTYPES)[number];
+
+export const CIVIC_FEATURE_COSTS_BY_SUBTYPE: Record<
+  CivicSubtype,
+  Record<string, number>
+> = {
+  library: {
+    stacks_load_reinforcement: 35,
+    acoustic_treatment: 25,
+    daylighting_controls: 20,
+    community_rooms: 20,
+    maker_space_mep: 40,
+  },
+  courthouse: {
+    courtroom: 50,
+    jury_room: 25,
+    holding_cells: 40,
+    judges_chambers: 30,
+    security_screening: 35,
+    magnetometer_screening_lanes: 20,
+    sallyport: 45,
+    ballistic_glazing_package: 30,
+    redundant_life_safety_power: 28,
+  },
+  government_building: {
+    council_chambers: 40,
+    secure_area: 35,
+    public_plaza: 25,
+    records_vault: 30,
+  },
+  community_center: {
+    gymnasium: 35,
+    kitchen: 25,
+    multipurpose_room: 20,
+    fitness_center: 20,
+    outdoor_pavilion: 15,
+  },
+  public_safety: {
+    apparatus_bay: 45,
+    dispatch_center: 50,
+    training_tower: 40,
+    emergency_generator: 35,
+    sally_port: 30,
+  },
+};
+
 const RESTAURANT_FEATURE_METADATA: Record<
   string,
   { name: string; description: string }
@@ -1078,6 +1132,124 @@ const EDUCATIONAL_FEATURE_METADATA: Record<
   },
 };
 
+const CIVIC_FEATURE_METADATA: Record<
+  string,
+  { name: string; description: string }
+> = {
+  stacks_load_reinforcement: {
+    name: "Stacks Load Reinforcement",
+    description: "Structural reinforcement for dense collections and long-span stack loading demands.",
+  },
+  acoustic_treatment: {
+    name: "Acoustic Treatment",
+    description: "Acoustic wall/ceiling treatments for reading rooms, study zones, and quiet commons.",
+  },
+  daylighting_controls: {
+    name: "Daylighting Controls",
+    description: "Daylight-responsive lighting controls for library public zones and collection areas.",
+  },
+  community_rooms: {
+    name: "Community Rooms",
+    description: "Flexible community meeting rooms with partitioning, AV support, and after-hours access.",
+  },
+  maker_space_mep: {
+    name: "Maker Space MEP",
+    description: "Enhanced power, ventilation, and specialty utility support for library maker spaces.",
+  },
+  courtroom: {
+    name: "Courtroom",
+    description: "Courtroom chamber fitout with judicial bench infrastructure and public gallery support.",
+  },
+  jury_room: {
+    name: "Jury Room",
+    description: "Dedicated jury deliberation rooms with secured circulation and privacy controls.",
+  },
+  holding_cells: {
+    name: "Holding Cells",
+    description: "Secure detainee holding cells with hardened finishes and life-safety systems.",
+  },
+  judges_chambers: {
+    name: "Judges Chambers",
+    description: "Judicial chambers with secure circulation, staff support, and controlled access.",
+  },
+  security_screening: {
+    name: "Security Screening",
+    description: "Public-entry screening area with queue management and threat-detection infrastructure.",
+  },
+  magnetometer_screening_lanes: {
+    name: "Magnetometer Lanes",
+    description: "Dedicated magnetometer screening lanes for courthouse ingress throughput.",
+  },
+  sallyport: {
+    name: "Sallyport",
+    description: "Secure vehicle transfer sallyport for protected detainee movement.",
+  },
+  ballistic_glazing_package: {
+    name: "Ballistic Glazing Package",
+    description: "Ballistic-rated glazing and framing package for high-risk perimeter conditions.",
+  },
+  redundant_life_safety_power: {
+    name: "Redundant Life Safety Power",
+    description: "Redundant emergency power for life-safety circuits and critical security systems.",
+  },
+  council_chambers: {
+    name: "Council Chambers",
+    description: "Council chamber buildout with dais, public comment areas, and civic hearing support.",
+  },
+  secure_area: {
+    name: "Secure Area",
+    description: "Controlled government operations zone with layered access control and monitoring.",
+  },
+  public_plaza: {
+    name: "Public Plaza",
+    description: "Civic-facing public plaza scope with paving, lighting, and integrated site utilities.",
+  },
+  records_vault: {
+    name: "Records Vault",
+    description: "Secure records vault with environmental controls and restricted archival access.",
+  },
+  gymnasium: {
+    name: "Gymnasium",
+    description: "Community recreation gymnasium with resilient flooring and spectator accommodations.",
+  },
+  kitchen: {
+    name: "Community Kitchen",
+    description: "Commercial-grade community kitchen with serving support and code-compliant systems.",
+  },
+  multipurpose_room: {
+    name: "Multipurpose Room",
+    description: "Flexible multipurpose room with divisible layouts and event support infrastructure.",
+  },
+  fitness_center: {
+    name: "Fitness Center",
+    description: "Community fitness center with enhanced MEP support and equipment-ready utility rough-ins.",
+  },
+  outdoor_pavilion: {
+    name: "Outdoor Pavilion",
+    description: "Weather-protected outdoor pavilion for community programming and events.",
+  },
+  apparatus_bay: {
+    name: "Apparatus Bay",
+    description: "Public safety apparatus bay with vehicle exhaust capture and rapid egress planning.",
+  },
+  dispatch_center: {
+    name: "Dispatch Center",
+    description: "24/7 dispatch center with hardened communications infrastructure and redundancy.",
+  },
+  training_tower: {
+    name: "Training Tower",
+    description: "Fire/rescue training tower program with durable envelope and training-ready utilities.",
+  },
+  emergency_generator: {
+    name: "Emergency Generator",
+    description: "Emergency generator plant for public safety operational continuity.",
+  },
+  sally_port: {
+    name: "Sally Port",
+    description: "Secure sally port for protected law-enforcement and emergency operations transfer.",
+  },
+};
+
 export const filterSpecialFeaturesBySubtype = (
   features: SpecialFeatureOption[],
   subtype?: string
@@ -1386,6 +1558,48 @@ export const EDUCATIONAL_SPECIAL_FEATURES = createEducationalSpecialFeatures();
 
 export const getEducationalSpecialFeatures = (): SpecialFeatureOption[] =>
   EDUCATIONAL_SPECIAL_FEATURES;
+
+const createCivicSpecialFeatures = (): SpecialFeatureOption[] => {
+  const byFeatureId: Record<
+    string,
+    { costPerSFBySubtype: Record<string, number>; allowedSubtypes: string[] }
+  > = {};
+
+  for (const subtype of CIVIC_SUBTYPES) {
+    const entries = CIVIC_FEATURE_COSTS_BY_SUBTYPE[subtype];
+    for (const [featureId, costPerSF] of Object.entries(entries)) {
+      if (!byFeatureId[featureId]) {
+        byFeatureId[featureId] = {
+          costPerSFBySubtype: {},
+          allowedSubtypes: [],
+        };
+      }
+      byFeatureId[featureId].costPerSFBySubtype[subtype] = costPerSF;
+      byFeatureId[featureId].allowedSubtypes.push(subtype);
+    }
+  }
+
+  return Object.entries(byFeatureId)
+    .sort(([featureA], [featureB]) => featureA.localeCompare(featureB))
+    .map(([featureId, featureData]) => {
+      const metadata = CIVIC_FEATURE_METADATA[featureId];
+      return {
+        id: featureId,
+        name: metadata?.name ?? featureId.replace(/_/g, " "),
+        description:
+          metadata?.description ?? "Civic subtype specific special feature.",
+        costPerSFBySubtype: featureData.costPerSFBySubtype,
+        allowedSubtypes: CIVIC_SUBTYPES.filter((subtype) =>
+          featureData.allowedSubtypes.includes(subtype)
+        ),
+      };
+    });
+};
+
+export const CIVIC_SPECIAL_FEATURES = createCivicSpecialFeatures();
+
+export const getCivicSpecialFeatures = (): SpecialFeatureOption[] =>
+  CIVIC_SPECIAL_FEATURES;
 
 const RESTAURANT_KEYWORD_DETECTION: Array<{
   featureId: string;
@@ -1716,6 +1930,206 @@ export const detectEducationalSubtypeFromDescription = (
   return undefined;
 };
 
+const CIVIC_KEYWORD_DETECTION: Array<{
+  featureId: string;
+  patterns: RegExp[];
+}> = [
+  {
+    featureId: "stacks_load_reinforcement",
+    patterns: [/\bstack loads?\b/i, /\bbook stacks?\b/i, /\bstacks? reinforcement\b/i],
+  },
+  {
+    featureId: "acoustic_treatment",
+    patterns: [/\bacoustic treatment\b/i, /\bacoustic panels?\b/i, /\bsound attenuation\b/i],
+  },
+  {
+    featureId: "daylighting_controls",
+    patterns: [/\bdaylighting controls?\b/i, /\bdaylight sensors?\b/i],
+  },
+  {
+    featureId: "community_rooms",
+    patterns: [/\bcommunity rooms?\b/i, /\bmeeting rooms?\b/i],
+  },
+  {
+    featureId: "maker_space_mep",
+    patterns: [/\bmakers?\s?space\b/i, /\bfab lab\b/i, /\bmaker space mep\b/i],
+  },
+  {
+    featureId: "courtroom",
+    patterns: [/\bcourtrooms?\b/i],
+  },
+  {
+    featureId: "jury_room",
+    patterns: [/\bjury rooms?\b/i, /\bdeliberation room\b/i],
+  },
+  {
+    featureId: "holding_cells",
+    patterns: [/\bholding cells?\b/i, /\bdetainee holding\b/i],
+  },
+  {
+    featureId: "judges_chambers",
+    patterns: [/\bjudges? chambers?\b/i],
+  },
+  {
+    featureId: "security_screening",
+    patterns: [/\bsecurity screening\b/i, /\bscreening checkpoint\b/i],
+  },
+  {
+    featureId: "magnetometer_screening_lanes",
+    patterns: [/\bmagnetometer\b/i, /\bscreening lanes?\b/i],
+  },
+  {
+    featureId: "sallyport",
+    patterns: [/\bsallyport\b/i, /\bsally port\b/i],
+  },
+  {
+    featureId: "ballistic_glazing_package",
+    patterns: [/\bballistic glazing\b/i, /\bbullet[-\s]?resistant glazing\b/i],
+  },
+  {
+    featureId: "redundant_life_safety_power",
+    patterns: [/\bredundant life[-\s]?safety power\b/i, /\blife safety backup power\b/i],
+  },
+  {
+    featureId: "council_chambers",
+    patterns: [/\bcouncil chambers?\b/i, /\bcity council\b/i],
+  },
+  {
+    featureId: "secure_area",
+    patterns: [/\bsecure areas?\b/i, /\brestricted government area\b/i],
+  },
+  {
+    featureId: "public_plaza",
+    patterns: [/\bpublic plaza\b/i, /\bcivic plaza\b/i],
+  },
+  {
+    featureId: "records_vault",
+    patterns: [/\brecords vault\b/i, /\barchival vault\b/i],
+  },
+  {
+    featureId: "gymnasium",
+    patterns: [/\bgymnasium\b/i, /\bcommunity gym\b/i],
+  },
+  {
+    featureId: "kitchen",
+    patterns: [/\bcommunity kitchen\b/i, /\bcommercial kitchen\b/i],
+  },
+  {
+    featureId: "multipurpose_room",
+    patterns: [/\bmultipurpose rooms?\b/i, /\bmulti[-\s]?purpose rooms?\b/i],
+  },
+  {
+    featureId: "fitness_center",
+    patterns: [/\bfitness center\b/i, /\bcommunity fitness\b/i],
+  },
+  {
+    featureId: "outdoor_pavilion",
+    patterns: [/\boutdoor pavilion\b/i, /\bcommunity pavilion\b/i],
+  },
+  {
+    featureId: "apparatus_bay",
+    patterns: [/\bapparatus bays?\b/i, /\bfire apparatus\b/i],
+  },
+  {
+    featureId: "dispatch_center",
+    patterns: [/\bdispatch center\b/i, /\b911 center\b/i, /\bpublic safety dispatch\b/i],
+  },
+  {
+    featureId: "training_tower",
+    patterns: [/\btraining tower\b/i, /\bfire training tower\b/i],
+  },
+  {
+    featureId: "emergency_generator",
+    patterns: [/\bemergency generator\b/i, /\bbackup generator\b/i],
+  },
+  {
+    featureId: "sally_port",
+    patterns: [/\bsally port\b/i],
+  },
+];
+
+export const detectCivicFeatureIdsFromDescription = (
+  description: string
+): string[] => {
+  const detectedFeatureIds = new Set<string>();
+  for (const { featureId, patterns } of CIVIC_KEYWORD_DETECTION) {
+    if (patterns.some((pattern) => pattern.test(description))) {
+      detectedFeatureIds.add(featureId);
+    }
+  }
+  return Array.from(detectedFeatureIds);
+};
+
+const CIVIC_SUBTYPE_CUE_ORDER: Array<{
+  subtype: CivicSubtype;
+  patterns: RegExp[];
+}> = [
+  {
+    subtype: "courthouse",
+    patterns: [/\bcourthouse\b/i, /\bcourt house\b/i, /\bjustice center\b/i, /\bjudicial center\b/i],
+  },
+  {
+    subtype: "public_safety",
+    patterns: [
+      /\bpublic safety\b/i,
+      /\bfire station\b/i,
+      /\bpolice station\b/i,
+      /\bsheriff\b/i,
+      /\bdispatch center\b/i,
+      /\b911 center\b/i,
+      /\bemergency services\b/i,
+      /\beoc\b/i,
+    ],
+  },
+  {
+    subtype: "library",
+    patterns: [
+      /\bpublic library\b/i,
+      /\bbranch library\b/i,
+      /\bcommunity library\b/i,
+      /\blibrary makerspace\b/i,
+      /\blearning commons\b/i,
+      /\blibrary\b/i,
+    ],
+  },
+  {
+    subtype: "community_center",
+    patterns: [
+      /\bcommunity center\b/i,
+      /\brec center\b/i,
+      /\bsenior center\b/i,
+      /\byouth center\b/i,
+      /\bcultural center\b/i,
+      /\bactivity center\b/i,
+      /\bcivic center\b/i,
+    ],
+  },
+  {
+    subtype: "government_building",
+    patterns: [
+      /\bcity hall\b/i,
+      /\bmunicipal building\b/i,
+      /\bgovernment center\b/i,
+      /\bfederal building\b/i,
+      /\bstate building\b/i,
+      /\bcapitol\b/i,
+      /\badministration building\b/i,
+      /\bgovernment building\b/i,
+    ],
+  },
+];
+
+export const detectCivicSubtypeFromDescription = (
+  description: string
+): CivicSubtype | undefined => {
+  for (const { subtype, patterns } of CIVIC_SUBTYPE_CUE_ORDER) {
+    if (patterns.some((pattern) => pattern.test(description))) {
+      return subtype;
+    }
+  }
+  return undefined;
+};
+
 const SPECIALTY_KEYWORD_DETECTION: Array<{
   featureId: string;
   patterns: RegExp[];
@@ -2020,6 +2434,7 @@ const SPECIAL_FEATURES_BY_BUILDING_TYPE: Record<string, SpecialFeatureOption[]> 
   specialty: SPECIALTY_SPECIAL_FEATURES,
   healthcare: HEALTHCARE_SPECIAL_FEATURES,
   educational: EDUCATIONAL_SPECIAL_FEATURES,
+  civic: CIVIC_SPECIAL_FEATURES,
 };
 
 const VALID_SUBTYPES_BY_BUILDING_TYPE: Record<string, readonly string[]> = {
@@ -2030,6 +2445,7 @@ const VALID_SUBTYPES_BY_BUILDING_TYPE: Record<string, readonly string[]> = {
   specialty: SPECIALTY_SUBTYPES,
   healthcare: HEALTHCARE_SUBTYPES,
   educational: EDUCATIONAL_SUBTYPES,
+  civic: CIVIC_SUBTYPES,
 };
 
 export const getAvailableSpecialFeatures = (
@@ -2102,3 +2518,6 @@ export const officeSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
 
 export const educationalSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
   filterSpecialFeaturesBySubtype(EDUCATIONAL_SPECIAL_FEATURES, subtype).length > 0;
+
+export const civicSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
+  filterSpecialFeaturesBySubtype(CIVIC_SPECIAL_FEATURES, subtype).length > 0;
