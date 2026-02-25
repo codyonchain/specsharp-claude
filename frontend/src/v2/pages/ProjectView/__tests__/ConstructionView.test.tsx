@@ -258,6 +258,29 @@ const RECREATION_SCHEDULE_CASES = [
   },
 ] as const;
 
+const PARKING_SCHEDULE_CASES = [
+  {
+    subtype: "surface_parking",
+    sitePhaseLabel: "Surface Lot Grading + Utility Tie-Ins",
+    structuralPhaseLabel: "Paving Sections + Lighting and Access Buildout",
+  },
+  {
+    subtype: "parking_garage",
+    sitePhaseLabel: "Garage Foundations + Ramp Core Prep",
+    structuralPhaseLabel: "Garage Frame + Vertical Circulation Build",
+  },
+  {
+    subtype: "underground_parking",
+    sitePhaseLabel: "Excavation + Dewatering + Foundation Mat",
+    structuralPhaseLabel: "Below-Grade Structure + Ventilation Buildout",
+  },
+  {
+    subtype: "automated_parking",
+    sitePhaseLabel: "Automated Bay Foundations + Utility Backbone",
+    structuralPhaseLabel: "Rack Structure + Retrieval System Integration",
+  },
+] as const;
+
 const MIXED_USE_SCHEDULE_CASES = [
   {
     subtype: "office_residential",
@@ -978,6 +1001,64 @@ const buildRecreationScheduleProject = (
   return project;
 };
 
+const buildParkingScheduleProject = (
+  subtype: (typeof PARKING_SCHEDULE_CASES)[number]["subtype"],
+  scheduleSource: "subtype" | "building_type",
+  options?: { unknownFallbackSubtype?: boolean }
+) => {
+  const fixture = PARKING_SCHEDULE_CASES.find((item) => item.subtype === subtype)!;
+  const fallbackSubtype =
+    scheduleSource === "building_type" && options?.unknownFallbackSubtype
+      ? "unknown_parking_variant"
+      : subtype;
+  const project = buildCrossTypeScheduleProject("parking", fallbackSubtype, scheduleSource);
+  project.analysis.calculations.construction_schedule.total_months =
+    scheduleSource === "subtype"
+      ? subtype === "surface_parking"
+        ? 12
+        : subtype === "parking_garage"
+          ? 22
+          : subtype === "underground_parking"
+            ? 24
+            : 20
+      : 18;
+  project.analysis.calculations.construction_schedule.phases =
+    scheduleSource === "subtype"
+      ? [
+          {
+            id: "site_foundation",
+            label: fixture.sitePhaseLabel,
+            start_month: 0,
+            duration_months: 5,
+            end_month: 5,
+          },
+          {
+            id: "structural",
+            label: fixture.structuralPhaseLabel,
+            start_month: 3,
+            duration_months: 11,
+            end_month: 14,
+          },
+        ]
+      : [
+          {
+            id: "site_foundation",
+            label: "Parking Baseline Site Program",
+            start_month: 0,
+            duration_months: 5,
+            end_month: 5,
+          },
+          {
+            id: "structural",
+            label: "Parking Baseline Structural Program",
+            start_month: 3,
+            duration_months: 9,
+            end_month: 12,
+          },
+        ];
+  return project;
+};
+
 const buildMixedUseScheduleProject = (
   subtype: (typeof MIXED_USE_SCHEDULE_CASES)[number]["subtype"],
   scheduleSource: "subtype" | "building_type",
@@ -1533,6 +1614,50 @@ describe("ConstructionView", () => {
       ).toBeInTheDocument();
       expect(screen.getAllByText("Recreation Baseline Site Program").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Recreation Baseline Structural Program").length).toBeGreaterThan(0);
+    }
+  });
+
+  it("renders parking schedule-source parity for all four subtypes with explicit unknown-subtype fallback messaging", () => {
+    const { rerender } = render(
+      <ConstructionView
+        project={buildParkingScheduleProject(PARKING_SCHEDULE_CASES[0].subtype, "subtype")}
+      />
+    );
+
+    for (const testCase of PARKING_SCHEDULE_CASES) {
+      rerender(
+        <ConstructionView
+          project={buildParkingScheduleProject(testCase.subtype, "subtype")}
+        />
+      );
+      expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
+      expect(
+        screen.getByTitle(`Subtype schedule • type: parking • subtype: ${testCase.subtype}`)
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("Timeline is tailored for this subtype profile.")
+      ).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.sitePhaseLabel).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(testCase.structuralPhaseLabel).length).toBeGreaterThan(0);
+
+      rerender(
+        <ConstructionView
+          project={buildParkingScheduleProject(testCase.subtype, "building_type", {
+            unknownFallbackSubtype: true,
+          })}
+        />
+      );
+      expect(screen.getByText("Building-type baseline")).toBeInTheDocument();
+      expect(
+        screen.getByTitle("Building-type baseline • type: parking")
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Timeline uses building-type baseline (subtype override unavailable)."
+        )
+      ).toBeInTheDocument();
+      expect(screen.getAllByText("Parking Baseline Site Program").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Parking Baseline Structural Program").length).toBeGreaterThan(0);
     }
   });
 
@@ -2590,6 +2715,269 @@ describe("ConstructionView", () => {
 
       openTradeCard("Finishes");
       expect(screen.getByText("3 systems")).toBeInTheDocument();
+      expect(screen.getByText(testCase.finishesName)).toBeInTheDocument();
+    }
+  });
+
+  it("renders parking trade scope depth and trade-detail credibility for all four parking subtypes", () => {
+    const cases = [
+      {
+        subtype: "surface_parking" as const,
+        structuralName: "Asphalt Section Build + Site Striping Base",
+        mechanicalName: "Surface Drainage Collection + Pump Tie-In",
+        electricalName: "Lot Lighting Poles + Distribution Backbone",
+        plumbingName: "Surface Catch Basin and Cleanout Branches",
+        finishesName: "Wayfinding + Protective Coating Package",
+        expectedSystems: {
+          structural: "4 systems",
+          mechanical: "3 systems",
+          electrical: "4 systems",
+          plumbing: "2 systems",
+          finishes: "2 systems",
+        },
+        breakdown: [
+          { id: "covered_parking", label: "Covered Parking", cost_per_sf: 2.5, total_cost: 180000 },
+          { id: "security_system", label: "Security System", cost_per_sf: 1.8, total_cost: 126000 },
+        ],
+      },
+      {
+        subtype: "parking_garage" as const,
+        structuralName: "Garage Slab and Ramp Frame Package",
+        mechanicalName: "Garage Ventilation Fans + CO Controls",
+        electricalName: "Garage Circuiting + EV Distribution",
+        plumbingName: "Garage Core Drain and Cleanout Package",
+        finishesName: "Traffic Coatings + Guardrail Finish Program",
+        expectedSystems: {
+          structural: "5 systems",
+          mechanical: "4 systems",
+          electrical: "5 systems",
+          plumbing: "2 systems",
+          finishes: "3 systems",
+        },
+        breakdown: [
+          { id: "automated_system", label: "Automated System", cost_per_sf: 4.5, total_cost: 315000 },
+          { id: "retail_space", label: "Retail Space", cost_per_sf: 3.0, total_cost: 210000 },
+        ],
+      },
+      {
+        subtype: "underground_parking" as const,
+        structuralName: "Below-Grade Wall + Mat Slab Reinforcement",
+        mechanicalName: "Underground Ventilation + Exhaust Controls",
+        electricalName: "Underground Emergency Lighting + Power Feeders",
+        plumbingName: "Sump and Storm Lift Pump Distribution",
+        finishesName: "Corrosion-Resistant Coating + Signage Package",
+        expectedSystems: {
+          structural: "6 systems",
+          mechanical: "5 systems",
+          electrical: "5 systems",
+          plumbing: "3 systems",
+          finishes: "3 systems",
+        },
+        breakdown: [
+          { id: "waterproofing", label: "Waterproofing", cost_per_sf: 4.2, total_cost: 294000 },
+          { id: "ventilation_upgrade", label: "Ventilation Upgrade", cost_per_sf: 3.0, total_cost: 210000 },
+        ],
+      },
+      {
+        subtype: "automated_parking" as const,
+        structuralName: "Automated Rack Structure + Retrieval Core",
+        mechanicalName: "Retrieval Machinery + Handling Systems",
+        electricalName: "Automation Controls + Redundant Power Backbone",
+        plumbingName: "Localized Drainage + Service Plumbing Branches",
+        finishesName: "Operator Interface + Safety Delineation Finishes",
+        expectedSystems: {
+          structural: "5 systems",
+          mechanical: "5 systems",
+          electrical: "6 systems",
+          plumbing: "2 systems",
+          finishes: "3 systems",
+        },
+        breakdown: [
+          { id: "retrieval_speed", label: "Retrieval Speed Package", cost_per_sf: 4.0, total_cost: 280000 },
+          { id: "redundant_systems", label: "Redundant Systems", cost_per_sf: 3.5, total_cost: 245000 },
+        ],
+      },
+    ];
+
+    const { rerender } = render(
+      <ConstructionView project={buildParkingScheduleProject(cases[0].subtype, "subtype")} />
+    );
+
+    const openTradeCard = (tradeName: string) => {
+      const tradeHeading = screen.getByText(tradeName, { selector: "h4" });
+      const tradeCard = tradeHeading.closest('[role="button"]');
+      expect(tradeCard).not.toBeNull();
+      fireEvent.click(tradeCard as HTMLElement);
+    };
+
+    for (const testCase of cases) {
+      const project = buildParkingScheduleProject(testCase.subtype, "subtype");
+      project.analysis.calculations.trade_breakdown = {
+        structural: 5100000,
+        mechanical: 4900000,
+        electrical: 5300000,
+        plumbing: 2500000,
+        finishes: 3000000,
+      };
+      project.analysis.calculations.scope_items = [
+        {
+          trade: "structural",
+          systems:
+            testCase.subtype === "surface_parking"
+              ? [
+                  { name: testCase.structuralName, quantity: 90000, unit: "SF", unit_cost: 21, total_cost: 1890000 },
+                  { name: "Subbase Stabilization + Curb Program", quantity: 90000, unit: "SF", unit_cost: 17, total_cost: 1530000 },
+                  { name: "Expansion Joint + Slab Transition Work", quantity: 90000, unit: "SF", unit_cost: 14, total_cost: 1260000 },
+                  { name: "Bollard and Wheel-Stop Anchoring", quantity: 90000, unit: "SF", unit_cost: 10, total_cost: 900000 },
+                ]
+              : testCase.subtype === "parking_garage"
+                ? [
+                    { name: testCase.structuralName, quantity: 130000, unit: "SF", unit_cost: 33, total_cost: 4290000 },
+                    { name: "Post-Tensioned Deck + Core Coupling", quantity: 130000, unit: "SF", unit_cost: 27, total_cost: 3510000 },
+                    { name: "Ramp Landing + Expansion Joint Program", quantity: 130000, unit: "SF", unit_cost: 22, total_cost: 2860000 },
+                    { name: "Perimeter Spandrel + Guardrail Supports", quantity: 130000, unit: "SF", unit_cost: 18, total_cost: 2340000 },
+                    { name: "Vertical Circulation Core Reinforcement", quantity: 130000, unit: "SF", unit_cost: 16, total_cost: 2080000 },
+                  ]
+                : testCase.subtype === "underground_parking"
+                  ? [
+                      { name: testCase.structuralName, quantity: 120000, unit: "SF", unit_cost: 35, total_cost: 4200000 },
+                      { name: "Excavation Support + Tieback Program", quantity: 120000, unit: "SF", unit_cost: 30, total_cost: 3600000 },
+                      { name: "Perimeter Slurry Wall Reinforcement", quantity: 120000, unit: "SF", unit_cost: 25, total_cost: 3000000 },
+                      { name: "Transfer Slab + Core Wall Hardening", quantity: 120000, unit: "SF", unit_cost: 22, total_cost: 2640000 },
+                      { name: "Below-Grade Expansion Joint System", quantity: 120000, unit: "SF", unit_cost: 19, total_cost: 2280000 },
+                      { name: "Topside Deck Interface Reinforcement", quantity: 120000, unit: "SF", unit_cost: 16, total_cost: 1920000 },
+                    ]
+                  : [
+                      { name: testCase.structuralName, quantity: 100000, unit: "SF", unit_cost: 34, total_cost: 3400000 },
+                      { name: "Rack Anchor Slab + Seismic Bracing", quantity: 100000, unit: "SF", unit_cost: 30, total_cost: 3000000 },
+                      { name: "Machine-Bay Core Reinforcement", quantity: 100000, unit: "SF", unit_cost: 26, total_cost: 2600000 },
+                      { name: "Transfer Deck + Lift Interface Framing", quantity: 100000, unit: "SF", unit_cost: 22, total_cost: 2200000 },
+                      { name: "Equipment Support Plinth Program", quantity: 100000, unit: "SF", unit_cost: 19, total_cost: 1900000 },
+                    ],
+        },
+        {
+          trade: "mechanical",
+          systems:
+            testCase.subtype === "surface_parking"
+              ? [
+                  { name: testCase.mechanicalName, quantity: 90000, unit: "SF", unit_cost: 17, total_cost: 1530000 },
+                  { name: "Stormwater Controls + Debris Filtration", quantity: 90000, unit: "SF", unit_cost: 14, total_cost: 1260000 },
+                  { name: "Pumping Controls + Freeze Protection", quantity: 90000, unit: "SF", unit_cost: 11, total_cost: 990000 },
+                ]
+              : testCase.subtype === "parking_garage"
+                ? [
+                    { name: testCase.mechanicalName, quantity: 130000, unit: "SF", unit_cost: 25, total_cost: 3250000 },
+                    { name: "CO Sensor Network + Fan Sequencing", quantity: 130000, unit: "SF", unit_cost: 21, total_cost: 2730000 },
+                    { name: "Smoke Exhaust + Stair Pressurization", quantity: 130000, unit: "SF", unit_cost: 18, total_cost: 2340000 },
+                    { name: "Commissioning and TAB Package", quantity: 130000, unit: "SF", unit_cost: 13, total_cost: 1690000 },
+                  ]
+                : [
+                    { name: testCase.mechanicalName, quantity: 120000, unit: "SF", unit_cost: 29, total_cost: 3480000 },
+                    { name: "Airside Distribution + Pressure Controls", quantity: 120000, unit: "SF", unit_cost: 24, total_cost: 2880000 },
+                    { name: "Equipment Cooling + Thermal Monitoring", quantity: 120000, unit: "SF", unit_cost: 20, total_cost: 2400000 },
+                    { name: "Fire/Life Safety Exhaust Controls", quantity: 120000, unit: "SF", unit_cost: 17, total_cost: 2040000 },
+                    { name: "Integrated Commissioning + Reliability Tuning", quantity: 120000, unit: "SF", unit_cost: 14, total_cost: 1680000 },
+                  ],
+        },
+        {
+          trade: "electrical",
+          systems:
+            testCase.subtype === "surface_parking"
+              ? [
+                  { name: testCase.electricalName, quantity: 90000, unit: "SF", unit_cost: 19, total_cost: 1710000 },
+                  { name: "Security and Call-Box Circuit Backbone", quantity: 90000, unit: "SF", unit_cost: 16, total_cost: 1440000 },
+                  { name: "Photocell + Lighting Control Integration", quantity: 90000, unit: "SF", unit_cost: 13, total_cost: 1170000 },
+                  { name: "EV Charger Branch-Circuit Distribution", quantity: 90000, unit: "SF", unit_cost: 11, total_cost: 990000 },
+                ]
+              : testCase.subtype === "parking_garage"
+                ? [
+                    { name: testCase.electricalName, quantity: 130000, unit: "SF", unit_cost: 28, total_cost: 3640000 },
+                    { name: "Vertical Riser + Panelboard Distribution", quantity: 130000, unit: "SF", unit_cost: 24, total_cost: 3120000 },
+                    { name: "Emergency Lighting + Egress Controls", quantity: 130000, unit: "SF", unit_cost: 19, total_cost: 2470000 },
+                    { name: "Access Control + LPR Backhaul", quantity: 130000, unit: "SF", unit_cost: 16, total_cost: 2080000 },
+                    { name: "Revenue Metering + Subpanel Coordination", quantity: 130000, unit: "SF", unit_cost: 13, total_cost: 1690000 },
+                  ]
+                : testCase.subtype === "underground_parking"
+                  ? [
+                      { name: testCase.electricalName, quantity: 120000, unit: "SF", unit_cost: 31, total_cost: 3720000 },
+                      { name: "Emergency Power Feeder + ATS Matrix", quantity: 120000, unit: "SF", unit_cost: 26, total_cost: 3120000 },
+                      { name: "Life-Safety Lighting + Wayfinding Controls", quantity: 120000, unit: "SF", unit_cost: 22, total_cost: 2640000 },
+                      { name: "Security Network + Monitoring Backbone", quantity: 120000, unit: "SF", unit_cost: 18, total_cost: 2160000 },
+                      { name: "Low-Voltage Systems + BMS Integration", quantity: 120000, unit: "SF", unit_cost: 15, total_cost: 1800000 },
+                    ]
+                  : [
+                      { name: testCase.electricalName, quantity: 100000, unit: "SF", unit_cost: 33, total_cost: 3300000 },
+                      { name: "PLC + Safety Interlock Distribution", quantity: 100000, unit: "SF", unit_cost: 28, total_cost: 2800000 },
+                      { name: "Rack Power Busway + Charger Integration", quantity: 100000, unit: "SF", unit_cost: 24, total_cost: 2400000 },
+                      { name: "Redundant Feeder + Transfer Logic", quantity: 100000, unit: "SF", unit_cost: 21, total_cost: 2100000 },
+                      { name: "Telemetry + Diagnostics Backbone", quantity: 100000, unit: "SF", unit_cost: 17, total_cost: 1700000 },
+                      { name: "Operator Kiosk + Interface Power", quantity: 100000, unit: "SF", unit_cost: 14, total_cost: 1400000 },
+                    ],
+        },
+        {
+          trade: "plumbing",
+          systems:
+            testCase.subtype === "underground_parking"
+              ? [
+                  { name: testCase.plumbingName, quantity: 120000, unit: "SF", unit_cost: 17, total_cost: 2040000 },
+                  { name: "Sump Pump Discharge + Redundant Routing", quantity: 120000, unit: "SF", unit_cost: 14, total_cost: 1680000 },
+                  { name: "Domestic and Service Plumbing Branches", quantity: 120000, unit: "SF", unit_cost: 11, total_cost: 1320000 },
+                ]
+              : [
+                  { name: testCase.plumbingName, quantity: 100000, unit: "SF", unit_cost: 13, total_cost: 1300000 },
+                  { name: "Domestic/Service Plumbing Tie-Ins", quantity: 100000, unit: "SF", unit_cost: 10, total_cost: 1000000 },
+                ],
+        },
+        {
+          trade: "finishes",
+          systems:
+            testCase.subtype === "surface_parking"
+              ? [
+                  { name: testCase.finishesName, quantity: 90000, unit: "SF", unit_cost: 9, total_cost: 810000 },
+                  { name: "Pavement Markings + Signage Finalization", quantity: 90000, unit: "SF", unit_cost: 7, total_cost: 630000 },
+                ]
+              : [
+                  { name: testCase.finishesName, quantity: 120000, unit: "SF", unit_cost: 15, total_cost: 1800000 },
+                  { name: "Traffic Coating + Surface Protection", quantity: 120000, unit: "SF", unit_cost: 12, total_cost: 1440000 },
+                  { name: "Signage, Striping, and Wayfinding Package", quantity: 120000, unit: "SF", unit_cost: 9, total_cost: 1080000 },
+                ],
+        },
+      ];
+      project.analysis.calculations.construction_costs.special_features_total = testCase.breakdown.reduce(
+        (sum, item) => sum + item.total_cost,
+        0
+      );
+      project.analysis.calculations.construction_costs.special_features_breakdown = testCase.breakdown;
+
+      rerender(<ConstructionView project={project} />);
+
+      expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
+      expect(screen.getByText("Special Features")).toBeInTheDocument();
+      for (const row of testCase.breakdown) {
+        expect(screen.getByText(row.label)).toBeInTheDocument();
+      }
+      expect(
+        screen.queryByText("Per-feature breakdown is unavailable for this project version; showing aggregate total only.")
+      ).not.toBeInTheDocument();
+
+      openTradeCard("Structural");
+      expect(screen.getByText(testCase.expectedSystems.structural)).toBeInTheDocument();
+      expect(screen.getByText(testCase.structuralName)).toBeInTheDocument();
+
+      openTradeCard("Mechanical");
+      expect(screen.getByText(testCase.expectedSystems.mechanical)).toBeInTheDocument();
+      expect(screen.getByText(testCase.mechanicalName)).toBeInTheDocument();
+
+      openTradeCard("Electrical");
+      expect(screen.getByText(testCase.expectedSystems.electrical)).toBeInTheDocument();
+      expect(screen.getByText(testCase.electricalName)).toBeInTheDocument();
+
+      openTradeCard("Plumbing");
+      expect(screen.getByText(testCase.expectedSystems.plumbing)).toBeInTheDocument();
+      expect(screen.getByText(testCase.plumbingName)).toBeInTheDocument();
+
+      openTradeCard("Finishes");
+      expect(screen.getByText(testCase.expectedSystems.finishes)).toBeInTheDocument();
       expect(screen.getByText(testCase.finishesName)).toBeInTheDocument();
     }
   });
