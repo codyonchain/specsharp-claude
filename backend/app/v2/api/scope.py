@@ -325,7 +325,10 @@ class ProjectResponse(BaseModel):
 # ============================================================================
 
 @router.post("/analyze", response_model=ProjectResponse)
-async def analyze_project(request: AnalyzeRequest):
+async def analyze_project(
+    request: AnalyzeRequest,
+    _auth: AuthContext = Depends(get_auth_context),
+):
     """
     Single endpoint that does everything from natural language
     No more confusion about which endpoint to use
@@ -501,7 +504,10 @@ async def analyze_project(request: AnalyzeRequest):
         )
 
 @router.post("/calculate", response_model=ProjectResponse)
-async def calculate_project(request: CalculateRequest):
+async def calculate_project(
+    request: CalculateRequest,
+    _auth: AuthContext = Depends(get_auth_context),
+):
     """
     Direct calculation endpoint when you know exactly what you want
     
@@ -561,7 +567,10 @@ async def calculate_project(request: CalculateRequest):
         )
 
 @router.post("/compare", response_model=ProjectResponse)
-async def compare_scenarios(request: CompareRequest):
+async def compare_scenarios(
+    request: CompareRequest,
+    _auth: AuthContext = Depends(get_auth_context),
+):
     """
     Compare multiple project scenarios
     
@@ -711,7 +720,8 @@ async def health_check():
 
 @router.get("/test-nlp")
 async def test_nlp(
-    text: str = Query(..., description="Text to parse")
+    text: str = Query(..., description="Text to parse"),
+    _auth: AuthContext = Depends(get_auth_context),
 ):
     """
     Test endpoint for phrase parsing (useful for debugging)
