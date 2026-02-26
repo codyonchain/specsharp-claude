@@ -1,0 +1,10 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Allow committed environment templates that only contain placeholders."
+paths = [
+  '''(^|/)backend/\.env(\..+)?\.example$''',
+  '''(^|/)backend/\.env\.template$''',
+  '''(^|/)frontend/\.env(\..+)?\.example$'''
+]
