@@ -1191,9 +1191,10 @@ class NLPService:
     def _extract_square_footage(self, text: str) -> Optional[int]:
         """Extract square footage from text"""
         # Match numbers with optional commas against common area-unit variants.
-        # Includes: SF, sq ft, sqft, square feet, square foot, and hyphenated forms (e.g. 128000-sq-ft).
+        # Includes: SF, sq ft/sq feet, sqft, square feet, square foot,
+        # and hyphenated forms (e.g. 128000-sq-ft).
         patterns = [
-            r'\b(\d{1,3}(?:,\d{3})+|\d+)\s*(?:-|–|—)?\s*(?:sf|s\.?\s*f\.?|sq\.?(?:\s|-)*ft\.?|sqft|square(?:\s+|-)?feet?|square(?:\s+|-)?foot)\b',
+            r'\b(\d{1,3}(?:,\d{3})+|\d+)\s*(?:-|–|—)?\s*(?:sf|s\.?\s*f\.?|sq\.?(?:\s|-)*(?:ft|feet)\.?|sqft|square(?:\s+|-)?feet?|square(?:\s+|-)?foot)\b',
         ]
 
         for pattern in patterns:

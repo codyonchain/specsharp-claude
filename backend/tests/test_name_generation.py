@@ -440,20 +440,45 @@ class TestProjectNameGeneration:
         assert parsed["subtype"] == "limited_service_hotel"
 
     @pytest.mark.parametrize(
-        "description",
+        "description,expected_type,expected_subtype",
         [
-            "Build a 128000 square foot limited service hotel with 210 keys in Nashville, TN.",
-            "Build a 128000 square feet limited service hotel with 210 keys in Nashville, TN.",
-            "Build a 128000 sqft limited service hotel with 210 keys in Nashville, TN.",
-            "Build a 128000-sq-ft limited service hotel with 210 keys in Nashville, TN.",
-            "Build a 128,000 sq. ft. limited service hotel with 210 keys, breakfast area and pool in Nashville, TN.",
+            (
+                "Build a 128000 square foot limited service hotel with 210 keys in Nashville, TN.",
+                "hospitality",
+                "limited_service_hotel",
+            ),
+            (
+                "Develop a 128000 square feet class A office tower in Nashville, TN.",
+                "office",
+                "class_a",
+            ),
+            (
+                "Construct a 128000 sq feet luxury apartment project in Nashville, TN.",
+                "multifamily",
+                "luxury_apartments",
+            ),
+            (
+                "Build a 128000 sqft self storage facility in Nashville, TN.",
+                "specialty",
+                "self_storage",
+            ),
+            (
+                "Build a 128000-sq-ft parking garage in Nashville, TN.",
+                "parking",
+                "parking_garage",
+            ),
+            (
+                "Build a 128,000 sq. ft. limited service hotel with 210 keys, breakfast area and pool in Nashville, TN.",
+                "hospitality",
+                "limited_service_hotel",
+            ),
         ],
     )
-    def test_square_footage_variants_extract_for_hospitality_prompts(self, description):
+    def test_square_footage_variants_extract_globally(self, description, expected_type, expected_subtype):
         parsed, _ = self._parse_and_name(description)
 
-        assert parsed["building_type"] == "hospitality"
-        assert parsed["subtype"] == "limited_service_hotel"
+        assert parsed["building_type"] == expected_type
+        assert parsed["subtype"] == expected_subtype
         assert parsed["square_footage"] == 128000
 
     @pytest.mark.parametrize(
