@@ -125,7 +125,7 @@ const faqData: FAQSection[] = [
     items: [
       {
         question: "Is my data secure?",
-        answer: "Yes. We use bank-level encryption, secure Google OAuth for login, and httpOnly cookies for sessions. We never store passwords."
+        answer: "Yes. We use bank-level encryption, secure Google OAuth for login, and short-lived session-scoped tokens. We never store passwords."
       },
       {
         question: "Can I access SpecSharp on mobile?",
