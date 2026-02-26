@@ -50,6 +50,23 @@ class Settings(BaseSettings):
             ])
         
         return list(set(default_origins))  # Remove duplicates
+
+    # Trusted backend hostnames
+    @property
+    def trusted_hosts(self) -> List[str]:
+        env_hosts = os.getenv("TRUSTED_HOSTS")
+        if env_hosts:
+            try:
+                return json.loads(env_hosts)
+            except json.JSONDecodeError:
+                return [host.strip() for host in env_hosts.split(",") if host.strip()]
+        return [
+            "localhost",
+            "127.0.0.1",
+            "api.specsharp.ai",
+            "specsharp.ai",
+            "www.specsharp.ai",
+        ]
     
     # Frontend URL - automatically set based on environment
     @property
