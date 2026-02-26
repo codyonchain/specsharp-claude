@@ -4,7 +4,7 @@ Clean API endpoint that uses the new system
 
 import os
 import json
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict, AliasChoices
 from typing import Optional, List, Dict, Any
@@ -30,6 +30,7 @@ from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.core.building_taxonomy import normalize_building_type, validate_building_type
 from app.core.auth import AuthContext, get_auth_context
 from app.core.config import settings
+from app.core.rate_limiter import limiter
 from app.core.run_limits import assert_run_available, consume_run
 from app.db.models import Project, ProjectAccess
 from app.db.database import get_db
@@ -325,8 +326,10 @@ class ProjectResponse(BaseModel):
 # ============================================================================
 
 @router.post("/analyze", response_model=ProjectResponse)
+@limiter.limit("30/minute")
 async def analyze_project(
-    request: AnalyzeRequest,
+    request: Request,
+    payload: AnalyzeRequest,
     _auth: AuthContext = Depends(get_auth_context),
 ):
     """
@@ -339,14 +342,14 @@ async def analyze_project(
     try:
         logger.info(
             "[scope.analyze][REQ] project_class=%s project_classification=%s raw=%s",
-            getattr(request, "project_class", None),
-            getattr(request, "project_classification", None),
-            request.model_dump() if hasattr(request, "model_dump") else request.dict(),
+            getattr(payload, "project_class", None),
+            getattr(payload, "project_classification", None),
+            payload.model_dump() if hasattr(payload, "model_dump") else payload.dict(),
         )
         # Parse the description using phrase-first parser
-        parsed = nlp_service.extract_project_details(request.description)
-        parsed['special_features'] = request.special_features or []
-        overrides = extract_industrial_overrides(request.description)
+        parsed = nlp_service.extract_project_details(payload.description)
+        parsed['special_features'] = payload.special_features or []
+        overrides = extract_industrial_overrides(payload.description)
         if overrides:
             parsed.update(overrides)
         override_keys = [
@@ -390,17 +393,17 @@ async def analyze_project(
                 )
         
         # Apply explicit overrides and defaults
-        if request.square_footage:
-            parsed['square_footage'] = request.square_footage
-        elif not parsed.get('square_footage') and request.default_square_footage:
-            parsed['square_footage'] = request.default_square_footage
+        if payload.square_footage:
+            parsed['square_footage'] = payload.square_footage
+        elif not parsed.get('square_footage') and payload.default_square_footage:
+            parsed['square_footage'] = payload.default_square_footage
 
-        if request.location:
-            parsed['location'] = request.location
-        elif not parsed.get('location') and request.default_location:
-            parsed['location'] = request.default_location
+        if payload.location:
+            parsed['location'] = payload.location
+        elif not parsed.get('location') and payload.default_location:
+            parsed['location'] = payload.default_location
 
-        finish_override = (request.finish_level or "").strip().lower() if request.finish_level else None
+        finish_override = (payload.finish_level or "").strip().lower() if payload.finish_level else None
         if finish_override:
             parsed['finish_level'] = finish_override
 
@@ -408,7 +411,7 @@ async def analyze_project(
             parsed['finish_level'] = 'standard'
 
         # Respect explicit project class selection from client-side configuration
-        override_class = getattr(request, "project_class", None) or getattr(request, "project_classification", None)
+        override_class = getattr(payload, "project_class", None) or getattr(payload, "project_classification", None)
         if override_class:
             parsed["project_class"] = override_class
             parsed["project_classification"] = override_class
@@ -457,7 +460,7 @@ async def analyze_project(
             parsed.get('subtype'),
             parsed.get('building_subtype'),
             parsed.get('location'),
-            request.description,
+            payload.description,
         )
         result = unified_engine.calculate_project(
             building_type=building_type,
@@ -504,8 +507,10 @@ async def analyze_project(
         )
 
 @router.post("/calculate", response_model=ProjectResponse)
+@limiter.limit("30/minute")
 async def calculate_project(
-    request: CalculateRequest,
+    request: Request,
+    payload: CalculateRequest,
     _auth: AuthContext = Depends(get_auth_context),
 ):
     """
@@ -525,25 +530,25 @@ async def calculate_project(
     """
     try:
         # Convert string values to enums
-        building_type = BuildingType(request.building_type)
-        project_class = ProjectClass(request.project_class)
-        ownership_type = OwnershipType(request.ownership_type)
+        building_type = BuildingType(payload.building_type)
+        project_class = ProjectClass(payload.project_class)
+        ownership_type = OwnershipType(payload.ownership_type)
         
-        location_value = request.location.strip()
+        location_value = payload.location.strip()
         _ensure_city_state_format(location_value)
 
         # Calculate
         result = unified_engine.calculate_project(
             building_type=building_type,
-            subtype=request.subtype,
-            square_footage=request.square_footage,
+            subtype=payload.subtype,
+            square_footage=payload.square_footage,
             location=location_value,
             project_class=project_class,
-            floors=request.floors,
+            floors=payload.floors,
             ownership_type=ownership_type,
-            finish_level=request.finish_level,
-            finish_level_source='explicit' if request.finish_level else None,
-            special_features=request.special_features
+            finish_level=payload.finish_level,
+            finish_level_source='explicit' if payload.finish_level else None,
+            special_features=payload.special_features
         )
         
         return ProjectResponse(
@@ -567,8 +572,10 @@ async def calculate_project(
         )
 
 @router.post("/compare", response_model=ProjectResponse)
+@limiter.limit("20/minute")
 async def compare_scenarios(
-    request: CompareRequest,
+    request: Request,
+    payload: CompareRequest,
     _auth: AuthContext = Depends(get_auth_context),
 ):
     """
@@ -595,7 +602,7 @@ async def compare_scenarios(
         }
     """
     try:
-        result = unified_engine.calculate_comparison(request.scenarios)
+        result = unified_engine.calculate_comparison(payload.scenarios)
         
         return ProjectResponse(
             success=True,
@@ -719,7 +726,9 @@ async def health_check():
         )
 
 @router.get("/test-nlp")
+@limiter.limit("15/minute")
 async def test_nlp(
+    request: Request,
     text: str = Query(..., description="Text to parse"),
     _auth: AuthContext = Depends(get_auth_context),
 ):
@@ -1051,8 +1060,10 @@ async def delete_project(
     )
 
 @router.post("/scope/generate")
+@limiter.limit("20/minute")
 async def generate_scope(
-    request: AnalyzeRequest,
+    request: Request,
+    payload: AnalyzeRequest,
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth_context),
 ):
@@ -1061,9 +1072,9 @@ async def generate_scope(
         assert_run_available(db, org_id=auth.org_id, email=auth.email)
 
         # Parse the description using NLP
-        parsed = nlp_service.extract_project_details(request.description)
-        parsed['special_features'] = request.special_features or []
-        overrides = extract_industrial_overrides(request.description)
+        parsed = nlp_service.extract_project_details(payload.description)
+        parsed['special_features'] = payload.special_features or []
+        overrides = extract_industrial_overrides(payload.description)
         if overrides:
             parsed.update(overrides)
         sf_list = parsed.get('special_features') or []
@@ -1080,24 +1091,24 @@ async def generate_scope(
         parsed['special_features'] = sf_list
         
         # Add any missing fields from request
-        if request.location:
-            parsed['location'] = request.location
-        elif not parsed.get('location') and hasattr(request, 'default_location'):
-            parsed['location'] = request.default_location
+        if payload.location:
+            parsed['location'] = payload.location
+        elif not parsed.get('location') and hasattr(payload, 'default_location'):
+            parsed['location'] = payload.default_location
 
-        if request.square_footage:
-            parsed['square_footage'] = request.square_footage
-        elif not parsed.get('square_footage') and hasattr(request, 'default_square_footage'):
-            parsed['square_footage'] = request.default_square_footage
+        if payload.square_footage:
+            parsed['square_footage'] = payload.square_footage
+        elif not parsed.get('square_footage') and hasattr(payload, 'default_square_footage'):
+            parsed['square_footage'] = payload.default_square_footage
 
-        finish_override = (request.finish_level or "").strip().lower() if getattr(request, 'finish_level', None) else None
+        finish_override = (payload.finish_level or "").strip().lower() if getattr(payload, 'finish_level', None) else None
         if finish_override:
             parsed['finish_level'] = finish_override
 
         if 'finish_level' not in parsed or not parsed['finish_level']:
             parsed['finish_level'] = 'standard'
 
-        override_class = getattr(request, "project_class", None) or getattr(request, "project_classification", None)
+        override_class = getattr(payload, "project_class", None) or getattr(payload, "project_classification", None)
         if override_class:
             parsed['project_class'] = override_class
             parsed['project_classification'] = override_class
@@ -1153,7 +1164,7 @@ async def generate_scope(
             project_class_str,
             parsed.get("project_class"),
             parsed.get("project_classification"),
-            getattr(request, "project_class", None),
+            getattr(payload, "project_class", None),
         )
 
         result = unified_engine.calculate_project(
@@ -1227,7 +1238,7 @@ async def generate_scope(
             # Required fields
             project_id=project_id,
             name=project_name,
-            description=request.description,
+            description=payload.description,
             location=parsed.get('location', 'Nashville, TN'),
             square_footage=parsed.get('square_footage', 10000),
             building_type=parsed.get('building_type', 'office'),
