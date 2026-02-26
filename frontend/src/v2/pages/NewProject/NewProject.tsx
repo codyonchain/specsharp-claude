@@ -139,6 +139,68 @@ const BUILDING_TYPE_DETECTION_CUES: RegExp[] = [
 const detectBuildingTypeInDescription = (text: string): boolean =>
   BUILDING_TYPE_DETECTION_CUES.some((pattern) => pattern.test(text));
 
+const STATE_NAME_TO_CODE: Record<string, string> = {
+  alabama: 'AL',
+  alaska: 'AK',
+  arizona: 'AZ',
+  arkansas: 'AR',
+  california: 'CA',
+  colorado: 'CO',
+  connecticut: 'CT',
+  delaware: 'DE',
+  'district of columbia': 'DC',
+  florida: 'FL',
+  georgia: 'GA',
+  hawaii: 'HI',
+  idaho: 'ID',
+  illinois: 'IL',
+  indiana: 'IN',
+  iowa: 'IA',
+  kansas: 'KS',
+  kentucky: 'KY',
+  louisiana: 'LA',
+  maine: 'ME',
+  maryland: 'MD',
+  massachusetts: 'MA',
+  michigan: 'MI',
+  minnesota: 'MN',
+  mississippi: 'MS',
+  missouri: 'MO',
+  montana: 'MT',
+  nebraska: 'NE',
+  nevada: 'NV',
+  'new hampshire': 'NH',
+  'new jersey': 'NJ',
+  'new mexico': 'NM',
+  'new york': 'NY',
+  'north carolina': 'NC',
+  'north dakota': 'ND',
+  ohio: 'OH',
+  oklahoma: 'OK',
+  oregon: 'OR',
+  pennsylvania: 'PA',
+  'rhode island': 'RI',
+  'south carolina': 'SC',
+  'south dakota': 'SD',
+  tennessee: 'TN',
+  texas: 'TX',
+  utah: 'UT',
+  vermont: 'VT',
+  virginia: 'VA',
+  washington: 'WA',
+  'west virginia': 'WV',
+  wisconsin: 'WI',
+  wyoming: 'WY',
+};
+
+const resolveStateCode = (rawState: string): string | null => {
+  const state = rawState.trim();
+  if (!state) return null;
+  if (/^[A-Za-z]{2}$/.test(state)) return state.toUpperCase();
+  const normalized = state.toLowerCase().replace(/[.\s]+/g, ' ').trim();
+  return STATE_NAME_TO_CODE[normalized] || null;
+};
+
 const detectCityStateInDescription = (text: string): string | null => {
   if (!text) return null;
 
@@ -147,7 +209,7 @@ const detectCityStateInDescription = (text: string): string | null => {
   // - 1 to 4 tokens
   // - each token letters/periods/hyphens only (no digits)
   const pattern =
-    /(?:^|[\s(])([A-Z][a-zA-Z.\-]*(?:\s+[A-Z][a-zA-Z.\-]*){0,3}),\s*([A-Z]{2})(?:\b|[\s).,;:!?\"'])/g;
+    /(?:^|[\s(])([A-Z][a-zA-Z.\-]*(?:\s+[A-Z][a-zA-Z.\-]*){0,3}),\s*([A-Za-z]{2}|[A-Za-z]+(?:\s+[A-Za-z]+){0,2})(?:\b|[\s).,;:!?\"'])/g;
 
   const forbiddenTokens = new Set([
     "SF", "SQ", "SQFT", "FT",
@@ -162,15 +224,15 @@ const detectCityStateInDescription = (text: string): string | null => {
 
   while ((match = pattern.exec(text)) !== null) {
     const cityRaw = (match[1] || "").trim();
-    const stateRaw = (match[2] || "").trim().toUpperCase();
-    if (!cityRaw || !stateRaw) continue;
+    const stateCode = resolveStateCode(match[2] || "");
+    if (!cityRaw || !stateCode) continue;
     if (cityRaw.length > 40) continue;
     if (/\d/.test(cityRaw)) continue;
 
     const tokens = cityRaw.toUpperCase().split(/\s+/).filter(Boolean);
     if (tokens.some(token => forbiddenTokens.has(token))) continue;
 
-    lastValid = { city: cityRaw, state: stateRaw };
+    lastValid = { city: cityRaw, state: stateCode };
   }
 
   return lastValid ? `${lastValid.city}, ${lastValid.state}` : null;
