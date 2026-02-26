@@ -42,6 +42,19 @@ create index if not exists idx_project_access_org_id
 create index if not exists idx_project_access_owner_user_id
   on public.project_access(owner_user_id);
 
+create table if not exists public.organization_run_quotas (
+  id bigserial primary key,
+  org_id text not null unique references public.organizations(id) on delete cascade,
+  included_runs integer not null default 3,
+  bonus_runs integer not null default 0,
+  used_runs integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz
+);
+
+create index if not exists idx_org_run_quotas_org_id
+  on public.organization_run_quotas(org_id);
+
 do $$
 begin
   if to_regclass('public.projects') is not null then
@@ -52,6 +65,7 @@ end $$;
 alter table if exists public.organizations enable row level security;
 alter table if exists public.organization_members enable row level security;
 alter table if exists public.project_access enable row level security;
+alter table if exists public.organization_run_quotas enable row level security;
 alter table if exists public.projects enable row level security;
 
 do $$
@@ -115,6 +129,28 @@ end $$;
 
 do $$
 begin
+  if to_regclass('public.organization_run_quotas') is not null then
+    drop policy if exists org_run_quotas_select_member on public.organization_run_quotas;
+    create policy org_run_quotas_select_member
+      on public.organization_run_quotas
+      for select
+      to authenticated
+      using (
+        exists (
+          select 1
+          from public.organization_members m
+          where m.org_id = organization_run_quotas.org_id
+            and (
+              m.user_id = auth.uid()::text
+              or lower(m.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+            )
+        )
+      );
+  end if;
+end $$;
+
+do $$
+begin
   if to_regclass('public.projects') is not null then
     drop policy if exists projects_select_scoped_member on public.projects;
     create policy projects_select_scoped_member
@@ -140,10 +176,12 @@ end $$;
 revoke all on table public.organizations from anon;
 revoke all on table public.organization_members from anon;
 revoke all on table public.project_access from anon;
+revoke all on table public.organization_run_quotas from anon;
 
 grant select on table public.organizations to authenticated;
 grant select on table public.organization_members to authenticated;
 grant select on table public.project_access to authenticated;
+grant select on table public.organization_run_quotas to authenticated;
 
 do $$
 begin

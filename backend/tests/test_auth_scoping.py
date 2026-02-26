@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from app.core.auth import AuthContext, get_auth_context, _resolve_membership, _upsert_default_membership
 from app.core.config import settings
 from app.db.database import Base
-from app.db.models import Project, ProjectAccess
+from app.db.models import Organization, OrganizationMember, Project, ProjectAccess
 from app.v2.api.scope import _assign_unscoped_projects_for_dev, _get_scoped_project
 
 
@@ -71,6 +71,45 @@ def test_requested_org_requires_membership():
             user_id="user_2",
             email="beta@example.com",
             requested_org_id="missing-org",
+        )
+    assert exc.value.status_code == 403
+
+
+def test_resolve_membership_claims_email_preprovisioned_record_case_insensitive():
+    db = _session()
+    org = Organization(id="org_claim", name="Claim Org")
+    db.add(org)
+    db.flush()
+    db.add(
+        OrganizationMember(
+            org_id=org.id,
+            user_id="pending_user",
+            email="Casey.User@Example.com",
+            role="owner",
+            is_default=True,
+        )
+    )
+    db.commit()
+
+    claimed = _resolve_membership(
+        db,
+        user_id="supabase_uid_1",
+        email="casey.user@example.com",
+        requested_org_id=None,
+    )
+    assert claimed.org_id == "org_claim"
+    assert claimed.user_id == "supabase_uid_1"
+
+
+def test_resolve_membership_blocks_unprovisioned_when_auto_provision_disabled(monkeypatch):
+    db = _session()
+    monkeypatch.setattr(settings, "allow_auto_org_provisioning", False)
+    with pytest.raises(HTTPException) as exc:
+        _resolve_membership(
+            db,
+            user_id="new_uid",
+            email="new.user@example.com",
+            requested_org_id=None,
         )
     assert exc.value.status_code == 403
 

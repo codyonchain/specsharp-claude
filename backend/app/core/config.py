@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     # Supabase auth integration
     supabase_url: str = ""
     supabase_service_role_key: str = ""
+    allow_auto_org_provisioning: bool = False
+
+    # Usage limits / entitlements
+    default_deal_runs: int = 3
+    unlimited_access_emails: str = ""
     
     # Session secret for OAuth state
     session_secret_key: str = ""

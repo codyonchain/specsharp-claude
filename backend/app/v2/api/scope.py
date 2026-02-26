@@ -30,6 +30,7 @@ from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.core.building_taxonomy import normalize_building_type, validate_building_type
 from app.core.auth import AuthContext, get_auth_context
 from app.core.config import settings
+from app.core.run_limits import assert_run_available, consume_run
 from app.db.models import Project, ProjectAccess
 from app.db.database import get_db
 from app.services.pdf_export_service import pdf_export_service
@@ -1047,6 +1048,8 @@ async def generate_scope(
 ):
     """Generate scope and save to database using V2 engine"""
     try:
+        assert_run_available(db, org_id=auth.org_id, email=auth.email)
+
         # Parse the description using NLP
         parsed = nlp_service.extract_project_details(request.description)
         parsed['special_features'] = request.special_features or []
@@ -1256,17 +1259,23 @@ async def generate_scope(
                 owner_user_id=auth.user_id,
             )
         )
+        run_limit_snapshot = consume_run(db, org_id=auth.org_id, email=auth.email)
         db.commit()
         db.refresh(project)
         
         # Return formatted response
         formatted = format_project_response(project)
+        if isinstance(formatted, dict):
+            formatted["run_limits"] = run_limit_snapshot.to_dict()
         return ProjectResponse(
             success=True,
             data=formatted,
             debug_trace=_build_debug_trace_payload(formatted)
         )
         
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         logger.error(f"Error generating scope: {str(e)}")
         db.rollback()

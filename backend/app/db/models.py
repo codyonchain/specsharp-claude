@@ -130,6 +130,7 @@ class Organization(Base):
 
     members = relationship("OrganizationMember", back_populates="organization", cascade="all, delete-orphan")
     projects = relationship("ProjectAccess", back_populates="organization", cascade="all, delete-orphan")
+    run_quota = relationship("OrganizationRunQuota", back_populates="organization", uselist=False, cascade="all, delete-orphan")
 
 
 class OrganizationMember(Base):
@@ -161,3 +162,17 @@ class ProjectAccess(Base):
 
     project = relationship("Project", back_populates="access")
     organization = relationship("Organization", back_populates="projects")
+
+
+class OrganizationRunQuota(Base):
+    __tablename__ = "organization_run_quotas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(String, ForeignKey("organizations.id"), nullable=False, unique=True, index=True)
+    included_runs = Column(Integer, nullable=False, default=3)
+    bonus_runs = Column(Integer, nullable=False, default=0)
+    used_runs = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    organization = relationship("Organization", back_populates="run_quota")

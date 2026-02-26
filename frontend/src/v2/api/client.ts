@@ -142,10 +142,19 @@ class V2APIClient {
       const data = await response.json();
 
       if (!response.ok) {
+        const detail = data?.detail;
+        const detailMessage =
+          typeof detail === 'string'
+            ? detail
+            : (typeof detail === 'object' && detail !== null ? detail.message : undefined);
+        const detailCode =
+          typeof detail === 'object' && detail !== null
+            ? (detail.code || detail.error)
+            : undefined;
         const error: APIError = {
-          message: data.message || data.detail || response.statusText,
+          message: data.message || detailMessage || response.statusText,
           status: response.status,
-          code: data.code,
+          code: data.code || detailCode,
           details: data
         };
         throw error;

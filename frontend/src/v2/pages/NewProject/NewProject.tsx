@@ -259,6 +259,7 @@ export const NewProject: React.FC = () => {
   const [locationInput, setLocationInput] = useState('');
   const [activeStep, setActiveStep] = useState<'input' | 'analyzing' | 'results'>('input');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   
   // Project configuration state
   const [specialFeatures, setSpecialFeatures] = useState<string[]>([]);
@@ -1048,6 +1049,7 @@ export const NewProject: React.FC = () => {
     if (!result) return;
     
     setSaving(true);
+    setSaveError(null);
     tracer.trace('SAVE_START', 'Saving project', result);
     
     try {
@@ -1095,6 +1097,11 @@ export const NewProject: React.FC = () => {
     } catch (err) {
       console.error('Failed to save project:', err);
       tracer.trace('SAVE_ERROR', 'Save failed', err);
+      const message =
+        typeof (err as any)?.message === 'string' && (err as any).message.trim()
+          ? (err as any).message
+          : 'Failed to save project';
+      setSaveError(message);
     } finally {
       setSaving(false);
     }
@@ -1956,6 +1963,11 @@ export const NewProject: React.FC = () => {
                   Start Over
                 </button>
               </div>
+              {saveError && (
+                <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {saveError}
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -8,6 +8,7 @@ import uuid
 import httpx
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -104,21 +105,49 @@ def _upsert_default_membership(db: Session, user_id: str, email: str) -> Organiz
 def _resolve_membership(
     db: Session, *, user_id: str, email: str, requested_org_id: Optional[str]
 ) -> OrganizationMember:
-    if requested_org_id:
-        membership = (
+    memberships = (
+        db.query(OrganizationMember)
+        .filter(OrganizationMember.user_id == user_id)
+        .order_by(OrganizationMember.is_default.desc(), OrganizationMember.id.asc())
+        .all()
+    )
+
+    # If provisioned by email before first login, claim that membership for this user_id.
+    if not memberships and email:
+        email_membership = (
             db.query(OrganizationMember)
-            .filter(
-                OrganizationMember.user_id == user_id,
-                OrganizationMember.org_id == requested_org_id,
-            )
+            .filter(func.lower(OrganizationMember.email) == email.lower())
+            .order_by(OrganizationMember.is_default.desc(), OrganizationMember.id.asc())
             .first()
         )
+        if email_membership:
+            email_membership.user_id = user_id
+            db.commit()
+            db.refresh(email_membership)
+            memberships = [email_membership]
+
+    if requested_org_id:
+        membership = next((m for m in memberships if m.org_id == requested_org_id), None)
         if not membership:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="User is not a member of requested org",
             )
         return membership
+
+    if memberships:
+        default_member = next((m for m in memberships if m.is_default), memberships[0])
+        if not default_member.is_default:
+            default_member.is_default = True
+            db.commit()
+            db.refresh(default_member)
+        return default_member
+
+    if not settings.allow_auto_org_provisioning:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is not provisioned. Contact support for onboarding.",
+        )
 
     return _upsert_default_membership(db, user_id=user_id, email=email)
 

@@ -29,3 +29,21 @@ TOKEN_USER_A='paste-user-a-token' TOKEN_USER_B='paste-user-b-token' API_BASE_URL
 ## Notes
 - The script creates one project per user and attempts cleanup at the end.
 - If cleanup fails, remove projects from dashboard or call delete endpoint with owner token.
+
+## Manual onboarding (no public signup)
+1. In Supabase, go to `Authentication -> Users -> Add user`.
+2. Add the customer email (set `email_confirm=true`).
+3. Keep backend setting `ALLOW_AUTO_ORG_PROVISIONING=false` in production.
+4. On first login, backend claims the pre-provisioned membership by email and binds it to the real Supabase `user_id`.
+
+## Quick run top-up (2-5 minute ops)
+Use the backend helper script:
+
+```bash
+cd /Users/codymarchant/Documents/Projects/specsharp-claude/.worktrees/merge_specialty_into_main/backend
+PYTHONPATH=$PWD ./venv/bin/python scripts/grant_runs.py --email customer@example.com --add-runs 10
+```
+
+Notes:
+- If the user does not exist in `organization_members` yet, the script resolves them by Supabase email and provisions a workspace.
+- Unlimited override users are controlled by `UNLIMITED_ACCESS_EMAILS` in `backend/.env` (comma-separated).
