@@ -44,6 +44,76 @@ export const HomePage: React.FC = () => {
     }
   ];
 
+  const sampleScenarioRows = [
+    {
+      scenario: 'Base',
+      totalProjectCost: '$57,482,040',
+      annualRevenue: '$8,045,555',
+      noi: '$3,218,222',
+      dscr: '1.36',
+      yieldOnCost: '5.6%',
+      stabilizedValue: '$58,513,130',
+    },
+    {
+      scenario: 'Conservative',
+      totalProjectCost: '$69,553,268',
+      annualRevenue: '$8,045,555',
+      noi: '$3,218,222',
+      dscr: '1.12',
+      yieldOnCost: '4.6%',
+      stabilizedValue: '$58,513,130',
+    },
+    {
+      scenario: 'Amenity Overrun',
+      totalProjectCost: '$70,810,898',
+      annualRevenue: '$8,045,555',
+      noi: '$3,218,222',
+      dscr: '1.10',
+      yieldOnCost: '4.5%',
+      stabilizedValue: '$58,513,130',
+    },
+    {
+      scenario: 'Amenity Systems Stress',
+      totalProjectCost: '$64,152,506',
+      annualRevenue: '$8,045,555',
+      noi: '$3,218,222',
+      dscr: '1.22',
+      yieldOnCost: '5.0%',
+      stabilizedValue: '$58,513,130',
+    },
+  ];
+
+  const sampleProvenanceRows = [
+    {
+      scenario: 'Base',
+      appliedTiles: '—',
+      costScalar: '—',
+      revenueScalar: '—',
+      driverMetric: '—',
+    },
+    {
+      scenario: 'Conservative',
+      appliedTiles: 'cost_plus_10, cost_per_sf_plus_10',
+      costScalar: '1.10',
+      revenueScalar: '—',
+      driverMetric: 'totals.cost_per_sf',
+    },
+    {
+      scenario: 'Amenity Overrun',
+      appliedTiles: 'cost_plus_10, cost_per_sf_plus_10, amenity_finish_plus_15',
+      costScalar: '1.10',
+      revenueScalar: '—',
+      driverMetric: 'totals.cost_per_sf, trade_breakdown.finishes',
+    },
+    {
+      scenario: 'Amenity Systems Stress',
+      appliedTiles: 'cost_plus_10, amenity_mep_plus_10',
+      costScalar: '1.10',
+      revenueScalar: '—',
+      driverMetric: 'trade_breakdown.mechanical',
+    },
+  ];
+
   useEffect(() => {
     trackPageView('Homepage');
     setupViewTracking();
@@ -126,7 +196,7 @@ export const HomePage: React.FC = () => {
                 document.getElementById('scenario-comparison')?.scrollIntoView({ behavior: 'smooth' });
               }}
             >
-              Compare Scenarios
+              Coverage
             </a>
             <Link to="/login" className="text-blue-600 hover:text-blue-700 transition-colors font-medium">
               Login
@@ -135,9 +205,9 @@ export const HomePage: React.FC = () => {
               to="/demo" 
               className="btn-primary"
               style={{backgroundColor: '#3B60E4', color: 'white', padding: '12px 24px'}}
-              onClick={() => handleCTAClick('Try It Now - No Signup', 'navigation')}
+              onClick={() => handleCTAClick('Request a DealShield Packet', 'navigation')}
             >
-              Try It Now - No Signup
+              Request a DealShield Packet
             </Link>
           </div>
           {/* Mobile menu button */}
@@ -180,7 +250,7 @@ export const HomePage: React.FC = () => {
                   setIsMobileMenuOpen(false);
                 }}
               >
-                Compare Scenarios
+                Coverage
               </a>
               <Link 
                 to="/login" 
@@ -194,11 +264,11 @@ export const HomePage: React.FC = () => {
                 className="block w-full text-center btn-primary"
                 style={{backgroundColor: '#3B60E4', color: 'white', padding: '12px 24px'}}
                 onClick={() => {
-                  handleCTAClick('Try It Now - No Signup', 'mobile-navigation');
+                  handleCTAClick('Request a DealShield Packet', 'mobile-navigation');
                   setTimeout(() => setIsMobileMenuOpen(false), 0);
                 }}
               >
-                Try It Now - No Signup
+                Request a DealShield Packet
               </Link>
             </div>
           </div>
@@ -259,55 +329,54 @@ export const HomePage: React.FC = () => {
             <h1 className="font-black tracking-tight mb-6">
               <span className="block text-3xl sm:text-5xl md:text-6xl lg:text-7xl text-white leading-tight" 
                     style={{animation: 'slide-in 0.5s ease-out both'}}>
-                Investment-Grade Project
+                Decision Insurance for
               </span>
               <span className="block text-3xl sm:text-5xl md:text-6xl lg:text-7xl text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 leading-tight" 
                     style={{animation: 'slide-in 0.5s ease-out both', animationDelay: '0.1s'}}>
-                Analysis
+                Development Deals
               </span>
             </h1>
 
-            {/* The hook - Before You Sign the LOI */}
-            <div className="mb-6" style={{animation: 'slide-in 0.5s ease-out both', animationDelay: '0.2s'}}>
-              <div className="relative inline-flex items-center justify-center">
-                <span className="text-2xl sm:text-3xl md:text-4xl font-bold text-yellow-400 
-                               filter drop-shadow-[0_0_20px_rgba(250,204,21,0.4)]">
-                  Before You Sign the LOI
-                </span>
-              </div>
-            </div>
+            <p className="text-xl sm:text-2xl md:text-3xl text-yellow-300 mb-4 font-semibold" 
+               style={{animation: 'slide-in 0.5s ease-out both', animationDelay: '0.2s'}}>
+              After discussion. Before delivery. The trust layer.
+            </p>
 
-            {/* Complete development costs */}
-            <p className="text-xl sm:text-2xl md:text-3xl text-gray-200 mb-4" 
+            <p className="text-base sm:text-lg md:text-xl text-gray-200 mb-6 max-w-4xl mx-auto px-4" 
                style={{animation: 'slide-in 0.5s ease-out both', animationDelay: '0.3s'}}>
-              Complete development costs. ROI projections. Board-ready scenarios.
+              SpecSharp generates a deterministic, auditable approval packet—DealShield + Executive + Construction—so your decision survives committee questions, lender scrutiny, and post-mortems.
             </p>
 
-            {/* Subheadline - Know your all-in number */}
-            <p className="text-base sm:text-lg md:text-xl text-gray-200 mb-6 max-w-3xl mx-auto px-4" 
-               style={{animation: 'slide-in 0.5s ease-out both', animationDelay: '0.35s'}}>
-              Know your all-in number—construction, soft costs, land, financing—instantly.
-            </p>
-
-            {/* Urgency text */}
-            <p className="text-base sm:text-lg text-yellow-300 mb-6 font-medium" 
-               style={{animation: 'slide-in 0.5s ease-out both', animationDelay: '0.38s'}}>
-              ⏰ Deal on your desk? Get your numbers before tomorrow's meeting.
-            </p>
+            <div className="max-w-4xl mx-auto mb-7 px-4" style={{animation: 'slide-in 0.5s ease-out both', animationDelay: '0.35s'}}>
+              <ul className="space-y-3 text-left">
+                <li className="flex items-start text-sm sm:text-base md:text-lg text-gray-100">
+                  <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mr-2 mt-0.5" />
+                  <span>What breaks first + breakpoints and flex bands</span>
+                </li>
+                <li className="flex items-start text-sm sm:text-base md:text-lg text-gray-100">
+                  <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mr-2 mt-0.5" />
+                  <span>What’s most likely wrong + question bank mapped to drivers</span>
+                </li>
+                <li className="flex items-start text-sm sm:text-base md:text-lg text-gray-100">
+                  <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mr-2 mt-0.5" />
+                  <span>Provenance on every run (inputs, overrides, what changed, Snapshot ID)</span>
+                </li>
+              </ul>
+            </div>
 
             {/* CTAs - stack on mobile, side-by-side on desktop */}
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center mb-6 px-4" 
                  style={{animation: 'slide-in 0.5s ease-out both', animationDelay: '0.4s'}}>
               <Link
-                to="/demo"
+                to="/new"
                 className="group relative px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-amber-500 to-orange-500 
                            rounded-lg font-bold text-base sm:text-lg text-white overflow-hidden
                            transform hover:scale-105 transition-all duration-200
                            shadow-[0_10px_30px_-10px_rgba(251,146,60,0.5)]"
-                onClick={() => handleCTAClick('Analyze Your Next Deal', 'hero')}
+                onClick={() => handleCTAClick('Generate Decision Packet', 'hero')}
               >
                 <span className="relative z-10 flex items-center justify-center">
-                  Analyze Your Next Deal
+                  Generate Decision Packet
                   <svg className="w-4 sm:w-5 h-4 sm:h-5 ml-2 group-hover:translate-x-1 transition-transform" 
                        fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
@@ -315,34 +384,18 @@ export const HomePage: React.FC = () => {
                 </span>
               </Link>
 
-              <button 
+              <button
                 className="px-6 sm:px-8 py-3 sm:py-4 bg-white/5 backdrop-blur border border-white/20 
                            rounded-lg font-bold text-base sm:text-lg text-white
                            hover:bg-white/10 hover:border-white/30
                            transform hover:scale-105 transition-all duration-200"
                 onClick={() => {
-                  document.getElementById('scenario-comparison')?.scrollIntoView({ behavior: 'smooth' });
+                  handleCTAClick('View a Sample DealShield', 'hero');
+                  document.getElementById('sample-dealshield')?.scrollIntoView({ behavior: 'smooth' });
                 }}
               >
-                Compare Scenarios
-                <span className="inline-block ml-2">📊</span>
+                View a Sample DealShield
               </button>
-            </div>
-
-            {/* Finally tagline */}
-            <p className="text-base sm:text-lg md:text-xl text-gray-300 mb-8" 
-               style={{animation: 'slide-in 0.5s ease-out both', animationDelay: '0.45s'}}>
-              Finally. Know if the deal works before spending $100K on design.
-            </p>
-
-            {/* Trust bar with developer focus */}
-            <div className="hero-trust-bar mt-8 pt-6 border-t border-white/10" 
-                 style={{animation: 'fade-in 0.5s ease-out both', animationDelay: '0.5s'}}>
-              <p className="text-sm sm:text-base text-gray-300">
-                Trusted by <span className="font-bold text-yellow-400">500+</span> developers | 
-                <span className="font-bold text-yellow-400"> $28B+</span> projects analyzed | 
-                <span className="font-bold text-yellow-400"> 50,000+</span> scenarios compared
-              </p>
             </div>
           </div>
         </div>
@@ -355,25 +408,54 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* Value Propositions - Investment focused metrics */}
+      {/* Deliverables Strip */}
       <section className="py-16 bg-gray-50 border-b border-gray-200">
         <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            <div className="text-center bg-white rounded-lg p-6 shadow-sm">
-              <div className="text-3xl sm:text-4xl font-bold text-yellow-600 mb-2">$2.9M</div>
-              <div className="text-lg font-semibold text-gray-800">All-in Investment</div>
-              <div className="text-sm text-gray-600">Construction + Soft Costs + Land</div>
+          <div className="text-center mb-8">
+            <p className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-4 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
+              Forwardable Artifacts
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+            <div className="group relative overflow-hidden rounded-2xl border border-blue-100 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-blue-100/70">
+              <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-blue-500 to-cyan-400" />
+              <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+                <Shield className="h-6 w-6" />
+              </div>
+              <h3 className="text-2xl font-extrabold tracking-tight text-gray-900">DealShield</h3>
+              <p className="mt-1 text-sm font-semibold uppercase tracking-[0.14em] text-blue-700">
+                1-page Policy Summary
+              </p>
+              <p className="mt-4 text-base font-medium text-gray-700">Forwardable in 60 seconds.</p>
             </div>
-            <div className="text-center bg-white rounded-lg p-6 shadow-sm">
-              <div className="text-3xl sm:text-4xl font-bold text-blue-600 mb-2">12.8%</div>
-              <div className="text-lg font-semibold text-gray-800">Target IRR</div>
-              <div className="text-sm text-gray-600">With clear path to achieve</div>
+
+            <div className="group relative overflow-hidden rounded-2xl border border-indigo-100 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-100/70">
+              <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-indigo-500 to-blue-500" />
+              <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
+                <Layers className="h-6 w-6" />
+              </div>
+              <h3 className="text-2xl font-extrabold tracking-tight text-gray-900">Executive Appendix</h3>
+              <p className="mt-4 text-base font-medium text-gray-700">Drivers, sensitivities, disclosures.</p>
             </div>
-            <div className="text-center bg-white rounded-lg p-6 shadow-sm">
-              <div className="text-3xl sm:text-4xl font-bold text-green-600 mb-2">&lt; 5 min</div>
-              <div className="text-lg font-semibold text-gray-800">Full Analysis</div>
-              <div className="text-sm text-gray-600">Including scenario comparison</div>
+
+            <div className="group relative overflow-hidden rounded-2xl border border-emerald-100 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-100/70">
+              <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-emerald-500 to-teal-400" />
+              <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                <HardHat className="h-6 w-6" />
+              </div>
+              <h3 className="text-2xl font-extrabold tracking-tight text-gray-900">Construction Appendix</h3>
+              <p className="mt-4 text-base font-medium text-gray-700">Scope + trades + schedule honesty.</p>
             </div>
+          </div>
+
+          <div className="mx-auto mt-8 max-w-4xl rounded-2xl border border-slate-200 bg-white/80 px-6 py-5 text-center shadow-sm">
+            <p className="text-lg sm:text-xl font-bold tracking-tight text-slate-900">
+              One deterministic packet your team can forward without rewriting the story.
+            </p>
+            <p className="mt-2 text-sm sm:text-base text-slate-600">
+              Same assumptions, same decision logic, full provenance across committee, lender, and partner review.
+            </p>
           </div>
         </div>
       </section>
@@ -387,6 +469,131 @@ export const HomePage: React.FC = () => {
       <div id="scenario-comparison" className="py-16 bg-gray-50 border-b border-gray-200">
         <ScenarioComparison />
       </div>
+
+      {/* Sample DealShield (Page 1) */}
+      <section id="sample-dealshield" className="py-16 bg-white border-b border-gray-200">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-8">
+            <p className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-4 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
+              View a Sample DealShield
+            </p>
+            <h2 className="mt-4 text-3xl sm:text-4xl font-black tracking-tight text-slate-900">
+              Page 1 Preview
+            </h2>
+          </div>
+
+          <div className="max-w-5xl mx-auto rounded-3xl border border-slate-200 bg-slate-50 p-6 sm:p-10 shadow-xl shadow-slate-200/70">
+            <header className="mb-6">
+              <h3 className="text-4xl sm:text-5xl font-black tracking-tight text-slate-900">DealShield</h3>
+              <p className="mt-2 text-xl text-slate-700">Profile: multifamily_luxury_apartments_v1</p>
+              <p className="text-lg text-slate-600">Nashville, TN · 220,000 SF</p>
+            </header>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+              <table className="min-w-full text-left text-sm sm:text-base">
+                <thead className="bg-slate-100 text-slate-800">
+                  <tr>
+                    <th className="px-4 py-3 font-bold">Scenario</th>
+                    <th className="px-4 py-3 font-bold">Total Project Cost</th>
+                    <th className="px-4 py-3 font-bold">Annual Revenue</th>
+                    <th className="px-4 py-3 font-bold">NOI</th>
+                    <th className="px-4 py-3 font-bold">DSCR</th>
+                    <th className="px-4 py-3 font-bold">Yield on Cost</th>
+                    <th className="px-4 py-3 font-bold">Stabilized Value</th>
+                  </tr>
+                </thead>
+                <tbody className="text-slate-700">
+                  {sampleScenarioRows.map((row) => (
+                    <tr key={row.scenario} className="border-t border-slate-200">
+                      <td className="px-4 py-3 font-semibold text-slate-900">{row.scenario}</td>
+                      <td className="px-4 py-3">{row.totalProjectCost}</td>
+                      <td className="px-4 py-3">{row.annualRevenue}</td>
+                      <td className="px-4 py-3">{row.noi}</td>
+                      <td className="px-4 py-3">{row.dscr}</td>
+                      <td className="px-4 py-3">{row.yieldOnCost}</td>
+                      <td className="px-4 py-3">{row.stabilizedValue}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="mt-4 text-lg text-slate-600">
+              DSCR and Yield reflect the underwriting/debt terms in this run — see Provenance.
+            </p>
+
+            <div className="mt-4 grid gap-3">
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-sm font-bold uppercase tracking-wide text-slate-500">Decision Summary</p>
+                <div className="mt-2 grid sm:grid-cols-2 gap-2 text-slate-700">
+                  <p><span className="font-semibold text-slate-900">Stabilized Value:</span> $58,513,130</p>
+                  <p><span className="font-semibold text-slate-900">Cap Rate Used:</span> 5.5%</p>
+                  <p className="sm:col-span-2"><span className="font-semibold text-slate-900">Value Gap:</span> +$1,031,090 (+1.8% of cost)</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-sm font-bold uppercase tracking-wide text-slate-500">Assumptions</p>
+                <ul className="mt-2 list-disc pl-5 space-y-1 text-slate-700">
+                  <li>DealShield scenarios stress cost/revenue assumptions only; schedule slippage or acceleration impacts are not modeled here.</li>
+                  <li>Not modeled: financing assumptions missing</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="mt-8">
+              <h4 className="text-3xl font-black tracking-tight text-slate-900">Provenance</h4>
+              <div className="mt-3 text-slate-700 space-y-2">
+                <p><span className="font-semibold text-slate-900">Profiles &amp; Controls:</span> Tile: multifamily_luxury_apartments_v1 | Content: multifamily_luxury_apartments_v1 | Scope: multifamily_luxury_apartments_structural_v1 | Stress band: — | Anchor: —</p>
+                <p><span className="font-semibold text-slate-900">Decision Policy:</span> Status: GO | Reason: base_value_gap_positive | Source: dealshield_policy_v1 | Policy ID: dealshield_canonical_policy_v1</p>
+              </div>
+
+              <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-slate-100 text-slate-800">
+                    <tr>
+                      <th className="px-4 py-3 font-bold">Scenario</th>
+                      <th className="px-4 py-3 font-bold">Applied Tiles</th>
+                      <th className="px-4 py-3 font-bold">Cost Scalar</th>
+                      <th className="px-4 py-3 font-bold">Revenue Scalar</th>
+                      <th className="px-4 py-3 font-bold">Driver metric (Ugly only)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-700">
+                    {sampleProvenanceRows.map((row) => (
+                      <tr key={row.scenario} className="border-t border-slate-200">
+                        <td className="px-4 py-3 font-semibold text-slate-900">{row.scenario}</td>
+                        <td className="px-4 py-3">{row.appliedTiles}</td>
+                        <td className="px-4 py-3">{row.costScalar}</td>
+                        <td className="px-4 py-3">{row.revenueScalar}</td>
+                        <td className="px-4 py-3">{row.driverMetric}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="mt-8">
+              <h4 className="text-3xl font-black tracking-tight text-slate-900">What would change this decision fastest?</h4>
+              <ul className="mt-4 list-disc pl-6 space-y-3 text-slate-700">
+                <li>
+                  <p className="font-semibold text-slate-900">Confirm core hard-cost movement</p>
+                  <p className="text-sm sm:text-base">Tile: cost_plus_10 | Metric: totals.total_project_cost | Transform: {"{"}"op": "mul", "value": 1.1{"}"}</p>
+                </li>
+                <li>
+                  <p className="font-semibold text-slate-900">Validate high-spec cost per SF tolerance</p>
+                  <p className="text-sm sm:text-base">Tile: cost_per_sf_plus_10 | Metric: totals.cost_per_sf | Transform: {"{"}"op": "mul", "value": 1.1{"}"}</p>
+                </li>
+                <li>
+                  <p className="font-semibold text-slate-900">Validate premium amenity finish exposure</p>
+                  <p className="text-sm sm:text-base">Tile: amenity_finish_plus_15 | Metric: trade_breakdown.finishes | Transform: {"{"}"op": "mul", "value": 1.15{"}"}</p>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Why Choose SpecSharp - Enhanced Version (NOW #4 with new design) */}
       <div className="py-16 bg-white border-b border-gray-200">
@@ -520,7 +727,7 @@ export const HomePage: React.FC = () => {
       </section>
       */}
 
-      {/* CTA Section - Investment Focused */}
+      {/* Final CTA Section */}
       <section className="cta-section fade-in-section bg-gradient-to-br from-slate-800 to-slate-900 relative overflow-hidden">
         {/* Add subtle pattern overlay */}
         <div className="absolute inset-0 opacity-10">
@@ -530,65 +737,65 @@ export const HomePage: React.FC = () => {
         </div>
         
         <div className="container mx-auto px-4 py-20 relative" style={{zIndex: 1}}>
-          {/* Urgency Badge */}
           <div className="text-center mb-6">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-400/20 backdrop-blur rounded-full">
-              <span className="text-yellow-400 text-2xl">⚡</span>
-              <span className="text-yellow-400 font-semibold">Limited Early Access</span>
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-400/20 backdrop-blur rounded-full border border-blue-300/30">
+              <Shield className="w-4 h-4 text-blue-100" />
+              <span className="text-blue-100 font-semibold">Decision Insurance Workflow</span>
             </div>
           </div>
           
           <h2 className="section-title text-center" style={{color: 'white'}}>
-            Your Next Deal is Waiting
+            Run the Packet Before IC, Lender, and Partner Review
           </h2>
           <p className="text-xl md:text-2xl mb-12 text-gray-300 max-w-3xl mx-auto text-center">
-            Know if it pencils before you commit. Get your complete investment analysis now.
+            Standardize what gets debated: canonical decision status, first-break conditions,
+            and snapshot-linked provenance in one forwardable packet.
           </p>
           
           {/* Two Column Layout */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto mb-12">
-            {/* What you'll get column */}
+            {/* Runbook column */}
             <div className="bg-white/10 backdrop-blur rounded-lg p-6">
-              <h3 className="text-lg font-bold text-white mb-4">In your first session:</h3>
+              <h3 className="text-lg font-bold text-white mb-4">Runbook (60-second flow):</h3>
               <ul className="space-y-3 text-gray-200">
                 <li className="flex items-start gap-2">
                   <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                  <span>Complete investment analysis with IRR/NPV</span>
+                  <span>Describe the deal (or paste your memo)</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                  <span>3 scenarios showing path to feasibility</span>
+                  <span>Confirm inferred assumptions and not-modeled items</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                  <span>Board-ready presentation package</span>
+                  <span>Generate DealShield + Executive + Construction appendices</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                  <span>Specific improvements to hit target returns</span>
+                  <span>Rerun with overrides; each run stamps a new Snapshot ID</span>
                 </li>
               </ul>
             </div>
             
-            {/* Perfect for column */}
+            {/* Defensible output column */}
             <div className="bg-white/10 backdrop-blur rounded-lg p-6">
-              <h3 className="text-lg font-bold text-white mb-4">Ready to analyze:</h3>
+              <h3 className="text-lg font-bold text-white mb-4">What gets defended in the room:</h3>
               <ul className="space-y-3 text-gray-200">
                 <li className="flex items-start gap-2">
-                  <Zap className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
-                  <span>Deals under LOI consideration</span>
+                  <CheckCircle className="w-5 h-5 text-blue-300 flex-shrink-0 mt-0.5" />
+                  <span>Canonical decision status + reason code</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <Zap className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
-                  <span>Projects stuck at NO-GO status</span>
+                  <CheckCircle className="w-5 h-5 text-blue-300 flex-shrink-0 mt-0.5" />
+                  <span>First-break scenario, threshold, and flex-before-break</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <Zap className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
-                  <span>Tomorrow's investment committee</span>
+                  <CheckCircle className="w-5 h-5 text-blue-300 flex-shrink-0 mt-0.5" />
+                  <span>Most-likely-wrong drivers + question bank</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <Zap className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
-                  <span>Portfolio optimization opportunities</span>
+                  <CheckCircle className="w-5 h-5 text-blue-300 flex-shrink-0 mt-0.5" />
+                  <span>Scope profile, schedule source, and applied controls</span>
                 </li>
               </ul>
             </div>
@@ -597,61 +804,56 @@ export const HomePage: React.FC = () => {
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
             <Link
-              to="/demo"
+              to="/new"
               className="group relative px-8 py-4 bg-gradient-to-r from-amber-500 to-orange-500 
                          rounded-lg font-bold text-lg text-white overflow-hidden
                          transform hover:scale-105 transition-all duration-200
                          shadow-[0_10px_30px_-10px_rgba(251,146,60,0.5)]
                          flex flex-col items-center"
-              onClick={() => handleCTAClick('Analyze Your Deal Now', 'footer-cta')}
+              onClick={() => handleCTAClick('Generate Decision Packet', 'footer-cta')}
             >
               <span className="flex items-center">
-                Analyze Your Deal Now
+                Generate Decision Packet
                 <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
               </span>
               <span className="text-sm mt-1 text-orange-100 font-normal">
-                Get GO/NO-GO decision in 60 seconds
+                Intake -&gt; confirm assumptions -&gt; stamp packet
               </span>
             </Link>
             
-            <a
-              href="mailto:cody@specsharp.ai?subject=SpecSharp Expert Walkthrough Request&body=Hi Cody,%0D%0A%0D%0AI'd like to schedule a 15-minute expert walkthrough with my actual project.%0D%0A%0D%0AProject Type: %0D%0A%0D%0ABest times for me:%0D%0A%0D%0AThanks!"
+            <button
               className="px-8 py-4 bg-white/10 backdrop-blur border-2 border-white/30 
                          rounded-lg font-bold text-lg text-white
                          hover:bg-white/20 hover:border-white/50
                          transform hover:scale-105 transition-all duration-200
                          flex flex-col items-center"
-              onClick={() => handleCTAClick('Schedule Expert Walkthrough', 'footer-cta')}
+              onClick={() => {
+                handleCTAClick('View a Sample DealShield', 'footer-cta');
+                document.getElementById('sample-dealshield')?.scrollIntoView({ behavior: 'smooth' });
+              }}
             >
-              <span>Schedule Expert Walkthrough</span>
+              <span>View a Sample DealShield</span>
               <span className="text-sm mt-1 text-gray-300 font-normal">
-                15-min demo with your actual project
+                See Page 1 packet format and provenance fields
               </span>
-            </a>
+            </button>
           </div>
-          
-          {/* Social Proof */}
-          <div className="text-center mb-8">
-            <span className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur rounded-full">
-              <span className="text-2xl">🔥</span>
-              <span className="text-white font-semibold">$1.2B in deals analyzed this quarter</span>
-            </span>
+
+          <div className="text-center mb-6">
+            <Link
+              to="/coverage"
+              className="inline-flex items-center text-blue-200 hover:text-white transition-colors text-sm font-semibold"
+              onClick={() => handleCTAClick('See Coverage', 'footer-cta')}
+            >
+              See supported types and subtype coverage
+              <ArrowRight className="w-4 h-4 ml-1" />
+            </Link>
           </div>
-          
-          {/* Security Badges */}
-          <div className="security-badges">
-            <div className="security-badge">
-              <Shield className="text-green-400" />
-              <span>SOC 2 Compliant</span>
-            </div>
-            <div className="security-badge">
-              <Lock className="text-green-400" />
-              <span>SSL Encrypted</span>
-            </div>
-            <div className="security-badge">
-              <Award className="text-green-400" />
-              <span>Built in Nashville</span>
-            </div>
+
+          <div className="text-center">
+            <p className="text-sm text-slate-300">
+              No synthetic performance claims. Every packet reflects current inputs, policy logic, and explicit not-modeled disclosures.
+            </p>
           </div>
         </div>
       </section>

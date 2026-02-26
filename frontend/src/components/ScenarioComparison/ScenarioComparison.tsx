@@ -136,17 +136,25 @@ const ScenarioComparison: React.FC = () => {
           ))}
         </div>
         
-        {/* Accuracy Badge */}
+        {/* Trust Message */}
         <motion.div 
           className="accuracy-badge"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.8 }}
         >
-          <span className="accuracy-icon">🎯</span>
+          <span className="accuracy-icon">🧾</span>
           <p className="accuracy-text">
-            <strong>94% accuracy</strong> vs. actual bids across <strong>50,000+ projects</strong>
+            <strong>Coverage is explicit. Unknowns are disclosed.</strong>
           </p>
+          <p className="accuracy-subtext">
+            Every packet stamps subtype assumptions, schedule/source provenance, and not-modeled items so reviews stay consistent.
+          </p>
+          <div className="accuracy-meta">
+            <span>Deterministic format</span>
+            <span>Snapshot-linked provenance</span>
+            <span>No hidden assumptions</span>
+          </div>
         </motion.div>
         
         {/* CTA */}
@@ -158,12 +166,14 @@ const ScenarioComparison: React.FC = () => {
         >
           <button 
             className="primary-btn large"
-            onClick={() => window.location.href = '/demo'}
+            onClick={() => window.location.href = '/new'}
           >
-            Try Your Building Type Now
+            Generate Decision Packet
             <span className="arrow">→</span>
           </button>
-          <p className="cta-subtitle">Get asset-specific intelligence in 60 seconds</p>
+          <p className="cta-subtitle">
+            Start with your deal, confirm assumptions, then generate DealShield + Executive + Construction.
+          </p>
         </motion.div>
       </div>
     </section>

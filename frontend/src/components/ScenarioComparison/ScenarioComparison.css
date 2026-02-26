@@ -210,7 +210,11 @@
 .cta-subtitle {
   margin-top: 12px;
   color: #666;
-  font-size: 0.95rem;
+  font-size: 1rem;
+  max-width: 700px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.45;
 }
 
 /* Mobile Responsive */
@@ -332,29 +336,72 @@
 /* Accuracy Badge */
 .accuracy-badge {
   text-align: center;
-  padding: 24px;
+  padding: 28px;
   margin: 60px auto 40px;
-  max-width: 600px;
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  border-radius: 16px;
-  color: white;
-  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.25);
+  max-width: 980px;
+  background: #ffffff;
+  border: 1px solid #dbe3f0;
+  border-radius: 20px;
+  color: #0f172a;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.accuracy-badge::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 4px;
+  background: #2563eb;
 }
 
 .accuracy-icon {
-  font-size: 48px;
+  font-size: 42px;
   display: block;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .accuracy-text {
-  font-size: 1.125rem;
+  font-size: 1.35rem;
   margin: 0;
 }
 
 .accuracy-text strong {
   font-weight: 700;
-  font-size: 1.25rem;
+  font-size: 1.45rem;
+  letter-spacing: -0.01em;
+}
+
+.accuracy-subtext {
+  margin: 12px auto 0;
+  max-width: 840px;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: #334155;
+}
+
+.accuracy-meta {
+  margin-top: 14px;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.accuracy-meta span {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1e40af;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 /* Mobile Responsive for Building Types */
@@ -376,5 +423,28 @@
   
   .unit-metric {
     text-align: center;
+  }
+
+  .accuracy-badge {
+    margin: 40px auto 30px;
+    padding: 22px 16px;
+    border-radius: 16px;
+  }
+
+  .accuracy-text {
+    font-size: 1.1rem;
+  }
+
+  .accuracy-text strong {
+    font-size: 1.2rem;
+  }
+
+  .accuracy-subtext {
+    font-size: 0.92rem;
+  }
+
+  .accuracy-meta span {
+    font-size: 0.72rem;
+    padding: 5px 10px;
   }
 }

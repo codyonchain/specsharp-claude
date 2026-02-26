@@ -12,12 +12,6 @@ const WhyChooseEnhanced: React.FC = () => {
     specsharp: { investment: 100, scenarios: 100, costs: 100, guidance: 100 }
   });
   
-  const [statsValues, setStatsValues] = useState({
-    dealsSaved: 0,
-    approved: 0,
-    presentations: 0
-  });
-  
   useEffect(() => {
     if (isInView) {
       // Animate comparison bars
@@ -28,42 +22,9 @@ const WhyChooseEnhanced: React.FC = () => {
         });
       }, 200);
       
-      // Animate stats counters
-      animateStats();
-      
       return () => clearTimeout(timer1);
     }
   }, [isInView]);
-  
-  const animateStats = () => {
-    const duration = 2000;
-    const steps = 60;
-    const targets = { dealsSaved: 450, approved: 87, presentations: 2400 };
-    
-    const current = { dealsSaved: 0, approved: 0, presentations: 0 };
-    const increments = {
-      dealsSaved: targets.dealsSaved / steps,
-      approved: targets.approved / steps,
-      presentations: targets.presentations / steps
-    };
-    
-    const timer = setInterval(() => {
-      current.dealsSaved += increments.dealsSaved;
-      current.approved += increments.approved;
-      current.presentations += increments.presentations;
-      
-      if (current.dealsSaved >= targets.dealsSaved) {
-        setStatsValues(targets);
-        clearInterval(timer);
-      } else {
-        setStatsValues({
-          dealsSaved: Math.floor(current.dealsSaved),
-          approved: Math.floor(current.approved),
-          presentations: Math.floor(current.presentations)
-        });
-      }
-    }, duration / steps);
-  };
   
   return (
     <section className="why-choose-enhanced py-12 bg-gray-50" ref={sectionRef}>
@@ -234,47 +195,53 @@ const WhyChooseEnhanced: React.FC = () => {
           </div>
         </div>
 
-        {/* Key Metrics Section */}
-        <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-          
-          {/* Deals Saved */}
-          <motion.div 
-            className="metric-card text-center bg-white p-6 rounded-xl shadow-lg"
-            initial={{ opacity: 0, y: 20 }}
-            animate={isInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ delay: 0.6 }}
-          >
-            <span className="text-4xl mb-3 block">💰</span>
-            <h3 className="font-bold text-xl mb-3 text-gray-800">Deals Saved</h3>
-            <div className="text-4xl font-bold text-red-600 mb-2">${statsValues.dealsSaved}M</div>
-            <p className="text-sm text-gray-600">In avoided bad investments</p>
-          </motion.div>
+        {/* How It's Used Workflow Band */}
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-7">
+            <h3 className="text-2xl sm:text-3xl font-bold text-gray-800">How it&apos;s used</h3>
+            <p className="mt-2 text-base sm:text-lg text-gray-600">Run before IC, lender, and partner decisions.</p>
+          </div>
 
-          {/* Projects Approved */}
-          <motion.div 
-            className="metric-card text-center bg-white p-6 rounded-xl shadow-lg"
-            initial={{ opacity: 0, y: 20 }}
-            animate={isInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ delay: 0.7 }}
-          >
-            <span className="text-4xl mb-3 block">✅</span>
-            <h3 className="font-bold text-xl mb-3 text-gray-800">Projects Approved</h3>
-            <div className="text-4xl font-bold text-green-600 mb-2">{statsValues.approved}%</div>
-            <p className="text-sm text-gray-600">After scenario optimization</p>
-          </motion.div>
+          <div className="grid md:grid-cols-3 gap-8">
+            <motion.div
+              className="metric-card text-center bg-white p-6 rounded-xl shadow-lg"
+              initial={{ opacity: 0, y: 20 }}
+              animate={isInView ? { opacity: 1, y: 0 } : {}}
+              transition={{ delay: 0.6 }}
+            >
+              <span className="text-4xl mb-3 block">🧭</span>
+              <h3 className="font-bold text-xl mb-3 text-gray-800">Run Before Decision Meetings</h3>
+              <p className="text-sm text-gray-600">
+                Use the packet before IC review, lender sizing, and partner sign-off.
+              </p>
+            </motion.div>
 
-          {/* Board Presentations */}
-          <motion.div 
-            className="metric-card text-center bg-white p-6 rounded-xl shadow-lg"
-            initial={{ opacity: 0, y: 20 }}
-            animate={isInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ delay: 0.8 }}
-          >
-            <span className="text-4xl mb-3 block">📊</span>
-            <h3 className="font-bold text-xl mb-3 text-gray-800">Board Presentations</h3>
-            <div className="text-4xl font-bold text-blue-600 mb-2">{statsValues.presentations.toLocaleString()}+</div>
-            <p className="text-sm text-gray-600">Generated for investment committees</p>
-          </motion.div>
+            <motion.div
+              className="metric-card text-center bg-white p-6 rounded-xl shadow-lg"
+              initial={{ opacity: 0, y: 20 }}
+              animate={isInView ? { opacity: 1, y: 0 } : {}}
+              transition={{ delay: 0.7 }}
+            >
+              <span className="text-4xl mb-3 block">✅</span>
+              <h3 className="font-bold text-xl mb-3 text-gray-800">Confirm Assumptions, Then Generate</h3>
+              <p className="text-sm text-gray-600">
+                Lock assumptions first, then generate DealShield + Executive + Construction.
+              </p>
+            </motion.div>
+
+            <motion.div
+              className="metric-card text-center bg-white p-6 rounded-xl shadow-lg"
+              initial={{ opacity: 0, y: 20 }}
+              animate={isInView ? { opacity: 1, y: 0 } : {}}
+              transition={{ delay: 0.8 }}
+            >
+              <span className="text-4xl mb-3 block">🧾</span>
+              <h3 className="font-bold text-xl mb-3 text-gray-800">Snapshot ID + Provenance Every Rerun</h3>
+              <p className="text-sm text-gray-600">
+                Every rerun stamps what changed, why it changed, and which controls were applied.
+              </p>
+            </motion.div>
+          </div>
         </div>
       </div>
     </section>

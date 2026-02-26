@@ -241,14 +241,14 @@ const HowItWorksInteractive: React.FC = () => {
               </div>
               
               <p className="step-caption">
-                See how each decision impacts returns. Export all scenarios for your investment committee.
+                See how each scenario changes policy risk, first-break triggers, and decision status.
               </p>
               
-              {/* Step 3: Get Actionable Investment Guidance */}
+              {/* Step 3: Get Decision Insurance Guidance */}
               <div className="export-section">
                 <div className="step-header">
                   <div className="step-number">3</div>
-                  <h3>Get Actionable Investment Guidance</h3>
+                  <h3>Get Decision Insurance Guidance</h3>
                 </div>
                 
                 <motion.div 
@@ -258,8 +258,8 @@ const HowItWorksInteractive: React.FC = () => {
                   transition={{ delay: 0.4 }}
                 >
                   <div className="analysis-header">
-                    <span className="status-badge no-go">Investment Decision: NO-GO</span>
-                    <h4>2 Criteria Not Met (Current Plan)</h4>
+                    <span className="status-badge no-go">Canonical Decision: NO-GO</span>
+                    <h4>2 Policy Conditions Failed (Current Plan)</h4>
                   </div>
                   
                   <div className="criteria-feedback">
@@ -272,7 +272,7 @@ const HowItWorksInteractive: React.FC = () => {
                       <span className="icon">❌</span>
                       <div className="details">
                         <strong>IRR: 6.8%</strong>
-                        <span className="requirement">Minimum required: 10%</span>
+                        <span className="requirement">Policy threshold: 10%</span>
                       </div>
                     </motion.div>
                     
@@ -285,7 +285,7 @@ const HowItWorksInteractive: React.FC = () => {
                       <span className="icon">❌</span>
                       <div className="details">
                         <strong>Cost/Unit: $236K</strong>
-                        <span className="requirement">Maximum target: $225K</span>
+                        <span className="requirement">Policy cap: $225K</span>
                       </div>
                     </motion.div>
                     
@@ -298,7 +298,7 @@ const HowItWorksInteractive: React.FC = () => {
                       <span className="icon">✅</span>
                       <div className="details">
                         <strong>Debt Yield: 7.8%</strong>
-                        <span className="requirement">Minimum required: 7.0%</span>
+                        <span className="requirement">Policy threshold: 7.0%</span>
                       </div>
                     </motion.div>
                   </div>
@@ -309,7 +309,7 @@ const HowItWorksInteractive: React.FC = () => {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.8 }}
                   >
-                    <h4>3 Ways to Make This Project Work:</h4>
+                    <h4>3 Fastest Levers to Flip the Decision:</h4>
                     <ul>
                       <li>Switch to surface parking: Save <strong>$8.1M</strong> ($40K per unit)</li>
                       <li>Increase rents by <strong>$125/month</strong> (still below market)</li>
@@ -339,7 +339,7 @@ const HowItWorksInteractive: React.FC = () => {
                 </motion.div>
                 
                 <p className="step-caption">
-                  Specific, quantified guidance to get your project approved. Ready for your board in seconds.
+                  Specific, quantified controls and assumption checks—ready for committee and lender review.
                 </p>
               </div>
             </motion.div>
