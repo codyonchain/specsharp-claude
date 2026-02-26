@@ -419,7 +419,10 @@ def test_description_infers_finish_level():
     premium_revenue_factor = premium_modifiers["revenue_factor"]
     base_revenue_factor = base_modifiers["revenue_factor"]
 
-    assert base_revenue_factor == pytest.approx(1.0), "Base revenue factor should remain neutral at 1.0"
+    assert base_revenue_factor == pytest.approx(
+        base_modifiers["regional_multiplier"] * 1.0,
+        rel=1e-9,
+    ), "Base revenue factor should include regional market factor"
     assert premium_revenue_factor > base_revenue_factor, "Premium modifiers should lift revenue factor"
     ratio = premium_revenue_factor / base_revenue_factor
     assert ratio == pytest.approx(1.08, rel=1e-2), "Premium factor should apply once (≈1.08× increase)"
@@ -606,6 +609,111 @@ def test_finish_level_quality_factor_trace():
     assert trace_data["finish_level"] == "premium"
     assert trace_data["quality_factor"] == pytest.approx(1.2, rel=1e-3)
 
+
+def test_project_class_multiplier_is_cost_only_global_parity():
+    cases = [
+        (BuildingType.HEALTHCARE, "hospital", 90_000),
+        (BuildingType.MULTIFAMILY, "luxury_apartments", 220_000),
+        (BuildingType.OFFICE, "class_a", 180_000),
+        (BuildingType.RETAIL, "shopping_center", 120_000),
+        (BuildingType.INDUSTRIAL, "warehouse", 150_000),
+        (BuildingType.HOSPITALITY, "full_service_hotel", 120_000),
+        (BuildingType.EDUCATIONAL, "elementary_school", 90_000),
+        (BuildingType.RECREATION, "aquatic_center", 60_000),
+        (BuildingType.MIXED_USE, "office_residential", 150_000),
+        (BuildingType.PARKING, "surface_parking", 140_000),
+        (BuildingType.RESTAURANT, "full_service", 12_000),
+        (BuildingType.SPECIALTY, "broadcast_facility", 90_000),
+    ]
+
+    for building_type, subtype, square_footage in cases:
+        kwargs = dict(
+            building_type=building_type,
+            subtype=subtype,
+            square_footage=square_footage,
+            location="Nashville, TN",
+            finish_level="standard",
+        )
+        ground_up = unified_engine.calculate_project(**kwargs, project_class=ProjectClass.GROUND_UP)
+        renovation = unified_engine.calculate_project(**kwargs, project_class=ProjectClass.RENOVATION)
+        addition = unified_engine.calculate_project(**kwargs, project_class=ProjectClass.ADDITION)
+
+        base_construction = float(ground_up["construction_costs"]["construction_total"])
+        renovation_construction = float(renovation["construction_costs"]["construction_total"])
+        addition_construction = float(addition["construction_costs"]["construction_total"])
+        assert renovation_construction / base_construction == pytest.approx(0.92, rel=0, abs=1e-9)
+        assert addition_construction / base_construction == pytest.approx(1.12, rel=0, abs=1e-9)
+
+        base_revenue = float(ground_up["revenue_analysis"]["annual_revenue"])
+        renovation_revenue = float(renovation["revenue_analysis"]["annual_revenue"])
+        addition_revenue = float(addition["revenue_analysis"]["annual_revenue"])
+        assert renovation_revenue == pytest.approx(base_revenue, rel=0, abs=0.01)
+        assert addition_revenue == pytest.approx(base_revenue, rel=0, abs=0.01)
+
+
+def test_finish_revenue_scaling_applies_once_from_occupancy_and_revenue_factor():
+    cases = [
+        (BuildingType.MULTIFAMILY, "luxury_apartments", 220_000),
+        (BuildingType.OFFICE, "class_a", 180_000),
+        (BuildingType.INDUSTRIAL, "warehouse", 150_000),
+        (BuildingType.PARKING, "surface_parking", 140_000),
+        (BuildingType.RECREATION, "aquatic_center", 60_000),
+        (BuildingType.RESTAURANT, "full_service", 12_000),
+    ]
+
+    for building_type, subtype, square_footage in cases:
+        kwargs = dict(
+            building_type=building_type,
+            subtype=subtype,
+            square_footage=square_footage,
+            location="Nashville, TN",
+            project_class=ProjectClass.GROUND_UP,
+        )
+        standard = unified_engine.calculate_project(**kwargs, finish_level="standard")
+        premium = unified_engine.calculate_project(**kwargs, finish_level="premium")
+        luxury = unified_engine.calculate_project(**kwargs, finish_level="luxury")
+
+        std_revenue = float(standard["revenue_analysis"]["annual_revenue"])
+        std_occ = float(standard["revenue_analysis"]["occupancy_rate"])
+        std_rev_factor = float(standard["revenue_analysis"]["revenue_factor"])
+
+        premium_revenue = float(premium["revenue_analysis"]["annual_revenue"])
+        premium_occ = float(premium["revenue_analysis"]["occupancy_rate"])
+        premium_rev_factor = float(premium["revenue_analysis"]["revenue_factor"])
+
+        luxury_revenue = float(luxury["revenue_analysis"]["annual_revenue"])
+        luxury_occ = float(luxury["revenue_analysis"]["occupancy_rate"])
+        luxury_rev_factor = float(luxury["revenue_analysis"]["revenue_factor"])
+
+        premium_ratio = premium_revenue / std_revenue if std_revenue > 0 else 1.0
+        if building_type == BuildingType.OFFICE:
+            expected_premium_ratio = (
+                (premium_rev_factor / std_rev_factor)
+                if std_rev_factor > 0
+                else 1.0
+            )
+        else:
+            expected_premium_ratio = (
+                (premium_occ / std_occ) * (premium_rev_factor / std_rev_factor)
+                if std_occ > 0 and std_rev_factor > 0
+                else 1.0
+            )
+        assert premium_ratio == pytest.approx(expected_premium_ratio, rel=1e-3, abs=1e-3)
+
+        luxury_ratio = luxury_revenue / std_revenue if std_revenue > 0 else 1.0
+        if building_type == BuildingType.OFFICE:
+            expected_luxury_ratio = (
+                (luxury_rev_factor / std_rev_factor)
+                if std_rev_factor > 0
+                else 1.0
+            )
+        else:
+            expected_luxury_ratio = (
+                (luxury_occ / std_occ) * (luxury_rev_factor / std_rev_factor)
+                if std_occ > 0 and std_rev_factor > 0
+                else 1.0
+            )
+        assert luxury_ratio == pytest.approx(expected_luxury_ratio, rel=1e-3, abs=1e-3)
 
 def test_caprate_only_for_supported_types():
     """Cap-rate valuation should follow active engine defaults for any positive-NOI asset class."""

@@ -3565,11 +3565,13 @@ class UnifiedEngine:
         if hospitality_financials and hospitality_expense_pct is not None:
             total_expenses = round(annual_revenue * hospitality_expense_pct, 2)
         elif office_financials:
-            annual_revenue = office_financials.get('egi', annual_revenue)
+            annual_revenue = office_financials.get('egi', annual_revenue) * revenue_factor
             total_expenses = round(
-                office_financials.get('opex', 0.0)
+                (
+                    office_financials.get('opex', 0.0)
                 + office_financials.get('ti_amort', 0.0)
-                + office_financials.get('lc_amort', 0.0),
+                + office_financials.get('lc_amort', 0.0)
+                ) * revenue_factor,
                 2
             )
             derived_margin = office_financials.get('noi_margin')
@@ -4091,8 +4093,8 @@ class UnifiedEngine:
                         noi = 0.0
                 else:
                     noi = 0.0
-                adjusted_annual_revenue = annual_revenue * market_factor
-                adjusted_noi = (noi * market_factor) if noi is not None else 0.0
+                adjusted_annual_revenue = annual_revenue
+                adjusted_noi = noi if noi is not None else 0.0
                 context['mob_revenue'] = {
                     'annual_revenue': adjusted_annual_revenue,
                     'operating_margin': operating_margin_base,
@@ -4129,11 +4131,6 @@ class UnifiedEngine:
                 office_profile = dict(profile_source)
             if office_profile:
                 base_rent = office_profile.get('base_rent_per_sf')
-                try:
-                    if base_rent is not None:
-                        office_profile['base_rent_per_sf'] = float(base_rent) * float(quality_factor or 1.0)
-                except (TypeError, ValueError):
-                    pass
                 office_financials = self._build_office_financials(square_footage, office_profile)
             else:
                 office_financials = {}
@@ -4300,10 +4297,8 @@ class UnifiedEngine:
             finish_level_multipliers = getattr(config, "finish_level_multipliers", None) or {}
             standard_entry = {**standard_defaults, **(finish_level_multipliers.get("standard") or {})}
             selected_entry = {**standard_entry, **(finish_level_multipliers.get(finish_level_value) or {})}
-            finish_rev_multiplier = selected_entry.get("revenue_multiplier", 1.00)
             adjusted_occupancy = selected_entry.get("occupancy_rate", 0.80)
             adjusted_margin = selected_entry.get("operating_margin")
-            base_revenue *= finish_rev_multiplier
             occupancy_rate = adjusted_occupancy
             if adjusted_margin is not None:
                 context['restaurant_finish_margin_override'] = adjusted_margin
@@ -4311,11 +4306,10 @@ class UnifiedEngine:
 
         # Apply quality factor and occupancy
         # Ensure no None values
-        base_revenue = (base_revenue or 0) * market_factor
-        quality_factor = quality_factor or 1.0
+        base_revenue = (base_revenue or 0)
         occupancy_rate = occupancy_rate or 0.85
         
-        adjusted_revenue = base_revenue * quality_factor * occupancy_rate
+        adjusted_revenue = base_revenue * occupancy_rate
         
         return adjusted_revenue
 

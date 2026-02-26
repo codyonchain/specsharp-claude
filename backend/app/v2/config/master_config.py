@@ -924,7 +924,7 @@ def get_effective_modifiers(
 
     finish_revenue_factor = get_finish_revenue_factor(finish_level, building_type, subtype)
     market_factor = get_market_factor(location, warning_callback=warning_callback)
-    raw_revenue_factor = finish_revenue_factor
+    raw_revenue_factor = finish_revenue_factor * market_factor
     revenue_factor = _clamp(raw_revenue_factor, 0.7, 1.6)
 
     return {
