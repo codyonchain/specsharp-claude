@@ -68,10 +68,40 @@ alter table if exists public.project_access enable row level security;
 alter table if exists public.organization_run_quotas enable row level security;
 alter table if exists public.projects enable row level security;
 
+-- Remove any legacy policies regardless of their names before applying canonical policies.
+do $$
+declare
+  target_table text;
+  policy_row record;
+begin
+  foreach target_table in array array[
+    'organizations',
+    'organization_members',
+    'project_access',
+    'organization_run_quotas',
+    'projects'
+  ]
+  loop
+    if to_regclass(format('public.%s', target_table)) is not null then
+      for policy_row in
+        select policyname
+        from pg_policies
+        where schemaname = 'public'
+          and tablename = target_table
+      loop
+        execute format(
+          'drop policy if exists %I on public.%I',
+          policy_row.policyname,
+          target_table
+        );
+      end loop;
+    end if;
+  end loop;
+end $$;
+
 do $$
 begin
   if to_regclass('public.organizations') is not null then
-    drop policy if exists org_select_for_members on public.organizations;
     create policy org_select_for_members
       on public.organizations
       for select
@@ -93,7 +123,6 @@ end $$;
 do $$
 begin
   if to_regclass('public.organization_members') is not null then
-    drop policy if exists org_members_select_self on public.organization_members;
     create policy org_members_select_self
       on public.organization_members
       for select
@@ -108,7 +137,6 @@ end $$;
 do $$
 begin
   if to_regclass('public.project_access') is not null then
-    drop policy if exists project_access_select_member on public.project_access;
     create policy project_access_select_member
       on public.project_access
       for select
@@ -130,7 +158,6 @@ end $$;
 do $$
 begin
   if to_regclass('public.organization_run_quotas') is not null then
-    drop policy if exists org_run_quotas_select_member on public.organization_run_quotas;
     create policy org_run_quotas_select_member
       on public.organization_run_quotas
       for select
@@ -152,7 +179,6 @@ end $$;
 do $$
 begin
   if to_regclass('public.projects') is not null then
-    drop policy if exists projects_select_scoped_member on public.projects;
     create policy projects_select_scoped_member
       on public.projects
       for select
@@ -177,6 +203,10 @@ revoke all on table public.organizations from anon;
 revoke all on table public.organization_members from anon;
 revoke all on table public.project_access from anon;
 revoke all on table public.organization_run_quotas from anon;
+revoke all on table public.organizations from authenticated;
+revoke all on table public.organization_members from authenticated;
+revoke all on table public.project_access from authenticated;
+revoke all on table public.organization_run_quotas from authenticated;
 
 grant select on table public.organizations to authenticated;
 grant select on table public.organization_members to authenticated;
@@ -187,6 +217,7 @@ do $$
 begin
   if to_regclass('public.projects') is not null then
     revoke all on table public.projects from anon;
+    revoke all on table public.projects from authenticated;
     grant select on table public.projects to authenticated;
   end if;
 end $$;
