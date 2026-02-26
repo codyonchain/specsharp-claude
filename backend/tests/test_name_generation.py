@@ -440,6 +440,23 @@ class TestProjectNameGeneration:
         assert parsed["subtype"] == "limited_service_hotel"
 
     @pytest.mark.parametrize(
+        "description",
+        [
+            "Build a 128000 square foot limited service hotel with 210 keys in Nashville, TN.",
+            "Build a 128000 square feet limited service hotel with 210 keys in Nashville, TN.",
+            "Build a 128000 sqft limited service hotel with 210 keys in Nashville, TN.",
+            "Build a 128000-sq-ft limited service hotel with 210 keys in Nashville, TN.",
+            "Build a 128,000 sq. ft. limited service hotel with 210 keys, breakfast area and pool in Nashville, TN.",
+        ],
+    )
+    def test_square_footage_variants_extract_for_hospitality_prompts(self, description):
+        parsed, _ = self._parse_and_name(description)
+
+        assert parsed["building_type"] == "hospitality"
+        assert parsed["subtype"] == "limited_service_hotel"
+        assert parsed["square_footage"] == 128000
+
+    @pytest.mark.parametrize(
         "description,expected_subtype,expected_name",
         [
             (
