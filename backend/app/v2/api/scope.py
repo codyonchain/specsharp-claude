@@ -1322,8 +1322,32 @@ async def export_project_pdf(
     project_name = project_payload.get('project_name') or project_payload.get('name') or f"project_{project_id}"
     project_payload['project_name'] = project_name
 
+    canonical_dealshield_view_model = None
+    payload = _resolve_project_payload(project)
+    profile_id = payload.get("dealshield_tile_profile")
+    if isinstance(profile_id, str) and profile_id.strip():
+        try:
+            profile = get_dealshield_profile(profile_id)
+            canonical_dealshield_view_model = build_dealshield_view_model(project.project_id or project_id, payload, profile)
+        except DealShieldResolutionError as exc:
+            logger.warning(
+                "DealShield canonical decision unavailable during project PDF export for %s: %s",
+                project_id,
+                str(exc),
+            )
+        except Exception as exc:
+            logger.warning(
+                "DealShield view model build failed during project PDF export for %s: %s",
+                project_id,
+                str(exc),
+            )
+
     try:
-        pdf_buffer = pdf_export_service.generate_professional_pdf(project_payload, client_name)
+        pdf_buffer = pdf_export_service.generate_professional_pdf(
+            project_payload,
+            client_name,
+            dealshield_view_model=canonical_dealshield_view_model,
+        )
     except Exception as exc:
         logger.error(f"Failed to generate PDF for project {project_id}: {exc}")
         raise HTTPException(status_code=500, detail="Failed to generate PDF report")

@@ -205,13 +205,29 @@ class ProfessionalPDFExportService:
             return [KeepTogether(block)]
         return block
 
-    def generate_professional_pdf(self, project_data: Dict, client_name: str = None) -> io.BytesIO:
+    def generate_professional_pdf(
+        self,
+        project_data: Dict,
+        client_name: str = None,
+        dealshield_view_model: Optional[Dict[str, Any]] = None,
+    ) -> io.BytesIO:
         """Generate premium PDF via Playwright-rendered HTML."""
         executive_summary = executive_summary_service.generate_executive_summary(project_data)
-        return self._render_chromium_pdf(project_data, executive_summary, client_name)
+        return self._render_chromium_pdf(project_data, executive_summary, client_name, dealshield_view_model)
 
-    def _render_chromium_pdf(self, project_data: Dict, executive_summary: Dict, client_name: Optional[str]) -> io.BytesIO:
-        html = self._render_executive_overview_html(project_data, executive_summary, client_name)
+    def _render_chromium_pdf(
+        self,
+        project_data: Dict,
+        executive_summary: Dict,
+        client_name: Optional[str],
+        dealshield_view_model: Optional[Dict[str, Any]] = None,
+    ) -> io.BytesIO:
+        html = self._render_executive_overview_html(
+            project_data,
+            executive_summary,
+            client_name,
+            dealshield_view_model,
+        )
         return self._render_html_to_pdf(html)
 
     def _render_html_to_pdf(self, html: str) -> io.BytesIO:
@@ -316,7 +332,13 @@ class ProfessionalPDFExportService:
         except Exception:
             return str(value)
 
-    def _render_executive_overview_html(self, project_data: Dict, executive_summary: Dict, client_name: Optional[str]) -> str:
+    def _render_executive_overview_html(
+        self,
+        project_data: Dict,
+        executive_summary: Dict,
+        client_name: Optional[str],
+        dealshield_view_model: Optional[Dict[str, Any]] = None,
+    ) -> str:
         calc = (project_data or {}).get("calculation_data") or {}
 
         # ExecutiveView decision + underwriting data is always under ownership_analysis.*
@@ -416,18 +438,52 @@ class ProfessionalPDFExportService:
         next_items = "".join(f"<li>{esc(step)}</li>" for step in next_steps[:8]) or "<li class='muted'>—</li>"
         assumption_items = "".join(f"<li>{esc(a)}</li>" for a in assumptions[:10]) or "<li class='muted'>—</li>"
 
-        # Decision/why: re-use ExecutiveView output verbatim.
-        decision = "NEEDS WORK"
-        if (feasible_flag is True) or (isinstance(feasibility_text, str) and feasibility_text.strip().lower() == "feasible"):
-            decision = "GO"
-        else:
-            reco_text = (feasibility_reco or "")
-            if isinstance(reco_text, str) and ("minor" in reco_text.lower() or "optimization" in reco_text.lower()):
-                decision = "NEEDS WORK"
-            else:
-                decision = "NO-GO"
+        # Decision/why: prefer canonical DealShield decision when available.
+        ds_model = dealshield_view_model if isinstance(dealshield_view_model, dict) else {}
+        ds_summary = ds_model.get("decision_summary") if isinstance(ds_model.get("decision_summary"), dict) else {}
+        ds_status = (
+            ds_model.get("decision_status")
+            or ds_summary.get("decision_status")
+        )
+        ds_reason_code = (
+            ds_model.get("decision_reason_code")
+            or ds_summary.get("decision_reason_code")
+        )
+        ds_status_provenance = ds_model.get("decision_status_provenance")
+        if not isinstance(ds_status_provenance, dict):
+            ds_status_provenance = ds_summary.get("decision_status_provenance") if isinstance(ds_summary.get("decision_status_provenance"), dict) else {}
+        ds_status_source = ds_status_provenance.get("status_source") or ds_status_provenance.get("statusSource")
+        ds_policy_id = ds_status_provenance.get("policy_id") or ds_status_provenance.get("policyId")
 
-        decision_reason = feasibility_reco or (f"Feasibility: {feasibility_status}" if feasibility_status else "Decision sourced from ExecutiveView underwriting logic.")
+        decision: str
+        decision_reason: str
+        if isinstance(ds_status, str) and ds_status.strip():
+            lowered = ds_status.strip().lower()
+            if "no-go" in lowered or "no_go" in lowered:
+                decision = "NO-GO"
+            elif "work" in lowered or "near" in lowered:
+                decision = "NEEDS WORK"
+            elif "pending" in lowered or "review" in lowered:
+                decision = "PENDING"
+            else:
+                decision = "GO"
+
+            policy_source_text = str(ds_status_source or "dealshield_policy_v1")
+            policy_id_text = f" ({ds_policy_id})" if isinstance(ds_policy_id, str) and ds_policy_id.strip() else ""
+            reason_text = f" · reason: {ds_reason_code}" if isinstance(ds_reason_code, str) and ds_reason_code.strip() else ""
+            decision_reason = f"Policy source: {policy_source_text}{policy_id_text}{reason_text}"
+        else:
+            decision = "NEEDS WORK"
+            if (feasible_flag is True) or (isinstance(feasibility_text, str) and feasibility_text.strip().lower() == "feasible"):
+                decision = "GO"
+            else:
+                reco_text = (feasibility_reco or "")
+                if isinstance(reco_text, str) and ("minor" in reco_text.lower() or "optimization" in reco_text.lower()):
+                    decision = "NEEDS WORK"
+                else:
+                    decision = "NO-GO"
+
+            decision_reason = feasibility_reco or (f"Feasibility: {feasibility_status}" if feasibility_status else "Decision sourced from ExecutiveView underwriting logic.")
         decision_badge_class = "needs"
         if decision == "GO":
             decision_badge_class = "go"
