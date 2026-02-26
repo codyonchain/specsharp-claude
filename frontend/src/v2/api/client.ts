@@ -18,6 +18,7 @@ import {
   DealShieldViewModel
 } from '../types';
 import { tracer } from '../utils/traceSystem';
+import { getValidAccessToken } from '../auth/session';
 
 const DEBUG_API =
   typeof window !== 'undefined' &&
@@ -115,12 +116,18 @@ class V2APIClient {
     const url = `${this.baseURL}/api/${apiVersion}${endpoint}`;
     
     try {
+      const accessToken = await getValidAccessToken();
+      const mergedHeaders: HeadersInit = {
+        ...this.headers,
+        ...options?.headers,
+      };
+      if (accessToken) {
+        (mergedHeaders as Record<string, string>).Authorization = `Bearer ${accessToken}`;
+      }
+
       const response = await fetch(url, {
         ...options,
-        headers: {
-          ...this.headers,
-          ...options?.headers,
-        },
+        headers: mergedHeaders,
       });
 
       // Handle non-JSON responses

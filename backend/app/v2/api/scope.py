@@ -4,7 +4,7 @@ Clean API endpoint that uses the new system
 
 import os
 import json
-from fastapi import APIRouter, HTTPException, Query, Depends, Header
+from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict, AliasChoices
 from typing import Optional, List, Dict, Any
@@ -28,7 +28,9 @@ from app.v2.services.industrial_override_extractor import extract_industrial_ove
 from app.v2.services.dealshield_service import build_dealshield_view_model, DealShieldResolutionError
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.core.building_taxonomy import normalize_building_type, validate_building_type
-from app.db.models import Project
+from app.core.auth import AuthContext, get_auth_context
+from app.core.config import settings
+from app.db.models import Project, ProjectAccess
 from app.db.database import get_db
 from app.services.pdf_export_service import pdf_export_service
 from app.config.regional_multipliers import _location_has_explicit_state
@@ -732,30 +734,64 @@ async def test_nlp(
 # CRUD OPERATIONS - Complete V2 API
 # ============================================================================
 
+
+def _assign_unscoped_projects_for_dev(db: Session, auth: AuthContext) -> None:
+    # Keep local development projects visible after introducing strict org scoping.
+    # Never do this outside local-dev sqlite usage.
+    env = (settings.environment or "").strip().lower()
+    is_local_env = env in {"development", "dev", "local"}
+    is_sqlite = (settings.database_url or "").strip().lower().startswith("sqlite")
+    if not (is_local_env and is_sqlite):
+        return
+
+    unscoped_projects = (
+        db.query(Project)
+        .outerjoin(ProjectAccess, ProjectAccess.project_id == Project.project_id)
+        .filter(ProjectAccess.id.is_(None))
+        .all()
+    )
+    if not unscoped_projects:
+        return
+
+    for project in unscoped_projects:
+        if not project.project_id:
+            continue
+        db.add(
+            ProjectAccess(
+                project_id=project.project_id,
+                org_id=auth.org_id,
+                owner_user_id=auth.user_id,
+            )
+        )
+    db.commit()
+
+
+def _get_scoped_project(db: Session, project_id: str, auth: AuthContext) -> Optional[Project]:
+    query = (
+        db.query(Project)
+        .join(ProjectAccess, ProjectAccess.project_id == Project.project_id)
+        .filter(ProjectAccess.org_id == auth.org_id)
+    )
+    project = query.filter(Project.project_id == project_id).first()
+    if not project and project_id.isdigit():
+        project = query.filter(Project.id == int(project_id)).first()
+    return project
+
+
 @router.get("/scope/projects")
 async def get_all_projects(
-    user_id: Optional[str] = Header(None, alias="X-User-Id"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
 ):
-    """
-    Get all projects for a user. Returns empty array if no user_id provided.
-    Handles missing user gracefully to prevent 500 errors.
-    """
     try:
-        if user_id:
-            # Get projects for specific user
-            projects = db.query(Project).filter(
-                Project.user_id == user_id
-            ).order_by(Project.created_at.desc()).all()
-        else:
-            # In development/testing, return recent projects if no user_id
-            # In production, you might want to return empty array instead
-            projects = db.query(Project).order_by(
-                Project.created_at.desc()
-            ).limit(20).all()
-            
-            # Alternative: Return empty array if no user
-            # projects = []
+        _assign_unscoped_projects_for_dev(db, auth)
+        projects = (
+            db.query(Project)
+            .join(ProjectAccess, ProjectAccess.project_id == Project.project_id)
+            .filter(ProjectAccess.org_id == auth.org_id)
+            .order_by(Project.created_at.desc())
+            .all()
+        )
         
         # Format each project using the improved format_project_response
         formatted_projects = []
@@ -776,15 +812,11 @@ async def get_all_projects(
 @router.get("/scope/projects/{project_id}")
 async def get_single_project(
     project_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
 ):
-    """Get a single project by ID"""
-    # Try to find by project_id (string) first, then by id (if numeric)
-    project = db.query(Project).filter(Project.project_id == project_id).first()
-    
-    # If not found and project_id is numeric, try searching by id
-    if not project and project_id.isdigit():
-        project = db.query(Project).filter(Project.id == int(project_id)).first()
+    """Get a single project by ID scoped to current org."""
+    project = _get_scoped_project(db, project_id, auth)
     
     if not project:
         return ProjectResponse(
@@ -862,11 +894,10 @@ async def update_dealshield_controls(
     project_id: str,
     request: DealShieldControlsUpdateRequest,
     db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
 ):
     """Persist DealShield controls to project calculation_data and rebuild scenario snapshots."""
-    project = db.query(Project).filter(Project.project_id == project_id).first()
-    if not project and project_id.isdigit():
-        project = db.query(Project).filter(Project.id == int(project_id)).first()
+    project = _get_scoped_project(db, project_id, auth)
 
     if not project:
         return ProjectResponse(
@@ -940,12 +971,11 @@ async def update_dealshield_controls(
 @router.get("/scope/projects/{project_id}/dealshield", response_model=ProjectResponse)
 async def get_dealshield_view(
     project_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
 ):
     """Get DealShield scenario table view model for a project."""
-    project = db.query(Project).filter(Project.project_id == project_id).first()
-    if not project and project_id.isdigit():
-        project = db.query(Project).filter(Project.id == int(project_id)).first()
+    project = _get_scoped_project(db, project_id, auth)
 
     if not project:
         return ProjectResponse(
@@ -989,10 +1019,11 @@ async def get_dealshield_view(
 @router.delete("/scope/projects/{project_id}")
 async def delete_project(
     project_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
 ):
-    """Delete a project"""
-    project = db.query(Project).filter(Project.id == project_id).first()
+    """Delete a project scoped to current org."""
+    project = _get_scoped_project(db, project_id, auth)
     if not project:
         return ProjectResponse(
             success=False,
@@ -1011,7 +1042,8 @@ async def delete_project(
 @router.post("/scope/generate")
 async def generate_scope(
     request: AnalyzeRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
 ):
     """Generate scope and save to database using V2 engine"""
     try:
@@ -1204,10 +1236,10 @@ async def generate_scope(
             # Nullable fields - NOT including project_type or project_classification!
             # These are now handled by building_type
             
-            # User tracking (if available)
-            user_id=getattr(request, 'user_id', None),
-            team_id=getattr(request, 'team_id', None),
-            created_by_id=getattr(request, 'user_id', None),
+            # User tracking (legacy fields retained)
+            user_id=None,
+            team_id=None,
+            created_by_id=None,
             
             # Timestamps
             created_at=datetime.utcnow(),
@@ -1216,6 +1248,14 @@ async def generate_scope(
         
         # Save to database
         db.add(project)
+        db.flush()
+        db.add(
+            ProjectAccess(
+                project_id=project_id,
+                org_id=auth.org_id,
+                owner_user_id=auth.user_id,
+            )
+        )
         db.commit()
         db.refresh(project)
         
@@ -1236,7 +1276,7 @@ async def generate_scope(
             errors=[str(e)]
         )
 
-async def _get_owner_view_impl(project_id: str, db: Session):
+async def _get_owner_view_impl(project_id: str, db: Session, auth: AuthContext):
     """Implementation of owner view logic"""
     if not project_id:
         return ProjectResponse(
@@ -1245,7 +1285,7 @@ async def _get_owner_view_impl(project_id: str, db: Session):
             errors=["project_id required"]
         )
     
-    project = db.query(Project).filter(Project.project_id == project_id).first()
+    project = _get_scoped_project(db, project_id, auth)
     if not project:
         return ProjectResponse(
             success=False,
@@ -1259,38 +1299,40 @@ async def _get_owner_view_impl(project_id: str, db: Session):
 @router.post("/scope/projects/{project_id}/owner-view")
 async def get_owner_view_by_id(
     project_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
 ):
     """Get owner view data for a project by ID in URL"""
-    return await _get_owner_view_impl(project_id, db)
+    return await _get_owner_view_impl(project_id, db, auth)
 
 @router.get("/scope/projects/{project_id}/owner-view")
 async def get_owner_view_by_id_get(
     project_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
 ):
     """Get owner view data for a project by ID in URL (GET version)"""
-    return await _get_owner_view_impl(project_id, db)
+    return await _get_owner_view_impl(project_id, db, auth)
 
 @router.post("/scope/owner-view")
 async def get_owner_view(
     request: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
 ):
     """Get owner-friendly view of project with ID in body"""
     project_id = request.get('project_id')
-    return await _get_owner_view_impl(project_id, db)
+    return await _get_owner_view_impl(project_id, db, auth)
 
 @router.get("/pdf/project/{project_id}/pdf")
 async def export_project_pdf(
     project_id: str,
     client_name: Optional[str] = Query(None, alias="client_name"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
 ):
     """Generate a PDF report for a project."""
-    project = db.query(Project).filter(Project.project_id == project_id).first()
-    if not project and project_id.isdigit():
-        project = db.query(Project).filter(Project.id == int(project_id)).first()
+    project = _get_scoped_project(db, project_id, auth)
 
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -1366,12 +1408,11 @@ async def export_project_pdf(
 @router.get("/scope/projects/{project_id}/dealshield/pdf")
 async def export_dealshield_pdf(
     project_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
 ):
     """Generate a DealShield PDF report for a project."""
-    project = db.query(Project).filter(Project.project_id == project_id).first()
-    if not project and project_id.isdigit():
-        project = db.query(Project).filter(Project.id == int(project_id)).first()
+    project = _get_scoped_project(db, project_id, auth)
 
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")

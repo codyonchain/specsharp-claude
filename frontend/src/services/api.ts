@@ -14,7 +14,7 @@ const api = axios.create({
 
 // Add auth token to requests
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('specsharp_access_token') || localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -60,30 +60,22 @@ export interface ScopeRequest {
 
 export const authService = {
   logout: async () => {
-    // Clear local storage first
+    localStorage.removeItem('specsharp_access_token');
+    localStorage.removeItem('specsharp_refresh_token');
+    localStorage.removeItem('specsharp_token_expires_at');
+    localStorage.removeItem('specsharp_user');
     localStorage.removeItem('token');
-    
-    // Call backend logout to clear cookies and OAuth session
-    try {
-      await api.post('/oauth/logout');
-    } catch (error) {
-      // Try auth logout as fallback
-      try {
-        await api.post('/auth/logout');
-      } catch (fallbackError) {
-        // Still continue even if backend calls fail
-      }
-    }
+    localStorage.removeItem('isAuthenticated');
   },
 
   isAuthenticated: () => {
-    // Check for token in localStorage or cookie presence
-    return !!localStorage.getItem('token') || document.cookie.includes('access_token');
+    const token = localStorage.getItem('specsharp_access_token') || localStorage.getItem('token');
+    return !!token;
   },
 
   getCurrentUser: async () => {
-    const response = await api.get('/oauth/user/info');
-    return response.data;
+    const response = await api.get('/auth/me');
+    return response.data?.data || response.data;
   },
 };
 

@@ -17,8 +17,6 @@ function Login({ setIsAuthenticated }: LoginProps) {
     try {
       const { default: authService } = await import('../services/authService');
       await authService.login();
-      // authService.login() may redirect; if it does not, we still mark auth true
-      setIsAuthenticated(true);
     } catch (err: any) {
       console.error('Login error:', err);
       setError(err?.message || 'Login failed');

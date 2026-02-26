@@ -15,6 +15,7 @@ import sys
 from app.core.config import settings
 from app.core.environment import EnvironmentChecker
 from app.v2.api.scope import router as v2_scope_router
+from app.v2.api.auth import router as v2_auth_router
 from app.db.database import engine, Base
 
 logger = logging.getLogger(__name__)
@@ -89,6 +90,7 @@ app.add_middleware(
 
 # V2 API - unified_engine endpoints
 app.include_router(v2_scope_router, prefix="/api/v2", tags=["v2-api"])
+app.include_router(v2_auth_router, prefix="/api/v2", tags=["v2-auth"])
 
 
 @app.on_event("startup")

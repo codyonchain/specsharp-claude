@@ -1,4 +1,14 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Boolean
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Float,
+    DateTime,
+    Text,
+    ForeignKey,
+    Boolean,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
@@ -90,6 +100,7 @@ class Project(Base):
     created_by = relationship("User", back_populates="created_projects", foreign_keys=[created_by_id])
     floor_plans = relationship("FloorPlan", back_populates="project")
     markup_overrides = relationship("ProjectMarkupOverrides", back_populates="project", uselist=False)
+    access = relationship("ProjectAccess", back_populates="project", uselist=False, cascade="all, delete-orphan")
     # scenarios = relationship("ProjectScenario", back_populates="project", cascade="all, delete-orphan")  # Commented out - ProjectScenario model removed
 
 
@@ -108,3 +119,45 @@ class FloorPlan(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     project = relationship("Project", back_populates="floor_plans")
+
+
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id = Column(String, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    members = relationship("OrganizationMember", back_populates="organization", cascade="all, delete-orphan")
+    projects = relationship("ProjectAccess", back_populates="organization", cascade="all, delete-orphan")
+
+
+class OrganizationMember(Base):
+    __tablename__ = "organization_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(String, ForeignKey("organizations.id"), nullable=False, index=True)
+    user_id = Column(String, nullable=False, index=True)
+    email = Column(String, nullable=False, index=True)
+    role = Column(String, nullable=False, default="member")
+    is_default = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    organization = relationship("Organization", back_populates="members")
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "user_id", name="uq_org_members_user"),
+    )
+
+
+class ProjectAccess(Base):
+    __tablename__ = "project_access"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(String, ForeignKey("projects.project_id"), nullable=False, unique=True, index=True)
+    org_id = Column(String, ForeignKey("organizations.id"), nullable=False, index=True)
+    owner_user_id = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    project = relationship("Project", back_populates="access")
+    organization = relationship("Organization", back_populates="projects")

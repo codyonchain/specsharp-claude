@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
     google_redirect_uri: Optional[str] = None
+
+    # Supabase auth integration
+    supabase_url: str = ""
+    supabase_service_role_key: str = ""
     
     # Session secret for OAuth state
     session_secret_key: str = ""

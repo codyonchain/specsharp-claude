@@ -7,6 +7,7 @@ import { Dashboard } from './pages/Dashboard/Dashboard';
 import { NewProject } from './pages/NewProject/NewProject';
 import { ProjectView } from './pages/ProjectView/ProjectView';
 import { Diagnostics } from './pages/Diagnostics';
+import { AuthCallback } from './pages/AuthCallback';
 // Removed ScenarioComparison - using ScenarioBuilder modal instead
 
 // Import the existing HomePage from the main src/pages
@@ -15,6 +16,7 @@ import { CoveragePage } from '../pages/CoveragePage';
 
 // Import Login component from V1
 import Login from '../components/Login';
+import { isAuthenticatedSession } from './auth/session';
 
 // Import diagnostics (auto-loads into window.diagnose)
 import './utils/diagnostics';
@@ -24,10 +26,7 @@ export const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing authentication in localStorage
-    const token = localStorage.getItem('token');
-    const hasCookie = document.cookie.includes('access_token');
-    setIsAuthenticated(!!token || hasCookie);
+    setIsAuthenticated(isAuthenticatedSession());
     setLoading(false);
   }, []);
 
@@ -42,6 +41,7 @@ export const App: React.FC = () => {
           {/* Homepage - always accessible */}
           <Route path="/" element={<HomePage />} />
           <Route path="/coverage" element={<CoveragePage />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
           
           {/* Login route - auto-redirect to dashboard if already authenticated */}
           <Route 
