@@ -1422,13 +1422,20 @@ class UnifiedEngine:
         elif city_value:
             pretty_location = city_value.title()
         regional_cost_factor = regional_context.get('cost_factor')
-        regional_market_factor = regional_context.get('market_factor', 1.0)
+        regional_market_factor = modifiers.get('market_factor', regional_context.get('market_factor', 1.0))
+        try:
+            regional_market_factor = float(regional_market_factor)
+        except (TypeError, ValueError):
+            regional_market_factor = 1.0
+        if regional_market_factor <= 0:
+            regional_market_factor = 1.0
         regional_payload = {
             'city': city_value.title() if city_value else None,
             'state': state_value,
             'source': regional_context.get('source'),
             'multiplier': regional_multiplier_effective,
-            'cost_factor': regional_cost_factor if regional_cost_factor is not None else regional_multiplier_effective,
+            'cost_factor': regional_multiplier_effective,
+            'context_cost_factor': regional_cost_factor,
             'market_factor': regional_market_factor,
             'location_display': pretty_location or regional_context.get('location_display') or location
         }

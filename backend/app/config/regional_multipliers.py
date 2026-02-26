@@ -276,11 +276,86 @@ _LOCATION_RE = re.compile(
     r"^\s*(?P<city>[A-Za-z .'\-]+?)\s*(?:,|\s)\s*(?P<state>[A-Za-z]{2})\s*$"
 )
 
+STATE_NAME_TO_CODE: Dict[str, str] = {
+    "alabama": "AL",
+    "alaska": "AK",
+    "arizona": "AZ",
+    "arkansas": "AR",
+    "california": "CA",
+    "colorado": "CO",
+    "connecticut": "CT",
+    "delaware": "DE",
+    "district of columbia": "DC",
+    "florida": "FL",
+    "georgia": "GA",
+    "hawaii": "HI",
+    "idaho": "ID",
+    "illinois": "IL",
+    "indiana": "IN",
+    "iowa": "IA",
+    "kansas": "KS",
+    "kentucky": "KY",
+    "louisiana": "LA",
+    "maine": "ME",
+    "maryland": "MD",
+    "massachusetts": "MA",
+    "michigan": "MI",
+    "minnesota": "MN",
+    "mississippi": "MS",
+    "missouri": "MO",
+    "montana": "MT",
+    "nebraska": "NE",
+    "nevada": "NV",
+    "new hampshire": "NH",
+    "new jersey": "NJ",
+    "new mexico": "NM",
+    "new york": "NY",
+    "north carolina": "NC",
+    "north dakota": "ND",
+    "ohio": "OH",
+    "oklahoma": "OK",
+    "oregon": "OR",
+    "pennsylvania": "PA",
+    "rhode island": "RI",
+    "south carolina": "SC",
+    "south dakota": "SD",
+    "tennessee": "TN",
+    "texas": "TX",
+    "utah": "UT",
+    "vermont": "VT",
+    "virginia": "VA",
+    "washington": "WA",
+    "west virginia": "WV",
+    "wisconsin": "WI",
+    "wyoming": "WY",
+}
+
+SORTED_STATE_NAMES = sorted(STATE_NAME_TO_CODE.keys(), key=len, reverse=True)
+
 def _normalize_city(city: str) -> str:
     return re.sub(r"\s+", " ", city.strip().lower())
 
 def _normalize_state(state: str) -> str:
     return state.strip().upper()
+
+
+def _normalize_state_name_text(value: str) -> str:
+    normalized = re.sub(r"[.\s]+", " ", value.strip().lower())
+    return normalized.strip()
+
+
+def _resolve_state_token(value: str) -> Optional[str]:
+    token = value.strip()
+    if not token:
+        return None
+
+    if re.fullmatch(r"[A-Za-z]{2}", token):
+        return token.upper()
+
+    normalized = _normalize_state_name_text(token)
+    if normalized in STATE_NAME_TO_CODE:
+        return STATE_NAME_TO_CODE[normalized]
+    return None
 
 def parse_location(location: str) -> Tuple[Optional[str], Optional[str]]:
     """
@@ -295,11 +370,28 @@ def parse_location(location: str) -> Tuple[Optional[str], Optional[str]]:
         return None, None
 
     loc = location.strip()
+
+    if "," in loc:
+        city_raw, state_raw = loc.split(",", 1)
+        city = _normalize_city(city_raw)
+        state = _resolve_state_token(state_raw)
+        if city and state:
+            return city, state
+
     m = _LOCATION_RE.match(loc)
     if m:
         city = _normalize_city(m.group("city"))
         state = _normalize_state(m.group("state"))
         return city, state
+
+    loc_lower = _normalize_state_name_text(loc)
+    for state_name in SORTED_STATE_NAMES:
+        suffix = f" {state_name}"
+        if loc_lower.endswith(suffix):
+            city_part = loc[: -len(suffix)].rstrip(", ").strip()
+            city = _normalize_city(city_part)
+            if city:
+                return city, STATE_NAME_TO_CODE[state_name]
 
     # City-only fallback: try to infer state for known cities
     city_only = _normalize_city(loc)
@@ -363,10 +455,18 @@ def _location_has_explicit_state(location: Optional[str]) -> bool:
         return False
     loc = location.strip()
     if "," in loc:
-        return True
+        _, state_part = loc.split(",", 1)
+        return _resolve_state_token(state_part) is not None
     # Check for trailing two-letter state code
     tail = loc.split()[-1]
-    return len(tail) == 2 and tail.isalpha()
+    if len(tail) == 2 and tail.isalpha():
+        return True
+
+    loc_lower = _normalize_state_name_text(loc)
+    for state_name in SORTED_STATE_NAMES:
+        if loc_lower.endswith(f" {state_name}"):
+            return True
+    return False
 
 
 def resolve_location_context(location: Optional[str]) -> Dict[str, Optional[str]]:

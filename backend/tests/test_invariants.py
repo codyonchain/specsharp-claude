@@ -348,6 +348,69 @@ def test_revenue_uses_own_multiplier():
     assert not math.isclose(premium_revenue, premium_cost), "Revenue factor should remain distinct from cost factor"
 
 
+def test_full_state_name_resolves_same_as_abbreviation():
+    abbreviated = unified_engine.calculate_project(
+        building_type=BuildingType.OFFICE,
+        subtype="class_a",
+        square_footage=50_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        finish_level="standard",
+    )
+    full_name = unified_engine.calculate_project(
+        building_type=BuildingType.OFFICE,
+        subtype="class_a",
+        square_footage=50_000,
+        location="Nashville, Tennessee",
+        project_class=ProjectClass.GROUND_UP,
+        finish_level="standard",
+    )
+
+    assert full_name["construction_costs"]["regional_multiplier"] == pytest.approx(
+        abbreviated["construction_costs"]["regional_multiplier"],
+        rel=0,
+        abs=1e-9,
+    )
+    assert full_name["modifiers"]["market_factor"] == pytest.approx(
+        abbreviated["modifiers"]["market_factor"],
+        rel=0,
+        abs=1e-9,
+    )
+    assert full_name["revenue_analysis"]["annual_revenue"] == pytest.approx(
+        abbreviated["revenue_analysis"]["annual_revenue"],
+        rel=0,
+        abs=0.01,
+    )
+    assert full_name["regional"]["state"] == "TN"
+    assert full_name["regional"]["source"] == "metro_override"
+
+
+def test_regional_payload_matches_applied_modifier_factors():
+    payload = unified_engine.calculate_project(
+        building_type=BuildingType.OFFICE,
+        subtype="class_a",
+        square_footage=50_000,
+        location="Nashville, Tennessee",
+        project_class=ProjectClass.GROUND_UP,
+        finish_level="standard",
+    )
+
+    regional = payload["regional"]
+    modifiers = payload["modifiers"]
+    construction = payload["construction_costs"]
+    revenue = payload["revenue_analysis"]
+
+    assert regional["cost_factor"] == pytest.approx(
+        construction["regional_multiplier"], rel=0, abs=1e-9
+    )
+    assert regional["market_factor"] == pytest.approx(
+        modifiers["market_factor"], rel=0, abs=1e-9
+    )
+    assert revenue["market_factor"] == pytest.approx(
+        modifiers["market_factor"], rel=0, abs=1e-9
+    )
+
+
 def test_description_detection_natural_language():
     """Natural-language descriptions should map to building types with NLP trace visibility."""
     office_description = "50,000 sf class A office in Nashville, TN"
