@@ -268,6 +268,7 @@ export const NewProject: React.FC = () => {
   const [projectClassLocked, setProjectClassLocked] = useState(false);
   const [mixedUseSplitContract, setMixedUseSplitContract] = useState<MixedUseSplitContract | null>(null);
   const [mixedUseSplitEdited, setMixedUseSplitEdited] = useState(false);
+  const [decisionInputsConfirmed, setDecisionInputsConfirmed] = useState(false);
   const [locationTouched, setLocationTouched] = useState(false);
   const [locationAutoFilled, setLocationAutoFilled] = useState(false);
   const [locationSubmitAttempted, setLocationSubmitAttempted] = useState(false);
@@ -331,124 +332,142 @@ export const NewProject: React.FC = () => {
     });
   }, [description, isMixedUseIntentDetected, liveDetectedLocation, parkingIntentResolution.shouldRouteToParking]);
   
-  // Example prompts covering all 13 building types
+  // Example prompts focused on core launch subtypes (15 cards for a clean 3x5 layout)
   const examplePrompts = [
     {
-      icon: <Heart className="h-6 w-6" />,
-      text: '200,000 sf hospital with emergency department in Nashville, TN',
-      highlights: ['200,000 sf', 'hospital', 'emergency department', 'Nashville, TN'],
-      type: 'healthcare',
-      color: 'text-red-600 bg-red-50',
-      squareFootage: 200000,
-      location: 'Nashville, TN'
-    },
-    {
-      icon: <UtensilsCrossed className="h-6 w-6" />,
-      text: '5,000 sf full service restaurant in Nashville, TN',
-      highlights: ['5,000 sf', 'full service restaurant', 'Nashville, TN'],
-      type: 'restaurant',
-      color: 'text-orange-600 bg-orange-50',
-      squareFootage: 5000,
+      icon: <Building className="h-6 w-6" />,
+      text: '220,000 SF market rate apartments with 240 units in Nashville, TN',
+      highlights: ['220,000 SF', 'market rate apartments', '240 units', 'Nashville, TN'],
+      type: 'multifamily',
+      color: 'text-purple-600 bg-purple-50',
+      squareFootage: 220000,
       location: 'Nashville, TN'
     },
     {
       icon: <Building className="h-6 w-6" />,
-      text: '250,000 sf luxury apartments complex with 250 units and amenity deck in Brentwood, TN',
-      highlights: ['250,000 sf', 'luxury apartments', '250 units', 'Brentwood, TN'],
+      text: '250,000 SF luxury apartments with 260 units and amenity deck in Nashville, TN',
+      highlights: ['250,000 SF', 'luxury apartments', '260 units', 'Nashville, TN'],
       type: 'multifamily',
       color: 'text-purple-600 bg-purple-50',
       squareFootage: 250000,
-      location: 'Brentwood, TN'
-    },
-    {
-      icon: <Briefcase className="h-6 w-6" />,
-      text: '50,000 sf class A office in Nashville, TN',
-      highlights: ['50,000 sf', 'class A office', 'Nashville, TN'],
-      type: 'office',
-      color: 'text-blue-600 bg-blue-50',
-      squareFootage: 50000,
-      location: 'Nashville, TN'
-    },
-    {
-      icon: <Hotel className="h-6 w-6" />,
-      text: '120,000 sf full service hotel with 200 rooms in downtown Nashville, TN',
-      highlights: ['120,000 sf', 'full service hotel', '200 rooms', 'Nashville, TN'],
-      type: 'hospitality',
-      color: 'text-indigo-600 bg-indigo-50',
-      squareFootage: 120000,
       location: 'Nashville, TN'
     },
     {
       icon: <Warehouse className="h-6 w-6" />,
-      text: '120,000 sf warehouse with twenty four docks in La Vergne, TN',
-      highlights: ['120,000 sf', 'warehouse', 'twenty four docks', 'La Vergne, TN'],
+      text: '140,000 SF warehouse with 24 dock doors in Nashville, TN',
+      highlights: ['140,000 SF', 'warehouse', '24 dock doors', 'Nashville, TN'],
       type: 'industrial',
       color: 'text-gray-600 bg-gray-50',
-      squareFootage: 120000,
-      location: 'La Vergne, TN'
+      squareFootage: 140000,
+      location: 'Nashville, TN'
     },
     {
-      icon: <ShoppingCart className="h-6 w-6" />,
-      text: '35,000 sf shopping center with grocery anchor in Franklin, TN',
-      highlights: ['35,000 sf', 'shopping center', 'grocery anchor', 'Franklin, TN'],
-      type: 'retail',
-      color: 'text-pink-600 bg-pink-50',
-      squareFootage: 35000,
-      location: 'Franklin, TN'
-    },
-    {
-      icon: <GraduationCap className="h-6 w-6" />,
-      text: '65,000 sf middle school for 800 students in Bedford, NH',
-      highlights: ['65,000 sf', 'middle school', '800 students', 'Bedford, NH'],
-      type: 'educational',
-      color: 'text-green-600 bg-green-50',
-      squareFootage: 65000,
-      location: 'Bedford, NH'
-    },
-    {
-      icon: <Shield className="h-6 w-6" />,
-      text: '25,000 sf public safety building with fire station in Murfreesboro, TN',
-      highlights: ['25,000 sf', 'public safety', 'fire station', 'Murfreesboro, TN'],
-      type: 'civic',
-      color: 'text-amber-600 bg-amber-50',
-      squareFootage: 25000,
-      location: 'Murfreesboro, TN'
-    },
-    {
-      icon: <Dumbbell className="h-6 w-6" />,
-      text: '45,000 sf fitness center with pool and basketball courts in Brentwood, TN',
-      highlights: ['45,000 sf', 'fitness center', 'pool', 'Brentwood, TN'],
-      type: 'recreation',
-      color: 'text-teal-600 bg-teal-50',
-      squareFootage: 45000,
-      location: 'Brentwood, TN'
-    },
-    {
-      icon: <Building2 className="h-6 w-6" />,
-      text: '180,000 sf urban mixed development with retail and residential in Nashville, TN',
-      highlights: ['180,000 sf', 'urban mixed', 'retail and residential', 'Nashville, TN'],
-      type: 'mixed_use',
-      color: 'text-violet-600 bg-violet-50',
+      icon: <Warehouse className="h-6 w-6" />,
+      text: '180,000 SF distribution center with high-bay racking in Nashville, TN',
+      highlights: ['180,000 SF', 'distribution center', 'high-bay racking', 'Nashville, TN'],
+      type: 'industrial',
+      color: 'text-gray-600 bg-gray-50',
       squareFootage: 180000,
       location: 'Nashville, TN'
     },
     {
-      icon: <Car className="h-6 w-6" />,
-      text: '100,000 sf parking garage with 300 spaces in downtown Nashville, TN',
-      highlights: ['100,000 sf', 'parking garage', '300 spaces', 'Nashville, TN'],
-      type: 'parking',
-      color: 'text-slate-600 bg-slate-50',
-      squareFootage: 100000,
+      icon: <Box className="h-6 w-6" />,
+      text: '95,000 SF cold storage facility with freezer zones in Manchester, NH',
+      highlights: ['95,000 SF', 'cold storage', 'freezer zones', 'Manchester, NH'],
+      type: 'industrial',
+      color: 'text-stone-600 bg-stone-50',
+      squareFootage: 95000,
+      location: 'Manchester, NH'
+    },
+    {
+      icon: <UtensilsCrossed className="h-6 w-6" />,
+      text: '6,500 SF full service restaurant with private dining in Nashville, TN',
+      highlights: ['6,500 SF', 'full service restaurant', 'private dining', 'Nashville, TN'],
+      type: 'restaurant',
+      color: 'text-orange-600 bg-orange-50',
+      squareFootage: 6500,
+      location: 'Nashville, TN'
+    },
+    {
+      icon: <UtensilsCrossed className="h-6 w-6" />,
+      text: '5,200 SF bar tavern with patio seating in Manchester, NH',
+      highlights: ['5,200 SF', 'bar tavern', 'patio seating', 'Manchester, NH'],
+      type: 'restaurant',
+      color: 'text-orange-600 bg-orange-50',
+      squareFootage: 5200,
+      location: 'Manchester, NH'
+    },
+    {
+      icon: <Hotel className="h-6 w-6" />,
+      text: '130,000 SF full service hotel with 220 keys in Nashville, TN',
+      highlights: ['130,000 SF', 'full service hotel', '220 keys', 'Nashville, TN'],
+      type: 'hospitality',
+      color: 'text-indigo-600 bg-indigo-50',
+      squareFootage: 130000,
       location: 'Nashville, TN'
     },
     {
       icon: <Box className="h-6 w-6" />,
-      text: '80,000 sf self storage facility with climate control in Antioch, TN',
-      highlights: ['80,000 sf', 'self storage', 'climate control', 'Antioch, TN'],
+      text: '320,000 SF data center with dual power trains in Nashville, TN',
+      highlights: ['320,000 SF', 'data center', 'dual power trains', 'Nashville, TN'],
       type: 'specialty',
       color: 'text-stone-600 bg-stone-50',
-      squareFootage: 80000,
-      location: 'Antioch, TN'
+      squareFootage: 320000,
+      location: 'Nashville, TN'
+    },
+    {
+      icon: <Heart className="h-6 w-6" />,
+      text: '34,000 SF ambulatory surgery center with 8 OR suites in Nashville, TN',
+      highlights: ['34,000 SF', 'ambulatory surgery center', '8 OR suites', 'Nashville, TN'],
+      type: 'healthcare',
+      color: 'text-red-600 bg-red-50',
+      squareFootage: 34000,
+      location: 'Nashville, TN'
+    },
+    {
+      icon: <Heart className="h-6 w-6" />,
+      text: '18,000 SF urgent care center with imaging suites in Manchester, NH',
+      highlights: ['18,000 SF', 'urgent care center', 'imaging suites', 'Manchester, NH'],
+      type: 'healthcare',
+      color: 'text-red-600 bg-red-50',
+      squareFootage: 18000,
+      location: 'Manchester, NH'
+    },
+    {
+      icon: <Heart className="h-6 w-6" />,
+      text: '92,000 SF acute care hospital with emergency department in Nashville, TN',
+      highlights: ['92,000 SF', 'acute care hospital', 'emergency department', 'Nashville, TN'],
+      type: 'healthcare',
+      color: 'text-red-600 bg-red-50',
+      squareFootage: 92000,
+      location: 'Nashville, TN'
+    },
+    {
+      icon: <Briefcase className="h-6 w-6" />,
+      text: '58,000 SF class A office tower with tenant lounge in Manchester, NH',
+      highlights: ['58,000 SF', 'class A office', 'tenant lounge', 'Manchester, NH'],
+      type: 'office',
+      color: 'text-blue-600 bg-blue-50',
+      squareFootage: 58000,
+      location: 'Manchester, NH'
+    },
+    {
+      icon: <ShoppingCart className="h-6 w-6" />,
+      text: '42,000 SF shopping center with grocery anchor in Nashville, TN',
+      highlights: ['42,000 SF', 'shopping center', 'grocery anchor', 'Nashville, TN'],
+      type: 'retail',
+      color: 'text-pink-600 bg-pink-50',
+      squareFootage: 42000,
+      location: 'Nashville, TN'
+    },
+    {
+      icon: <GraduationCap className="h-6 w-6" />,
+      text: '68,000 SF middle school for 900 students in Manchester, NH',
+      highlights: ['68,000 SF', 'middle school', '900 students', 'Manchester, NH'],
+      type: 'educational',
+      color: 'text-green-600 bg-green-50',
+      squareFootage: 68000,
+      location: 'Manchester, NH'
     }
   ];
   
@@ -930,6 +949,7 @@ export const NewProject: React.FC = () => {
     setLocationSubmitAttempted(true);
     if (!isLocationFormatValid) return;
     
+    setDecisionInputsConfirmed(false);
     setActiveStep('analyzing');
     tracer.trace('ANALYZE_START', 'Starting analysis', { description: descriptionForAnalysis });
     
@@ -1095,6 +1115,7 @@ export const NewProject: React.FC = () => {
     setProjectClassLocked(false);
     setMixedUseSplitContract(null);
     setMixedUseSplitEdited(false);
+    setDecisionInputsConfirmed(false);
     setPreviewData(null);
     setPreviewStatus('idle');
     setPreviewError(null);
@@ -1273,7 +1294,12 @@ export const NewProject: React.FC = () => {
                 ← Back
               </button>
               <div className="h-6 w-px bg-gray-300" />
-              <h1 className="text-xl font-bold text-gray-900">Create New Project Estimate</h1>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">Decision Insurance Intake</h1>
+                <p className="text-xs text-gray-500">
+                  Generate a deterministic, IC-grade approval packet before capital is committed.
+                </p>
+              </div>
             </div>
             
             {/* Progress indicator */}
@@ -1291,14 +1317,14 @@ export const NewProject: React.FC = () => {
                 'bg-gray-100 text-gray-500'
               }`}>
                 <Calculator className="h-4 w-4" />
-                <span className="text-sm font-medium">2. Analyze</span>
+                <span className="text-sm font-medium">2. Confirm</span>
               </div>
               <ChevronDown className="h-4 w-4 text-gray-400 rotate-[-90deg]" />
               <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full transition ${
-                result ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                activeStep === 'results' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
               }`}>
                 <Save className="h-4 w-4" />
-                <span className="text-sm font-medium">3. Save</span>
+                <span className="text-sm font-medium">3. Generate Packet</span>
               </div>
             </div>
           </div>
@@ -1314,14 +1340,14 @@ export const NewProject: React.FC = () => {
               <Sparkles className="h-5 w-5 text-blue-600" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Describe Your Project</h2>
-              <p className="text-sm text-gray-500">Use natural language to describe what you want to build</p>
+              <h2 className="text-lg font-semibold text-gray-900">Describe the deal</h2>
+              <p className="text-sm text-gray-500">Use plain English. SpecSharp will pre-fill the required fields below.</p>
             </div>
           </div>
           
           {/* Input guidance */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-            <p className="text-sm font-medium text-blue-900 mb-2">Include these key details for accurate analysis:</p>
+            <p className="text-sm font-medium text-blue-900 mb-2">Include these details so your packet is deterministic:</p>
             <div className="flex flex-wrap gap-2 mb-3">
               <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 border border-blue-300 rounded-full text-xs font-medium text-blue-700">
                 📏 Size (SF or units)
@@ -1343,7 +1369,7 @@ export const NewProject: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-blue-800">
-              <strong>Good example:</strong> "200-unit luxury apartment complex with parking garage and amenity deck in Nashville, TN"
+              <strong>Example (copy/paste):</strong> "200-unit luxury apartment complex with parking garage and amenity deck in Nashville, TN"
             </p>
           </div>
           
@@ -1477,13 +1503,13 @@ export const NewProject: React.FC = () => {
           {/* Live preview */}
           <div className="mt-6">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-semibold text-gray-700">Live Preview</p>
-              <span className="text-xs text-gray-400">Live based on inputs</span>
+              <p className="text-sm font-semibold text-gray-700">Packet Preview (Draft)</p>
+              <span className="text-xs text-gray-400">Draft signals only</span>
             </div>
             <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
               {previewStatus === 'idle' && (
                 <p className="text-xs text-gray-500">
-                  Start adding project details to see real-time cost and ROI insights.
+                  Start adding project details to see draft decision signals.
                 </p>
               )}
               {previewStatus === 'loading' && (
@@ -1497,23 +1523,23 @@ export const NewProject: React.FC = () => {
               {previewStatus === 'success' && previewData && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   <div>
-                    <p className="text-xs text-gray-500 uppercase tracking-wide">Total Cost</p>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Cost Baseline (Draft)</p>
                     <p className="text-sm font-semibold text-gray-900">{formatPreviewCurrency(previewData.totalCost)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 uppercase tracking-wide">Annual Revenue</p>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Revenue Inputs (Draft)</p>
                     <p className="text-sm font-semibold text-gray-900">{formatPreviewCurrency(previewData.annualRevenue)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 uppercase tracking-wide">NOI</p>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Operating Assumptions (Draft)</p>
                     <p className="text-sm font-semibold text-gray-900">{formatPreviewCurrency(previewData.noi)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 uppercase tracking-wide">Cash-on-Cash ROI</p>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Return Snapshot (Draft)</p>
                     <p className="text-sm font-semibold text-gray-900">{formatPreviewPercent(previewData.roi)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 uppercase tracking-wide">Payback Period</p>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Timing Snapshot (Draft)</p>
                     <p className="text-sm font-semibold text-gray-900">{formatPreviewYears(previewData.payback)}</p>
                   </div>
                 </div>
@@ -1598,24 +1624,27 @@ export const NewProject: React.FC = () => {
               {analyzing ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin" />
-                  Analyzing Project...
+                  Generating Draft Packet...
                 </>
               ) : (
                 <>
                   <Calculator className="h-5 w-5" />
-                  Analyze Project
+                  Generate Draft Packet
                 </>
               )}
             </button>
           </div>
+          <p className="mt-2 text-center text-xs text-gray-500">
+            You’ll confirm assumptions before the packet is stamped.
+          </p>
         </div>
 
         {/* Analyzing State */}
         {analyzing && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
             <Loader2 className="h-12 w-12 text-blue-600 animate-spin mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Analyzing Your Project</h3>
-            <p className="text-gray-500">Parsing requirements and calculating costs...</p>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Generating Draft Packet</h3>
+            <p className="text-gray-500">Parsing requirements and preparing decision inputs...</p>
             <div className="mt-4 flex justify-center gap-2">
               <div className="h-2 w-2 bg-blue-600 rounded-full animate-bounce" />
               <div className="h-2 w-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
@@ -1633,14 +1662,14 @@ export const NewProject: React.FC = () => {
                 <Check className="h-5 w-5 text-green-600" />
               </div>
               <div className="flex-1">
-                <h3 className="font-semibold text-green-900">Analysis Complete!</h3>
-                <p className="text-sm text-green-700">Review your project details below and save when ready</p>
+                <h3 className="font-semibold text-green-900">Draft Ready - Confirm Decision Inputs</h3>
+                <p className="text-sm text-green-700">These assumptions will be stamped into the Decision Packet (and logged in provenance).</p>
               </div>
             </div>
 
             {/* Project Summary */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 animate-in fade-in slide-in-from-bottom duration-500 delay-100">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">Project Analysis Results</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-6">Decision Inputs (Stamped)</h3>
               
               {/* Project Details Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -1654,6 +1683,7 @@ export const NewProject: React.FC = () => {
                         result.parsed_input.subtype || result.parsed_input.building_subtype
                       )}
                     </p>
+                    <p className="text-xs text-amber-700 mt-1">(auto-detected - please verify)</p>
                   </div>
                 </div>
                 
@@ -1693,10 +1723,10 @@ export const NewProject: React.FC = () => {
             {/* Project Configuration Section */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 animate-in fade-in slide-in-from-bottom duration-500 delay-200">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold text-gray-900">Project Configuration</h3>
+                <h3 className="text-lg font-semibold text-gray-900">Underwriting Assumptions</h3>
                 <div className="text-sm text-gray-500 flex items-center gap-1">
                   <Info className="h-4 w-4" />
-                  Detected from your description - adjust as needed
+                  Detected from your description. Confirm or correct—this is what the packet will use.
                 </div>
               </div>
               
@@ -1855,8 +1885,11 @@ export const NewProject: React.FC = () => {
                 <div className="mt-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-6 text-white">
                   <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
                     <DollarSign className="h-5 w-5" />
-                    Project Cost Summary
+                    Deterministic Cost Baseline
                   </h4>
+                  <p className="text-xs text-blue-200 mb-3">
+                    Excludes items marked “Not Modeled” in the packet.
+                  </p>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                       <p className="text-blue-100 text-sm mb-1">Base Cost (per SF)</p>
@@ -1884,21 +1917,33 @@ export const NewProject: React.FC = () => {
               )}
 
               {/* Action Buttons */}
+              <label className="flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 mt-8">
+                <input
+                  type="checkbox"
+                  checked={decisionInputsConfirmed}
+                  onChange={(event) => setDecisionInputsConfirmed(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded text-blue-600"
+                />
+                <span className="text-sm text-gray-700">
+                  I confirm these inputs reflect the basis of this decision.
+                </span>
+              </label>
+
               <div className="flex gap-4 mt-8">
                 <button
                   onClick={handleSaveProject}
-                  disabled={saving}
+                  disabled={saving || !decisionInputsConfirmed}
                   className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving ? (
                     <>
                       <Loader2 className="h-5 w-5 animate-spin" />
-                      Saving...
+                      Generating Packet...
                     </>
                   ) : (
                     <>
                       <Save className="h-5 w-5" />
-                      Save Project & View Details
+                      Generate Decision Packet
                     </>
                   )}
                 </button>
