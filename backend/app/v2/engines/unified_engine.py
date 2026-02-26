@@ -1332,6 +1332,7 @@ class UnifiedEngine:
                 'location': location,
                 'scenario': scenario_key,
                 'mixed_use_split': mixed_use_split_contract,
+                'ownership_type': ownership_type.value if hasattr(ownership_type, 'value') else ownership_type,
             },
         )
         ownership_analysis = ownership_bundle['ownership_analysis']
@@ -3438,6 +3439,23 @@ class UnifiedEngine:
         subtype_config = MASTER_CONFIG[building_enum].get(subtype)
         if not subtype_config:
             return self._empty_ownership_analysis()
+
+        ownership_type_value = calculations.get('ownership_type')
+        resolved_ownership_type = OwnershipType.FOR_PROFIT
+        if isinstance(ownership_type_value, OwnershipType):
+            resolved_ownership_type = ownership_type_value
+        elif isinstance(ownership_type_value, str):
+            try:
+                resolved_ownership_type = OwnershipType(ownership_type_value)
+            except ValueError:
+                resolved_ownership_type = OwnershipType.FOR_PROFIT
+
+        financing_terms_for_gate = None
+        ownership_terms = getattr(subtype_config, 'ownership_types', None)
+        if isinstance(ownership_terms, dict) and ownership_terms:
+            financing_terms_for_gate = ownership_terms.get(resolved_ownership_type)
+            if financing_terms_for_gate is None:
+                financing_terms_for_gate = next(iter(ownership_terms.values()))
         
         scenario_value = (
             calculations.get('scenario')
@@ -3901,7 +3919,9 @@ class UnifiedEngine:
         cash_on_cash_return_pct = round((net_income / total_cost) * 100, 2) if total_cost > 0 else 0
         cap_rate_pct = round((net_income / total_cost) * 100, 2) if total_cost > 0 else 0
 
-        target_roi = get_target_roi(building_enum)
+        target_roi = getattr(financing_terms_for_gate, "target_roi", None)
+        if not isinstance(target_roi, (int, float)):
+            target_roi = get_target_roi(building_enum)
         feasible = (npv >= 0) and ((cash_on_cash_return_pct / 100) >= target_roi)
 
         self._log_trace("feasibility_evaluated", {

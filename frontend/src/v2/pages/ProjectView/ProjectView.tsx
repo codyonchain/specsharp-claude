@@ -89,7 +89,7 @@ export const ProjectView: React.FC = () => {
             dealShieldData={dealShieldState.data}
           />
         ) : (
-          <ConstructionView project={project} />
+          <ConstructionView project={project} dealShieldData={dealShieldState.data} />
         )}
       </div>
     </div>

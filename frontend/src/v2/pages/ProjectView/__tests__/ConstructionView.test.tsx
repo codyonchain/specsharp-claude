@@ -1275,7 +1275,17 @@ describe("ConstructionView", () => {
       },
     ];
 
-    render(<ConstructionView project={project} />);
+    const dealShieldData = {
+      view_model: {
+        decision_status: "GO",
+        decision_reason_code: "base_value_gap_positive",
+        decision_status_provenance: {
+          status_source: "dealshield_policy_v1",
+        },
+      },
+    };
+
+    render(<ConstructionView project={project} dealShieldData={dealShieldData as any} />);
     fireEvent.click(screen.getByRole("button", { name: "View Detailed Provenance Receipt" }));
 
     expect(screen.getByText("Provenance Receipt")).toBeInTheDocument();
@@ -1286,6 +1296,11 @@ describe("ConstructionView", () => {
     expect(screen.getByText("Ground-Up")).toBeInTheDocument();
     expect(screen.getByText("nlp_service.detect_building_type_with_subtype")).toBeInTheDocument();
     expect(screen.getByText("none")).toBeInTheDocument();
+    expect(screen.getByText("Canonical Decision (DealShield)")).toBeInTheDocument();
+    expect(screen.getByText("Status:")).toBeInTheDocument();
+    expect(screen.getByText("GO")).toBeInTheDocument();
+    expect(screen.getByText("Reason: Base Value Gap Positive")).toBeInTheDocument();
+    expect(screen.getByText("Source: dealshield_policy_v1")).toBeInTheDocument();
 
     expect(screen.queryByText("111,111 SF")).not.toBeInTheDocument();
     expect(screen.queryByText("Miami, FL")).not.toBeInTheDocument();

@@ -6,13 +6,36 @@ interface ProvenanceModalProps {
   isOpen: boolean;
   onClose: () => void;
   analysis: any;
+  dealShieldData?: any;
   displayData?: any;
 }
+
+const toRecord = (value: unknown): Record<string, any> =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, any>)
+    : {};
+
+const coalesceRecord = (...candidates: unknown[]): Record<string, any> => {
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+      return candidate as Record<string, any>;
+    }
+  }
+  return {};
+};
+
+const formatReasonCode = (value?: string): string => {
+  if (!value || typeof value !== 'string') return 'N/A';
+  return value
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
 
 export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
   isOpen,
   onClose,
   analysis,
+  dealShieldData,
   displayData,
 }) => {
   if (!isOpen) return null;
@@ -62,6 +85,43 @@ export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
     parsedInput?.detection_source || 'N/A';
   const conflictResolution =
     parsedInput?.detection_conflict_resolution || 'N/A';
+  const hasDetectionSource = detectionSource !== 'N/A';
+  const hasConflictResolution = conflictResolution !== 'N/A';
+
+  const dealShieldRecord = toRecord(dealShieldData);
+  const dealShieldViewModel = coalesceRecord(
+    dealShieldRecord.view_model,
+    dealShieldRecord.viewModel,
+    dealShieldRecord
+  );
+  const dealShieldDecisionSummary = coalesceRecord(
+    dealShieldViewModel.decision_summary,
+    dealShieldViewModel.decisionSummary
+  );
+  const dealShieldProvenance = coalesceRecord(
+    dealShieldViewModel.provenance,
+    dealShieldRecord.provenance
+  );
+  const dealShieldStatusProvenance = coalesceRecord(
+    dealShieldViewModel.decision_status_provenance,
+    dealShieldDecisionSummary.decision_status_provenance,
+    dealShieldProvenance.decision_status_provenance,
+    dealShieldProvenance.decisionStatusProvenance
+  );
+  const canonicalDecisionStatus =
+    (typeof dealShieldViewModel.decision_status === 'string' && dealShieldViewModel.decision_status) ||
+    (typeof dealShieldDecisionSummary.decision_status === 'string' && dealShieldDecisionSummary.decision_status) ||
+    (typeof dealShieldProvenance.decision_status === 'string' && dealShieldProvenance.decision_status) ||
+    undefined;
+  const canonicalDecisionReason =
+    (typeof dealShieldViewModel.decision_reason_code === 'string' && dealShieldViewModel.decision_reason_code) ||
+    (typeof dealShieldDecisionSummary.decision_reason_code === 'string' && dealShieldDecisionSummary.decision_reason_code) ||
+    (typeof dealShieldProvenance.decision_reason_code === 'string' && dealShieldProvenance.decision_reason_code) ||
+    undefined;
+  const canonicalDecisionSource =
+    (typeof dealShieldStatusProvenance.status_source === 'string' && dealShieldStatusProvenance.status_source) ||
+    (typeof dealShieldStatusProvenance.statusSource === 'string' && dealShieldStatusProvenance.statusSource) ||
+    undefined;
 
   const formatLabel = (value?: string) => {
     if (!value || typeof value !== 'string') {
@@ -124,6 +184,16 @@ export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
     if (value === null || value === undefined) return 'N/A';
     if (typeof value === 'boolean') return value ? 'Yes' : 'No';
     const keyLower = key.toLowerCase();
+    if (keyLower.includes('dscr')) {
+      return typeof value === 'number' && Number.isFinite(value)
+        ? `${value.toFixed(2)}x`
+        : String(value);
+    }
+    if (keyLower.includes('debt_ratio')) {
+      if (typeof value !== 'number' || !Number.isFinite(value)) return String(value);
+      const normalized = value > 0 && value < 1 ? value * 100 : value;
+      return `${normalized.toFixed(2)}%`;
+    }
     const isFactorKey =
       keyLower.includes('factor') ||
       keyLower.includes('multiplier');
@@ -141,7 +211,7 @@ export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
       keyLower.includes('revenue') ||
       keyLower.includes('noi') ||
       keyLower.includes('npv') ||
-      keyLower.includes('debt') ||
+      (keyLower.includes('debt') && !keyLower.includes('debt_ratio')) ||
       keyLower.includes('value');
 
     if (isPercentKey) {
@@ -217,6 +287,27 @@ export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
     return `${v.toFixed(2)}%`;
   };
 
+  const runProvenanceRows: Array<{ label: string; value: string; required?: boolean }> = [
+    { label: 'Building type', value: formatLabel(normalizedBuildingType), required: true },
+    { label: 'Subtype', value: formatLabel(normalizedSubtype), required: true },
+    { label: 'Scope profile', value: String(calc?.scope_items_profile_id || calc?.scope_profile || 'N/A') },
+    { label: 'DealShield tile profile', value: String(calc?.dealshield_tile_profile_id || 'N/A') },
+    { label: 'Schedule source', value: String(calc?.construction_schedule?.schedule_source || 'N/A') },
+    { label: 'Schedule profile', value: String(calc?.construction_schedule?.profile_id || 'N/A') },
+  ];
+  const visibleRunProvenanceRows = runProvenanceRows.filter((row) => {
+    if (row.required) return true;
+    const value = row.value.trim();
+    return value.length > 0 && value !== 'N/A';
+  });
+  const canonicalDecisionStatusUpper = canonicalDecisionStatus?.toUpperCase();
+  const canonicalDecisionClass =
+    canonicalDecisionStatusUpper === 'GO'
+      ? 'text-green-700'
+      : canonicalDecisionStatusUpper === 'NEEDS WORK' || canonicalDecisionStatusUpper === 'PENDING'
+        ? 'text-amber-700'
+        : 'text-red-700';
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
@@ -287,18 +378,22 @@ export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
                     {formatProjectClass(resolvedProjectClass)}
                   </p>
                 </div>
-                <div>
-                  <p className="text-gray-600">Detection Source</p>
-                  <p className="font-medium text-xs break-all">
-                    {detectionSource}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-gray-600">Conflict Outcome</p>
-                  <p className="font-medium text-xs break-all">
-                    {conflictResolution}
-                  </p>
-                </div>
+                {hasDetectionSource && (
+                  <div>
+                    <p className="text-gray-600">Detection Source</p>
+                    <p className="font-medium text-xs break-all">
+                      {detectionSource}
+                    </p>
+                  </div>
+                )}
+                {hasConflictResolution && (
+                  <div>
+                    <p className="text-gray-600">Conflict Outcome</p>
+                    <p className="font-medium text-xs break-all">
+                      {conflictResolution}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -306,22 +401,26 @@ export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
               <h3 className="font-semibold text-blue-900 mb-2">Run Provenance</h3>
               <ul className="space-y-1 text-sm text-blue-800">
-                <li>• Building type: {formatLabel(normalizedBuildingType)}</li>
-                <li>• Subtype: {formatLabel(normalizedSubtype)}</li>
-                <li>
-                  • Scope profile: {calc?.scope_items_profile_id || calc?.scope_profile || 'N/A'}
-                </li>
-                <li>
-                  • DealShield tile profile: {calc?.dealshield_tile_profile_id || 'N/A'}
-                </li>
-                <li>
-                  • Schedule source: {calc?.construction_schedule?.schedule_source || 'N/A'}
-                </li>
-                <li>
-                  • Schedule profile: {calc?.construction_schedule?.profile_id || 'N/A'}
-                </li>
+                {visibleRunProvenanceRows.map((row) => (
+                  <li key={row.label}>• {row.label}: {row.value}</li>
+                ))}
               </ul>
             </div>
+
+            {canonicalDecisionStatus && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                <h3 className="font-semibold text-green-900 mb-2">Canonical Decision (DealShield)</h3>
+                <p className="text-sm text-green-900">
+                  Status: <span className={`font-semibold ${canonicalDecisionClass}`}>{canonicalDecisionStatus}</span>
+                </p>
+                {canonicalDecisionReason && (
+                  <p className="text-sm text-green-900">Reason: {formatReasonCode(canonicalDecisionReason)}</p>
+                )}
+                {canonicalDecisionSource && (
+                  <p className="text-xs text-green-700 break-all mt-1">Source: {canonicalDecisionSource}</p>
+                )}
+              </div>
+            )}
 
             {(() => {
               const feasibilityData = feasibilityTrace?.data || feasibilityTrace?.payload || {};
@@ -442,7 +541,7 @@ export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
                 typeof targetRoiPercent === 'number' ? formatPercent(targetRoiPercent) : 'N/A';
               const npvDisplay =
                 typeof npvRaw === 'number' ? formatCurrency(npvRaw) : 'N/A';
-              const feasibleDisplay = feasibilityState ?? 'N/A';
+              const roiGateDisplay = feasibilityState ?? 'N/A';
               const feasibilityClass =
                 feasibilityState === 'GO'
                   ? 'text-green-700'
@@ -453,7 +552,7 @@ export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
               return (
                 <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
                   <h3 className="font-semibold text-purple-900 mb-2">
-                    Feasibility Evaluation{isDevMode ? ' (dev)' : ''}
+                    Diagnostic ROI Gate{isDevMode ? ' (dev)' : ''}
                   </h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                     <div>
@@ -469,12 +568,15 @@ export const ProvenanceModal: React.FC<ProvenanceModalProps> = ({
                       <p className="font-semibold text-gray-900">{npvDisplay}</p>
                     </div>
                     <div>
-                      <p className="text-purple-700 uppercase tracking-wide text-xs mb-1">Feasible</p>
+                      <p className="text-purple-700 uppercase tracking-wide text-xs mb-1">Legacy ROI Gate</p>
                       <p className={`font-semibold ${feasibilityClass}`}>
-                        {feasibleDisplay}
+                        {roiGateDisplay}
                       </p>
                     </div>
                   </div>
+                  <p className="mt-3 border-t border-purple-200 pt-3 text-xs text-purple-800">
+                    Diagnostic only. Canonical recommendation is the DealShield decision above.
+                  </p>
                 </div>
               );
             })()}

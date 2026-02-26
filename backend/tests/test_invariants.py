@@ -14,7 +14,6 @@ from app.v2.config.master_config import (
     OwnershipType,
     get_building_config,
     get_margin_pct,
-    get_target_roi,
     validate_config,
 )
 from app.v2.config.construction_schedule import build_construction_schedule
@@ -543,9 +542,40 @@ def test_modifiers_applied_boost_revenue_and_align_feasibility():
     roi_percent = return_metrics.get("cash_on_cash_return", 0)
     npv = return_metrics.get("npv", 0)
     feasible_flag = return_metrics.get("feasible")
-    target_roi = get_target_roi(BuildingType.RESTAURANT)
+    ownership_target_roi = premium.get("ownership_analysis", {}).get("return_metrics", {}).get("target_roi")
+    assert isinstance(ownership_target_roi, (int, float))
+    target_roi = float(ownership_target_roi)
     expected_feasible = (npv >= 0) and ((roi_percent or 0) / 100 >= target_roi)
     assert feasible_flag == expected_feasible, "Feasibility flag must reflect ROI hurdle and NPV"
+
+
+def test_feasibility_trace_target_roi_uses_subtype_financing_terms():
+    payload = unified_engine.calculate_project(
+        building_type=BuildingType.MULTIFAMILY,
+        subtype="luxury_apartments",
+        square_footage=220_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+    )
+
+    trace_entries = [entry for entry in payload["calculation_trace"] if entry["step"] == "feasibility_evaluated"]
+    assert trace_entries, "Expected feasibility_evaluated trace entry"
+    trace_target_roi = trace_entries[-1]["data"].get("target_roi")
+    assert isinstance(trace_target_roi, (int, float))
+
+    subtype_config = get_building_config(BuildingType.MULTIFAMILY, "luxury_apartments")
+    assert subtype_config is not None
+    financing_terms = subtype_config.ownership_types.get(OwnershipType.FOR_PROFIT)
+    if financing_terms is None:
+        financing_terms = next(iter(subtype_config.ownership_types.values()))
+    assert financing_terms is not None
+    assert isinstance(financing_terms.target_roi, (int, float))
+
+    ownership_target_roi = payload.get("ownership_analysis", {}).get("return_metrics", {}).get("target_roi")
+    assert isinstance(ownership_target_roi, (int, float))
+
+    assert trace_target_roi == pytest.approx(float(financing_terms.target_roi), rel=0, abs=1e-12)
+    assert trace_target_roi == pytest.approx(float(ownership_target_roi), rel=0, abs=1e-12)
 
 
 def test_finish_level_quality_factor_trace():

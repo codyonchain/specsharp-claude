@@ -80,6 +80,7 @@ const normalizeTradeCostSplit = (split: TradeCostSplit): TradeCostSplit => {
 
 interface Props {
   project: Project;
+  dealShieldData?: any;
 }
 
 const conceptualLabelByTrade: Record<string, string> = {
@@ -353,7 +354,7 @@ const getPhaseTooltip = (
   return tradesSuffix || undefined;
 };
 
-export const ConstructionView: React.FC<Props> = ({ project }) => {
+export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) => {
   const [expandedTrade, setExpandedTrade] = useState<string | null>(null);
   const [showProvenanceModal, setShowProvenanceModal] = useState(false);
   const [showTraceModal, setShowTraceModal] = useState(false);
@@ -2158,6 +2159,7 @@ export const ConstructionView: React.FC<Props> = ({ project }) => {
         isOpen={showProvenanceModal}
         onClose={() => setShowProvenanceModal(false)}
         analysis={analysis}
+        dealShieldData={dealShieldData}
         displayData={displayData}
       />
 
