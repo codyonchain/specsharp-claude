@@ -11,6 +11,7 @@ import { Diagnostics } from './pages/Diagnostics';
 
 // Import the existing HomePage from the main src/pages
 import { HomePage } from '../pages/HomePage';
+import { CoveragePage } from '../pages/CoveragePage';
 
 // Import Login component from V1
 import Login from '../components/Login';
@@ -40,6 +41,7 @@ export const App: React.FC = () => {
         <Routes>
           {/* Homepage - always accessible */}
           <Route path="/" element={<HomePage />} />
+          <Route path="/coverage" element={<CoveragePage />} />
           
           {/* Login route - auto-redirect to dashboard if already authenticated */}
           <Route 

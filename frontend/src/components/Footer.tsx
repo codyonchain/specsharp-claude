@@ -32,7 +32,7 @@ export const Footer: React.FC = () => {
           <h4>Support</h4>
           <ul className="footer-links">
             <li><Link to="/faq">FAQ</Link></li>
-            <li><a href="/#scenario-comparison">Building Type Supported</a></li>
+            <li><a href="/coverage">Building Types Supported</a></li>
             <li><a href="mailto:cody@specsharp.ai">Contact Us</a></li>
             <li><a href="mailto:cody@specsharp.ai">cody@specsharp.ai</a></li>
           </ul>

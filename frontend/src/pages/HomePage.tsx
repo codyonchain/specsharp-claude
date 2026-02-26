@@ -188,16 +188,9 @@ export const HomePage: React.FC = () => {
             >
               How It Works
             </a>
-            <a 
-              href="#scenario-comparison" 
-              className="text-gray-700 hover:text-blue-600 transition-colors"
-              onClick={(e) => {
-                e.preventDefault();
-                document.getElementById('scenario-comparison')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-            >
+            <Link to="/coverage" className="text-gray-700 hover:text-blue-600 transition-colors">
               Coverage
-            </a>
+            </Link>
             <Link to="/login" className="text-blue-600 hover:text-blue-700 transition-colors font-medium">
               Login
             </Link>
@@ -241,17 +234,13 @@ export const HomePage: React.FC = () => {
               >
                 How It Works
               </a>
-              <a 
-                href="#scenario-comparison" 
+              <Link
+                to="/coverage"
                 className="block py-2 text-gray-700 hover:text-blue-600 transition-colors"
-                onClick={(e) => {
-                  e.preventDefault();
-                  document.getElementById('scenario-comparison')?.scrollIntoView({ behavior: 'smooth' });
-                  setIsMobileMenuOpen(false);
-                }}
+                onClick={() => setIsMobileMenuOpen(false)}
               >
                 Coverage
-              </a>
+              </Link>
               <Link 
                 to="/login" 
                 className="block py-2 text-blue-600 hover:text-blue-700 transition-colors font-medium"
