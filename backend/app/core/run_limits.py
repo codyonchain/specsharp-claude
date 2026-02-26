@@ -118,7 +118,7 @@ def assert_run_available(db: Session, *, org_id: str, email: str) -> RunLimitSna
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
-                "message": "Run limit reached. Contact support to add more runs.",
+                "message": "Run limit reached. Call Cody to add more runs.",
                 "code": "run_limit_reached",
                 "remaining_runs": 0,
             },
@@ -136,7 +136,7 @@ def consume_run(db: Session, *, org_id: str, email: str) -> RunLimitSnapshot:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
-                "message": "Run limit reached. Contact support to add more runs.",
+                "message": "Run limit reached. Call Cody to add more runs.",
                 "code": "run_limit_reached",
                 "remaining_runs": 0,
             },
