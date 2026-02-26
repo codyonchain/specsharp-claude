@@ -8,29 +8,66 @@ type AuthCallbackResult =
   | { ok: false; error: string };
 
 const ACCESS_TOKEN_KEY = 'specsharp_access_token';
-const REFRESH_TOKEN_KEY = 'specsharp_refresh_token';
 const EXPIRES_AT_KEY = 'specsharp_token_expires_at';
 const USER_KEY = 'specsharp_user';
 
 const LEGACY_TOKEN_KEY = 'token';
 const LEGACY_AUTH_KEY = 'isAuthenticated';
 
+const hasSessionStorage = (): boolean =>
+  typeof window !== 'undefined' && typeof window.sessionStorage !== 'undefined';
+
 const hasLocalStorage = (): boolean =>
   typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 
 const storageGet = (key: string): string | null => {
-  if (!hasLocalStorage()) return null;
-  return window.localStorage.getItem(key);
+  if (!hasSessionStorage()) return null;
+  return window.sessionStorage.getItem(key);
 };
 
 const storageSet = (key: string, value: string): void => {
-  if (!hasLocalStorage()) return;
-  window.localStorage.setItem(key, value);
+  if (!hasSessionStorage()) return;
+  window.sessionStorage.setItem(key, value);
 };
 
 const storageRemove = (key: string): void => {
+  if (!hasSessionStorage()) return;
+  window.sessionStorage.removeItem(key);
+};
+
+const clearLegacyLocalAuthStorage = (): void => {
   if (!hasLocalStorage()) return;
-  window.localStorage.removeItem(key);
+  window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+  window.localStorage.removeItem(EXPIRES_AT_KEY);
+  window.localStorage.removeItem(USER_KEY);
+  window.localStorage.removeItem(LEGACY_TOKEN_KEY);
+  window.localStorage.removeItem(LEGACY_AUTH_KEY);
+};
+
+const migrateLegacyLocalStorageSession = (): void => {
+  if (!hasSessionStorage() || !hasLocalStorage()) return;
+  if (window.sessionStorage.getItem(ACCESS_TOKEN_KEY)) {
+    return;
+  }
+
+  const legacyToken =
+    window.localStorage.getItem(ACCESS_TOKEN_KEY) ||
+    window.localStorage.getItem(LEGACY_TOKEN_KEY);
+  if (!legacyToken) {
+    return;
+  }
+
+  window.sessionStorage.setItem(ACCESS_TOKEN_KEY, legacyToken);
+  const legacyExpiry = window.localStorage.getItem(EXPIRES_AT_KEY);
+  if (legacyExpiry) {
+    window.sessionStorage.setItem(EXPIRES_AT_KEY, legacyExpiry);
+  }
+  const legacyUser = window.localStorage.getItem(USER_KEY);
+  if (legacyUser) {
+    window.sessionStorage.setItem(USER_KEY, legacyUser);
+  }
+
+  clearLegacyLocalAuthStorage();
 };
 
 const getSupabaseUrl = (): string =>
@@ -59,7 +96,6 @@ const parseJwtPayload = (token: string): Record<string, any> | null => {
 
 const persistSession = (session: {
   access_token: string;
-  refresh_token?: string;
   expires_in?: number;
   user?: SessionUser;
 }) => {
@@ -69,38 +105,37 @@ const persistSession = (session: {
     : nowEpoch() + (session.expires_in || 3600);
 
   storageSet(ACCESS_TOKEN_KEY, session.access_token);
-  storageSet(LEGACY_TOKEN_KEY, session.access_token);
-  storageSet(LEGACY_AUTH_KEY, 'true');
   storageSet(EXPIRES_AT_KEY, String(exp));
 
-  if (session.refresh_token) {
-    storageSet(REFRESH_TOKEN_KEY, session.refresh_token);
-  }
   if (session.user) {
     storageSet(USER_KEY, JSON.stringify(session.user));
   }
+
+  clearLegacyLocalAuthStorage();
 };
 
 export const clearAuthSession = () => {
+  migrateLegacyLocalStorageSession();
   storageRemove(ACCESS_TOKEN_KEY);
-  storageRemove(REFRESH_TOKEN_KEY);
   storageRemove(EXPIRES_AT_KEY);
   storageRemove(USER_KEY);
   storageRemove(LEGACY_TOKEN_KEY);
   storageRemove(LEGACY_AUTH_KEY);
+  clearLegacyLocalAuthStorage();
 };
 
-const readSession = () => ({
-  accessToken: storageGet(ACCESS_TOKEN_KEY) || storageGet(LEGACY_TOKEN_KEY),
-  refreshToken: storageGet(REFRESH_TOKEN_KEY),
-  expiresAt: Number(storageGet(EXPIRES_AT_KEY) || '0'),
-});
+const readSession = () => {
+  migrateLegacyLocalStorageSession();
+  return {
+    accessToken: storageGet(ACCESS_TOKEN_KEY),
+    expiresAt: Number(storageGet(EXPIRES_AT_KEY) || '0'),
+  };
+};
 
 export const isAuthenticatedSession = (): boolean => {
-  const { accessToken, expiresAt, refreshToken } = readSession();
+  const { accessToken, expiresAt } = readSession();
   if (!accessToken) return false;
-  if (expiresAt > nowEpoch() + 30) return true;
-  return Boolean(refreshToken);
+  return expiresAt > nowEpoch() + 30;
 };
 
 export const getStoredUser = (): SessionUser | null => {
@@ -163,7 +198,6 @@ export const handleAuthCallback = async (): Promise<AuthCallbackResult> => {
   }
 
   const accessToken = params.get('access_token');
-  const refreshToken = params.get('refresh_token');
   const expiresIn = Number(params.get('expires_in') || '3600');
 
   if (!accessToken) {
@@ -172,7 +206,6 @@ export const handleAuthCallback = async (): Promise<AuthCallbackResult> => {
 
   persistSession({
     access_token: accessToken,
-    refresh_token: refreshToken || undefined,
     expires_in: expiresIn,
   });
   await fetchSupabaseUser(accessToken).catch(() => null);
@@ -180,50 +213,23 @@ export const handleAuthCallback = async (): Promise<AuthCallbackResult> => {
 };
 
 export const getValidAccessToken = async (): Promise<string | null> => {
-  const supabaseUrl = getSupabaseUrl();
-  const anonKey = getSupabaseAnonKey();
-  const { accessToken, refreshToken, expiresAt } = readSession();
+  const { accessToken, expiresAt } = readSession();
 
   if (!accessToken) return null;
-
-  if (expiresAt > nowEpoch() + 30) {
-    return accessToken;
-  }
-
-  if (!refreshToken || !supabaseUrl || !anonKey) {
+  if (expiresAt <= nowEpoch() + 30) {
     clearAuthSession();
     return null;
   }
+  return accessToken;
+};
 
-  try {
-    const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: anonKey,
-      },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    });
-    if (!response.ok) {
-      clearAuthSession();
-      return null;
-    }
-
-    const data = await response.json();
-    if (!data?.access_token) {
-      clearAuthSession();
-      return null;
-    }
-
-    persistSession({
-      access_token: data.access_token,
-      refresh_token: data.refresh_token || refreshToken,
-      expires_in: data.expires_in,
-    });
-    await fetchSupabaseUser(data.access_token).catch(() => null);
-    return data.access_token as string;
-  } catch {
-    clearAuthSession();
-    return null;
-  }
+export const setAccessTokenSession = (
+  accessToken: string,
+  options?: { expiresInSeconds?: number; user?: SessionUser }
+): void => {
+  persistSession({
+    access_token: accessToken,
+    expires_in: options?.expiresInSeconds,
+    user: options?.user,
+  });
 };

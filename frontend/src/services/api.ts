@@ -1,4 +1,10 @@
 import axios from 'axios';
+import {
+  clearAuthSession,
+  getValidAccessToken,
+  isAuthenticatedSession,
+  setAccessTokenSession,
+} from '../v2/auth/session';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL 
   ? `${import.meta.env.VITE_API_URL}/api/v2`
@@ -13,8 +19,8 @@ const api = axios.create({
 });
 
 // Add auth token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('specsharp_access_token') || localStorage.getItem('token');
+api.interceptors.request.use(async (config) => {
+  const token = await getValidAccessToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -60,17 +66,11 @@ export interface ScopeRequest {
 
 export const authService = {
   logout: async () => {
-    localStorage.removeItem('specsharp_access_token');
-    localStorage.removeItem('specsharp_refresh_token');
-    localStorage.removeItem('specsharp_token_expires_at');
-    localStorage.removeItem('specsharp_user');
-    localStorage.removeItem('token');
-    localStorage.removeItem('isAuthenticated');
+    clearAuthSession();
   },
 
   isAuthenticated: () => {
-    const token = localStorage.getItem('specsharp_access_token') || localStorage.getItem('token');
-    return !!token;
+    return isAuthenticatedSession();
   },
 
   getCurrentUser: async () => {
@@ -188,9 +188,11 @@ export const demoService = {
     
     const response = await demoApi.post('/demo/quick-signup', data);
     
-    // Store the token
+    // Persist token in hardened V2 session storage
     if (response.data.access_token) {
-      localStorage.setItem('token', response.data.access_token);
+      setAccessTokenSession(response.data.access_token, {
+        expiresInSeconds: response.data.expires_in,
+      });
     }
     
     return response.data;
