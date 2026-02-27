@@ -13,6 +13,7 @@ import { AuthCallback } from './pages/AuthCallback';
 // Import the existing HomePage from the main src/pages
 import { HomePage } from '../pages/HomePage';
 import { CoveragePage } from '../pages/CoveragePage';
+import { FAQPage } from '../pages/FAQPage';
 import { TermsOfService } from '../pages/TermsOfService';
 import { PrivacyPolicy } from '../pages/PrivacyPolicy';
 import { CookiePolicy } from '../pages/CookiePolicy';
@@ -47,6 +48,7 @@ export const App: React.FC = () => {
           {/* Homepage - always accessible */}
           <Route path="/" element={<HomePage />} />
           <Route path="/coverage" element={<CoveragePage />} />
+          <Route path="/faq" element={<FAQPage />} />
           <Route path="/terms" element={<TermsOfService />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/cookies" element={<CookiePolicy />} />

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, ShieldCheck, Sparkles, Gauge, FileText, Users } from 'lucide-react';
 import { Footer } from '../components/Footer';
 import './FAQPage.css';
 
@@ -10,155 +10,167 @@ interface FAQItem {
 }
 
 interface FAQSection {
+  id: string;
   title: string;
+  summary: string;
   items: FAQItem[];
 }
 
-const faqData: FAQSection[] = [
+const faqSections: FAQSection[] = [
   {
-    title: "Getting Started",
+    id: 'basics',
+    title: 'Platform Basics',
+    summary: 'What SpecSharp is, who it is for, and what it does.',
     items: [
       {
-        question: "How does SpecSharp work?",
-        answer: "Simply describe your project in plain English (e.g., \"50,000 sf office building in Nashville, Tennessee\") and get a detailed cost estimate with 200+ line items in 60 seconds. No complex forms, no waiting."
+        question: 'What is SpecSharp?',
+        answer:
+          'SpecSharp is a decision-support platform for development deals. We generate structured, auditable estimates and a DealShield summary so teams can pressure-test scope, cost, and risk fast.'
       },
       {
-        question: "Do I need to sign up to try it?",
-        answer: "No! You can create 3 estimates without any signup. Just click \"Try It Now\" and see the magic happen. After 3 estimates, create an account to continue."
+        question: 'Who is it built for?',
+        answer:
+          'SpecSharp is built for developers, owners, lenders, and operators who need a fast, credible early-stage cost view. It is a B2B product and is not intended for consumer use.'
       },
       {
-        question: "What information do I need to provide?",
-        answer: "Just the basics: building type, size, location, and any special requirements. For example: \"100,000 sf hospital with emergency department in Manchester, New Hampshire.\""
+        question: 'How do I run a deal?',
+        answer:
+          'Describe the project in plain English (type, size, location, and special features). SpecSharp returns a trade-level budget, schedule signals, and a decision summary.'
       },
       {
-        question: "How accurate are the estimates?",
-        answer: "Our estimates are 85-90% accurate for preliminary budgeting. They include regional pricing, local building codes, and requirements specific to your area. Always verify final numbers with contractors before proceeding."
+        question: 'Is this a bid or a contract?',
+        answer:
+          'No. SpecSharp is for preliminary budgeting and decision support. Final pricing should be validated by qualified professionals.'
       }
     ]
   },
   {
-    title: "Pricing & Billing",
+    id: 'onboarding',
+    title: 'Onboarding & Access',
+    summary: 'How accounts, run limits, and teams work.',
     items: [
       {
-        question: "How much does SpecSharp cost?",
-        answer: "$799/month for unlimited estimates. This includes 3 team seats. Additional team members are $99/month each."
+        question: 'Do you offer self-serve signup?',
+        answer:
+          'Not yet. We onboard manually to ensure accurate configuration, clean data, and the right usage limits. Email cody@specsharp.ai to get access.'
       },
       {
-        question: "Is there a free trial?",
-        answer: "Better than a trial - you can create 3 full estimates before signing up. No credit card required. See exactly what you're getting before you pay."
+        question: 'How do run limits work?',
+        answer:
+          'Each organization has an included run quota. You can add runs at any time by request. We can also grant temporary or unlimited access for approved internal users.'
       },
       {
-        question: "Can I cancel anytime?",
-        answer: "Yes. No contracts, no cancellation fees. Cancel anytime from your account settings."
+        question: 'Can I add teammates?',
+        answer:
+          'Yes. We support team access and role-based permissions. Tell us who to add and their role.'
       },
       {
-        question: "What payment methods do you accept?",
-        answer: "We accept all major credit cards through Stripe. For enterprise accounts, we can arrange ACH payments."
+        question: 'Can I transfer ownership or change org details?',
+        answer:
+          'Yes. We can update organization ownership, rename the org, or adjust roles on request.'
       }
     ]
   },
   {
-    title: "Features & Capabilities",
+    id: 'outputs',
+    title: 'Outputs & Accuracy',
+    summary: 'What you get, what’s included, and how to use it safely.',
     items: [
       {
-        question: "What building types do you support?",
-        answer: "All major commercial types including:\n• Office buildings\n• Medical facilities\n• Warehouses & industrial\n• Retail & restaurants\n• Hotels & hospitality\n• Schools & education\n• Multi-family residential\n• Mixed-use developments"
+        question: 'What does SpecSharp output?',
+        answer:
+          'You get a trade-level cost breakdown, a DealShield decision summary, and supporting narrative signals. Exports include PDF and spreadsheet formats.'
       },
       {
-        question: "Can I export estimates?",
-        answer: "Yes! Export to Excel with detailed line items and formulas, or professional PDF reports. Perfect for sharing with clients or subs."
+        question: 'How accurate are the estimates?',
+        answer:
+          'SpecSharp is designed for early-stage budgeting. Use it to identify directional cost, scope risk, and decision readiness. Final pricing should always be validated by qualified professionals.'
       },
       {
-        question: "Do you handle mixed-use buildings?",
-        answer: "Absolutely. Just specify the mix, like \"warehouse (70%) + office (30%)\" and we'll calculate accordingly."
+        question: 'What is included in the cost?',
+        answer:
+          'Core trade scopes, regional adjustments, and major systems are included. You can also layer in special features and finish-level adjustments.'
       },
       {
-        question: "Can I adjust for finish quality?",
-        answer: "Yes. Choose from Basic, Standard, or Premium finishes. You can even set different quality levels for different trades."
-      },
-      {
-        question: "Can I share estimates with others?",
-        answer: "Yes! Generate share links that let anyone view your estimate without logging in. Links expire after 30 days for security."
+        question: 'What is not included?',
+        answer:
+          'Land, financing, permitting fees, legal work, and owner-procured items are typically excluded unless explicitly configured.'
       }
     ]
   },
   {
-    title: "Accuracy & Reliability",
+    id: 'security',
+    title: 'Data & Security',
+    summary: 'How we protect your data and keep accounts isolated.',
     items: [
       {
-        question: "How do you determine costs?",
-        answer: "We use current regional pricing data, RSMeans references, and local market conditions. Costs are updated regularly and adjusted for your specific location."
+        question: 'Who can see my projects?',
+        answer:
+          'Only users in your organization can access your projects. Shared links are optional and controlled by you.'
       },
       {
-        question: "Why are New Hampshire and Tennessee costs different?",
-        answer: "Labor rates, material costs, and code requirements vary by region. New Hampshire typically runs 10-15% higher than Tennessee due to labor costs and climate requirements."
+        question: 'How is data secured?',
+        answer:
+          'We use secure OAuth authentication, encrypted connections, strict access controls, and database row-level security for tenant isolation.'
       },
       {
-        question: "What's included in the estimates?",
-        answer: "Everything needed for preliminary budgeting:\n• All major trades (structural, mechanical, electrical, plumbing)\n• Regional adjustments\n• Local code requirements (snow loads for NH, seismic for TN)\n• Contractor overhead & profit\n• Contingency allowances"
+        question: 'Do you sell or share my data?',
+        answer:
+          'No. We do not sell your data. We share data only with vetted service providers required to run the platform.'
       },
       {
-        question: "What's NOT included?",
-        answer: "Land costs, financing, permits, architectural fees, and owner-supplied items. These vary too much to estimate accurately without specific project details."
+        question: 'Do you use my data to train public models?',
+        answer:
+          'We use your data only to provide the Service. If training or analytics requirements change, we will disclose them in our policies.'
       }
     ]
   },
   {
-    title: "Team & Collaboration",
+    id: 'collaboration',
+    title: 'Exports & Collaboration',
+    summary: 'How to share outputs with stakeholders.',
     items: [
       {
-        question: "How do team seats work?",
-        answer: "Your base subscription includes 3 seats. All team members can view and create estimates. Add more team members for $99/month each."
+        question: 'Can I export to PDF or Excel?',
+        answer:
+          'Yes. You can export DealShield PDFs and structured spreadsheets for internal review or external sharing.'
       },
       {
-        question: "Can subcontractors use SpecSharp?",
-        answer: "Yes! Use the \"Extract for Subs\" feature to download trade-specific scopes. Send to your subs for accurate pricing."
+        question: 'Can I share a link with partners?',
+        answer:
+          'Yes. You can generate a share link to provide view-only access to a specific project.'
       },
       {
-        question: "Who can see my estimates?",
-        answer: "Only your team members can see your estimates, unless you create a share link. You control who has access."
+        question: 'Can I pull trade packages for subs?',
+        answer:
+          'Yes. SpecSharp can export trade-specific summaries to support subcontractor pricing workflows.'
       }
     ]
   },
   {
-    title: "Technical & Security",
+    id: 'support',
+    title: 'Support & Roadmap',
+    summary: 'How to get help and what’s coming next.',
     items: [
       {
-        question: "Is my data secure?",
-        answer: "Yes. We use bank-level encryption, secure Google OAuth for login, and short-lived session-scoped tokens. We never store passwords."
+        question: 'How do I get support?',
+        answer:
+          'Email cody@specsharp.ai. We typically respond within one business day.'
       },
       {
-        question: "Can I access SpecSharp on mobile?",
-        answer: "Yes, SpecSharp works on any device with a web browser. The interface is responsive and works great on tablets and phones."
+        question: 'Do you offer training?',
+        answer:
+          'Yes. We can provide onboarding sessions for teams and review your first few deals together.'
       },
       {
-        question: "Do you integrate with other software?",
-        answer: "Not yet, but API access is on our roadmap for 2025. Let us know what integrations you need!"
+        question: 'Do you integrate with other tools?',
+        answer:
+          'Not yet. API access and integrations are on our roadmap. Tell us which tools matter most.'
       },
       {
-        question: "What browsers do you support?",
-        answer: "SpecSharp works best on Chrome, Safari, Firefox, and Edge. We recommend using the latest version for the best experience."
-      }
-    ]
-  },
-  {
-    title: "Support",
-    items: [
-      {
-        question: "How do I get help?",
-        answer: "Email us at support@specsharp.ai. We typically respond within 24 hours on business days."
-      },
-      {
-        question: "Do you offer training?",
-        answer: "SpecSharp is designed to be intuitive - most users are creating estimates within minutes. We have video tutorials available and can arrange training for enterprise accounts."
-      },
-      {
-        question: "Can you add my specific requirements?",
-        answer: "We're always improving! Send feature requests to support@specsharp.ai. Many of our best features came from user suggestions."
-      },
-      {
-        question: "What if I find an error in an estimate?",
-        answer: "Let us know immediately at support@specsharp.ai. We'll investigate and update our algorithms if needed. Your feedback helps everyone get better estimates."
+        question: 'Where can I request features?',
+        answer:
+          'Email cody@specsharp.ai with your request. We prioritize features based on customer impact.'
       }
     ]
   }
@@ -168,16 +180,17 @@ const FAQAccordion: React.FC<{ section: FAQSection }> = ({ section }) => {
   const [openItems, setOpenItems] = useState<number[]>([]);
 
   const toggleItem = (index: number) => {
-    setOpenItems(prev => 
-      prev.includes(index) 
-        ? prev.filter(i => i !== index)
-        : [...prev, index]
+    setOpenItems((prev) =>
+      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
     );
   };
 
   return (
-    <div className="faq-section">
-      <h2 className="faq-section-title">{section.title}</h2>
+    <section id={section.id} className="faq-section">
+      <div className="faq-section-head">
+        <h2 className="faq-section-title">{section.title}</h2>
+        <p className="faq-section-summary">{section.summary}</p>
+      </div>
       <div className="faq-items">
         {section.items.map((item, index) => (
           <div key={index} className="faq-item">
@@ -205,7 +218,7 @@ const FAQAccordion: React.FC<{ section: FAQSection }> = ({ section }) => {
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 };
 
@@ -215,51 +228,83 @@ export const FAQPage: React.FC = () => {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Navigation Header */}
-      <nav className="bg-white shadow-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <Link to="/" className="font-bold text-2xl text-blue-600">SpecSharp</Link>
-          <div className="flex items-center space-x-4">
-            <Link to="/" className="text-gray-700 hover:text-blue-600 transition-colors">
-              Back to Home
-            </Link>
-            <Link 
-              to="/demo" 
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Try Demo
-            </Link>
+    <div className="faq-page">
+      <nav className="faq-nav">
+        <div className="faq-nav-inner">
+          <Link to="/" className="faq-logo">SpecSharp</Link>
+          <div className="faq-nav-links">
+            <Link to="/coverage">Coverage</Link>
+            <Link to="/demo">Demo</Link>
+            <a href="mailto:cody@specsharp.ai?subject=SpecSharp%20Access">Request Access</a>
           </div>
         </div>
       </nav>
 
-      {/* FAQ Content */}
-      <main className="flex-grow bg-gray-50 py-12">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto">
-            <h1 className="text-4xl font-bold text-center mb-8">Frequently Asked Questions</h1>
-            
-            <div className="space-y-8">
-              {faqData.map((section, index) => (
-                <FAQAccordion key={index} section={section} />
-              ))}
-            </div>
-
-            <div className="mt-12 text-center bg-white rounded-lg shadow-sm p-8">
-              <h3 className="text-2xl font-semibold mb-4">Still have questions?</h3>
-              <p className="text-gray-600 mb-6">
-                Email <a href="mailto:support@specsharp.ai" className="text-blue-600 hover:underline">support@specsharp.ai</a> and we'll be happy to help!
-              </p>
-              <Link 
-                to="/demo" 
-                className="inline-flex items-center bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-              >
-                Try SpecSharp Now
-              </Link>
-            </div>
+      <header className="faq-hero">
+        <div className="faq-hero-content">
+          <span className="faq-kicker">SpecSharp FAQ</span>
+          <h1>Clear answers before you run your first deal</h1>
+          <p>
+            SpecSharp is built for fast, defensible decision making. This FAQ covers onboarding,
+            outputs, security, and how teams use SpecSharp in real workflows.
+          </p>
+          <div className="faq-hero-actions">
+            <Link to="/demo" className="faq-primary-btn">View Demo</Link>
+            <a href="mailto:cody@specsharp.ai?subject=SpecSharp%20Access" className="faq-secondary-btn">Request Access</a>
           </div>
         </div>
+        <div className="faq-hero-card">
+          <div className="faq-hero-card-header">
+            <ShieldCheck size={22} />
+            <span>Decision Insurance Snapshot</span>
+          </div>
+          <ul>
+            <li><Sparkles size={18} /> Trade-level budget + risk signals</li>
+            <li><Gauge size={18} /> Fast turnaround, built for precon</li>
+            <li><FileText size={18} /> PDF + spreadsheet exports</li>
+            <li><Users size={18} /> Org‑scoped access controls</li>
+          </ul>
+        </div>
+      </header>
+
+      <section className="faq-metrics">
+        <div className="faq-metric-card">
+          <p className="faq-metric-label">Designed for</p>
+          <h3>Developers &amp; Owners</h3>
+        </div>
+        <div className="faq-metric-card">
+          <p className="faq-metric-label">Outputs</p>
+          <h3>DealShield + Trade Detail</h3>
+        </div>
+        <div className="faq-metric-card">
+          <p className="faq-metric-label">Security Model</p>
+          <h3>Tenant-Isolated by Default</h3>
+        </div>
+      </section>
+
+      <section className="faq-quick-nav">
+        {faqSections.map((section) => (
+          <a key={section.id} href={`#${section.id}`} className="faq-quick-card">
+            <span>{section.title}</span>
+            <p>{section.summary}</p>
+          </a>
+        ))}
+      </section>
+
+      <main className="faq-body">
+        {faqSections.map((section) => (
+          <FAQAccordion key={section.id} section={section} />
+        ))}
+
+        <section className="faq-contact-section">
+          <h3>Still have questions?</h3>
+          <p>
+            We respond quickly and can walk you through a live example.
+          </p>
+          <a href="mailto:cody@specsharp.ai?subject=SpecSharp%20Questions">
+            Email cody@specsharp.ai
+          </a>
+        </section>
       </main>
 
       <Footer />
