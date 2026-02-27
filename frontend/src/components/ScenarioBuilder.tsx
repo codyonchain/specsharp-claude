@@ -27,7 +27,6 @@ import scenarioV2Api from '../services/scenarioV2Api';
 import api from '../services/api';
 import { formatCurrency, formatPercentage } from '../utils/formatters';
 import { debugProjectData } from '../utils/debugProjectData';
-import debounce from 'lodash/debounce';
 
 interface ScenarioBuilderProps {
   projectId: string;
@@ -47,6 +46,16 @@ interface ImpactPreview {
   costPerSqft: number;
   costPerSqftDelta: number;
 }
+
+const debounce = <T extends (...args: any[]) => void>(fn: T, waitMs: number) => {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  return (...args: Parameters<T>) => {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+    timeout = setTimeout(() => fn(...args), waitMs);
+  };
+};
 
 const ScenarioBuilder: React.FC<ScenarioBuilderProps> = ({
   projectId,
