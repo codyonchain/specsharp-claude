@@ -191,9 +191,28 @@ const formatAssumptionPercent = (value: unknown) => {
   }).format(percentValue)}%`;
 };
 
-const formatPrimaryControlLabel = (label: string, isIndustrialProfile: boolean): string => {
-  if (!isIndustrialProfile) return label;
-  return label.replace(/^IC-First(?:\s*[:\-]\s*|\s+)/i, '').trim();
+const formatPrimaryControlLabel = (
+  label: string,
+  isIndustrialProfile: boolean,
+  isMarketRateMultifamilyProfile: boolean,
+  isAffordableHousingProfile: boolean
+): string => {
+  if (isIndustrialProfile) {
+    return label.replace(/^IC-First(?:\s*[:\-]\s*|\s+)/i, '').trim();
+  }
+  if (isMarketRateMultifamilyProfile) {
+    const normalized = label.trim().toLowerCase();
+    if (normalized === 'structural base carry proxy +5%') {
+      return 'Lease-Up + Concessions Carry + Basis Drift';
+    }
+  }
+  if (isAffordableHousingProfile) {
+    const normalized = label.trim().toLowerCase();
+    if (normalized === 'compliance electrical +8%') {
+      return 'Compliance + Agency Revisions (Electrical / Life Safety)';
+    }
+  }
+  return label;
 };
 
 const toComparableKey = (value: unknown): string | null => {
@@ -1003,6 +1022,32 @@ export const DealShieldView: React.FC<Props> = ({
     provenance?.content_profile_id,
     content?.profile_id,
   ].some((value) => typeof value === 'string' && value.startsWith('restaurant_full_service'));
+  const isMarketRateMultifamilyStatusProfile = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (viewModel as any)?.profile_id,
+    (viewModel as any)?.profileId,
+    (viewModel as any)?.tile_profile_id,
+    (viewModel as any)?.tileProfileId,
+    provenance?.profile_id,
+    (viewModel as any)?.content_profile_id,
+    (viewModel as any)?.contentProfileId,
+    provenance?.content_profile_id,
+    content?.profile_id,
+  ].some((value) => typeof value === 'string' && value.startsWith('multifamily_market_rate_apartments'));
+  const isAffordableHousingStatusProfile = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (viewModel as any)?.profile_id,
+    (viewModel as any)?.profileId,
+    (viewModel as any)?.tile_profile_id,
+    (viewModel as any)?.tileProfileId,
+    provenance?.profile_id,
+    (viewModel as any)?.content_profile_id,
+    (viewModel as any)?.contentProfileId,
+    provenance?.content_profile_id,
+    content?.profile_id,
+  ].some((value) => typeof value === 'string' && value.startsWith('multifamily_affordable_housing'));
   const normalizedDecisionReasonKey =
     typeof decisionReasonCode === 'string' ? decisionReasonCode.trim().toLowerCase() : null;
   const decisionStatusSummaryText =
@@ -1011,7 +1056,7 @@ export const DealShieldView: React.FC<Props> = ({
       : canonicalDecisionStatus === 'Needs Work'
         ? 'Downside pressure is present; policy marks this as near-break risk.'
         : canonicalDecisionStatus === 'NO-GO'
-          ? (isManufacturingStatusProfile || isColdStorageStatusProfile || isRestaurantFullServiceStatusProfile)
+          ? (isManufacturingStatusProfile || isColdStorageStatusProfile || isRestaurantFullServiceStatusProfile || isMarketRateMultifamilyStatusProfile || isAffordableHousingStatusProfile)
             ? 'Base case already breaks the policy threshold (value gap non-positive).'
             : 'Base case has already collapsed or value gap is non-positive.'
           : 'Canonical status is pending due to missing modeled inputs.';
@@ -1023,7 +1068,21 @@ export const DealShieldView: React.FC<Props> = ({
           ? firstBreakSummaryText
           : 'Break condition is flagged by policy; verify scenario and threshold inputs.'
       : null;
+  const marketRateDecisionStatusDetailText =
+    isMarketRateMultifamilyStatusProfile &&
+    canonicalDecisionStatus === 'NO-GO' &&
+    normalizedDecisionReasonKey === 'base_case_break_condition'
+      ? 'This is a basis/NOI mismatch under current rent + occupancy + operating assumptions.'
+      : null;
+  const affordableDecisionStatusDetailText =
+    isAffordableHousingStatusProfile &&
+    canonicalDecisionStatus === 'NO-GO' &&
+    normalizedDecisionReasonKey === 'base_case_break_condition'
+      ? 'This is a funding-gap / compliance-cost sensitivity issue under capped revenue.'
+      : null;
   const decisionStatusDetailText = manufacturingDecisionStatusDetailText
+    ?? marketRateDecisionStatusDetailText
+    ?? affordableDecisionStatusDetailText
     ?? decisionReasonCopy(decisionReasonCode)
     ?? provenanceNotModeledReason
     ?? decisionSummary.notModeledReason
@@ -1052,6 +1111,10 @@ export const DealShieldView: React.FC<Props> = ({
   const fastestChangeDisplayText =
     isManufacturingStatusProfile && fastestChangeDrivers.length > 0
       ? 'Lock process utilities + equipment schedule; stress revenue ramp; then validate GMP/bid carry.'
+      : isAffordableHousingStatusProfile && fastestChangeDrivers.length > 0
+        ? `${fastestChangeText}${/rent limits|ami mix|utility allowance/i.test(fastestChangeText)
+          ? ''
+          : '; Confirm rent limits / AMI mix and utility allowance assumptions (revenue is capped; cost drift is not).'}`
       : fastestChangeText || '-';
   const scenarioInputsRaw = provenance?.scenario_inputs ?? (viewModel as any)?.scenario_inputs;
   const provenanceControlsRaw = provenance?.dealshield_controls ?? (dealShieldData as any)?.dealshield_controls;
@@ -1106,7 +1169,14 @@ export const DealShieldView: React.FC<Props> = ({
   const isRestaurantProfile = [profileId, tileProfileId, contentProfileId].some(
     (value) => typeof value === 'string' && value.startsWith('restaurant_')
   );
-  const useIsolatedSensitivityLabel = isIndustrialProfile || isRestaurantProfile;
+  const isMarketRateMultifamilyProfile = [profileId, tileProfileId, contentProfileId].some(
+    (value) => typeof value === 'string' && value.startsWith('multifamily_market_rate_apartments')
+  );
+  const isAffordableHousingProfile = [profileId, tileProfileId, contentProfileId].some(
+    (value) => typeof value === 'string' && value.startsWith('multifamily_affordable_housing')
+  );
+  const useIsolatedSensitivityLabel =
+    isIndustrialProfile || isRestaurantProfile || isMarketRateMultifamilyProfile;
   const useRestaurantDecisionSummaryLabels = isRestaurantProfile;
   const isManufacturingProfile = [profileId, tileProfileId, contentProfileId].some(
     (value) => typeof value === 'string' && value.startsWith('industrial_manufacturing')
@@ -1344,7 +1414,12 @@ export const DealShieldView: React.FC<Props> = ({
                       <div className="mt-2 space-y-1 text-sm text-slate-700">
                         <p>
                           <span className="font-medium text-slate-600">Label:</span>{' '}
-                          <span>{formatPrimaryControlLabel(labelFrom(primaryControlVariable, '-'), isIndustrialProfile)}</span>
+                          <span>{formatPrimaryControlLabel(
+                            labelFrom(primaryControlVariable, '-'),
+                            isIndustrialProfile,
+                            isMarketRateMultifamilyProfile,
+                            isAffordableHousingProfile
+                          )}</span>
                         </p>
                         <p>
                           <span className="font-medium text-slate-600">

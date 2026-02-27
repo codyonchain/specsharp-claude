@@ -260,12 +260,23 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     (dealShieldData as any)?.content_profile_id,
     (dealShieldData as any)?.contentProfileId,
   ].some((value) => typeof value === 'string' && value.startsWith('restaurant_fine_dining'));
+  const hasMarketRateMultifamilyProfileId = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (dealShieldData as any)?.tile_profile_id,
+    (dealShieldData as any)?.tileProfileId,
+    (dealShieldData as any)?.content_profile_id,
+    (dealShieldData as any)?.contentProfileId,
+  ].some((value) => typeof value === 'string' && value.startsWith('multifamily_market_rate_apartments'));
   const isFullServiceRestaurantProject =
     isRestaurantProject && (parsedSubtype === 'full_service' || hasRestaurantFullServiceProfileId);
   const isQuickServiceRestaurantProject =
     isRestaurantProject && (parsedSubtype === 'quick_service' || hasRestaurantQuickServiceProfileId);
   const isFineDiningRestaurantProject =
     isRestaurantProject && (parsedSubtype === 'fine_dining' || hasRestaurantFineDiningProfileId);
+  const isMarketRateMultifamilyProject =
+    parsedBuildingType.includes('multifamily') &&
+    (parsedSubtype === 'market_rate_apartments' || hasMarketRateMultifamilyProfileId);
   const isManufacturingIndustrialProject =
     parsedBuildingType === 'industrial' && parsedSubtype === 'manufacturing';
   const isWarehouseIndustrialProject =
@@ -1126,6 +1137,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     if (decisionStatus === 'NO-GO') {
       const coldStorageActionPlan =
         ' Confirm refrigeration plant scope + utility rates. Underwrite commissioning-to-stabilization ramp (don\'t assume day-1 utilization). Reduce basis via envelope/plant VE, not generic scope cuts.';
+      const marketRateActionPlan =
+        ' Primary fix paths: concessions + lease-up pace (market reality), expense load / payroll / utilities (ops reality), basis discipline (hard + soft) / fee stack, and debt sizing / rate / IO period (debt lens).';
       const defaultActionPlan =
         ' Improve rents, cut scope, or rework the capital stack before advancing.';
       const fullServiceActionPlan =
@@ -1142,6 +1155,28 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
         return {
           body: 'Project currently falls below underwriting thresholds.',
           detail: `${fullServiceLeadLine} ${noGoDetail}${fullServiceActionPlan}`,
+        };
+      }
+      if (isMarketRateMultifamilyProject) {
+        const hasNonPositiveValueGap = typeof canonicalValueGap === 'number' && canonicalValueGap <= 0;
+        const marketRateNoGoDetail = (() => {
+          if (hasNonPositiveValueGap && dscrMeetsTarget === true) {
+            return `NO-GO because value gap is non-positive (equity lens), even with DSCR ${dscrText ?? '—'} meeting ${dscrTargetText} (debt lens).`;
+          }
+          if (hasNonPositiveValueGap && dscrMeetsTarget === false) {
+            return `NO-GO because DSCR ${dscrText ?? '—'} is below ${dscrTargetText} (debt lens) and value gap is non-positive (equity lens).`;
+          }
+          if (hasNonPositiveValueGap) {
+            return `NO-GO because value gap is non-positive (equity lens) while debt-lens coverage is still being verified against ${dscrTargetText}.`;
+          }
+          if (dscrMeetsTarget === false) {
+            return `NO-GO because DSCR ${dscrText ?? '—'} is below ${dscrTargetText} (debt lens) and yield spread remains below market (equity lens).`;
+          }
+          return noGoDetail;
+        })();
+        return {
+          body: 'Project currently falls below underwriting thresholds.',
+          detail: `${marketRateNoGoDetail}${marketRateActionPlan}`,
         };
       }
       return {

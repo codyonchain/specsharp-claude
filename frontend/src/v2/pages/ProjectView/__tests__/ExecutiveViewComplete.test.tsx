@@ -1534,6 +1534,81 @@ describe("ExecutiveViewComplete", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("uses market-rate multifamily NO-GO narrative with explicit equity/debt lens precedence and subtype-native fix paths", () => {
+    const marketRateDealShield = buildCrossTypeDealShieldViewModel(
+      "multifamily_market_rate_apartments_v1",
+      "NO-GO",
+      "base_case_break_condition"
+    ) as any;
+    marketRateDealShield.decision_summary = {
+      value_gap: -250000,
+      value_gap_pct: -3.4,
+    };
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject(
+            "multifamily",
+            "market_rate_apartments",
+            "multifamily_market_rate_apartments_v1"
+          )}
+          dealShieldData={marketRateDealShield}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getByText((text) =>
+        text.includes(
+          "NO-GO because value gap is non-positive (equity lens), even with DSCR 1.46× meeting 1.30× (debt lens)."
+        )
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((text) =>
+        text.includes(
+          "Primary fix paths: concessions + lease-up pace (market reality), expense load / payroll / utilities (ops reality), basis discipline (hard + soft) / fee stack, and debt sizing / rate / IO period (debt lens)."
+        )
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Improve rents, cut scope, or rework the capital stack before advancing.", {
+        exact: false,
+      })
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject(
+            "multifamily",
+            "luxury_apartments",
+            "multifamily_luxury_apartments_v1"
+          )}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "multifamily_luxury_apartments_v1",
+            "NO-GO",
+            "base_case_break_condition"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.queryByText((text) =>
+        text.includes(
+          "NO-GO because value gap is non-positive (equity lens), even with DSCR 1.46× meeting 1.30× (debt lens)."
+        )
+      )
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Improve rents, cut scope, or rework the capital stack before advancing.", {
+        exact: false,
+      })
+    ).toBeInTheDocument();
+  });
+
   it("renders explicit multifamily canonical decision status/reason/provenance parity", () => {
     const { rerender } = render(
       <MemoryRouter>

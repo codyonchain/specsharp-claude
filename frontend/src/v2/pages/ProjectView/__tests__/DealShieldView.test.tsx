@@ -115,8 +115,22 @@ const DECISION_REASON_TEXT: Record<string, string> = {
 };
 
 const formatExpectedPrimaryControlLabel = (profileId: string, label: string): string => {
-  if (!profileId.startsWith("industrial_")) return label;
-  return label.replace(/^IC-First(?:\s*[:\-]\s*|\s+)/i, "").trim();
+  if (profileId.startsWith("industrial_")) {
+    return label.replace(/^IC-First(?:\s*[:\-]\s*|\s+)/i, "").trim();
+  }
+  if (
+    profileId === "multifamily_market_rate_apartments_v1" &&
+    label.trim().toLowerCase() === "structural base carry proxy +5%"
+  ) {
+    return "Lease-Up + Concessions Carry + Basis Drift";
+  }
+  if (
+    profileId === "multifamily_affordable_housing_v1" &&
+    label.trim().toLowerCase() === "compliance electrical +8%"
+  ) {
+    return "Compliance + Agency Revisions (Electrical / Life Safety)";
+  }
+  return label;
 };
 
 const HEALTHCARE_POLICY_CONTRACT_CASES = [
@@ -2107,6 +2121,44 @@ describe("DealShieldView", () => {
     }
   });
 
+  it("adds affordable-housing-only fastest-change bullet for capped-revenue assumptions", () => {
+    const affordablePayload = buildPolicyBackedDealShieldPayload(MULTIFAMILY_POLICY_CONTRACT_CASES[2]) as any;
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_multifamily_affordable_fastest_change"
+        data={affordablePayload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        (text) =>
+          text.includes("Confirm rent limits / AMI mix and utility allowance assumptions") &&
+          text.includes("revenue is capped; cost drift is not")
+      )
+    ).toBeInTheDocument();
+
+    const luxuryPayload = buildPolicyBackedDealShieldPayload(MULTIFAMILY_POLICY_CONTRACT_CASES[1]) as any;
+    rerender(
+      <DealShieldView
+        projectId="proj_multifamily_luxury_fastest_change"
+        data={luxuryPayload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.queryByText(
+        (text) =>
+          text.includes("Confirm rent limits / AMI mix and utility allowance assumptions") &&
+          text.includes("revenue is capped; cost drift is not")
+      )
+    ).not.toBeInTheDocument();
+  });
+
   it("applies restaurant-only decision summary label mapping and preserves non-restaurant labels", () => {
     const buildRestaurantPayloadWithSummary = (profileId: string) => {
       const payload = buildRestaurantDealShieldPayload(profileId) as any;
@@ -2251,6 +2303,104 @@ describe("DealShieldView", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("uses subtype-specific multifamily NO-GO threshold copy for market-rate and affordable while preserving legacy wording for luxury", () => {
+    const marketRatePayload = buildPolicyBackedDealShieldPayload(MULTIFAMILY_POLICY_CONTRACT_CASES[0]) as any;
+    marketRatePayload.view_model.decision_status = "NO-GO";
+    marketRatePayload.view_model.decision_reason_code = "base_case_break_condition";
+    marketRatePayload.view_model.first_break_condition = {
+      scenario_id: "base",
+      scenario_label: "Base",
+      break_metric: "value_gap_pct",
+      operator: "<=",
+      threshold: 6.0,
+      observed_value: 5.1,
+      observed_value_pct: 5.1,
+    };
+
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_multifamily_market_rate_nogo_copy"
+        data={marketRatePayload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.getByText("Base case already breaks the policy threshold (value gap non-positive).")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("This is a basis/NOI mismatch under current rent + occupancy + operating assumptions.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Base case has already collapsed or value gap is non-positive.")
+    ).not.toBeInTheDocument();
+
+    const affordablePayload = buildPolicyBackedDealShieldPayload(MULTIFAMILY_POLICY_CONTRACT_CASES[2]) as any;
+    affordablePayload.view_model.decision_status = "NO-GO";
+    affordablePayload.view_model.decision_reason_code = "base_case_break_condition";
+    affordablePayload.view_model.first_break_condition = {
+      scenario_id: "base",
+      scenario_label: "Base",
+      break_metric: "value_gap_pct",
+      operator: "<=",
+      threshold: 8.0,
+      observed_value: 7.0,
+      observed_value_pct: 7.0,
+    };
+
+    rerender(
+      <DealShieldView
+        projectId="proj_multifamily_affordable_nogo_copy"
+        data={affordablePayload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.getByText("Base case already breaks the policy threshold (value gap non-positive).")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("This is a funding-gap / compliance-cost sensitivity issue under capped revenue.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Base case has already collapsed or value gap is non-positive.")
+    ).not.toBeInTheDocument();
+
+    const luxuryPayload = buildPolicyBackedDealShieldPayload(MULTIFAMILY_POLICY_CONTRACT_CASES[1]) as any;
+    luxuryPayload.view_model.decision_status = "NO-GO";
+    luxuryPayload.view_model.decision_reason_code = "base_case_break_condition";
+    luxuryPayload.view_model.first_break_condition = {
+      scenario_id: "base",
+      scenario_label: "Base",
+      break_metric: "value_gap",
+      operator: "<=",
+      threshold: 250000,
+      observed_value: 190000,
+      observed_value_pct: -1.2,
+    };
+
+    rerender(
+      <DealShieldView
+        projectId="proj_multifamily_luxury_nogo_copy"
+        data={luxuryPayload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.getByText("Base case has already collapsed or value gap is non-positive.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("This is a basis/NOI mismatch under current rent + occupancy + operating assumptions.")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("This is a funding-gap / compliance-cost sensitivity issue under capped revenue.")
+    ).not.toBeInTheDocument();
+  });
+
   it("renders hospitality canonical decision and decision-insurance contract fields for both hotel profiles", () => {
     const { rerender } = render(
       <DealShieldView
@@ -2334,8 +2484,18 @@ describe("DealShieldView", () => {
       expect(screen.getByText(formatExpectedPrimaryControlLabel(testCase.profileId, testCase.primaryControlLabel))).toBeInTheDocument();
       expect(screen.getByText("Impact:")).toBeInTheDocument();
       expect(screen.queryByText("Impact (local):")).not.toBeInTheDocument();
-      expect(screen.getByText("Driver Impact Severity:")).toBeInTheDocument();
-      expect(screen.queryByText("Isolated Sensitivity Rank:")).not.toBeInTheDocument();
+      if (testCase.profileId === "multifamily_market_rate_apartments_v1") {
+        expect(screen.getByText("Isolated Sensitivity Rank:")).toBeInTheDocument();
+        expect(screen.queryByText("Driver Impact Severity:")).not.toBeInTheDocument();
+        expect(
+          screen.getByText(
+            "Isolated Sensitivity Rank scores isolated driver sensitivity; Break Risk reflects first-break/flex policy risk."
+          )
+        ).toBeInTheDocument();
+      } else {
+        expect(screen.getByText("Driver Impact Severity:")).toBeInTheDocument();
+        expect(screen.queryByText("Isolated Sensitivity Rank:")).not.toBeInTheDocument();
+      }
       expect(screen.queryByText("Model Impact (local):")).not.toBeInTheDocument();
 
       if (testCase.breakMetric === "value_gap_pct") {
