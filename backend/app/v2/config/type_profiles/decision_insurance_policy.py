@@ -10,7 +10,7 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "primary_control_variable": {
             "tile_id": "prototype_finish_rework_plus_10",
             "metric_ref": "trade_breakdown.finishes",
-            "label": "Prototype Finish Rework +10%",
+            "label": "Prototype Buildout Spec Drift (Finish + Equipment)",
         },
         "collapse_trigger": {
             "metric": "value_gap_pct",
@@ -24,7 +24,7 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "primary_control_variable": {
             "tile_id": "service_labor_and_layout_plus_12",
             "metric_ref": "trade_breakdown.finishes",
-            "label": "Service Labor + Layout +12%",
+            "label": "Labor Efficiency + Service-Flow Layout (Turns / Staffing)",
         },
         "collapse_trigger": {
             "metric": "value_gap_pct",

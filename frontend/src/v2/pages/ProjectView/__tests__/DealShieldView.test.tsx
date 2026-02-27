@@ -2006,6 +2006,74 @@ describe("DealShieldView", () => {
     expect(screen.queryByText("Decision Insurance unavailable for this profile/run.")).not.toBeInTheDocument();
   });
 
+  it("renders quick-service subtype-authored control and throughput/equipment prompts", () => {
+    const payload = buildRestaurantDealShieldPayload("restaurant_quick_service_v1") as any;
+    payload.view_model.primary_control_variable.label =
+      "Prototype Buildout Spec Drift (Finish + Equipment)";
+    payload.view_model.ranked_likely_wrong = [
+      {
+        id: "mlw_qsr_1",
+        text: "Opening ramp assumes day-1 throughput; validate drive-thru speed, peak-hour capacity, and ticket mix stabilization.",
+        why: "Throughput misses can compress early NOI before operations stabilize.",
+        driver_tile_id: "revenue_minus_10",
+        impact_pct: 5.1,
+        severity: "Med",
+      },
+    ];
+    payload.view_model.content.most_likely_wrong = [
+      {
+        id: "mlw_qsr_1",
+        text: "Opening ramp assumes day-1 throughput; validate drive-thru speed, peak-hour capacity, and ticket mix stabilization.",
+        why: "Throughput misses can compress early NOI before operations stabilize.",
+        driver_tile_id: "revenue_minus_10",
+      },
+    ];
+    payload.view_model.content.question_bank = [
+      {
+        id: "qb_qsr_1",
+        driver_tile_id: "revenue_minus_10",
+        questions: [
+          "Drive-thru service time target (seconds) and modeled cars/hour at peak - what is the constraint (order point, window, kitchen line)?",
+        ],
+      },
+      {
+        id: "qb_qsr_2",
+        driver_tile_id: "prototype_finish_rework_plus_10",
+        questions: [
+          "Equipment lead times (hood, walk-in, POS) - which items are owner-furnished vs GC carry?",
+        ],
+      },
+    ];
+
+    render(
+      <DealShieldView
+        projectId="proj_restaurant_quick_service_qsr_copy"
+        data={payload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.getByText("Prototype Buildout Spec Drift (Finish + Equipment)")
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText(
+        "Opening ramp assumes day-1 throughput; validate drive-thru speed, peak-hour capacity, and ticket mix stabilization."
+      ).length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByText(
+        "Drive-thru service time target (seconds) and modeled cars/hour at peak - what is the constraint (order point, window, kitchen line)?"
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Equipment lead times (hood, walk-in, POS) - which items are owner-furnished vs GC carry?"
+      )
+    ).toBeInTheDocument();
+  });
+
   it("supports all five restaurant DealShield profile IDs without quick-service-only assumptions", () => {
     const { rerender } = render(
       <DealShieldView
@@ -2121,6 +2189,66 @@ describe("DealShieldView", () => {
     expect(screen.getByText("Decision Status")).toBeInTheDocument();
     expect(screen.getByText("Investment Decision: GO")).toBeInTheDocument();
     expect(screen.getByText("Status source: restaurant_policy_v1.")).toBeInTheDocument();
+  });
+
+  it("uses threshold wording for full-service restaurant NO-GO while keeping collapsed wording for other restaurant subtypes", () => {
+    const fullServicePayload = buildRestaurantDealShieldPayload("restaurant_full_service_v1") as any;
+    fullServicePayload.view_model.decision_status = "NO-GO";
+    fullServicePayload.view_model.decision_reason_code = "base_case_break_condition";
+    fullServicePayload.view_model.first_break_condition = {
+      scenario_id: "base",
+      scenario_label: "Base",
+      break_metric: "value_gap",
+      operator: "<=",
+      threshold: 0,
+      observed_value: -20000,
+      observed_value_pct: -0.7,
+    };
+
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_restaurant_full_service_nogo_copy"
+        data={fullServicePayload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.getByText("Base case already breaks the policy threshold (value gap non-positive).")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Base case has already collapsed or value gap is non-positive.")
+    ).not.toBeInTheDocument();
+
+    const quickServicePayload = buildRestaurantDealShieldPayload("restaurant_quick_service_v1") as any;
+    quickServicePayload.view_model.decision_status = "NO-GO";
+    quickServicePayload.view_model.decision_reason_code = "base_case_break_condition";
+    quickServicePayload.view_model.first_break_condition = {
+      scenario_id: "base",
+      scenario_label: "Base",
+      break_metric: "value_gap",
+      operator: "<=",
+      threshold: 0,
+      observed_value: -18000,
+      observed_value_pct: -0.6,
+    };
+
+    rerender(
+      <DealShieldView
+        projectId="proj_restaurant_quick_service_nogo_copy"
+        data={quickServicePayload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.getByText("Base case has already collapsed or value gap is non-positive.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Base case already breaks the policy threshold (value gap non-positive).")
+    ).not.toBeInTheDocument();
   });
 
   it("renders hospitality canonical decision and decision-insurance contract fields for both hotel profiles", () => {

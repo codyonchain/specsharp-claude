@@ -34,7 +34,7 @@ DEALSHIELD_CONTENT_PROFILES = {
             {
                 "id": "mlw_2",
                 "driver_tile_id": "revenue_minus_10",
-                "text": "Opening ramp assumes immediate lane utilization and stable ticket mix.",
+                "text": "Opening ramp assumes day-1 throughput; validate drive-thru speed, peak-hour capacity, and ticket mix stabilization.",
                 "why": "Early demand softness can create outsized NOI variance during debt stabilization.",
             },
             {
@@ -59,6 +59,7 @@ DEALSHIELD_CONTENT_PROFILES = {
                 "questions": [
                     "What empirical data supports opening-month throughput assumptions by daypart?",
                     "What labor plan protects service times if demand opens below plan?",
+                    "Drive-thru service time target (seconds) and modeled cars/hour at peak - what is the constraint (order point, window, kitchen line)?",
                 ],
             },
             {
@@ -67,6 +68,7 @@ DEALSHIELD_CONTENT_PROFILES = {
                 "questions": [
                     "Which prototype details remain pending final franchisor sign-off?",
                     "Which finish alternates are pre-approved if supply chain substitutions are required?",
+                    "Equipment lead times (hood, walk-in, POS) - which items are owner-furnished vs GC carry?",
                 ],
             },
         ],
@@ -146,6 +148,8 @@ DEALSHIELD_CONTENT_PROFILES = {
                 "questions": [
                     "How is weekday lunch and dinner capture supported by nearby demand comps?",
                     "What staffing and menu actions are pre-modeled for a soft first 90 days?",
+                    "Occupancy cost % at projected sales (rent + CAM + taxes + insurance) - confirm lease terms and CAM assumptions.",
+                    "Table turns by daypart + average check - what is the validated throughput under the current layout?",
                 ],
             },
             {
@@ -154,6 +158,7 @@ DEALSHIELD_CONTENT_PROFILES = {
                 "questions": [
                     "Has the FOH/BOH flow been validated against actual service simulations?",
                     "Which layout dependencies could trigger late-stage electrical or plumbing rework?",
+                    "Labor model realism: FOH/BOH staffing by shift + training ramp - confirm staffing plan supports the assumed service level.",
                 ],
             },
         ],

@@ -304,6 +304,70 @@ def test_restaurant_content_profiles_are_subtype_authored_not_clones():
     assert "entertainment_and_life_safety_plus_10" in bar_driver_tiles
 
 
+def test_restaurant_full_service_policy_and_question_bank_copy():
+    full_service_policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID["restaurant_full_service_v1"]
+    assert (
+        full_service_policy["primary_control_variable"]["label"]
+        == "Labor Efficiency + Service-Flow Layout (Turns / Staffing)"
+    )
+
+    full_content = get_dealshield_content_profile("restaurant_full_service_v1")
+    full_questions = [
+        question
+        for entry in full_content.get("question_bank", [])
+        if isinstance(entry, dict)
+        for question in entry.get("questions", [])
+        if isinstance(question, str)
+    ]
+    assert (
+        "Occupancy cost % at projected sales (rent + CAM + taxes + insurance) - confirm lease terms and CAM assumptions."
+        in full_questions
+    )
+    assert (
+        "Table turns by daypart + average check - what is the validated throughput under the current layout?"
+        in full_questions
+    )
+    assert (
+        "Labor model realism: FOH/BOH staffing by shift + training ramp - confirm staffing plan supports the assumed service level."
+        in full_questions
+    )
+
+
+def test_restaurant_quick_service_policy_and_content_copy():
+    quick_service_policy = DECISION_INSURANCE_POLICY_BY_PROFILE_ID["restaurant_quick_service_v1"]
+    assert (
+        quick_service_policy["primary_control_variable"]["label"]
+        == "Prototype Buildout Spec Drift (Finish + Equipment)"
+    )
+
+    quick_content = get_dealshield_content_profile("restaurant_quick_service_v1")
+    quick_questions = [
+        question
+        for entry in quick_content.get("question_bank", [])
+        if isinstance(entry, dict)
+        for question in entry.get("questions", [])
+        if isinstance(question, str)
+    ]
+    assert (
+        "Drive-thru service time target (seconds) and modeled cars/hour at peak - what is the constraint (order point, window, kitchen line)?"
+        in quick_questions
+    )
+    assert (
+        "Equipment lead times (hood, walk-in, POS) - which items are owner-furnished vs GC carry?"
+        in quick_questions
+    )
+
+    quick_mlw_text = [
+        entry.get("text")
+        for entry in quick_content.get("most_likely_wrong", [])
+        if isinstance(entry, dict)
+    ]
+    assert (
+        "Opening ramp assumes day-1 throughput; validate drive-thru speed, peak-hour capacity, and ticket mix stabilization."
+        in quick_mlw_text
+    )
+
+
 def test_restaurant_engine_emits_profiles_for_all_subtypes_and_dealshield_alignment():
     for subtype, profile_id in RESTAURANT_PROFILE_IDS.items():
         payload = unified_engine.calculate_project(

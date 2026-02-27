@@ -914,6 +914,263 @@ describe("ExecutiveViewComplete", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("adds full-service-specific GO/NO-GO narrative guidance without spilling into other restaurant subtypes", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject("restaurant", "full_service", "restaurant_full_service_v1")}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "restaurant_full_service_v1",
+            "NO-GO",
+            "base_case_break_condition"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getByText((text) =>
+        text.includes(
+          "Full Service viability is driven by sales per SF and prime cost (labor + food) under the current layout/turn assumptions."
+        )
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((text) =>
+        text.includes(
+          "Primary fix paths: raise sales per SF (turns/check), reduce prime cost %, or renegotiate occupancy cost."
+        )
+      )
+    ).toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject("restaurant", "full_service", "restaurant_full_service_v1")}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "restaurant_full_service_v1",
+            "GO",
+            "base_value_gap_positive"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getByText((text) =>
+        text.includes("Still validate occupancy cost % at projected sales and table turns by daypart.")
+      )
+    ).toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject("restaurant", "quick_service", "restaurant_quick_service_v1")}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "restaurant_quick_service_v1",
+            "NO-GO",
+            "base_case_break_condition"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.queryByText((text) =>
+        text.includes(
+          "Full Service viability is driven by sales per SF and prime cost (labor + food) under the current layout/turn assumptions."
+        )
+      )
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText((text) =>
+        text.includes(
+          "Primary fix paths: raise sales per SF (turns/check), reduce prime cost %, or renegotiate occupancy cost."
+        )
+      )
+    ).not.toBeInTheDocument();
+  });
+
+  it("adds quick-service-specific DSCR label and throughput-first decision-points guidance", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject("restaurant", "quick_service", "restaurant_quick_service_v1")}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "restaurant_quick_service_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Debt Lens: DSCR")).toBeInTheDocument();
+    expect(
+      screen.getByText((text) =>
+        text.includes(
+          "QSR reality check: validate peak-hour throughput (cars/hour or tickets/hour) and service time assumptions; that's the first-break driver."
+        )
+      )
+    ).toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject("restaurant", "fine_dining", "restaurant_fine_dining_v1")}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "restaurant_fine_dining_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("DSCR VS TARGET")).toBeInTheDocument();
+    expect(
+      screen.queryByText((text) =>
+        text.includes(
+          "QSR reality check: validate peak-hour throughput (cars/hour or tickets/hour) and service time assumptions; that's the first-break driver."
+        )
+      )
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses Buildout Payback helper copy for full-service, quick-service, and fine-dining", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject("restaurant", "full_service", "restaurant_full_service_v1")}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "restaurant_full_service_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Buildout payback at current NOI.")).toBeInTheDocument();
+    expect(screen.queryByText("Simple payback at current NOI")).not.toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject("restaurant", "quick_service", "restaurant_quick_service_v1")}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "restaurant_quick_service_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Buildout payback at current NOI.")).toBeInTheDocument();
+    expect(screen.queryByText("Simple payback at current NOI")).not.toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject("restaurant", "fine_dining", "restaurant_fine_dining_v1")}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "restaurant_fine_dining_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Buildout payback at current NOI.")).toBeInTheDocument();
+    expect(screen.queryByText("Simple payback at current NOI")).not.toBeInTheDocument();
+  });
+
+  it("shows fine-dining revenue clarifier only when sales per SF clears but NOI still misses target", () => {
+    const fineDiningProject = buildCrossTypeProject(
+      "restaurant",
+      "fine_dining",
+      "restaurant_fine_dining_v1"
+    );
+    fineDiningProject.analysis.calculations.revenue_analysis = {
+      annual_revenue: 5040000,
+      net_income: 250000,
+    };
+    fineDiningProject.analysis.calculations.revenue_requirements = {
+      required_value: 296000,
+      market_value: 250000,
+      required_revenue_per_sf: 462.5,
+      actual_revenue_per_sf: 630,
+      feasibility: {
+        status: "Not Feasible",
+        recommendation: "Margin and occupancy assumptions need tightening.",
+      },
+    };
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={fineDiningProject}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "restaurant_fine_dining_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getByText((text) =>
+        text.includes(
+          "Sales/SF clears easily; the hurdle is margin/prime cost and occupancy cost, not top-line demand."
+        )
+      )
+    ).toBeInTheDocument();
+
+    const fullServiceProject = buildCrossTypeProject(
+      "restaurant",
+      "full_service",
+      "restaurant_full_service_v1"
+    );
+    fullServiceProject.analysis.calculations.revenue_analysis = {
+      annual_revenue: 5040000,
+      net_income: 250000,
+    };
+    fullServiceProject.analysis.calculations.revenue_requirements = {
+      required_value: 296000,
+      market_value: 250000,
+      required_revenue_per_sf: 462.5,
+      actual_revenue_per_sf: 630,
+      feasibility: {
+        status: "Not Feasible",
+        recommendation: "Margin and occupancy assumptions need tightening.",
+      },
+    };
+
+    rerender(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={fullServiceProject}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "restaurant_full_service_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.queryByText((text) =>
+        text.includes(
+          "Sales/SF clears easily; the hurdle is margin/prime cost and occupancy cost, not top-line demand."
+        )
+      )
+    ).not.toBeInTheDocument();
+  });
+
   it("replaces restaurant footer unit-template fields with restaurant-native metrics and keeps non-restaurant unchanged", () => {
     const { rerender } = render(
       <MemoryRouter>

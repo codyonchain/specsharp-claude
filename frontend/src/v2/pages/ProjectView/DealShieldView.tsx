@@ -990,6 +990,19 @@ export const DealShieldView: React.FC<Props> = ({
     provenance?.content_profile_id,
     content?.profile_id,
   ].some((value) => typeof value === 'string' && value.startsWith('industrial_cold_storage'));
+  const isRestaurantFullServiceStatusProfile = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (viewModel as any)?.profile_id,
+    (viewModel as any)?.profileId,
+    (viewModel as any)?.tile_profile_id,
+    (viewModel as any)?.tileProfileId,
+    provenance?.profile_id,
+    (viewModel as any)?.content_profile_id,
+    (viewModel as any)?.contentProfileId,
+    provenance?.content_profile_id,
+    content?.profile_id,
+  ].some((value) => typeof value === 'string' && value.startsWith('restaurant_full_service'));
   const normalizedDecisionReasonKey =
     typeof decisionReasonCode === 'string' ? decisionReasonCode.trim().toLowerCase() : null;
   const decisionStatusSummaryText =
@@ -998,7 +1011,7 @@ export const DealShieldView: React.FC<Props> = ({
       : canonicalDecisionStatus === 'Needs Work'
         ? 'Downside pressure is present; policy marks this as near-break risk.'
         : canonicalDecisionStatus === 'NO-GO'
-          ? (isManufacturingStatusProfile || isColdStorageStatusProfile)
+          ? (isManufacturingStatusProfile || isColdStorageStatusProfile || isRestaurantFullServiceStatusProfile)
             ? 'Base case already breaks the policy threshold (value gap non-positive).'
             : 'Base case has already collapsed or value gap is non-positive.'
           : 'Canonical status is pending due to missing modeled inputs.';

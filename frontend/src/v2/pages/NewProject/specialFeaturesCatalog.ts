@@ -574,7 +574,7 @@ const RESTAURANT_FEATURE_METADATA: Record<
   },
   private_dining: {
     name: "Private Dining",
-    description: "Dedicated private dining rooms with upgraded finishes and acoustic separation.",
+    description: "Dedicated private dining room with upgraded finishes and acoustic separation.",
   },
   wine_cellar: {
     name: "Wine Cellar",

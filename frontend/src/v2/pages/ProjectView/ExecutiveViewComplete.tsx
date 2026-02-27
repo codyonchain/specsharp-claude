@@ -236,6 +236,36 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     (dealShieldData as any)?.content_profile_id,
     (dealShieldData as any)?.contentProfileId,
   ].some((value) => typeof value === 'string' && value.startsWith('industrial_cold_storage'));
+  const hasRestaurantFullServiceProfileId = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (dealShieldData as any)?.tile_profile_id,
+    (dealShieldData as any)?.tileProfileId,
+    (dealShieldData as any)?.content_profile_id,
+    (dealShieldData as any)?.contentProfileId,
+  ].some((value) => typeof value === 'string' && value.startsWith('restaurant_full_service'));
+  const hasRestaurantQuickServiceProfileId = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (dealShieldData as any)?.tile_profile_id,
+    (dealShieldData as any)?.tileProfileId,
+    (dealShieldData as any)?.content_profile_id,
+    (dealShieldData as any)?.contentProfileId,
+  ].some((value) => typeof value === 'string' && value.startsWith('restaurant_quick_service'));
+  const hasRestaurantFineDiningProfileId = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (dealShieldData as any)?.tile_profile_id,
+    (dealShieldData as any)?.tileProfileId,
+    (dealShieldData as any)?.content_profile_id,
+    (dealShieldData as any)?.contentProfileId,
+  ].some((value) => typeof value === 'string' && value.startsWith('restaurant_fine_dining'));
+  const isFullServiceRestaurantProject =
+    isRestaurantProject && (parsedSubtype === 'full_service' || hasRestaurantFullServiceProfileId);
+  const isQuickServiceRestaurantProject =
+    isRestaurantProject && (parsedSubtype === 'quick_service' || hasRestaurantQuickServiceProfileId);
+  const isFineDiningRestaurantProject =
+    isRestaurantProject && (parsedSubtype === 'fine_dining' || hasRestaurantFineDiningProfileId);
   const isManufacturingIndustrialProject =
     parsedBuildingType === 'industrial' && parsedSubtype === 'manufacturing';
   const isWarehouseIndustrialProject =
@@ -1059,6 +1089,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     const yieldText = formatPct(yieldPctValue);
     const marketText = formatPct(marketCapPctValue);
     const marketBenchmarkLabel = isRestaurantProject ? 'market return benchmark' : 'market cap';
+    const fullServiceLeadLine =
+      'Full Service viability is driven by sales per SF and prime cost (labor + food) under the current layout/turn assumptions.';
     const spreadText = typeof spreadPctValue === 'number'
       ? `${spreadPctValue >= 0 ? '+' : ''}${spreadPctValue.toFixed(1)}%`
       : undefined;
@@ -1069,13 +1101,20 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
           detail: `Equity Lens: ${yieldPctValue !== undefined ? `yield on cost ${yieldText}` : 'yield on cost'}${marketCapPctValue !== undefined ? ` vs market cap ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''}. Debt Lens: DSCR ${dscrText ?? '—'} meets target ${dscrTargetText}. Reality Check: stabilized value gap ${stabilizedValueGapDisplay}.`
         };
       }
+      const goDetail = `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'}${marketCapPctValue !== undefined ? ` vs ${marketBenchmarkLabel} ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''}${
+        dscrText
+          ? ` and DSCR ${dscrText} ${dscrMeetsTarget === false ? `is below` : `meets`} the ${dscrTargetText} requirement.`
+          : '.'
+      }`;
+      if (isFullServiceRestaurantProject) {
+        return {
+          body: 'Project meets underwriting criteria with strong returns and healthy debt coverage.',
+          detail: `${fullServiceLeadLine} ${goDetail} Still validate occupancy cost % at projected sales and table turns by daypart.`,
+        };
+      }
       return {
         body: 'Project meets underwriting criteria with strong returns and healthy debt coverage.',
-        detail: `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'}${marketCapPctValue !== undefined ? ` vs ${marketBenchmarkLabel} ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''}${
-          dscrText
-            ? ` and DSCR ${dscrText} ${dscrMeetsTarget === false ? `is below` : `meets`} the ${dscrTargetText} requirement.`
-            : '.'
-        }`
+        detail: goDetail,
       };
     }
     if (decisionStatus === 'Needs Work') {
@@ -1089,16 +1128,25 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
         ' Confirm refrigeration plant scope + utility rates. Underwrite commissioning-to-stabilization ramp (don\'t assume day-1 utilization). Reduce basis via envelope/plant VE, not generic scope cuts.';
       const defaultActionPlan =
         ' Improve rents, cut scope, or rework the capital stack before advancing.';
+      const fullServiceActionPlan =
+        ' Primary fix paths: raise sales per SF (turns/check), reduce prime cost %, or renegotiate occupancy cost.';
       const restaurantDscrDetail = dscrText
         ? ` DSCR ${dscrText} ${dscrMeetsTarget === false ? 'is below' : 'meets'} the ${dscrTargetText} requirement.`
         : ` DSCR data is still loading against the ${dscrTargetText} requirement.`;
+      const noGoDetail = `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'}${marketCapPctValue !== undefined ? ` vs ${marketBenchmarkLabel} ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''}${
+        isRestaurantProject
+          ? `.${restaurantDscrDetail}`
+          : ` and/or DSCR ${dscrText ?? '—'}× are below the ${dscrTargetText} requirement.`
+      }`;
+      if (isFullServiceRestaurantProject) {
+        return {
+          body: 'Project currently falls below underwriting thresholds.',
+          detail: `${fullServiceLeadLine} ${noGoDetail}${fullServiceActionPlan}`,
+        };
+      }
       return {
         body: 'Project currently falls below underwriting thresholds.',
-        detail: `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'}${marketCapPctValue !== undefined ? ` vs ${marketBenchmarkLabel} ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''}${
-          isRestaurantProject
-            ? `.${restaurantDscrDetail}`
-            : ` and/or DSCR ${dscrText ?? '—'}× are below the ${dscrTargetText} requirement.`
-        }${isManufacturingIndustrialProject ? ' For manufacturing, also validate commissioning/qualification timeline and process utility loads—those usually drive the downside.' : ''}${isColdStorageIndustrialProject ? coldStorageActionPlan : defaultActionPlan}`
+        detail: `${noGoDetail}${isManufacturingIndustrialProject ? ' For manufacturing, also validate commissioning/qualification timeline and process utility loads—those usually drive the downside.' : ''}${isColdStorageIndustrialProject ? coldStorageActionPlan : defaultActionPlan}`
       };
     }
     return {
@@ -1680,6 +1728,13 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
       ? `Need ${gapCurrency} (${pctText}) more NOI — meaning higher sales per SF. Pressure-test day-part volume, check size, and prime cost discipline to close the gap.`
       : `Need ${gapCurrency} (${pctText}) more NOI to meet the yield target.`;
   })();
+  const shouldShowFineDiningRevenueClarifier =
+    isFineDiningRestaurantProject &&
+    typeof currentRevenuePerSf === 'number' &&
+    typeof requiredRevenuePerSf === 'number' &&
+    currentRevenuePerSf >= requiredRevenuePerSf &&
+    typeof noiGap === 'number' &&
+    noiGap < 0;
 
   const isIndustrialProject = (buildingType || '').toLowerCase() === 'industrial';
   const industrialYieldSpreadDisplay =
@@ -1827,6 +1882,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
       } else if (isIndustrialProject) {
         returnsText +=
           ' For industrial, this signals whether the rent roll, dock configuration, and truck flow can clear both equity and lender hurdles.';
+      } else if (isQuickServiceRestaurantProject) {
+        returnsText +=
+          " QSR reality check: validate peak-hour throughput (cars/hour or tickets/hour) and service time assumptions; that's the first-break driver.";
       } else {
         returnsText += ' Together these determine whether the project clears both equity and lender hurdles.';
       }
@@ -2146,6 +2204,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
             <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">
               {isMultifamilyProject
                 ? `Debt Lens: DSCR (Target ${dscrTargetDisplay})`
+                : isQuickServiceRestaurantProject
+                  ? 'Debt Lens: DSCR'
                 : isIndustrialProject
                   ? 'Debt Lens: DSCR'
                   : 'DSCR VS TARGET'}
@@ -3393,6 +3453,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                   <p className="text-sm text-gray-800 leading-snug mt-1">
                     {feasibilityGapCopy}
                   </p>
+                  {shouldShowFineDiningRevenueClarifier && (
+                    <p className="text-xs text-gray-600 leading-snug mt-2">
+                      Sales/SF clears easily; the hurdle is margin/prime cost and occupancy cost, not top-line demand.
+                    </p>
+                  )}
                 </div>
                 <span className={`font-bold ${
                   (revenueReq.feasibility?.status || revenueReq.feasibility) === 'Feasible' ? 'text-green-600' : 'text-amber-600'
@@ -4088,7 +4153,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
               <div className="text-center">
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">BUILDOUT PAYBACK</p>
                 <p className="text-3xl font-bold text-white">{restaurantBuildoutPaybackText}</p>
-                <p className="text-sm text-slate-500">Simple payback at current NOI</p>
+                <p className="text-sm text-slate-500">
+                  {(isFullServiceRestaurantProject || isQuickServiceRestaurantProject || isFineDiningRestaurantProject)
+                    ? 'Buildout payback at current NOI.'
+                    : 'Simple payback at current NOI'}
+                </p>
               </div>
             </>
           )}
