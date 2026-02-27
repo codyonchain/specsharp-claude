@@ -95,6 +95,14 @@ const MULTIFAMILY_SCHEDULE_CASES = [
   { subtype: "affordable_housing" },
 ] as const;
 
+const INDUSTRIAL_SCHEDULE_CASES = [
+  { subtype: "warehouse" },
+  { subtype: "distribution_center" },
+  { subtype: "manufacturing" },
+  { subtype: "cold_storage" },
+  { subtype: "flex_space" },
+] as const;
+
 const OFFICE_SCHEDULE_CASES = [
   {
     subtype: "class_a",
@@ -1288,7 +1296,11 @@ describe("ConstructionView", () => {
     render(<ConstructionView project={project} dealShieldData={dealShieldData as any} />);
     fireEvent.click(screen.getByRole("button", { name: "View Detailed Provenance Receipt" }));
 
-    expect(screen.getByText("Provenance Receipt")).toBeInTheDocument();
+    const provenanceReceiptHeading = screen.getByText("Provenance Receipt");
+    expect(provenanceReceiptHeading).toBeInTheDocument();
+    const provenanceReceiptSection =
+      provenanceReceiptHeading.closest("section") ?? provenanceReceiptHeading.parentElement;
+    expect(provenanceReceiptSection).not.toBeNull();
     expect(screen.getByText(/Building type:\s*Multifamily/i)).toBeInTheDocument();
     expect(screen.getByText(/Subtype:\s*Luxury Apartments/i)).toBeInTheDocument();
     expect(screen.getByText("220,000 SF")).toBeInTheDocument();
@@ -1302,8 +1314,8 @@ describe("ConstructionView", () => {
     expect(screen.getByText("Reason: Base Value Gap Positive")).toBeInTheDocument();
     expect(screen.getByText("Source: dealshield_policy_v1")).toBeInTheDocument();
 
-    expect(screen.queryByText("111,111 SF")).not.toBeInTheDocument();
-    expect(screen.queryByText("Miami, FL")).not.toBeInTheDocument();
+    expect(provenanceReceiptSection).not.toHaveTextContent("111,111 SF");
+    expect(provenanceReceiptSection).not.toHaveTextContent("Miami, FL");
   });
 
   it("renders subtype schedule messaging for restaurant subtype schedules", () => {
@@ -1410,40 +1422,52 @@ describe("ConstructionView", () => {
     }
   });
 
-  it("renders industrial distribution-center schedule provenance for subtype and baseline fallback", () => {
+  it("renders industrial schedule provenance parity for all five subtypes with subtype and baseline fallback sources", () => {
     const { rerender } = render(
       <ConstructionView
         project={buildCrossTypeScheduleProject(
           "industrial",
-          "distribution_center",
+          INDUSTRIAL_SCHEDULE_CASES[0].subtype,
           "subtype"
         )}
       />
     );
 
-    expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
-    expect(
-      screen.getByText("Timeline is tailored for this subtype profile.")
-    ).toBeInTheDocument();
-    expect(screen.getAllByText("Subtype Structural Program").length).toBeGreaterThan(0);
+    for (const testCase of INDUSTRIAL_SCHEDULE_CASES) {
+      rerender(
+        <ConstructionView
+          project={buildCrossTypeScheduleProject(
+            "industrial",
+            testCase.subtype,
+            "subtype"
+          )}
+        />
+      );
 
-    rerender(
-      <ConstructionView
-        project={buildCrossTypeScheduleProject(
-          "industrial",
-          "distribution_center",
-          "building_type"
-        )}
-      />
-    );
+      expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
+      expect(
+        screen.getByText("Timeline is tailored for this subtype profile.")
+      ).toBeInTheDocument();
+      expect(screen.getAllByText("Subtype Structural Program").length).toBeGreaterThan(0);
 
-    expect(screen.getByText("Building-type baseline")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Timeline uses building-type baseline (subtype override unavailable)."
-      )
-    ).toBeInTheDocument();
-    expect(screen.getAllByText("Baseline Structural Program").length).toBeGreaterThan(0);
+      rerender(
+        <ConstructionView
+          project={buildCrossTypeScheduleProject(
+            "industrial",
+            testCase.subtype,
+            "building_type"
+          )}
+        />
+      );
+
+      expect(screen.getByText("Building-type baseline")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Timeline uses building-type baseline (subtype override unavailable)."
+        )
+      ).toBeInTheDocument();
+      expect(screen.getAllByText("Baseline Structural Program").length).toBeGreaterThan(0);
+    }
   });
 
   it("renders explicit multifamily schedule provenance parity for subtype and fallback sources", () => {

@@ -10,17 +10,17 @@ DEALSHIELD_CONTENT_PROFILES = {
             "drivers": [
                 {
                     "id": "driver_cost",
-                    "label": "Confirm hard costs +/-10%",
+                    "label": "Confirm sitework/civil allowances + utility routing",
                     "tile_id": "cost_plus_10",
                 },
                 {
                     "id": "driver_revenue",
-                    "label": "Validate revenue +/-10%",
+                    "label": "Validate rent/SF and absorption (broker comps + active tenants)",
                     "tile_id": "revenue_minus_10",
                 },
                 {
                     "id": "driver_trade",
-                    "label": "Verify structural and envelope risk",
+                    "label": "Confirm dock count/clear height as it affects rent",
                     "tile_id": "structural_plus_10",
                 },
             ],
@@ -33,7 +33,7 @@ DEALSHIELD_CONTENT_PROFILES = {
             },
             {
                 "id": "mlw_2",
-                "text": "Lease-up timing is treated as linear when tenant decision cycles are not.",
+                "text": "Lease-up is modeled smoothly; real absorption is lumpy (LOIs, TI decisions, broker cycles).",
                 "why": "Revenue downside is a direct decision lever and needs a contract-backed ramp assumption.",
             },
             {
@@ -59,6 +59,7 @@ DEALSHIELD_CONTENT_PROFILES = {
                     "Which lease-up assumptions are committed in LOIs versus modeled from market averages?",
                     "What demand comps support the stated revenue run-rate, and when were they last updated?",
                     "What is the downside plan if absorption slips one leasing cycle?",
+                    "What share of NOI is backed by executed lease term and tenant credit, and what exit cap assumption is tied to that rent roll?",
                 ],
             },
             {
@@ -145,6 +146,7 @@ DEALSHIELD_CONTENT_PROFILES = {
                     "What share of projected income is backed by executed leases or binding LOIs?",
                     "Which assumptions rely on speculative absorption for remaining bays?",
                     "What downside leasing cadence has been tested in IC materials?",
+                    "What weighted-average lease term and tenant-credit mix support base rent, and how does that map to the cap-rate assumption used for value?",
                 ],
             },
             {
@@ -232,6 +234,7 @@ DEALSHIELD_CONTENT_PROFILES = {
                     "What throughput assumptions are contract-backed vs modeled?",
                     "Which customer commitments support first-year production volumes?",
                     "What downside case was run for delayed line qualification?",
+                    "Which offtake terms and customer credit actually back year-one revenue, and what cap-rate or exit-multiple assumption is IC using for valuation?",
                 ],
             },
             {
@@ -319,6 +322,7 @@ DEALSHIELD_CONTENT_PROFILES = {
                     "What comp-set evidence supports the blended rent assumption by bay type?",
                     "How much of projected income depends on office-heavy suites leasing on schedule?",
                     "What scenario was tested for slower lease-up of higher-finish bays?",
+                    "What executed lease term and tenant-credit support exists for office-heavy bays, and what cap-rate assumption was applied to that blended mix?",
                 ],
             },
             {
@@ -357,17 +361,17 @@ DEALSHIELD_CONTENT_PROFILES = {
             "drivers": [
                 {
                     "id": "driver_cost",
-                    "label": "Confirm hard costs +/-10%",
+                    "label": "Confirm refrigeration package scope + inclusions (vendor vs GC carry)",
                     "tile_id": "cost_plus_10",
                 },
                 {
                     "id": "driver_revenue",
-                    "label": "Validate revenue +/-10%",
+                    "label": "Confirm utility commitment + backup power assumptions",
                     "tile_id": "revenue_minus_10",
                 },
                 {
                     "id": "driver_trade",
-                    "label": "Verify refrigeration and equipment risk",
+                    "label": "Validate ramp-to-stabilization assumptions (commissioning curve)",
                     "tile_id": "equipment_plus_10",
                 },
             ],
@@ -405,6 +409,7 @@ DEALSHIELD_CONTENT_PROFILES = {
                     "Which contract terms and throughput assumptions support the revenue line?",
                     "What commissioning delay risk is not currently reflected in baseline operations?",
                     "What volume downside triggers a covenant discussion?",
+                    "Which executed storage/service contract terms and counterparty credit support the ramp, and what cap-rate assumption is IC using on stabilized cash flow?",
                 ],
             },
             {

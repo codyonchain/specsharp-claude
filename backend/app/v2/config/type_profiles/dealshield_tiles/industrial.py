@@ -9,9 +9,39 @@ DEALSHIELD_TILE_DEFAULTS = {
 }
 
 
+INDUSTRIAL_DECISION_TABLE_COLUMNS = [
+    {
+        "id": "total_cost",
+        "label": "Total Project Cost",
+        "metric_ref": "totals.total_project_cost",
+    },
+    {
+        "id": "annual_revenue",
+        "label": "Annual Revenue",
+        "metric_ref": "revenue_analysis.annual_revenue",
+    },
+    {
+        "id": "noi",
+        "label": "NOI",
+        "metric_ref": "return_metrics.estimated_annual_noi",
+    },
+    {
+        "id": "dscr",
+        "label": "Debt Lens: DSCR",
+        "metric_ref": "ownership_analysis.debt_metrics.calculated_dscr",
+    },
+    {
+        "id": "yoc",
+        "label": "Yield on Cost",
+        "metric_ref": "ownership_analysis.yield_on_cost",
+    },
+]
+
+
 DEALSHIELD_TILE_PROFILES = {
     "industrial_warehouse_v1": {
         "version": "v1",
+        "decision_table_columns": INDUSTRIAL_DECISION_TABLE_COLUMNS,
         "tiles": [
             {
                 "tile_id": "cost_plus_10",
@@ -52,6 +82,7 @@ DEALSHIELD_TILE_PROFILES = {
     },
     "industrial_distribution_center_v1": {
         "version": "v1",
+        "decision_table_columns": INDUSTRIAL_DECISION_TABLE_COLUMNS,
         "tiles": [
             {
                 "tile_id": "cost_plus_10",
@@ -92,6 +123,7 @@ DEALSHIELD_TILE_PROFILES = {
     },
     "industrial_manufacturing_v1": {
         "version": "v1",
+        "decision_table_columns": INDUSTRIAL_DECISION_TABLE_COLUMNS,
         "tiles": [
             {
                 "tile_id": "cost_plus_10",
@@ -132,6 +164,7 @@ DEALSHIELD_TILE_PROFILES = {
     },
     "industrial_flex_space_v1": {
         "version": "v1",
+        "decision_table_columns": INDUSTRIAL_DECISION_TABLE_COLUMNS,
         "tiles": [
             {
                 "tile_id": "cost_plus_10",
@@ -172,6 +205,7 @@ DEALSHIELD_TILE_PROFILES = {
     },
     "industrial_cold_storage_v1": {
         "version": "v1",
+        "decision_table_columns": INDUSTRIAL_DECISION_TABLE_COLUMNS,
         "tiles": [
             {
                 "tile_id": "cost_plus_10",

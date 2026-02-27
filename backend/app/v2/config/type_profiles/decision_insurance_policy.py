@@ -416,7 +416,7 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "primary_control_variable": {
             "tile_id": "structural_plus_10",
             "metric_ref": "trade_breakdown.structural",
-            "label": "Structural +10%",
+            "label": "Sitework + Shell Basis + Lease-Up Assumptions",
         },
         "collapse_trigger": {
             "metric": "value_gap_pct",
@@ -430,7 +430,7 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "primary_control_variable": {
             "tile_id": "electrical_plus_10",
             "metric_ref": "trade_breakdown.electrical",
-            "label": "Electrical +10%",
+            "label": "IC-First Power Density + Sortation Throughput Control",
         },
         "collapse_trigger": {
             "metric": "value_gap_pct",
@@ -444,7 +444,7 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "primary_control_variable": {
             "tile_id": "process_mep_plus_10",
             "metric_ref": "trade_breakdown.mechanical",
-            "label": "Process MEP +10%",
+            "label": "IC-First Process Utility Drift + Commissioning Yield Control",
         },
         "collapse_trigger": {
             "metric": "value_gap_pct",
@@ -458,7 +458,7 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "primary_control_variable": {
             "tile_id": "office_finish_plus_10",
             "metric_ref": "trade_breakdown.finishes",
-            "label": "Office/Finish Scope +10%",
+            "label": "IC-First Office/Finish Creep + Tenant-Mix Control",
         },
         "collapse_trigger": {
             "metric": "value_gap_pct",
@@ -472,7 +472,7 @@ DECISION_INSURANCE_POLICY_BY_PROFILE_ID: Dict[str, Dict[str, Any]] = {
         "primary_control_variable": {
             "tile_id": "equipment_plus_10",
             "metric_ref": "construction_costs.equipment_total",
-            "label": "Equipment +10%",
+            "label": "IC-First Refrigeration Plant + Envelope + Commissioning Ramp",
         },
         "collapse_trigger": {
             "metric": "value_gap_pct",

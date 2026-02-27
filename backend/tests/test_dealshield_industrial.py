@@ -53,6 +53,14 @@ INDUSTRIAL_POLICY_EXPECTATIONS = {
     },
 }
 
+INDUSTRIAL_PRIMARY_CONTROL_LABELS = {
+    "warehouse": "Sitework + Shell Basis + Lease-Up Assumptions",
+    "distribution_center": "IC-First Power Density + Sortation Throughput Control",
+    "manufacturing": "IC-First Process Utility Drift + Commissioning Yield Control",
+    "flex_space": "IC-First Office/Finish Creep + Tenant-Mix Control",
+    "cold_storage": "IC-First Refrigeration Plant + Envelope + Commissioning Ramp",
+}
+
 INDUSTRIAL_SCOPE_PROFILE_IDS = {
     "distribution_center": "industrial_distribution_center_structural_v1",
     "flex_space": "industrial_flex_space_structural_v1",
@@ -308,6 +316,15 @@ def test_industrial_tile_profiles_and_defaults_resolve():
         assert profile["version"] == "v1"
         assert isinstance(profile.get("tiles"), list) and profile["tiles"]
         assert isinstance(profile.get("derived_rows"), list) and profile["derived_rows"]
+        decision_columns = profile.get("decision_table_columns")
+        assert isinstance(decision_columns, list) and decision_columns
+        dscr_columns = [
+            column
+            for column in decision_columns
+            if isinstance(column, dict) and column.get("id") == "dscr"
+        ]
+        assert len(dscr_columns) == 1
+        assert dscr_columns[0].get("label") == "Debt Lens: DSCR"
 
         tile_ids = {tile["tile_id"] for tile in profile["tiles"]}
         assert {"cost_plus_10", "revenue_minus_10"}.issubset(tile_ids)
@@ -329,6 +346,79 @@ def test_industrial_content_profiles_resolve_and_align_with_tiles():
 
         for driver in drivers:
             assert driver["tile_id"] in tile_ids
+
+
+def test_industrial_content_question_bank_includes_ic_reality_checks():
+    for profile_id in INDUSTRIAL_PROFILE_IDS.values():
+        content_profile = get_dealshield_content_profile(profile_id)
+        question_bank = content_profile.get("question_bank")
+        assert isinstance(question_bank, list) and question_bank
+        questions = [
+            question
+            for entry in question_bank
+            if isinstance(entry, dict)
+            for question in (entry.get("questions") or [])
+            if isinstance(question, str)
+        ]
+        normalized_questions = " ".join(question.lower() for question in questions)
+        assert "term" in normalized_questions
+        assert "credit" in normalized_questions
+        assert "cap" in normalized_questions
+
+
+def test_industrial_di_policy_labels_are_subtype_specific():
+    observed_labels = []
+    for subtype, profile_id in INDUSTRIAL_PROFILE_IDS.items():
+        policy_cfg = DECISION_INSURANCE_POLICY_BY_PROFILE_ID[profile_id]
+        primary_control = policy_cfg.get("primary_control_variable")
+        assert isinstance(primary_control, dict)
+        label = primary_control.get("label")
+        assert label == INDUSTRIAL_PRIMARY_CONTROL_LABELS[subtype]
+        assert isinstance(label, str)
+        if subtype == "warehouse":
+            assert not label.lower().startswith("ic-first ")
+        else:
+            assert label.lower().startswith("ic-first ")
+        observed_labels.append(label.lower())
+
+    assert len(observed_labels) == len(set(observed_labels))
+
+
+def test_industrial_warehouse_content_uses_warehouse_native_copy():
+    content_profile = get_dealshield_content_profile(INDUSTRIAL_PROFILE_IDS["warehouse"])
+
+    fastest_change = content_profile.get("fastest_change")
+    assert isinstance(fastest_change, dict)
+    drivers = fastest_change.get("drivers")
+    assert isinstance(drivers, list) and len(drivers) >= 3
+    assert [driver.get("label") for driver in drivers[:3]] == [
+        "Confirm sitework/civil allowances + utility routing",
+        "Validate rent/SF and absorption (broker comps + active tenants)",
+        "Confirm dock count/clear height as it affects rent",
+    ]
+
+    most_likely_wrong = content_profile.get("most_likely_wrong")
+    assert isinstance(most_likely_wrong, list) and most_likely_wrong
+    assert any(
+        entry.get("text")
+        == "Lease-up is modeled smoothly; real absorption is lumpy (LOIs, TI decisions, broker cycles)."
+        for entry in most_likely_wrong
+        if isinstance(entry, dict)
+    )
+
+
+def test_industrial_cold_storage_content_uses_cold_storage_native_fastest_change_copy():
+    content_profile = get_dealshield_content_profile(INDUSTRIAL_PROFILE_IDS["cold_storage"])
+
+    fastest_change = content_profile.get("fastest_change")
+    assert isinstance(fastest_change, dict)
+    drivers = fastest_change.get("drivers")
+    assert isinstance(drivers, list) and len(drivers) >= 3
+    assert [driver.get("label") for driver in drivers[:3]] == [
+        "Confirm refrigeration package scope + inclusions (vendor vs GC carry)",
+        "Confirm utility commitment + backup power assumptions",
+        "Validate ramp-to-stabilization assumptions (commissioning curve)",
+    ]
 
 
 def test_industrial_engine_emits_dealshield_profile_for_all_subtypes():
