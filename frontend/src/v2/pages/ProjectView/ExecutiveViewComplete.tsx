@@ -502,6 +502,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const isOffice =
     buildingType === 'OFFICE' ||
     (typeof buildingType === 'string' && buildingType.toUpperCase().includes('OFFICE'));
+  const isMultifamilyProject = parsedBuildingType.includes('multifamily');
   const staffing = toRecord(
     displayData?.operational_metrics?.staffing ??
     displayData?.operational_metrics ??
@@ -1033,6 +1034,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const dscrMeetsTarget = typeof dscrValue === 'number' && Number.isFinite(dscrValue)
     ? dscrValue >= resolvedTargetDscr
     : undefined;
+  const stabilizedValueGapDisplay =
+    typeof canonicalValueGap === 'number' && Number.isFinite(canonicalValueGap)
+      ? `${canonicalValueGap >= 0 ? '+' : '-'}${formatters.currency(Math.abs(canonicalValueGap))}`
+      : '—';
   const decisionCopy = (() => {
     const yieldText = formatPct(yieldPctValue);
     const marketText = formatPct(marketCapPctValue);
@@ -1040,6 +1045,12 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
       ? `${spreadPctValue >= 0 ? '+' : ''}${spreadPctValue.toFixed(1)}%`
       : undefined;
     if (decisionStatus === 'GO') {
+      if (isMultifamilyProject) {
+        return {
+          body: 'Project clears multifamily underwriting across equity and debt lenses.',
+          detail: `Equity Lens: ${yieldPctValue !== undefined ? `yield on cost ${yieldText}` : 'yield on cost'}${marketCapPctValue !== undefined ? ` vs market cap ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''}. Debt Lens: DSCR ${dscrText ?? '—'} meets target ${dscrTargetText}. Reality Check: stabilized value gap ${stabilizedValueGapDisplay}.`
+        };
+      }
       return {
         body: 'Project meets underwriting criteria with strong returns and healthy debt coverage.',
         detail: `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'}${marketCapPctValue !== undefined ? ` vs market cap ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''}${
@@ -2028,7 +2039,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
             </p>
           </div>
           <div>
-            <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">DSCR VS TARGET</p>
+            <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">
+              {isMultifamilyProject ? `Debt Lens: DSCR (Target ${dscrTargetDisplay})` : 'DSCR VS TARGET'}
+            </p>
             <p className="text-2xl sm:text-3xl font-bold">
               {typeof dscr === 'number' ? `${dscr.toFixed(2)}×` : '—'}
             </p>
@@ -2040,8 +2053,12 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
             </p>
           </div>
           <div>
-            <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">Simple Payback (yrs)</p>
-            <p className="text-2xl sm:text-3xl font-bold">{formatters.years(displayData.paybackPeriod)}</p>
+            <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">
+              {isMultifamilyProject ? 'Stabilized Value Gap' : 'Simple Payback (yrs)'}
+            </p>
+            <p className="text-2xl sm:text-3xl font-bold">
+              {isMultifamilyProject ? stabilizedValueGapDisplay : formatters.years(displayData.paybackPeriod)}
+            </p>
           </div>
         </div>
       </div>

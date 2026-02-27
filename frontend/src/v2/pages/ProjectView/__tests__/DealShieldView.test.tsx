@@ -1992,6 +1992,7 @@ describe("DealShieldView", () => {
       expect(screen.getByText("Decision Insurance")).toBeInTheDocument();
       expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
       expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText("Driver Impact Severity:")).toBeInTheDocument();
 
       if (testCase.breakMetric === "value_gap_pct") {
         expect(
@@ -2041,9 +2042,30 @@ describe("DealShieldView", () => {
             );
           })
         ).toBeInTheDocument();
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Threshold:") && text.includes("% of cost");
+          })
+        ).toBeInTheDocument();
       }
 
+      const expectedBreakRisk =
+        testCase.flexBeforeBreakPct < 2 ? "High" : testCase.flexBeforeBreakPct <= 5 ? "Medium" : "Low";
+      expect(
+        screen.getByText((_, element) => {
+          if (element?.tagName.toLowerCase() !== "p") return false;
+          const text = element.textContent ?? "";
+          return text.includes("Break Risk:") && text.includes(expectedBreakRisk);
+        })
+      ).toBeInTheDocument();
       expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Lease-up timing, concessions, and rent growth are baseline inputs; verify against current comps and concessions."
+        )
+      ).toBeInTheDocument();
     }
   });
 

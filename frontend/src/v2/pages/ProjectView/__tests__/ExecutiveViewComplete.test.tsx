@@ -913,6 +913,36 @@ describe("ExecutiveViewComplete", () => {
     }
   });
 
+  it("renders multifamily-native debt/equity/reality lens copy and metric labels", () => {
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject(
+            "multifamily",
+            "luxury_apartments",
+            "multifamily_luxury_apartments_v1"
+          )}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "multifamily_luxury_apartments_v1",
+            "GO",
+            "base_value_gap_positive"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Debt Lens: DSCR (Target 1.30×)")).toBeInTheDocument();
+    expect(screen.getByText("Stabilized Value Gap")).toBeInTheDocument();
+    expect(screen.getByText("Project clears multifamily underwriting across equity and debt lenses.")).toBeInTheDocument();
+    expect(
+      screen.getByText((text) =>
+        text.includes("Equity Lens:") &&
+        text.includes("Debt Lens:") &&
+        text.includes("Reality Check:")
+      )
+    ).toBeInTheDocument();
+  });
+
   it("keeps canonical decision status/reason/provenance parity for office class_a and class_b", () => {
     const { rerender } = render(
       <MemoryRouter>

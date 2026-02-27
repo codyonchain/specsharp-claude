@@ -242,6 +242,34 @@ const classifyFlexBeforeBreak = (value: number): 'Structurally Tight' | 'Moderat
   return 'Flexible';
 };
 
+type BreakRiskLevel = 'High' | 'Medium' | 'Low';
+
+const classifyBreakRisk = (
+  scenarioLabel: string | null,
+  flexBeforeBreakPct: number | null
+): { level: BreakRiskLevel; reason: string } | null => {
+  const scenarioKey = toComparableKey(scenarioLabel);
+  if (scenarioKey === 'base') {
+    return { level: 'High', reason: 'Base case breaks first.' };
+  }
+  if (flexBeforeBreakPct !== null) {
+    if (flexBeforeBreakPct < 2) {
+      return { level: 'High', reason: '<2% flex before break.' };
+    }
+    if (flexBeforeBreakPct <= 5) {
+      return { level: 'Medium', reason: '2-5% flex before break.' };
+    }
+    return { level: 'Low', reason: '>5% flex before break.' };
+  }
+  if (scenarioKey === 'conservative') {
+    return { level: 'Medium', reason: 'First break appears in conservative stress.' };
+  }
+  if (scenarioKey === 'ugly') {
+    return { level: 'Low', reason: 'First break appears only in ugly stress.' };
+  }
+  return null;
+};
+
 const formatAssumptionYears = (value: unknown) => {
   const numeric = toFiniteNumber(value);
   if (numeric === null) return MISSING_VALUE;
@@ -682,6 +710,35 @@ export const DealShieldView: React.FC<Props> = ({
       ).filter((value, index, array) => array.indexOf(value) === index),
     [provenance?.dealshield_disclosures, viewModel]
   );
+  const dealShieldDisplayDisclosures = useMemo(() => {
+    const disclosures = [...dealShieldDisclosures];
+    const profileHints = [
+      (viewModel as any)?.profile_id,
+      (viewModel as any)?.profileId,
+      (viewModel as any)?.tile_profile_id,
+      (viewModel as any)?.tileProfileId,
+      (viewModel as any)?.content_profile_id,
+      (viewModel as any)?.contentProfileId,
+      (viewModel as any)?.scope_items_profile_id,
+      (viewModel as any)?.scopeItemsProfileId,
+      provenance?.profile_id,
+      provenance?.content_profile_id,
+      provenance?.scope_items_profile_id,
+      (dealShieldData as any)?.profile_id,
+      (dealShieldData as any)?.profileId,
+    ]
+      .filter((value): value is string => typeof value === 'string')
+      .map((value) => value.toLowerCase());
+    const isMultifamilyProfile = profileHints.some((value) => value.includes('multifamily'));
+    if (!isMultifamilyProfile) return disclosures;
+    const multifamilyNote =
+      'Lease-up timing, concessions, and rent growth are baseline inputs; verify against current comps and concessions.';
+    const hasMultifamilyNote = disclosures.some((item) => /lease-up timing/i.test(item));
+    if (!hasMultifamilyNote) {
+      disclosures.push(multifamilyNote);
+    }
+    return disclosures;
+  }, [dealShieldData, dealShieldDisclosures, provenance, viewModel]);
   const decisionSummary = useMemo(() => {
     const summaryRaw =
       ((viewModel as any)?.decision_summary && typeof (viewModel as any).decision_summary === 'object'
@@ -766,6 +823,7 @@ export const DealShieldView: React.FC<Props> = ({
 
     return {
       stabilizedValue: baseStabilizedValue,
+      baseTotalCost,
       capRateUsedPct,
       valueGap,
       valueGapPct,
@@ -784,6 +842,27 @@ export const DealShieldView: React.FC<Props> = ({
   const firstBreakScenarioLabelKey = toComparableKey(
     firstBreakCondition?.scenario_label ?? (firstBreakCondition as any)?.scenarioLabel
   );
+  const breakRisk = useMemo(
+    () =>
+      classifyBreakRisk(
+        firstBreakScenarioLabel ?? firstBreakScenarioLabelKey ?? null,
+        flexBeforeBreakPct
+      ),
+    [firstBreakScenarioLabel, firstBreakScenarioLabelKey, flexBeforeBreakPct]
+  );
+  const firstBreakThresholdDisplay = useMemo(() => {
+    if (!firstBreakCondition) return MISSING_VALUE;
+    const thresholdDisplay = formatFirstBreakMetricValue(firstBreakCondition.threshold);
+    if (firstBreakMetric !== 'value_gap') return thresholdDisplay;
+    const thresholdNumeric = toFiniteNumber(firstBreakCondition.threshold);
+    const baseTotalCost = decisionSummary.baseTotalCost;
+    if (thresholdNumeric === null || baseTotalCost === null || baseTotalCost === 0) return thresholdDisplay;
+    const thresholdPct = (thresholdNumeric / baseTotalCost) * 100;
+    return `${thresholdDisplay} (${formatValue(firstBreakCondition.operator)} ${new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }).format(thresholdPct)}% of cost)`;
+  }, [decisionSummary.baseTotalCost, firstBreakCondition, firstBreakMetric, formatFirstBreakMetricValue]);
   const hasBaseBreakCondition = Boolean(
     firstBreakCondition && (firstBreakScenarioIdKey === 'base' || firstBreakScenarioLabelKey === 'base')
   );
@@ -1165,9 +1244,16 @@ export const DealShieldView: React.FC<Props> = ({
                           <span>{formatAssumptionPercent(primaryControlVariable.impact_pct)}</span>
                         </p>
                         <p>
-                          <span className="font-medium text-slate-600">Severity:</span>{' '}
+                          <span className="font-medium text-slate-600">Driver Impact Severity:</span>{' '}
                           <span>{formatValue(primaryControlVariable.severity)}</span>
                         </p>
+                        {breakRisk && (
+                          <p>
+                            <span className="font-medium text-slate-600">Break Risk:</span>{' '}
+                            <span>{breakRisk.level}</span>{' '}
+                            <span className="text-xs text-slate-500">({breakRisk.reason})</span>
+                          </p>
+                        )}
                       </div>
                     ) : (
                       <p className="mt-2 text-sm text-slate-700">{primaryControlUnavailableReason ?? 'Unavailable.'}</p>
@@ -1191,7 +1277,7 @@ export const DealShieldView: React.FC<Props> = ({
                           <span className="font-medium text-slate-600">Threshold:</span>{' '}
                           <span>
                             {formatValue(firstBreakCondition.operator)}{' '}
-                            {formatFirstBreakMetricValue(firstBreakCondition.threshold)}
+                            {firstBreakThresholdDisplay}
                           </span>
                         </p>
                       </div>
@@ -1383,7 +1469,7 @@ export const DealShieldView: React.FC<Props> = ({
                 )}
               </div>
             )}
-            {(financingAssumptionItems.length > 0 || dealShieldDisclosures.length > 0) && (
+            {(financingAssumptionItems.length > 0 || dealShieldDisplayDisclosures.length > 0) && (
               <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Assumptions</p>
                 {financingAssumptionItems.length > 0 ? (
@@ -1397,14 +1483,14 @@ export const DealShieldView: React.FC<Props> = ({
                   </div>
                 ) : (
                   <ul className="mt-2 space-y-1 text-xs text-slate-700">
-                    {dealShieldDisclosures.map((item, index) => (
+                    {dealShieldDisplayDisclosures.map((item, index) => (
                       <li key={`assumptions-disclosure-${index}`}>{item}</li>
                     ))}
                   </ul>
                 )}
-                {financingAssumptionItems.length > 0 && dealShieldDisclosures.length > 0 && (
+                {financingAssumptionItems.length > 0 && dealShieldDisplayDisclosures.length > 0 && (
                   <ul className="mt-2 space-y-1 text-xs text-slate-600">
-                    {dealShieldDisclosures.map((item, index) => (
+                    {dealShieldDisplayDisclosures.map((item, index) => (
                       <li key={`assumptions-extra-disclosure-${index}`}>{item}</li>
                     ))}
                   </ul>
