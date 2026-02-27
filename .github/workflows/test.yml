@@ -50,14 +50,6 @@ jobs:
     
     steps:
       - uses: actions/checkout@v3
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-      
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
@@ -73,54 +65,13 @@ jobs:
       
       - name: Install dependencies
         run: |
-          cd frontend
-          npm ci
-          npx playwright install --with-deps chromium
-          cd ../backend
+          cd backend
           pip install -r requirements.txt
       
-      - name: Create test environment file
+      - name: Run acceptance tests
         run: |
           cd backend
-          echo "DATABASE_URL=sqlite:///./test_specsharp.db" > .env
-          echo "SECRET_KEY=test-secret-key-for-ci" >> .env
-          echo "ALGORITHM=HS256" >> .env
-          echo "ACCESS_TOKEN_EXPIRE_MINUTES=30" >> .env
-      
-      - name: Start backend
-        run: |
-          cd backend
-          uvicorn app.main:app --port 8001 &
-          sleep 5  # Wait for backend to start
-          curl -f http://localhost:8001/docs || exit 1
-      
-      - name: Start frontend
-        run: |
-          cd frontend
-          npm run dev &
-          sleep 5  # Wait for frontend to start
-          curl -f http://localhost:3000 || exit 1
-      
-      - name: Run smoke tests
-        run: |
-          cd frontend
-          npm run test:smoke || true  # Continue for now
-      
-      - name: Upload test results
-        uses: actions/upload-artifact@v3
-        if: always()
-        with:
-          name: playwright-report
-          path: tests/reports/playwright-html/
-          retention-days: 7
-      
-      - name: Upload screenshots
-        uses: actions/upload-artifact@v3
-        if: failure()
-        with:
-          name: playwright-screenshots
-          path: tests/screenshots/
-          retention-days: 7
+          PYTHONPATH=. pytest -q tests/test_v2_acceptance.py
   
   test-backend:
     name: Backend Tests

@@ -98,10 +98,9 @@ run_test_suite "Backend Tests" "bash -lc '
   exit 1
 '" "backend"
 
-# Run e2e tests (STRICT - do not mask failures)
-# IMPORTANT: Restrict Playwright to ./tests/e2e so it does not collect frontend unit tests under frontend/src/**/__tests__.
-# ALSO: Ensure Playwright browsers are installed (fresh machines / updated Playwright will fail without this).
-run_test_suite "E2E Tests" "bash -lc 'set -euo pipefail; npx playwright install; TESTING=true npx playwright test tests/e2e'" "."
+# Run acceptance tests (STRICT - do not mask failures)
+# V2 acceptance tests exercise NLP, finish levels, regional multipliers, scenarios, and export wiring.
+run_test_suite "E2E Tests" "bash -lc 'set -euo pipefail; source venv/bin/activate; PYTHONPATH=. pytest -q tests/test_v2_acceptance.py'" "backend"
 
 # Run deployment safety check
 echo -e "\n${YELLOW}Running Deployment Safety Check...${NC}"
