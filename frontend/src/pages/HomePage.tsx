@@ -170,6 +170,8 @@ export const HomePage: React.FC = () => {
   const handleCTAClick = (button: string, location: string) => {
     trackCTAClick(button, location);
   };
+  const requestPacketMailto =
+    'mailto:cody@specsharp.ai?subject=DealShield%20Packet%20Request&body=Project%20type%3A%0ASize%20(SF)%3A%0ALocation%3A%0ATimeline%3A%0ASpecial%20features%2Fconstraints%3A';
 
   return (
     <div className="min-h-screen">
@@ -194,14 +196,14 @@ export const HomePage: React.FC = () => {
             <Link to="/login" className="text-blue-600 hover:text-blue-700 transition-colors font-medium">
               Login
             </Link>
-            <Link 
-              to="/demo" 
+            <a 
+              href={requestPacketMailto}
               className="btn-primary"
               style={{backgroundColor: '#3B60E4', color: 'white', padding: '12px 24px'}}
-              onClick={() => handleCTAClick('Request a DealShield Packet', 'navigation')}
+              onClick={() => handleCTAClick('Request DealShield Packet', 'navigation')}
             >
               Request a DealShield Packet
-            </Link>
+            </a>
           </div>
           {/* Mobile menu button */}
           <button 
@@ -248,17 +250,17 @@ export const HomePage: React.FC = () => {
               >
                 Login
               </Link>
-              <Link 
-                to="/demo" 
+              <a 
+                href={requestPacketMailto}
                 className="block w-full text-center btn-primary"
                 style={{backgroundColor: '#3B60E4', color: 'white', padding: '12px 24px'}}
                 onClick={() => {
-                  handleCTAClick('Request a DealShield Packet', 'mobile-navigation');
+                  handleCTAClick('Request DealShield Packet', 'mobile-navigation');
                   setTimeout(() => setIsMobileMenuOpen(false), 0);
                 }}
               >
                 Request a DealShield Packet
-              </Link>
+              </a>
             </div>
           </div>
         )}
@@ -356,22 +358,22 @@ export const HomePage: React.FC = () => {
             {/* CTAs - stack on mobile, side-by-side on desktop */}
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center mb-6 px-4" 
                  style={{animation: 'slide-in 0.5s ease-out both', animationDelay: '0.4s'}}>
-              <Link
-                to="/new"
+              <a
+                href={requestPacketMailto}
                 className="group relative px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-amber-500 to-orange-500 
                            rounded-lg font-bold text-base sm:text-lg text-white overflow-hidden
                            transform hover:scale-105 transition-all duration-200
                            shadow-[0_10px_30px_-10px_rgba(251,146,60,0.5)]"
-                onClick={() => handleCTAClick('Generate Decision Packet', 'hero')}
+                onClick={() => handleCTAClick('Request DealShield Packet', 'hero')}
               >
                 <span className="relative z-10 flex items-center justify-center">
-                  Generate Decision Packet
+                  Request DealShield Packet
                   <svg className="w-4 sm:w-5 h-4 sm:h-5 ml-2 group-hover:translate-x-1 transition-transform" 
                        fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>
                 </span>
-              </Link>
+              </a>
 
               <button
                 className="px-6 sm:px-8 py-3 sm:py-4 bg-white/5 backdrop-blur border border-white/20 
@@ -792,23 +794,23 @@ export const HomePage: React.FC = () => {
           
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
-            <Link
-              to="/new"
+            <a
+              href={requestPacketMailto}
               className="group relative px-8 py-4 bg-gradient-to-r from-amber-500 to-orange-500 
                          rounded-lg font-bold text-lg text-white overflow-hidden
                          transform hover:scale-105 transition-all duration-200
                          shadow-[0_10px_30px_-10px_rgba(251,146,60,0.5)]
                          flex flex-col items-center"
-              onClick={() => handleCTAClick('Generate Decision Packet', 'footer-cta')}
+              onClick={() => handleCTAClick('Request DealShield Packet', 'footer-cta')}
             >
               <span className="flex items-center">
-                Generate Decision Packet
+                Request DealShield Packet
                 <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
               </span>
               <span className="text-sm mt-1 text-orange-100 font-normal">
                 Intake -&gt; confirm assumptions -&gt; stamp packet
               </span>
-            </Link>
+            </a>
             
             <button
               className="px-8 py-4 bg-white/10 backdrop-blur border-2 border-white/30 
