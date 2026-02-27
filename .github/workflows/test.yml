@@ -72,6 +72,100 @@ jobs:
         run: |
           cd backend
           PYTHONPATH=. pytest -q tests/test_v2_acceptance.py
+
+  test-ux-smoke:
+    name: UX Smoke Tests (non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install root test dependencies
+        run: npm ci
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Prepare backend env for smoke run
+        run: |
+          cat > backend/.env << 'EOF'
+          DATABASE_URL=sqlite:///./test_specsharp.db
+          SECRET_KEY=test-secret-key
+          SESSION_SECRET_KEY=test-session-secret-key
+          JWT_SECRET=test-jwt-secret-key
+          ALGORITHM=HS256
+          ACCESS_TOKEN_EXPIRE_MINUTES=30
+          ENVIRONMENT=development
+          LOG_LEVEL=INFO
+          TESTING=true
+          EOF
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Start backend
+        run: |
+          mkdir -p tests/reports
+          cd backend
+          nohup bash -lc "source venv/bin/activate && uvicorn app.main:app --host 127.0.0.1 --port 8001" > ../tests/reports/backend-ux-smoke.log 2>&1 &
+
+      - name: Start frontend
+        run: |
+          cd frontend
+          nohup bash -lc "VITE_API_URL=http://127.0.0.1:8001 npm run dev -- --host 127.0.0.1 --port 3000" > ../tests/reports/frontend-ux-smoke.log 2>&1 &
+
+      - name: Wait for services
+        run: |
+          for i in {1..60}; do
+            curl -sf http://127.0.0.1:8001/health >/dev/null && break
+            sleep 1
+          done
+          for i in {1..60}; do
+            curl -sf http://127.0.0.1:3000 >/dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8001/health >/dev/null
+          curl -sf http://127.0.0.1:3000 >/dev/null
+
+      - name: Run UX smoke suite
+        env:
+          TEST_BASE_URL: http://127.0.0.1:3000
+          E2E_API_BASE_URL: http://127.0.0.1:8001
+          E2E_USER_TOKEN: ${{ secrets.E2E_USER_TOKEN }}
+          E2E_SECONDARY_USER_TOKEN: ${{ secrets.E2E_SECONDARY_USER_TOKEN }}
+        run: |
+          npx playwright test --config=tests/playwright.config.ts tests/e2e/smoke
+
+      - name: Upload UX smoke artifacts
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: ux-smoke-artifacts
+          path: |
+            tests/reports/playwright-html
+            tests/reports/playwright-results
+            tests/reports/backend-ux-smoke.log
+            tests/reports/frontend-ux-smoke.log
+          retention-days: 7
   
   test-backend:
     name: Backend Tests
@@ -167,7 +261,7 @@ jobs:
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
-    needs: [test-frontend, test-e2e, test-backend, deployment-safety-check]
+    needs: [test-frontend, test-e2e, test-ux-smoke, test-backend, deployment-safety-check]
     if: always()
     
     steps:
@@ -179,6 +273,7 @@ jobs:
           echo "|------------|--------|"
           echo "| Frontend Unit Tests | ${{ needs.test-frontend.result == 'success' && '✅ Passed' || '⚠️ Check Required' }} |"
           echo "| E2E Tests | ${{ needs.test-e2e.result == 'success' && '✅ Passed' || '⚠️ Check Required' }} |"
+          echo "| UX Smoke Tests (non-blocking) | ${{ needs.test-ux-smoke.result == 'success' && '✅ Passed' || '⚠️ Non-blocking failure' }} |"
           echo "| Backend Tests | ${{ needs.test-backend.result == 'success' && '✅ Passed' || '⚠️ Check Required' }} |"
           echo "| Deployment Safety | ${{ needs.deployment-safety-check.result == 'success' && '✅ Safe' || '❌ Failed' }} |"
           echo ""
