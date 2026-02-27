@@ -23,8 +23,8 @@ export const CookiePolicy: React.FC = () => {
       <main className="flex-grow bg-gray-50 py-12">
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-sm p-8">
-            <h1 className="text-3xl font-bold mb-6">Cookie Policy</h1>
-            <p className="text-gray-600 mb-8">Last updated: {new Date().toLocaleDateString()}</p>
+            <h1 className="text-3xl font-bold mb-6">Cookie Notice</h1>
+            <p className="text-gray-600 mb-8">Last updated: May 29, 2025</p>
 
             <section className="mb-8">
               <h2 className="text-2xl font-semibold mb-4">1. What Are Cookies</h2>
@@ -63,7 +63,7 @@ export const CookiePolicy: React.FC = () => {
               </p>
               <ul className="list-disc pl-6 mb-4">
                 <li><strong>Google OAuth:</strong> For secure authentication</li>
-                <li><strong>Stripe:</strong> For payment processing (on their secure checkout page)</li>
+                <li><strong>Google Analytics (if enabled):</strong> To understand usage and improve the Service</li>
               </ul>
             </section>
 
@@ -97,7 +97,7 @@ export const CookiePolicy: React.FC = () => {
               </p>
               <ul className="list-disc pl-6 mb-4">
                 <li><strong>Session Cookies:</strong> Deleted when you close your browser</li>
-                <li><strong>Persistent Cookies:</strong> Remain for up to 30 days to remember your login</li>
+                <li><strong>Persistent Cookies:</strong> Remain for a period set by the provider (up to 2 years for analytics, if enabled)</li>
               </ul>
             </section>
 
@@ -115,7 +115,7 @@ export const CookiePolicy: React.FC = () => {
                 If you have questions about our use of cookies, please contact us at:
               </p>
               <p className="mb-4">
-                Email: <a href="mailto:support@specsharp.ai" className="text-blue-600 hover:underline">support@specsharp.ai</a>
+                Email: <a href="mailto:cody@specsharp.ai" className="text-blue-600 hover:underline">cody@specsharp.ai</a>
               </p>
             </section>
           </div>

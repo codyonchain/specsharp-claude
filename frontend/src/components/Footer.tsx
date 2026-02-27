@@ -22,9 +22,9 @@ export const Footer: React.FC = () => {
             <li><Link to="/terms">Terms of Service</Link></li>
             <li><Link to="/privacy">Privacy Policy</Link></li>
             <li><Link to="/cookies">Cookie Notice</Link></li>
-            <li><a href="mailto:cody@specsharp.ai?subject=Security%20and%20Trust%20Request">Security &amp; Trust</a></li>
-            <li><a href="mailto:cody@specsharp.ai?subject=Data%20Processing%20Addendum%20Request">Data Processing Addendum</a></li>
-            <li><a href="mailto:cody@specsharp.ai?subject=Subprocessor%20List%20Request">Subprocessor List</a></li>
+            <li><Link to="/security">Security &amp; Trust</Link></li>
+            <li><Link to="/dpa">Data Processing Addendum</Link></li>
+            <li><Link to="/subprocessors">Subprocessor List</Link></li>
           </ul>
         </div>
 

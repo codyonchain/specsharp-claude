@@ -24,22 +24,32 @@ export const TermsOfService: React.FC = () => {
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-sm p-8">
             <h1 className="text-3xl font-bold mb-6">Terms of Service</h1>
-            <p className="text-gray-600 mb-8">Last updated: {new Date().toLocaleDateString()}</p>
+            <p className="text-gray-600 mb-8">Last updated: May 29, 2025</p>
 
             <section className="mb-8">
-              <h2 className="text-2xl font-semibold mb-4">1. Service Description</h2>
+              <h2 className="text-2xl font-semibold mb-4">1. Agreement and Definitions</h2>
               <p className="mb-4">
-                SpecSharp provides automated construction cost estimation services through our web platform. 
-                Our service generates preliminary budget estimates based on project descriptions and regional 
-                construction data.
+                These Terms of Service (the "Terms") govern your access to and use of the SpecSharp platform
+                and related services (the "Service"). The Service is provided by BidSharp Technologies LLC
+                ("SpecSharp," "we," "us," or "our"), located at 3669 Charlotte Pike, Nashville, TN 37209,
+                United States. By using the Service, you agree to these Terms.
+              </p>
+              <p className="mb-4">
+                The Service is offered for business-to-business use only. You represent that you are acting
+                on behalf of a business entity and have authority to bind that entity to these Terms.
               </p>
             </section>
 
             <section className="mb-8">
-              <h2 className="text-2xl font-semibold mb-4">2. Accuracy Disclaimer</h2>
+              <h2 className="text-2xl font-semibold mb-4">2. Service Description and Disclaimers</h2>
               <p className="mb-4">
-                <strong>IMPORTANT:</strong> All estimates provided by SpecSharp are for preliminary budgeting 
-                purposes only. Actual construction costs may vary significantly based on:
+                SpecSharp provides automated construction cost estimation and decision-support outputs based
+                on project descriptions and regional data. Outputs are scenario-based and not a guarantee
+                of project performance.
+              </p>
+              <p className="mb-4">
+                <strong>IMPORTANT:</strong> All estimates are for preliminary budgeting purposes only. Actual
+                construction costs may vary based on:
               </p>
               <ul className="list-disc pl-6 mb-4">
                 <li>Site-specific conditions</li>
@@ -49,33 +59,81 @@ export const TermsOfService: React.FC = () => {
                 <li>Market conditions at time of construction</li>
               </ul>
               <p className="mb-4">
-                Users should always consult with qualified construction professionals for final project pricing.
+                The Service does not provide legal, tax, accounting, or investment advice. You should consult
+                qualified professionals for final pricing, contracts, and investment decisions.
               </p>
             </section>
 
             <section className="mb-8">
-              <h2 className="text-2xl font-semibold mb-4">3. Payment Terms</h2>
+              <h2 className="text-2xl font-semibold mb-4">3. Accounts and Access</h2>
               <p className="mb-4">
-                SpecSharp is offered at $799 per month for unlimited use. You may cancel your subscription 
-                at any time. Cancellations take effect at the end of the current billing period.
+                You are responsible for maintaining the confidentiality of your account credentials and
+                for all activities that occur under your account. Do not share credentials outside your
+                organization. You must provide accurate account information and keep it current.
+              </p>
+            </section>
+
+            <section className="mb-8">
+              <h2 className="text-2xl font-semibold mb-4">4. Fees, Invoices, and Run Limits</h2>
+              <p className="mb-4">
+                Fees are provided by invoice or an order form and are due according to the payment terms
+                stated therein. The Service may include run limits or usage caps as described in your order
+                form or account settings. Additional runs may be purchased or granted by SpecSharp.
+              </p>
+              <p className="mb-4">
+                <strong>No refunds unless required by law.</strong>
+              </p>
+              <p className="mb-4">
+                You are responsible for any applicable taxes, levies, or duties imposed by taxing authorities.
+              </p>
+            </section>
+
+            <section className="mb-8">
+              <h2 className="text-2xl font-semibold mb-4">5. Data Ownership and License</h2>
+              <p className="mb-4">
+                You retain ownership of your project data and inputs. You grant SpecSharp a limited, non-exclusive
+                license to process your data solely to provide the Service, including generating outputs and
+                maintaining audit trails.
+              </p>
+              <p className="mb-4">
+                SpecSharp retains all rights to the Service, software, models, and output formatting, including
+                all related intellectual property.
+              </p>
+            </section>
+
+            <section className="mb-8">
+              <h2 className="text-2xl font-semibold mb-4">6. Acceptable Use</h2>
+              <p className="mb-4">
+                You agree not to use the Service to:
               </p>
               <ul className="list-disc pl-6 mb-4">
-                <li>Billing is monthly in advance</li>
-                <li>No refunds for partial months</li>
-                <li>Prices subject to change with 30 days notice</li>
+                <li>Violate any laws or regulations</li>
+                <li>Infringe intellectual property rights</li>
+                <li>Transmit malicious code or interfere with the Service</li>
+                <li>Attempt unauthorized access to systems or data</li>
+                <li>Reverse engineer or misuse the Service</li>
               </ul>
             </section>
 
             <section className="mb-8">
-              <h2 className="text-2xl font-semibold mb-4">4. Data Ownership</h2>
+              <h2 className="text-2xl font-semibold mb-4">7. Suspension and Termination</h2>
               <p className="mb-4">
-                You retain full ownership of all project data you input into SpecSharp and all estimates 
-                generated. We claim no ownership rights over your project information.
+                We may suspend or terminate access if we reasonably believe you have violated these Terms,
+                posed a security risk, or failed to pay fees. You may stop using the Service at any time.
               </p>
             </section>
 
             <section className="mb-8">
-              <h2 className="text-2xl font-semibold mb-4">5. Limitation of Liability</h2>
+              <h2 className="text-2xl font-semibold mb-4">8. Warranty Disclaimer</h2>
+              <p className="mb-4">
+                THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE." SPECSHARP DISCLAIMS ALL WARRANTIES,
+                WHETHER EXPRESS, IMPLIED, OR STATUTORY, INCLUDING IMPLIED WARRANTIES OF MERCHANTABILITY,
+                FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+              </p>
+            </section>
+
+            <section className="mb-8">
+              <h2 className="text-2xl font-semibold mb-4">9. Limitation of Liability</h2>
               <p className="mb-4">
                 TO THE MAXIMUM EXTENT PERMITTED BY LAW, SPECSHARP SHALL NOT BE LIABLE FOR ANY INDIRECT, 
                 INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS OR REVENUES, 
@@ -85,25 +143,24 @@ export const TermsOfService: React.FC = () => {
             </section>
 
             <section className="mb-8">
-              <h2 className="text-2xl font-semibold mb-4">6. Acceptable Use</h2>
+              <h2 className="text-2xl font-semibold mb-4">10. Governing Law</h2>
               <p className="mb-4">
-                You agree not to use SpecSharp to:
+                These Terms are governed by the laws of the State of Tennessee, United States, without regard
+                to conflict of law principles. Any disputes shall be brought in the state or federal courts
+                located in Davidson County, Tennessee.
               </p>
-              <ul className="list-disc pl-6 mb-4">
-                <li>Violate any laws or regulations</li>
-                <li>Infringe on intellectual property rights</li>
-                <li>Transmit malicious code or interfere with the service</li>
-                <li>Attempt to gain unauthorized access to our systems</li>
-              </ul>
             </section>
 
             <section className="mb-8">
-              <h2 className="text-2xl font-semibold mb-4">7. Contact Information</h2>
+              <h2 className="text-2xl font-semibold mb-4">11. Contact Information</h2>
               <p className="mb-4">
                 For questions about these Terms of Service, please contact us at:
               </p>
               <p className="mb-4">
-                Email: <a href="mailto:support@specsharp.ai" className="text-blue-600 hover:underline">support@specsharp.ai</a>
+                Email: <a href="mailto:cody@specsharp.ai" className="text-blue-600 hover:underline">cody@specsharp.ai</a>
+              </p>
+              <p className="mb-4">
+                BidSharp Technologies LLC, 3669 Charlotte Pike, Nashville, TN 37209, United States.
               </p>
             </section>
           </div>

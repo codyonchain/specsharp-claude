@@ -13,6 +13,12 @@ import { AuthCallback } from './pages/AuthCallback';
 // Import the existing HomePage from the main src/pages
 import { HomePage } from '../pages/HomePage';
 import { CoveragePage } from '../pages/CoveragePage';
+import { TermsOfService } from '../pages/TermsOfService';
+import { PrivacyPolicy } from '../pages/PrivacyPolicy';
+import { CookiePolicy } from '../pages/CookiePolicy';
+import { SecurityTrust } from '../pages/SecurityTrust';
+import { DataProcessingAddendum } from '../pages/DataProcessingAddendum';
+import { SubprocessorList } from '../pages/SubprocessorList';
 
 // Import Login component from V1
 import Login from '../components/Login';
@@ -41,6 +47,12 @@ export const App: React.FC = () => {
           {/* Homepage - always accessible */}
           <Route path="/" element={<HomePage />} />
           <Route path="/coverage" element={<CoveragePage />} />
+          <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/cookies" element={<CookiePolicy />} />
+          <Route path="/security" element={<SecurityTrust />} />
+          <Route path="/dpa" element={<DataProcessingAddendum />} />
+          <Route path="/subprocessors" element={<SubprocessorList />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           
           {/* Login route - auto-redirect to dashboard if already authenticated */}

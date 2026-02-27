@@ -21,6 +21,9 @@ const DemoPage = lazy(() => import('./pages/DemoPage').then(m => ({ default: m.D
 const TermsOfService = lazy(() => import('./pages/TermsOfService').then(m => ({ default: m.TermsOfService })));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy').then(m => ({ default: m.PrivacyPolicy })));
 const CookiePolicy = lazy(() => import('./pages/CookiePolicy').then(m => ({ default: m.CookiePolicy })));
+const SecurityTrust = lazy(() => import('./pages/SecurityTrust').then(m => ({ default: m.SecurityTrust })));
+const DataProcessingAddendum = lazy(() => import('./pages/DataProcessingAddendum').then(m => ({ default: m.DataProcessingAddendum })));
+const SubprocessorList = lazy(() => import('./pages/SubprocessorList').then(m => ({ default: m.SubprocessorList })));
 const PricingPage = lazy(() => import('./pages/PricingPage').then(m => ({ default: m.PricingPage })));
 const FAQPage = lazy(() => import('./pages/FAQPage').then(m => ({ default: m.FAQPage })));
 
@@ -161,6 +164,9 @@ function App() {
             <Route path="/terms" element={<TermsOfService />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/cookies" element={<CookiePolicy />} />
+            <Route path="/security" element={<SecurityTrust />} />
+            <Route path="/dpa" element={<DataProcessingAddendum />} />
+            <Route path="/subprocessors" element={<SubprocessorList />} />
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/faq" element={<FAQPage />} />
             
