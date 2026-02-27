@@ -39,6 +39,39 @@ const CROSS_TYPE_POLICY_CASES = [
   },
 ] as const;
 
+const INDUSTRIAL_POLICY_CASES = [
+  {
+    subtype: "warehouse",
+    profileId: "industrial_warehouse_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+  },
+  {
+    subtype: "distribution_center",
+    profileId: "industrial_distribution_center_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+  },
+  {
+    subtype: "manufacturing",
+    profileId: "industrial_manufacturing_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+  },
+  {
+    subtype: "cold_storage",
+    profileId: "industrial_cold_storage_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+  },
+  {
+    subtype: "flex_space",
+    profileId: "industrial_flex_space_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+  },
+] as const;
+
 const SPECIALTY_POLICY_CASES = [
   {
     subtype: "data_center",
@@ -858,6 +891,91 @@ describe("ExecutiveViewComplete", () => {
     });
     expect(policyLineMatches.length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Scenario" })).toBeInTheDocument();
+  });
+
+  it("renders industrial-native executive metric framing for all five industrial subtypes", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject(
+            "industrial",
+            INDUSTRIAL_POLICY_CASES[0].subtype,
+            INDUSTRIAL_POLICY_CASES[0].profileId
+          )}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            INDUSTRIAL_POLICY_CASES[0].profileId,
+            INDUSTRIAL_POLICY_CASES[0].decisionStatus,
+            INDUSTRIAL_POLICY_CASES[0].decisionReasonCode
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    for (const testCase of INDUSTRIAL_POLICY_CASES) {
+      rerender(
+        <MemoryRouter>
+          <ExecutiveViewComplete
+            project={buildCrossTypeProject("industrial", testCase.subtype, testCase.profileId)}
+            dealShieldData={buildCrossTypeDealShieldViewModel(
+              testCase.profileId,
+              testCase.decisionStatus,
+              testCase.decisionReasonCode
+            ) as any}
+          />
+        </MemoryRouter>
+      );
+
+      expect(screen.getByText("Debt Lens: DSCR")).toBeInTheDocument();
+      expect(screen.getByText("Yield Spread vs Market")).toBeInTheDocument();
+      expect(screen.getByText("INVESTMENT PER SF")).toBeInTheDocument();
+      expect(
+        screen.getByText("See what it takes to clear target yield through NOI lift, scope compression, or both.")
+      ).toBeInTheDocument();
+      expect(screen.queryAllByText("Simple Payback (yrs)")).toHaveLength(0);
+      expect(screen.queryByText("INVESTMENT PER UNIT")).not.toBeInTheDocument();
+    }
+  });
+
+  it("adds manufacturing-specific downside note in NO-GO decision explanation", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject("industrial", "manufacturing", "industrial_manufacturing_v1")}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "industrial_manufacturing_v1",
+            "NO-GO",
+            "base_value_gap_non_positive"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getByText(
+        "For manufacturing, also validate commissioning/qualification timeline and process utility loads—those usually drive the downside.",
+        { exact: false }
+      )
+    ).toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject("industrial", "distribution_center", "industrial_distribution_center_v1")}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "industrial_distribution_center_v1",
+            "NO-GO",
+            "base_value_gap_non_positive"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.queryByText(
+        "For manufacturing, also validate commissioning/qualification timeline and process utility loads—those usually drive the downside.",
+        { exact: false }
+      )
+    ).not.toBeInTheDocument();
   });
 
   it("renders explicit multifamily canonical decision status/reason/provenance parity", () => {

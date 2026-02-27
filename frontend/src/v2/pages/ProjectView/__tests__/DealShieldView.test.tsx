@@ -114,6 +114,11 @@ const DECISION_REASON_TEXT: Record<string, string> = {
   base_value_gap_positive: "Base value gap is positive under current assumptions.",
 };
 
+const formatExpectedPrimaryControlLabel = (profileId: string, label: string): string => {
+  if (!profileId.startsWith("industrial_")) return label;
+  return label.replace(/^IC-First(?:\s*[:\-]\s*|\s+)/i, "").trim();
+};
+
 const HEALTHCARE_POLICY_CONTRACT_CASES = [
   {
     subtype: "surgical_center",
@@ -906,7 +911,7 @@ const POLICY_CONTRACT_CASES = [
     scopeProfileId: "industrial_distribution_center_structural_v1",
     decisionStatus: "Needs Work",
     decisionReasonCode: "tight_flex_band",
-    primaryControlLabel: "Electrical +10%",
+    primaryControlLabel: "IC-First Power Density + Sortation Throughput Control",
     breakScenarioLabel: "Conservative",
     breakMetric: "value_gap_pct",
     breakMetricRef: "decision_summary.value_gap_pct",
@@ -915,6 +920,104 @@ const POLICY_CONTRACT_CASES = [
     observedValue: -45.9,
     flexBeforeBreakPct: 1.9,
     expectedFlexLabel: "1.90% (Structurally Tight)",
+  },
+] as const;
+
+const INDUSTRIAL_POLICY_CONTRACT_CASES = [
+  {
+    subtype: "warehouse",
+    buildingType: "industrial",
+    profileId: "industrial_warehouse_v1",
+    scopeProfileId: "industrial_warehouse_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "low_flex_before_break_buffer",
+    primaryControlLabel: "IC-First Structural Drift + Lease Depth Control",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: -8.0,
+    observedValue: -9.4,
+    flexBeforeBreakPct: 1.8,
+    expectedFlexLabel: "1.80% (Structurally Tight)",
+    baseDscr: 1.32,
+    stressedDscr: 1.07,
+  },
+  {
+    subtype: "distribution_center",
+    buildingType: "industrial",
+    profileId: "industrial_distribution_center_v1",
+    scopeProfileId: "industrial_distribution_center_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+    primaryControlLabel: "IC-First Power Density + Sortation Throughput Control",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: -25.0,
+    observedValue: -45.9,
+    flexBeforeBreakPct: 1.9,
+    expectedFlexLabel: "1.90% (Structurally Tight)",
+    baseDscr: 1.36,
+    stressedDscr: 1.11,
+  },
+  {
+    subtype: "manufacturing",
+    buildingType: "industrial",
+    profileId: "industrial_manufacturing_v1",
+    scopeProfileId: "industrial_manufacturing_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+    primaryControlLabel: "IC-First Process Utility Drift + Commissioning Yield Control",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: -35.0,
+    observedValue: -38.1,
+    flexBeforeBreakPct: 1.5,
+    expectedFlexLabel: "1.50% (Structurally Tight)",
+    baseDscr: 1.28,
+    stressedDscr: 1.01,
+  },
+  {
+    subtype: "flex_space",
+    buildingType: "industrial",
+    profileId: "industrial_flex_space_v1",
+    scopeProfileId: "industrial_flex_space_structural_v1",
+    decisionStatus: "GO",
+    decisionReasonCode: "base_value_gap_positive",
+    primaryControlLabel: "IC-First Office/Finish Creep + Tenant-Mix Control",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: -6.0,
+    observedValue: -3.9,
+    flexBeforeBreakPct: 5.2,
+    expectedFlexLabel: "5.20% (Flexible)",
+    baseDscr: 1.41,
+    stressedDscr: 1.22,
+  },
+  {
+    subtype: "cold_storage",
+    buildingType: "industrial",
+    profileId: "industrial_cold_storage_v1",
+    scopeProfileId: "industrial_cold_storage_structural_v1",
+    decisionStatus: "Needs Work",
+    decisionReasonCode: "tight_flex_band",
+    primaryControlLabel: "IC-First Refrigeration Reliability + Throughput Control",
+    breakScenarioLabel: "Conservative",
+    breakMetric: "value_gap_pct",
+    breakMetricRef: "decision_summary.value_gap_pct",
+    breakOperator: "<=",
+    threshold: -30.0,
+    observedValue: -33.4,
+    flexBeforeBreakPct: 1.7,
+    expectedFlexLabel: "1.70% (Structurally Tight)",
+    baseDscr: 1.27,
+    stressedDscr: 1.03,
   },
 ] as const;
 
@@ -1591,7 +1694,7 @@ const buildSubtypePolicyPayload = (
       },
       {
         id: "dscr",
-        label: "DSCR",
+        label: input.profileId.startsWith("industrial_") ? "Debt Lens: DSCR" : "DSCR",
         metric_ref: "ownership_analysis.debt_metrics.calculated_dscr",
       },
       {
@@ -1991,8 +2094,12 @@ describe("DealShieldView", () => {
 
       expect(screen.getByText("Decision Insurance")).toBeInTheDocument();
       expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
-      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText(formatExpectedPrimaryControlLabel(testCase.profileId, testCase.primaryControlLabel))).toBeInTheDocument();
+      expect(screen.getByText("Impact:")).toBeInTheDocument();
+      expect(screen.queryByText("Impact (local):")).not.toBeInTheDocument();
       expect(screen.getByText("Driver Impact Severity:")).toBeInTheDocument();
+      expect(screen.queryByText("Isolated Sensitivity Rank:")).not.toBeInTheDocument();
+      expect(screen.queryByText("Model Impact (local):")).not.toBeInTheDocument();
 
       if (testCase.breakMetric === "value_gap_pct") {
         expect(
@@ -2091,7 +2198,7 @@ describe("DealShieldView", () => {
 
       expect(screen.getByText("Decision Insurance")).toBeInTheDocument();
       expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
-      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText(formatExpectedPrimaryControlLabel(testCase.profileId, testCase.primaryControlLabel))).toBeInTheDocument();
 
       if (testCase.breakMetric === "value_gap") {
         if (testCase.threshold === 0) {
@@ -2184,6 +2291,233 @@ describe("DealShieldView", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders industrial parity for all five subtypes with IC-authored controls and Debt Lens DSCR columns", () => {
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_industrial_policy_contract_0"
+        data={buildSubtypePolicyPayload(INDUSTRIAL_POLICY_CONTRACT_CASES[0]) as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    for (const testCase of INDUSTRIAL_POLICY_CONTRACT_CASES) {
+      rerender(
+        <DealShieldView
+          projectId={`proj_${testCase.profileId}`}
+          data={buildSubtypePolicyPayload(testCase) as any}
+          loading={false}
+          error={null}
+        />
+      );
+
+      expect(
+        screen.getByText(`Investment Decision: ${testCase.decisionStatus}`)
+      ).toBeInTheDocument();
+      expect(screen.getByText(DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
+      expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
+      expect(screen.getByText(formatExpectedPrimaryControlLabel(testCase.profileId, testCase.primaryControlLabel))).toBeInTheDocument();
+      expect(screen.getByText("Impact (local):")).toBeInTheDocument();
+      expect(screen.queryByText("Impact:")).not.toBeInTheDocument();
+      expect(screen.getByText("Isolated Sensitivity Rank:")).toBeInTheDocument();
+      expect(screen.getByText("Debt Lens: DSCR")).toBeInTheDocument();
+      expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
+      expect(screen.getByText(testCase.baseDscr.toFixed(2))).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Isolated Sensitivity Rank scores isolated driver sensitivity; Break Risk reflects first-break/flex policy risk."
+        )
+      ).toBeInTheDocument();
+      expect(screen.queryByText("Driver Impact Severity:")).not.toBeInTheDocument();
+      expect(screen.queryByText("Model Impact (local):")).not.toBeInTheDocument();
+
+      if (testCase.subtype === "manufacturing") {
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Impact: 8.2% | Risk: High");
+          })
+        ).toBeInTheDocument();
+      } else {
+        expect(
+          screen.getByText((_, element) => {
+            if (element?.tagName.toLowerCase() !== "p") return false;
+            const text = element.textContent ?? "";
+            return text.includes("Impact: 8.2% | Severity: High");
+          })
+        ).toBeInTheDocument();
+      }
+
+      const expectedBreakRisk =
+        testCase.flexBeforeBreakPct < 2 ? "High" : testCase.flexBeforeBreakPct <= 5 ? "Medium" : "Low";
+      expect(
+        screen.getByText((_, element) => {
+          if (element?.tagName.toLowerCase() !== "p") return false;
+          const text = element.textContent ?? "";
+          return text.includes("Break Risk:");
+        })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText((_, element) => {
+          if (element?.tagName.toLowerCase() !== "p") return false;
+          const text = element.textContent ?? "";
+          return text.includes("Break Risk:") && text.includes(expectedBreakRisk);
+        })
+      ).toBeInTheDocument();
+    }
+  });
+
+  it("uses manufacturing-specific NO-GO wording and ranked likely wrong risk labels", () => {
+    const manufacturingCase = INDUSTRIAL_POLICY_CONTRACT_CASES.find(
+      (testCase) => testCase.subtype === "manufacturing"
+    );
+    expect(manufacturingCase).toBeDefined();
+
+    const payload = buildSubtypePolicyPayload(manufacturingCase!) as any;
+    payload.view_model.decision_status = "NO-GO";
+    payload.view_model.decision_reason_code = "base_case_break_condition";
+    payload.view_model.first_break_condition = {
+      scenario_id: "base",
+      scenario_label: "Base",
+      break_metric: "value_gap",
+      operator: "<=",
+      threshold: 0,
+      observed_value: -25000,
+      observed_value_pct: -0.8,
+    };
+    payload.view_model.ranked_likely_wrong = [
+      {
+        id: "mlw_1",
+        text: "Process utility drift is under-modeled.",
+        why: "Single-driver sensitivity dominates downside exposure.",
+        driver_tile_id: "cost_plus_10",
+        impact_pct: 10.0,
+        severity: "High",
+      },
+      {
+        id: "mlw_2",
+        text: "Commissioning utility load assumptions need validation.",
+        why: "Qualification sequencing can push downside timing and cost.",
+        driver_tile_id: "revenue_minus_10",
+        impact_pct: 1.54,
+        severity: "Low",
+      },
+    ];
+
+    render(
+      <DealShieldView
+        projectId="proj_industrial_manufacturing_nogo"
+        data={payload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(screen.getByText("Investment Decision: NO-GO")).toBeInTheDocument();
+    expect(
+      screen.getByText("Base case already breaks the policy threshold (value gap non-positive).")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Break occurs immediately in Base.")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Base scenario already trips the break condition.")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Lock process utilities + equipment schedule; stress revenue ramp; then validate GMP/bid carry."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return text.includes("Impact: 10.0% | Risk: High");
+      })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return text.includes("Impact: 1.54% | Risk: Low");
+      })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return text.includes("| Severity:");
+      })
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses scenario-accurate manufacturing detail when break condition is met outside Base", () => {
+    const manufacturingCase = INDUSTRIAL_POLICY_CONTRACT_CASES.find(
+      (testCase) => testCase.subtype === "manufacturing"
+    );
+    expect(manufacturingCase).toBeDefined();
+
+    const payload = buildSubtypePolicyPayload(manufacturingCase!) as any;
+    payload.view_model.decision_status = "NO-GO";
+    payload.view_model.decision_reason_code = "base_case_break_condition";
+    payload.view_model.first_break_condition = {
+      scenario_id: "conservative",
+      scenario_label: "Conservative",
+      break_metric: "value_gap_pct",
+      operator: "<=",
+      threshold: -35,
+      observed_value: -38.1,
+      observed_value_pct: -38.1,
+    };
+
+    render(
+      <DealShieldView
+        projectId="proj_industrial_manufacturing_nogo_non_base"
+        data={payload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.getAllByText("Break occurs in Conservative: value-gap percentage crosses threshold.").length
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText("Break occurs immediately in Base.")).not.toBeInTheDocument();
+  });
+
+  it("uses verification-safe manufacturing detail when break thresholds do not confirm the reason code", () => {
+    const manufacturingCase = INDUSTRIAL_POLICY_CONTRACT_CASES.find(
+      (testCase) => testCase.subtype === "manufacturing"
+    );
+    expect(manufacturingCase).toBeDefined();
+
+    const payload = buildSubtypePolicyPayload(manufacturingCase!) as any;
+    payload.view_model.decision_status = "NO-GO";
+    payload.view_model.decision_reason_code = "base_case_break_condition";
+    payload.view_model.first_break_condition = {
+      scenario_id: "base",
+      scenario_label: "Base",
+      break_metric: "value_gap",
+      operator: "<=",
+      threshold: 0,
+      observed_value: 25000,
+      observed_value_pct: 0.8,
+    };
+
+    render(
+      <DealShieldView
+        projectId="proj_industrial_manufacturing_nogo_unverified"
+        data={payload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.getByText("Break condition is flagged by policy; verify scenario and threshold inputs.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Break occurs immediately in Base.")).not.toBeInTheDocument();
+  });
+
   it("renders explicit office parity for class_a and class_b with canonical decision policy, first-break semantics, DSCR disclosure, and scenario controls", () => {
     const { rerender } = render(
       <DealShieldView
@@ -2209,7 +2543,7 @@ describe("DealShieldView", () => {
       ).toBeInTheDocument();
       expect(screen.getByText(DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
       expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
-      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText(formatExpectedPrimaryControlLabel(testCase.profileId, testCase.primaryControlLabel))).toBeInTheDocument();
       expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
       expect(screen.getByText(testCase.baseDscr.toFixed(2))).toBeInTheDocument();
       expect(
@@ -2320,7 +2654,7 @@ describe("DealShieldView", () => {
       ).toBeInTheDocument();
       expect(screen.getByText(DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
       expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
-      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText(formatExpectedPrimaryControlLabel(testCase.profileId, testCase.primaryControlLabel))).toBeInTheDocument();
       expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
       expect(screen.getByText(testCase.baseDscr.toFixed(2))).toBeInTheDocument();
       expect(
@@ -2417,7 +2751,7 @@ describe("DealShieldView", () => {
       ).toBeInTheDocument();
       expect(screen.getByText(DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
       expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
-      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText(formatExpectedPrimaryControlLabel(testCase.profileId, testCase.primaryControlLabel))).toBeInTheDocument();
       expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
       expect(screen.getByText(testCase.baseDscr.toFixed(2))).toBeInTheDocument();
       expect(
@@ -2502,7 +2836,7 @@ describe("DealShieldView", () => {
       ).toBeInTheDocument();
       expect(screen.getByText(DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
       expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
-      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText(formatExpectedPrimaryControlLabel(testCase.profileId, testCase.primaryControlLabel))).toBeInTheDocument();
       expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
       expect(screen.getByText(testCase.baseDscr.toFixed(2))).toBeInTheDocument();
       expect(
@@ -2601,7 +2935,7 @@ describe("DealShieldView", () => {
       });
       expect(decisionPolicyMatches.length).toBeGreaterThan(0);
 
-      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText(formatExpectedPrimaryControlLabel(testCase.profileId, testCase.primaryControlLabel))).toBeInTheDocument();
       expect(screen.getByText("First Break Condition")).toBeInTheDocument();
       expect(screen.getByText("Flex Before Break %")).toBeInTheDocument();
       expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
@@ -2696,7 +3030,7 @@ describe("DealShieldView", () => {
       ).toBeInTheDocument();
       expect(screen.getByText(DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
       expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
-      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText(formatExpectedPrimaryControlLabel(testCase.profileId, testCase.primaryControlLabel))).toBeInTheDocument();
       expect(screen.getByText("First Break Condition")).toBeInTheDocument();
       expect(screen.getByText("Flex Before Break %")).toBeInTheDocument();
       expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
@@ -2803,7 +3137,7 @@ describe("DealShieldView", () => {
       ).toBeInTheDocument();
       expect(screen.getByText(DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
       expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
-      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText(formatExpectedPrimaryControlLabel(testCase.profileId, testCase.primaryControlLabel))).toBeInTheDocument();
       expect(screen.getByText("First Break Condition")).toBeInTheDocument();
       expect(screen.getByText("Flex Before Break %")).toBeInTheDocument();
       expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
@@ -2910,7 +3244,7 @@ describe("DealShieldView", () => {
       ).toBeInTheDocument();
       expect(screen.getByText(DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
       expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
-      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText(formatExpectedPrimaryControlLabel(testCase.profileId, testCase.primaryControlLabel))).toBeInTheDocument();
       expect(screen.getByText("First Break Condition")).toBeInTheDocument();
       expect(screen.getByText("Flex Before Break %")).toBeInTheDocument();
       expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
@@ -3021,7 +3355,7 @@ describe("DealShieldView", () => {
       ).toBeInTheDocument();
       expect(screen.getByText(DECISION_REASON_TEXT[testCase.decisionReasonCode])).toBeInTheDocument();
       expect(screen.getAllByText(testCase.profileId).length).toBeGreaterThan(0);
-      expect(screen.getByText(testCase.primaryControlLabel)).toBeInTheDocument();
+      expect(screen.getByText(formatExpectedPrimaryControlLabel(testCase.profileId, testCase.primaryControlLabel))).toBeInTheDocument();
       expect(screen.getByText("First Break Condition")).toBeInTheDocument();
       expect(screen.getByText(testCase.expectedFlexLabel)).toBeInTheDocument();
 

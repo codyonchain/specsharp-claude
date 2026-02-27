@@ -225,6 +225,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     .toString()
     .toLowerCase()
     .replace(/\s+/g, '_');
+  const isManufacturingIndustrialProject =
+    parsedBuildingType === 'industrial' && parsedSubtype === 'manufacturing';
   const dealShieldRecord = toRecord(dealShieldData);
   const hasDealShieldPayload = Object.keys(dealShieldRecord).length > 0;
   const dealShieldProvenanceRecord = coalesceRecord(
@@ -1069,7 +1071,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     if (decisionStatus === 'NO-GO') {
       return {
         body: 'Project currently falls below underwriting thresholds.',
-        detail: `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'}${marketCapPctValue !== undefined ? ` vs market cap ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''} and/or DSCR ${dscrText ?? '—'}× are below the ${dscrTargetText} requirement. Improve rents, cut scope, or rework the capital stack before advancing.`
+        detail: `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'}${marketCapPctValue !== undefined ? ` vs market cap ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''} and/or DSCR ${dscrText ?? '—'}× are below the ${dscrTargetText} requirement.${isManufacturingIndustrialProject ? ' For manufacturing, also validate commissioning/qualification timeline and process utility loads—those usually drive the downside.' : ''} Improve rents, cut scope, or rework the capital stack before advancing.`
       };
     }
     return {
@@ -1607,6 +1609,26 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   })();
 
   const isIndustrialProject = (buildingType || '').toLowerCase() === 'industrial';
+  const industrialYieldSpreadDisplay =
+    typeof spreadBpsValue === 'number' && Number.isFinite(spreadBpsValue)
+      ? `${spreadBpsValue >= 0 ? '+' : '-'}${Math.abs(spreadBpsValue).toFixed(0)} bp`
+      : '—';
+  const industrialCostPerSfValue =
+    typeof costPerSFValue === 'number' && Number.isFinite(costPerSFValue)
+      ? costPerSFValue
+      : typeof totals?.cost_per_sf === 'number' && Number.isFinite(totals.cost_per_sf)
+        ? totals.cost_per_sf
+        : undefined;
+  const underwritingBridgeLabel = isMultifamilyProject
+    ? 'Stabilized Value Gap'
+    : isIndustrialProject
+      ? 'Yield Spread vs Market'
+      : 'Simple Payback (yrs)';
+  const underwritingBridgeValue = isMultifamilyProject
+    ? stabilizedValueGapDisplay
+    : isIndustrialProject
+      ? industrialYieldSpreadDisplay
+      : formatters.years(displayData.paybackPeriod);
   const decisionYieldDisplay =
     typeof yieldOnCost === 'number' && Number.isFinite(yieldOnCost)
       ? `${(yieldOnCost * 100).toFixed(1)}%`
@@ -2040,7 +2062,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
           </div>
           <div>
             <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">
-              {isMultifamilyProject ? `Debt Lens: DSCR (Target ${dscrTargetDisplay})` : 'DSCR VS TARGET'}
+              {isMultifamilyProject
+                ? `Debt Lens: DSCR (Target ${dscrTargetDisplay})`
+                : isIndustrialProject
+                  ? 'Debt Lens: DSCR'
+                  : 'DSCR VS TARGET'}
             </p>
             <p className="text-2xl sm:text-3xl font-bold">
               {typeof dscr === 'number' ? `${dscr.toFixed(2)}×` : '—'}
@@ -2054,10 +2080,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
           </div>
           <div>
             <p className="text-blue-200 text-xs uppercase tracking-wider mb-2 font-medium">
-              {isMultifamilyProject ? 'Stabilized Value Gap' : 'Simple Payback (yrs)'}
+              {underwritingBridgeLabel}
             </p>
             <p className="text-2xl sm:text-3xl font-bold">
-              {isMultifamilyProject ? stabilizedValueGapDisplay : formatters.years(displayData.paybackPeriod)}
+              {underwritingBridgeValue}
             </p>
           </div>
         </div>
@@ -2348,8 +2374,25 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
               </span>
             </span>
             <span className="flex items-center gap-2">
-              <span className={`w-2 h-2 ${displayData.paybackPeriod <= 20 ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></span>
-              <span className="text-sm">Payback: <strong>{formatters.years(displayData.paybackPeriod)}</strong></span>
+              <span
+                className={`w-2 h-2 ${
+                  isIndustrialProject
+                    ? typeof spreadBpsValue === 'number' && spreadBpsValue >= 0
+                      ? 'bg-green-500'
+                      : 'bg-amber-500'
+                    : displayData.paybackPeriod <= 20
+                      ? 'bg-green-500'
+                      : 'bg-amber-500'
+                } rounded-full`}
+              ></span>
+              <span className="text-sm">
+                {isIndustrialProject ? 'Yield Spread:' : 'Payback:'}{' '}
+                <strong>
+                  {isIndustrialProject
+                    ? industrialYieldSpreadDisplay
+                    : formatters.years(displayData.paybackPeriod)}
+                </strong>
+              </span>
             </span>
           </div>
       </section>
@@ -2693,6 +2736,31 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                   For office, focus on whether the required rent and NOI per SF are achievable given comp-set leases and realistic TI/LC packages. If required rent per SF is materially above market, the leasing and amenity plan must justify that premium to investors and lenders.
                 </div>
               </div>
+            ) : isIndustrialProject ? (
+              <>
+                <p className="text-3xl font-bold text-gray-900">
+                  {squareFootage > 0 ? formatters.squareFeet(squareFootage) : '—'}
+                </p>
+                <p className="text-sm text-gray-500 mb-4">Industrial Footprint</p>
+                <div className="space-y-2 pt-4 border-t">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Cost per SF</span>
+                    <span className="font-bold">
+                      {typeof industrialCostPerSfValue === 'number'
+                        ? formatters.costPerSF(industrialCostPerSfValue)
+                        : '—'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Revenue per SF</span>
+                    <span className="font-bold">
+                      {typeof currentRevenuePerSf === 'number'
+                        ? formatters.currency(currentRevenuePerSf)
+                        : '—'}
+                    </span>
+                  </div>
+                </div>
+              </>
             ) : (
               <>
                 <p className="text-3xl font-bold text-gray-900">{formatters.units(displayData.unitCount)}</p>
@@ -2796,7 +2864,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
             Prescriptive Playbook
           </div>
           <h3 className="text-xl font-semibold text-slate-900">What It Would Take to Hit Target Yield</h3>
-          <p className="text-sm text-slate-500 mt-1">See how much NOI or cost needs to move for this project to hit its underwriting hurdle.</p>
+          <p className="text-sm text-slate-500 mt-1">
+            {isIndustrialProject
+              ? 'See what it takes to clear target yield through NOI lift, scope compression, or both.'
+              : 'See how much NOI or cost needs to move for this project to hit its underwriting hurdle.'}
+          </p>
         </div>
         <div className="p-4 sm:p-6 md:p-8">
         {isOffice ? (
@@ -3250,8 +3322,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
             </div>
             
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pt-4 border-t">
-              <span className="text-sm text-gray-600">Simple Payback (yrs)</span>
-              <span className="text-lg font-bold">{formatters.years(displayData.paybackPeriod)}</span>
+              <span className="text-sm text-gray-600">{underwritingBridgeLabel}</span>
+              <span className="text-lg font-bold">{underwritingBridgeValue}</span>
             </div>
           </div>
         </section>
@@ -3878,12 +3950,22 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
           </div>
           <div className="text-center">
             <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">
-              INVESTMENT PER UNIT
+              {isIndustrialProject ? 'INVESTMENT PER SF' : 'INVESTMENT PER UNIT'}
             </p>
             <p className="text-3xl font-bold text-white">
-              {displayData.costPerUnit > 0 ? formatters.currencyExact(displayData.costPerUnit) : 'N/A'}
+              {isIndustrialProject
+                ? typeof industrialCostPerSfValue === 'number'
+                  ? formatters.costPerSF(industrialCostPerSfValue)
+                  : 'N/A'
+                : displayData.costPerUnit > 0
+                  ? formatters.currencyExact(displayData.costPerUnit)
+                  : 'N/A'}
             </p>
-            <p className="text-sm text-slate-500">Total project cost divided by units</p>
+            <p className="text-sm text-slate-500">
+              {isIndustrialProject
+                ? 'Total project cost normalized by gross square footage'
+                : 'Total project cost divided by units'}
+            </p>
           </div>
             <div className="text-center">
               <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">DEBT COVERAGE</p>

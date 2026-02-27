@@ -191,6 +191,11 @@ const formatAssumptionPercent = (value: unknown) => {
   }).format(percentValue)}%`;
 };
 
+const formatPrimaryControlLabel = (label: string, isIndustrialProfile: boolean): string => {
+  if (!isIndustrialProfile) return label;
+  return label.replace(/^IC-First(?:\s*[:\-]\s*|\s+)/i, '').trim();
+};
+
 const toComparableKey = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim().toLowerCase();
@@ -268,6 +273,29 @@ const classifyBreakRisk = (
     return { level: 'Low', reason: 'First break appears only in ugly stress.' };
   }
   return null;
+};
+
+const doesBreakConditionHold = (
+  operator: string,
+  observedValue: number | null,
+  thresholdValue: number | null
+): boolean | null => {
+  if (observedValue === null || thresholdValue === null) return null;
+  switch (operator) {
+    case '<=':
+      return observedValue <= thresholdValue;
+    case '<':
+      return observedValue < thresholdValue;
+    case '>=':
+      return observedValue >= thresholdValue;
+    case '>':
+      return observedValue > thresholdValue;
+    case '=':
+    case '==':
+      return Math.abs(observedValue - thresholdValue) <= 1e-9;
+    default:
+      return null;
+  }
 };
 
 const formatAssumptionYears = (value: unknown) => {
@@ -580,6 +608,14 @@ export const DealShieldView: React.FC<Props> = ({
   const firstBreakOperator =
     typeof firstBreakCondition?.operator === 'string' ? firstBreakCondition.operator.trim() : '';
   const firstBreakThresholdNumeric = toFiniteNumber(firstBreakCondition?.threshold);
+  const firstBreakObservedNumeric = toFiniteNumber(
+    firstBreakCondition?.observed_value ?? (firstBreakCondition as any)?.observedValue
+  );
+  const firstBreakConditionHolds = doesBreakConditionHold(
+    firstBreakOperator,
+    firstBreakObservedNumeric,
+    firstBreakThresholdNumeric
+  );
   const firstBreakSummaryText =
     firstBreakMetric === 'value_gap'
       ? firstBreakOperator === '<=' && firstBreakThresholdNumeric !== null && Math.abs(firstBreakThresholdNumeric) < 1e-9
@@ -866,6 +902,10 @@ export const DealShieldView: React.FC<Props> = ({
   const hasBaseBreakCondition = Boolean(
     firstBreakCondition && (firstBreakScenarioIdKey === 'base' || firstBreakScenarioLabelKey === 'base')
   );
+  const hasVerifiedBaseBreakCondition = hasBaseBreakCondition && firstBreakConditionHolds === true;
+  const hasVerifiedNonBaseBreakCondition = Boolean(
+    firstBreakCondition && !hasBaseBreakCondition && firstBreakConditionHolds === true
+  );
   const flexBeforeBreakReasonKey = toComparableKey(
     (decisionInsuranceProvenance?.flex_before_break_pct as any)?.reason
   );
@@ -924,15 +964,41 @@ export const DealShieldView: React.FC<Props> = ({
   })();
   const decisionStatusLabel =
     canonicalDecisionStatus === 'PENDING' ? 'Under Review' : canonicalDecisionStatus;
+  const isManufacturingStatusProfile = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (viewModel as any)?.profile_id,
+    (viewModel as any)?.profileId,
+    (viewModel as any)?.tile_profile_id,
+    (viewModel as any)?.tileProfileId,
+    provenance?.profile_id,
+    (viewModel as any)?.content_profile_id,
+    (viewModel as any)?.contentProfileId,
+    provenance?.content_profile_id,
+    content?.profile_id,
+  ].some((value) => typeof value === 'string' && value.startsWith('industrial_manufacturing'));
+  const normalizedDecisionReasonKey =
+    typeof decisionReasonCode === 'string' ? decisionReasonCode.trim().toLowerCase() : null;
   const decisionStatusSummaryText =
     canonicalDecisionStatus === 'GO'
       ? 'Base case remains positive under canonical DealShield policy.'
       : canonicalDecisionStatus === 'Needs Work'
         ? 'Downside pressure is present; policy marks this as near-break risk.'
         : canonicalDecisionStatus === 'NO-GO'
-          ? 'Base case has already collapsed or value gap is non-positive.'
+          ? isManufacturingStatusProfile
+            ? 'Base case already breaks the policy threshold (value gap non-positive).'
+            : 'Base case has already collapsed or value gap is non-positive.'
           : 'Canonical status is pending due to missing modeled inputs.';
-  const decisionStatusDetailText = decisionReasonCopy(decisionReasonCode)
+  const manufacturingDecisionStatusDetailText =
+    isManufacturingStatusProfile && normalizedDecisionReasonKey === 'base_case_break_condition'
+      ? hasVerifiedBaseBreakCondition
+        ? 'Break occurs immediately in Base.'
+        : hasVerifiedNonBaseBreakCondition
+          ? firstBreakSummaryText
+          : 'Break condition is flagged by policy; verify scenario and threshold inputs.'
+      : null;
+  const decisionStatusDetailText = manufacturingDecisionStatusDetailText
+    ?? decisionReasonCopy(decisionReasonCode)
     ?? provenanceNotModeledReason
     ?? decisionSummary.notModeledReason
     ?? firstBreakUnavailableReason
@@ -957,6 +1023,10 @@ export const DealShieldView: React.FC<Props> = ({
       : canonicalDecisionStatus === 'NO-GO'
         ? 'text-rose-800'
         : 'text-amber-800';
+  const fastestChangeDisplayText =
+    isManufacturingStatusProfile && fastestChangeDrivers.length > 0
+      ? 'Lock process utilities + equipment schedule; stress revenue ramp; then validate GMP/bid carry.'
+      : fastestChangeText || '-';
   const scenarioInputsRaw = provenance?.scenario_inputs ?? (viewModel as any)?.scenario_inputs;
   const provenanceControlsRaw = provenance?.dealshield_controls ?? (dealShieldData as any)?.dealshield_controls;
   const scenarioInputs = useMemo(() => {
@@ -1004,6 +1074,12 @@ export const DealShieldView: React.FC<Props> = ({
     (viewModel as any)?.contentProfileId ??
     provenance?.content_profile_id ??
     content?.profile_id;
+  const isIndustrialProfile = [profileId, tileProfileId, contentProfileId].some(
+    (value) => typeof value === 'string' && value.startsWith('industrial_')
+  );
+  const isManufacturingProfile = [profileId, tileProfileId, contentProfileId].some(
+    (value) => typeof value === 'string' && value.startsWith('industrial_manufacturing')
+  );
   const scopeProfileId =
     (viewModel as any)?.scope_items_profile_id ??
     (viewModel as any)?.scopeItemsProfileId ??
@@ -1237,14 +1313,18 @@ export const DealShieldView: React.FC<Props> = ({
                       <div className="mt-2 space-y-1 text-sm text-slate-700">
                         <p>
                           <span className="font-medium text-slate-600">Label:</span>{' '}
-                          <span>{labelFrom(primaryControlVariable, '-')}</span>
+                          <span>{formatPrimaryControlLabel(labelFrom(primaryControlVariable, '-'), isIndustrialProfile)}</span>
                         </p>
                         <p>
-                          <span className="font-medium text-slate-600">Impact:</span>{' '}
+                          <span className="font-medium text-slate-600">
+                            {isIndustrialProfile ? 'Impact (local):' : 'Impact:'}
+                          </span>{' '}
                           <span>{formatAssumptionPercent(primaryControlVariable.impact_pct)}</span>
                         </p>
                         <p>
-                          <span className="font-medium text-slate-600">Driver Impact Severity:</span>{' '}
+                          <span className="font-medium text-slate-600">
+                            {isIndustrialProfile ? 'Isolated Sensitivity Rank:' : 'Driver Impact Severity:'}
+                          </span>{' '}
                           <span>{formatValue(primaryControlVariable.severity)}</span>
                         </p>
                         {breakRisk && (
@@ -1252,6 +1332,11 @@ export const DealShieldView: React.FC<Props> = ({
                             <span className="font-medium text-slate-600">Break Risk:</span>{' '}
                             <span>{breakRisk.level}</span>{' '}
                             <span className="text-xs text-slate-500">({breakRisk.reason})</span>
+                          </p>
+                        )}
+                        {isIndustrialProfile && (
+                          <p className="text-xs text-slate-500">
+                            Isolated Sensitivity Rank scores isolated driver sensitivity; Break Risk reflects first-break/flex policy risk.
                           </p>
                         )}
                       </div>
@@ -1316,7 +1401,7 @@ export const DealShieldView: React.FC<Props> = ({
                         <li key={`${entry.id ?? 'ranked-likely-wrong'}-${index}`} className="rounded border border-slate-200 bg-white px-2.5 py-2">
                           <p className="font-medium text-slate-800">{formatValue(entry.text ?? entry.id)}</p>
                           <p className="mt-1 text-xs text-slate-600">
-                            Impact: {formatAssumptionPercent(entry.impact_pct)} | Severity: {formatValue(entry.severity)}
+                            Impact: {formatAssumptionPercent(entry.impact_pct)} | {isManufacturingProfile ? 'Risk' : 'Severity'}: {formatValue(entry.severity)}
                           </p>
                           <p className="mt-1 text-xs text-slate-600">Why: {formatValue(entry.why)}</p>
                         </li>
@@ -1503,7 +1588,7 @@ export const DealShieldView: React.FC<Props> = ({
             <div>
               <h3 className="mb-2 text-xl font-semibold tracking-tight text-slate-900">Fastest-Change</h3>
               <p className="text-sm text-slate-700">
-                {fastestChangeText || '-'}
+                {fastestChangeDisplayText}
               </p>
             </div>
             <div>
