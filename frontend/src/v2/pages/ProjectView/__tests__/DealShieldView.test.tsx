@@ -931,7 +931,7 @@ const INDUSTRIAL_POLICY_CONTRACT_CASES = [
     scopeProfileId: "industrial_warehouse_structural_v1",
     decisionStatus: "Needs Work",
     decisionReasonCode: "low_flex_before_break_buffer",
-    primaryControlLabel: "IC-First Structural Drift + Lease Depth Control",
+    primaryControlLabel: "Sitework + Shell Basis + Lease-Up Assumptions",
     breakScenarioLabel: "Conservative",
     breakMetric: "value_gap_pct",
     breakMetricRef: "decision_summary.value_gap_pct",
@@ -1007,7 +1007,7 @@ const INDUSTRIAL_POLICY_CONTRACT_CASES = [
     scopeProfileId: "industrial_cold_storage_structural_v1",
     decisionStatus: "Needs Work",
     decisionReasonCode: "tight_flex_band",
-    primaryControlLabel: "IC-First Refrigeration Reliability + Throughput Control",
+    primaryControlLabel: "IC-First Refrigeration Plant + Envelope + Commissioning Ramp",
     breakScenarioLabel: "Conservative",
     breakMetric: "value_gap_pct",
     breakMetricRef: "decision_summary.value_gap_pct",
@@ -1750,17 +1750,52 @@ const buildSubtypePolicyPayload = (
     content: {
       profile_id: input.profileId,
       fastest_change: {
-        drivers: [
-          { tile_id: "cost_plus_10", label: "Confirm hard costs +/-10%" },
-          { tile_id: "revenue_minus_10", label: "Validate demand revenue +/-10%" },
-        ],
+        drivers:
+          input.profileId === "industrial_warehouse_v1"
+            ? [
+                {
+                  tile_id: "cost_plus_10",
+                  label: "Confirm sitework/civil allowances + utility routing",
+                },
+                {
+                  tile_id: "revenue_minus_10",
+                  label: "Validate rent/SF and absorption (broker comps + active tenants)",
+                },
+                {
+                  tile_id: "structural_plus_10",
+                  label: "Confirm dock count/clear height as it affects rent",
+                },
+              ]
+            : input.profileId === "industrial_cold_storage_v1"
+              ? [
+                  {
+                    tile_id: "cost_plus_10",
+                    label: "Confirm refrigeration package scope + inclusions (vendor vs GC carry)",
+                  },
+                  {
+                    tile_id: "revenue_minus_10",
+                    label: "Confirm utility commitment + backup power assumptions",
+                  },
+                  {
+                    tile_id: "equipment_plus_10",
+                    label: "Validate ramp-to-stabilization assumptions (commissioning curve)",
+                  },
+                ]
+              : [
+                  { tile_id: "cost_plus_10", label: "Confirm hard costs +/-10%" },
+                  { tile_id: "revenue_minus_10", label: "Validate demand revenue +/-10%" },
+                ],
       },
       most_likely_wrong: [
         {
           id: "mlw_1",
-          text: `${input.subtype} downside concentration is under-modeled.`,
+          text:
+            input.profileId === "industrial_warehouse_v1"
+              ? "Lease-up is modeled smoothly; real absorption is lumpy (LOIs, TI decisions, broker cycles)."
+              : `${input.subtype} downside concentration is under-modeled.`,
           why: "Single-driver sensitivity dominates downside exposure.",
-          driver_tile_id: "cost_plus_10",
+          driver_tile_id:
+            input.profileId === "industrial_warehouse_v1" ? "revenue_minus_10" : "cost_plus_10",
         },
       ],
       question_bank: [
@@ -1799,9 +1834,13 @@ const buildSubtypePolicyPayload = (
     ranked_likely_wrong: [
       {
         id: "mlw_1",
-        text: `${input.subtype} downside concentration is under-modeled.`,
+        text:
+          input.profileId === "industrial_warehouse_v1"
+            ? "Lease-up is modeled smoothly; real absorption is lumpy (LOIs, TI decisions, broker cycles)."
+            : `${input.subtype} downside concentration is under-modeled.`,
         why: "Single-driver sensitivity dominates downside exposure.",
-        driver_tile_id: "cost_plus_10",
+        driver_tile_id:
+          input.profileId === "industrial_warehouse_v1" ? "revenue_minus_10" : "cost_plus_10",
         impact_pct: 8.2,
         severity: "High",
       },
@@ -1989,7 +2028,77 @@ describe("DealShieldView", () => {
       expect(screen.getAllByText(profileId).length).toBeGreaterThan(0);
       expect(screen.getByText("Decision Insurance")).toBeInTheDocument();
       expect(screen.getAllByText("Conservative").length).toBeGreaterThan(0);
+      expect(screen.getByText("Isolated Sensitivity Rank:")).toBeInTheDocument();
+      expect(screen.getByText("Break Risk:")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Isolated Sensitivity Rank scores isolated driver sensitivity; Break Risk reflects first-break/flex policy risk."
+        )
+      ).toBeInTheDocument();
+      expect(screen.queryByText("Driver Impact Severity:")).not.toBeInTheDocument();
     }
+  });
+
+  it("applies restaurant-only decision summary label mapping and preserves non-restaurant labels", () => {
+    const buildRestaurantPayloadWithSummary = (profileId: string) => {
+      const payload = buildRestaurantDealShieldPayload(profileId) as any;
+      payload.view_model.decision_summary = {
+        stabilized_value: 4_750_000,
+        cap_rate_used_pct: 0.072,
+        value_gap: 250_000,
+        value_gap_pct: 5.3,
+      };
+      return payload;
+    };
+
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_restaurant_labels_0"
+        data={buildRestaurantPayloadWithSummary(RESTAURANT_PROFILE_IDS[0]) as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    for (const profileId of RESTAURANT_PROFILE_IDS) {
+      rerender(
+        <DealShieldView
+          projectId={`proj_${profileId}`}
+          data={buildRestaurantPayloadWithSummary(profileId) as any}
+          loading={false}
+          error={null}
+        />
+      );
+
+      expect(screen.getByText("Implied Store Value (NOI / exit yield):")).toBeInTheDocument();
+      expect(screen.getByText("Market return benchmark:")).toBeInTheDocument();
+      expect(screen.queryByText("Stabilized Value:")).not.toBeInTheDocument();
+      expect(screen.queryByText("Cap Rate Used:")).not.toBeInTheDocument();
+    }
+
+    const hospitalityPayload = buildHospitalityDealShieldPayload("hospitality_full_service_hotel_v1") as any;
+    hospitalityPayload.view_model.decision_summary = {
+      stabilized_value: 39_700_000,
+      cap_rate_used_pct: 0.075,
+      value_gap: 1_250_000,
+      value_gap_pct: 3.2,
+    };
+
+    rerender(
+      <DealShieldView
+        projectId="proj_hospitality_labels_regression"
+        data={hospitalityPayload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(screen.getByText("Stabilized Value:")).toBeInTheDocument();
+    expect(screen.getByText("Cap Rate Used:")).toBeInTheDocument();
+    expect(screen.getByText("Driver Impact Severity:")).toBeInTheDocument();
+    expect(screen.queryByText("Isolated Sensitivity Rank:")).not.toBeInTheDocument();
+    expect(screen.queryByText("Implied Store Value (NOI / exit yield):")).not.toBeInTheDocument();
+    expect(screen.queryByText("Market return benchmark:")).not.toBeInTheDocument();
   });
 
   it("renders decision status provenance source when reason code is absent", () => {
@@ -2331,6 +2440,45 @@ describe("DealShieldView", () => {
       expect(screen.queryByText("Driver Impact Severity:")).not.toBeInTheDocument();
       expect(screen.queryByText("Model Impact (local):")).not.toBeInTheDocument();
 
+      if (testCase.subtype === "warehouse") {
+        expect(
+          screen.getByText("Confirm sitework/civil allowances + utility routing")
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((text) =>
+            text.includes("Validate rent/SF and absorption")
+          )
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText((text) =>
+            text.includes("Confirm dock count/clear height as it affects rent")
+          )
+        ).toBeInTheDocument();
+        expect(
+          screen.getAllByText((text) =>
+            text.includes(
+              "Lease-up is modeled smoothly; real absorption is lumpy"
+            )
+          ).length
+        ).toBeGreaterThan(0);
+      } else if (testCase.subtype === "cold_storage") {
+        expect(
+          screen.getAllByText((text) =>
+            text.includes("Confirm refrigeration package scope + inclusions")
+          ).length
+        ).toBeGreaterThan(0);
+        expect(
+          screen.getAllByText((text) =>
+            text.includes("Confirm utility commitment + backup power assumptions")
+          ).length
+        ).toBeGreaterThan(0);
+        expect(
+          screen.getAllByText((text) =>
+            text.includes("Validate ramp-to-stabilization assumptions")
+          ).length
+        ).toBeGreaterThan(0);
+      }
+
       if (testCase.subtype === "manufacturing") {
         expect(
           screen.getByText((_, element) => {
@@ -2482,6 +2630,43 @@ describe("DealShieldView", () => {
       screen.getAllByText("Break occurs in Conservative: value-gap percentage crosses threshold.").length
     ).toBeGreaterThan(0);
     expect(screen.queryByText("Break occurs immediately in Base.")).not.toBeInTheDocument();
+  });
+
+  it("uses cold-storage NO-GO threshold copy instead of collapsed wording", () => {
+    const coldStorageCase = INDUSTRIAL_POLICY_CONTRACT_CASES.find(
+      (testCase) => testCase.subtype === "cold_storage"
+    );
+    expect(coldStorageCase).toBeDefined();
+
+    const payload = buildSubtypePolicyPayload(coldStorageCase!) as any;
+    payload.view_model.decision_status = "NO-GO";
+    payload.view_model.decision_reason_code = "base_case_break_condition";
+    payload.view_model.first_break_condition = {
+      scenario_id: "base",
+      scenario_label: "Base",
+      break_metric: "value_gap",
+      operator: "<=",
+      threshold: 0,
+      observed_value: -125000,
+      observed_value_pct: -1.2,
+    };
+
+    render(
+      <DealShieldView
+        projectId="proj_industrial_cold_storage_nogo"
+        data={payload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(screen.getByText("Investment Decision: NO-GO")).toBeInTheDocument();
+    expect(
+      screen.getByText("Base case already breaks the policy threshold (value gap non-positive).")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Base case has already collapsed or value gap is non-positive.")
+    ).not.toBeInTheDocument();
   });
 
   it("uses verification-safe manufacturing detail when break thresholds do not confirm the reason code", () => {

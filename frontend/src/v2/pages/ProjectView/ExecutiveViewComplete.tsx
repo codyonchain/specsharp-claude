@@ -225,8 +225,23 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     .toString()
     .toLowerCase()
     .replace(/\s+/g, '_');
+  const isRestaurantProject =
+    parsedBuildingType === 'restaurant' ||
+    rawBuildingType.toString().toUpperCase().includes('RESTAURANT');
+  const hasColdStorageProfileId = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (dealShieldData as any)?.tile_profile_id,
+    (dealShieldData as any)?.tileProfileId,
+    (dealShieldData as any)?.content_profile_id,
+    (dealShieldData as any)?.contentProfileId,
+  ].some((value) => typeof value === 'string' && value.startsWith('industrial_cold_storage'));
   const isManufacturingIndustrialProject =
     parsedBuildingType === 'industrial' && parsedSubtype === 'manufacturing';
+  const isWarehouseIndustrialProject =
+    parsedBuildingType === 'industrial' && parsedSubtype === 'warehouse';
+  const isColdStorageIndustrialProject =
+    (parsedBuildingType === 'industrial' && parsedSubtype === 'cold_storage') || hasColdStorageProfileId;
   const dealShieldRecord = toRecord(dealShieldData);
   const hasDealShieldPayload = Object.keys(dealShieldRecord).length > 0;
   const dealShieldProvenanceRecord = coalesceRecord(
@@ -1043,6 +1058,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const decisionCopy = (() => {
     const yieldText = formatPct(yieldPctValue);
     const marketText = formatPct(marketCapPctValue);
+    const marketBenchmarkLabel = isRestaurantProject ? 'market return benchmark' : 'market cap';
     const spreadText = typeof spreadPctValue === 'number'
       ? `${spreadPctValue >= 0 ? '+' : ''}${spreadPctValue.toFixed(1)}%`
       : undefined;
@@ -1055,7 +1071,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
       }
       return {
         body: 'Project meets underwriting criteria with strong returns and healthy debt coverage.',
-        detail: `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'}${marketCapPctValue !== undefined ? ` vs market cap ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''}${
+        detail: `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'}${marketCapPctValue !== undefined ? ` vs ${marketBenchmarkLabel} ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''}${
           dscrText
             ? ` and DSCR ${dscrText} ${dscrMeetsTarget === false ? `is below` : `meets`} the ${dscrTargetText} requirement.`
             : '.'
@@ -1065,13 +1081,24 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     if (decisionStatus === 'Needs Work') {
       return {
         body: 'Project is close to the yield hurdle but still needs improvement.',
-        detail: `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'} is roughly in line with the market cap${spreadText ? ` (${spreadText})` : ''}. Keep DSCR ${dscrText ?? '—'}× at or above ${dscrTargetText} while lifting NOI or trimming costs to add at least 200 bp of spread.`
+        detail: `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'} is roughly in line with the ${marketBenchmarkLabel}${spreadText ? ` (${spreadText})` : ''}. Keep DSCR ${dscrText ?? '—'}× at or above ${dscrTargetText} while lifting NOI or trimming costs to add at least 200 bp of spread.`
       };
     }
     if (decisionStatus === 'NO-GO') {
+      const coldStorageActionPlan =
+        ' Confirm refrigeration plant scope + utility rates. Underwrite commissioning-to-stabilization ramp (don\'t assume day-1 utilization). Reduce basis via envelope/plant VE, not generic scope cuts.';
+      const defaultActionPlan =
+        ' Improve rents, cut scope, or rework the capital stack before advancing.';
+      const restaurantDscrDetail = dscrText
+        ? ` DSCR ${dscrText} ${dscrMeetsTarget === false ? 'is below' : 'meets'} the ${dscrTargetText} requirement.`
+        : ` DSCR data is still loading against the ${dscrTargetText} requirement.`;
       return {
         body: 'Project currently falls below underwriting thresholds.',
-        detail: `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'}${marketCapPctValue !== undefined ? ` vs market cap ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''} and/or DSCR ${dscrText ?? '—'}× are below the ${dscrTargetText} requirement.${isManufacturingIndustrialProject ? ' For manufacturing, also validate commissioning/qualification timeline and process utility loads—those usually drive the downside.' : ''} Improve rents, cut scope, or rework the capital stack before advancing.`
+        detail: `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'}${marketCapPctValue !== undefined ? ` vs ${marketBenchmarkLabel} ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''}${
+          isRestaurantProject
+            ? `.${restaurantDscrDetail}`
+            : ` and/or DSCR ${dscrText ?? '—'}× are below the ${dscrTargetText} requirement.`
+        }${isManufacturingIndustrialProject ? ' For manufacturing, also validate commissioning/qualification timeline and process utility loads—those usually drive the downside.' : ''}${isColdStorageIndustrialProject ? coldStorageActionPlan : defaultActionPlan}`
       };
     }
     return {
@@ -1482,9 +1509,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const showRestaurantFacilityMetrics = normalizedFacilityType === 'RESTAURANT';
   const isOfficeProject = isOffice;
   const isHospitalityProject = showHotelFacilityMetrics;
-  const isRestaurantProject =
-    normalizedFacilityType === 'RESTAURANT' ||
-    (buildingType || '').toString().toUpperCase().includes('RESTAURANT');
   const hospitalityRooms =
     typeof facilityMetrics?.rooms === 'number' ? facilityMetrics.rooms : undefined;
   const hospitalityAdr =
@@ -1528,6 +1552,55 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const salesPerSfText = hasRestaurantSalesPerSf ? formatPerSf(restaurantSalesPerSf) : '—';
   const noiPerSfText = hasRestaurantNoiPerSf ? formatPerSf(restaurantNoiPerSf) : '—';
   const costPerSfText = hasRestaurantCostPerSf ? formatPerSf(restaurantCostPerSf) : '—';
+  const restaurantFooterCostPerSfText = hasRestaurantCostPerSf
+    ? formatPerSf(restaurantCostPerSf)
+    : typeof displayData.costPerSF === 'number' && Number.isFinite(displayData.costPerSF)
+      ? formatPerSf(displayData.costPerSF)
+      : '—';
+  const restaurantFooterSalesPerSfText =
+    typeof currentRevenuePerSf === 'number' && Number.isFinite(currentRevenuePerSf)
+      ? formatPerSf(currentRevenuePerSf)
+      : salesPerSfText;
+  const restaurantPrimeCostPct = (() => {
+    if (!isRestaurantProject) return undefined;
+    const normalizeRatio = (value: number | null): number | undefined => {
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return undefined;
+      }
+      return value > 1 ? value / 100 : value;
+    };
+    const facilityMetricEntries = Array.isArray((facilityMetrics as AnyRecord)?.entries)
+      ? (facilityMetrics as AnyRecord).entries
+      : [];
+    const primeEntry = facilityMetricEntries.find(
+      (entry: any) => entry && typeof entry === 'object' && String(entry.id ?? '').toLowerCase() === 'prime_cost_ratio'
+    );
+    const entryRatio = normalizeRatio(toFiniteNumber(primeEntry?.value));
+    const operationalEfficiency = calculations?.ownership_analysis?.operational_efficiency ?? calculations?.operational_efficiency ?? {};
+    const efficiencyPrimeRatio = normalizeRatio(toFiniteNumber((operationalEfficiency as AnyRecord)?.prime_cost_ratio));
+    const foodCostRatio = normalizeRatio(toFiniteNumber((operationalEfficiency as AnyRecord)?.food_cost_ratio));
+    const laborCostRatio = normalizeRatio(toFiniteNumber((operationalEfficiency as AnyRecord)?.labor_cost_ratio));
+    const primeCostKpi = Array.isArray(displayData.kpis)
+      ? displayData.kpis.find((kpi) => typeof kpi?.label === 'string' && /prime cost/i.test(kpi.label))
+      : undefined;
+    const kpiPrimeRatio = normalizeRatio(toFiniteNumber((primeCostKpi as AnyRecord)?.value));
+    const resolvedRatio =
+      entryRatio ??
+      efficiencyPrimeRatio ??
+      (typeof foodCostRatio === 'number' && typeof laborCostRatio === 'number'
+        ? foodCostRatio + laborCostRatio
+        : undefined) ??
+      kpiPrimeRatio;
+    return typeof resolvedRatio === 'number' ? resolvedRatio * 100 : undefined;
+  })();
+  const restaurantPrimeCostText =
+    typeof restaurantPrimeCostPct === 'number' ? `${restaurantPrimeCostPct.toFixed(1)}%` : '—';
+  const restaurantBuildoutPaybackText =
+    typeof displayData.paybackPeriod === 'number' &&
+    Number.isFinite(displayData.paybackPeriod) &&
+    displayData.paybackPeriod > 0
+      ? formatters.years(displayData.paybackPeriod)
+      : '—';
   const officeNoiGapValue =
     typeof requiredNoi === 'number' && typeof currentNoi === 'number'
       ? requiredNoi - currentNoi
@@ -1748,6 +1821,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
       if (isIndustrialProject && isFlexIndustrial) {
         returnsText +=
           ' For flex industrial, this reflects the balance between office and warehouse lease mix, tenant flexibility, and achievable blended rents.';
+      } else if (isIndustrialProject && isColdStorageIndustrialProject) {
+        returnsText +=
+          ' For cold storage, this signals whether refrigeration/utility load + commissioning ramp assumptions can clear both equity and lender hurdles.';
       } else if (isIndustrialProject) {
         returnsText +=
           ' For industrial, this signals whether the rent roll, dock configuration, and truck flow can clear both equity and lender hurdles.';
@@ -1770,7 +1846,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
       }
       if (isIndustrialProject) {
         bullets.push(
-          `Scope & sitework: ${softPct}% of total — prioritize slab thickness, dock count, ESFR coverage, and truck court design with your GC to keep the budget aligned.`
+          isWarehouseIndustrialProject
+            ? `Scope & sitework: ${softPct}% of total — validate slab thickness, dock package, ESFR, truck court and utility routing with your GC to keep the budget aligned.`
+            : isColdStorageIndustrialProject
+              ? `Scope & sitework: ${softPct}% of total — prioritize insulated slab + vapor barrier, panel/envelope performance, refrigeration utility loads, and commissioning gates to keep the budget aligned.`
+            : `Scope & sitework: ${softPct}% of total — prioritize slab thickness, dock count, ESFR coverage, and truck court design with your GC to keep the budget aligned.`
         );
       } else {
         bullets.push(`Soft costs: ${softPct}% of total — ${posture}`);
@@ -1778,7 +1858,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     } else {
       bullets.push(
         isIndustrialProject
-          ? 'Scope & sitework: awaiting detailed estimates to validate slab, dock, ESFR, and sitework allowances.'
+          ? isWarehouseIndustrialProject
+            ? 'Scope & sitework: awaiting detailed estimates to validate slab thickness, dock package, ESFR, truck court and utility routing.'
+            : 'Scope & sitework: awaiting detailed estimates to validate slab, dock, ESFR, and sitework allowances.'
           : 'Soft costs: awaiting latest estimates to benchmark against the 18-25% guidance band.'
       );
     }
@@ -3233,7 +3315,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                     ? 'GO'
                     : decisionStatus === 'NO-GO'
                       ? 'Not Feasible'
-                      : 'Marginal';
+                      : decisionStatus === 'PENDING'
+                        ? 'Needs Review'
+                        : isWarehouseIndustrialProject
+                          ? 'Cushion'
+                          : 'Marginal';
                 const baseClasses =
                   'rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide';
                 const colorClasses =
@@ -3463,14 +3549,18 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                   : 'Add a market cap benchmark to calculate spread.';
                 return (
                   <>
-                    <p className="text-xs uppercase tracking-wider text-slate-400 mb-2">Yield vs market cap</p>
+                    <p className="text-xs uppercase tracking-wider text-slate-400 mb-2">
+                      {isRestaurantProject ? 'Yield vs market return benchmark' : 'Yield vs market cap'}
+                    </p>
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-300">Yield on cost</span>
                         <span className="font-semibold">{formatPct(effectiveYield)}</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-slate-300">Market cap rate</span>
+                        <span className="text-slate-300">
+                          {isRestaurantProject ? 'Market return benchmark' : 'Market cap rate'}
+                        </span>
                         <span className="font-semibold">{formatPct(marketCapRateValue)}</span>
                       </div>
                       <p className="text-xs text-amber-200 mt-1">{spreadCopy}</p>
@@ -3950,31 +4040,62 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
           </div>
           <div className="text-center">
             <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">
-              {isIndustrialProject ? 'INVESTMENT PER SF' : 'INVESTMENT PER UNIT'}
+              {isIndustrialProject
+                ? 'INVESTMENT PER SF'
+                : isRestaurantProject
+                  ? 'COST PER SF'
+                  : 'INVESTMENT PER UNIT'}
             </p>
             <p className="text-3xl font-bold text-white">
               {isIndustrialProject
                 ? typeof industrialCostPerSfValue === 'number'
                   ? formatters.costPerSF(industrialCostPerSfValue)
                   : 'N/A'
-                : displayData.costPerUnit > 0
-                  ? formatters.currencyExact(displayData.costPerUnit)
-                  : 'N/A'}
+                : isRestaurantProject
+                  ? restaurantFooterCostPerSfText
+                  : displayData.costPerUnit > 0
+                    ? formatters.currencyExact(displayData.costPerUnit)
+                    : 'N/A'}
             </p>
             <p className="text-sm text-slate-500">
               {isIndustrialProject
                 ? 'Total project cost normalized by gross square footage'
-                : 'Total project cost divided by units'}
+                : isRestaurantProject
+                  ? 'Total project cost normalized by square footage'
+                  : 'Total project cost divided by units'}
             </p>
           </div>
-            <div className="text-center">
-              <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">DEBT COVERAGE</p>
-              <p className="text-3xl font-bold text-white">{formatters.multiplier(displayData.dscr)}</p>
-              <p className="text-sm text-slate-500">DSCR (Target: {dscrTargetDisplay})</p>
-            </div>
+          <div className="text-center">
+            <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">
+              {isRestaurantProject ? 'SALES PER SF' : 'DEBT COVERAGE'}
+            </p>
+            <p className="text-3xl font-bold text-white">
+              {isRestaurantProject ? restaurantFooterSalesPerSfText : formatters.multiplier(displayData.dscr)}
+            </p>
+            <p className="text-sm text-slate-500">
+              {isRestaurantProject
+                ? 'Current sales velocity per square foot'
+                : `DSCR (Target: ${dscrTargetDisplay})`}
+            </p>
+          </div>
+          {isRestaurantProject && (
+            <>
+              <div className="text-center">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">PRIME COST %</p>
+                <p className="text-3xl font-bold text-white">{restaurantPrimeCostText}</p>
+                <p className="text-sm text-slate-500">Food + labor share of sales</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">BUILDOUT PAYBACK</p>
+                <p className="text-3xl font-bold text-white">{restaurantBuildoutPaybackText}</p>
+                <p className="text-sm text-slate-500">Simple payback at current NOI</p>
+              </div>
+            </>
+          )}
           {(() => {
             const showTotalUnitsFooter =
-              (buildingType || '').toLowerCase() !== 'industrial' &&
+              parsedBuildingType !== 'industrial' &&
+              parsedBuildingType !== 'restaurant' &&
               typeof displayData.units === 'number' &&
               displayData.units > 0;
             if (!showTotalUnitsFooter) return null;

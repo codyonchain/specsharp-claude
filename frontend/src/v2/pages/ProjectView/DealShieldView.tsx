@@ -977,6 +977,19 @@ export const DealShieldView: React.FC<Props> = ({
     provenance?.content_profile_id,
     content?.profile_id,
   ].some((value) => typeof value === 'string' && value.startsWith('industrial_manufacturing'));
+  const isColdStorageStatusProfile = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (viewModel as any)?.profile_id,
+    (viewModel as any)?.profileId,
+    (viewModel as any)?.tile_profile_id,
+    (viewModel as any)?.tileProfileId,
+    provenance?.profile_id,
+    (viewModel as any)?.content_profile_id,
+    (viewModel as any)?.contentProfileId,
+    provenance?.content_profile_id,
+    content?.profile_id,
+  ].some((value) => typeof value === 'string' && value.startsWith('industrial_cold_storage'));
   const normalizedDecisionReasonKey =
     typeof decisionReasonCode === 'string' ? decisionReasonCode.trim().toLowerCase() : null;
   const decisionStatusSummaryText =
@@ -985,7 +998,7 @@ export const DealShieldView: React.FC<Props> = ({
       : canonicalDecisionStatus === 'Needs Work'
         ? 'Downside pressure is present; policy marks this as near-break risk.'
         : canonicalDecisionStatus === 'NO-GO'
-          ? isManufacturingStatusProfile
+          ? (isManufacturingStatusProfile || isColdStorageStatusProfile)
             ? 'Base case already breaks the policy threshold (value gap non-positive).'
             : 'Base case has already collapsed or value gap is non-positive.'
           : 'Canonical status is pending due to missing modeled inputs.';
@@ -1077,6 +1090,11 @@ export const DealShieldView: React.FC<Props> = ({
   const isIndustrialProfile = [profileId, tileProfileId, contentProfileId].some(
     (value) => typeof value === 'string' && value.startsWith('industrial_')
   );
+  const isRestaurantProfile = [profileId, tileProfileId, contentProfileId].some(
+    (value) => typeof value === 'string' && value.startsWith('restaurant_')
+  );
+  const useIsolatedSensitivityLabel = isIndustrialProfile || isRestaurantProfile;
+  const useRestaurantDecisionSummaryLabels = isRestaurantProfile;
   const isManufacturingProfile = [profileId, tileProfileId, contentProfileId].some(
     (value) => typeof value === 'string' && value.startsWith('industrial_manufacturing')
   );
@@ -1323,7 +1341,7 @@ export const DealShieldView: React.FC<Props> = ({
                         </p>
                         <p>
                           <span className="font-medium text-slate-600">
-                            {isIndustrialProfile ? 'Isolated Sensitivity Rank:' : 'Driver Impact Severity:'}
+                            {useIsolatedSensitivityLabel ? 'Isolated Sensitivity Rank:' : 'Driver Impact Severity:'}
                           </span>{' '}
                           <span>{formatValue(primaryControlVariable.severity)}</span>
                         </p>
@@ -1334,7 +1352,7 @@ export const DealShieldView: React.FC<Props> = ({
                             <span className="text-xs text-slate-500">({breakRisk.reason})</span>
                           </p>
                         )}
-                        {isIndustrialProfile && (
+                        {useIsolatedSensitivityLabel && (
                           <p className="text-xs text-slate-500">
                             Isolated Sensitivity Rank scores isolated driver sensitivity; Break Risk reflects first-break/flex policy risk.
                           </p>
@@ -1530,11 +1548,15 @@ export const DealShieldView: React.FC<Props> = ({
                 {decisionSummary.stabilizedValue !== null && decisionSummary.capRateUsedPct !== null ? (
                   <div className="mt-2 grid gap-x-4 gap-y-1 text-xs text-slate-700 sm:grid-cols-2">
                     <p>
-                      <span className="font-medium text-slate-600">Stabilized Value:</span>{' '}
+                      <span className="font-medium text-slate-600">
+                        {useRestaurantDecisionSummaryLabels ? 'Implied Store Value (NOI / exit yield):' : 'Stabilized Value:'}
+                      </span>{' '}
                       <span>{formatDecisionMetricValue(decisionSummary.stabilizedValue, 'derived.stabilized_value')}</span>
                     </p>
                     <p>
-                      <span className="font-medium text-slate-600">Cap Rate Used:</span>{' '}
+                      <span className="font-medium text-slate-600">
+                        {useRestaurantDecisionSummaryLabels ? 'Market return benchmark:' : 'Cap Rate Used:'}
+                      </span>{' '}
                       <span>{formatAssumptionPercent(decisionSummary.capRateUsedPct)}</span>
                     </p>
                     {decisionSummary.valueGap !== null && (

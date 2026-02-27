@@ -8,6 +8,29 @@ const HOSPITALITY_PROFILE_IDS = [
   "hospitality_full_service_hotel_v1",
 ];
 
+const RESTAURANT_POLICY_CASES = [
+  {
+    subtype: "quick_service",
+    profileId: "restaurant_quick_service_v1",
+  },
+  {
+    subtype: "full_service",
+    profileId: "restaurant_full_service_v1",
+  },
+  {
+    subtype: "fine_dining",
+    profileId: "restaurant_fine_dining_v1",
+  },
+  {
+    subtype: "cafe",
+    profileId: "restaurant_cafe_v1",
+  },
+  {
+    subtype: "bar_tavern",
+    profileId: "restaurant_bar_tavern_v1",
+  },
+] as const;
+
 const CROSS_TYPE_POLICY_CASES = [
   {
     buildingType: "restaurant",
@@ -809,6 +832,144 @@ describe("ExecutiveViewComplete", () => {
     }
   });
 
+  it("keeps restaurant NO-GO detail DSCR wording truthful across all five restaurant subtypes", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject(
+            "restaurant",
+            RESTAURANT_POLICY_CASES[0].subtype,
+            RESTAURANT_POLICY_CASES[0].profileId
+          )}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            RESTAURANT_POLICY_CASES[0].profileId,
+            "NO-GO",
+            "base_case_break_condition"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    for (const testCase of RESTAURANT_POLICY_CASES) {
+      rerender(
+        <MemoryRouter>
+          <ExecutiveViewComplete
+            project={buildCrossTypeProject("restaurant", testCase.subtype, testCase.profileId)}
+            dealShieldData={buildCrossTypeDealShieldViewModel(
+              testCase.profileId,
+              "NO-GO",
+              "base_case_break_condition"
+            ) as any}
+          />
+        </MemoryRouter>
+      );
+
+      expect(
+        screen.getByText((text) =>
+          text.includes("DSCR 1.46× meets the 1.30× requirement.")
+        )
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText((text) =>
+          text.includes("and/or DSCR 1.46× are below the 1.30× requirement.")
+        )
+      ).not.toBeInTheDocument();
+      expect(screen.getByText("Market return benchmark")).toBeInTheDocument();
+      expect(screen.queryByText("Market cap rate")).not.toBeInTheDocument();
+    }
+  });
+
+  it("handles missing restaurant DSCR values without contradictory NO-GO copy", () => {
+    const restaurantProject = buildCrossTypeProject(
+      "restaurant",
+      "full_service",
+      "restaurant_full_service_v1"
+    );
+    restaurantProject.analysis.calculations.ownership_analysis.debt_metrics.calculated_dscr = Number.NaN;
+    restaurantProject.analysis.calculations.dealshield_scenarios.scenarios.base.ownership_analysis.debt_metrics.calculated_dscr =
+      Number.NaN;
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={restaurantProject}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "restaurant_full_service_v1",
+            "NO-GO",
+            "base_case_break_condition"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getByText((text) =>
+        text.includes("DSCR data is still loading against the 1.30× requirement.")
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText((text) =>
+        text.includes("and/or DSCR")
+      )
+    ).not.toBeInTheDocument();
+  });
+
+  it("replaces restaurant footer unit-template fields with restaurant-native metrics and keeps non-restaurant unchanged", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject(
+            "restaurant",
+            RESTAURANT_POLICY_CASES[0].subtype,
+            RESTAURANT_POLICY_CASES[0].profileId
+          )}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            RESTAURANT_POLICY_CASES[0].profileId,
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    for (const testCase of RESTAURANT_POLICY_CASES) {
+      rerender(
+        <MemoryRouter>
+          <ExecutiveViewComplete
+            project={buildCrossTypeProject("restaurant", testCase.subtype, testCase.profileId)}
+            dealShieldData={buildCrossTypeDealShieldViewModel(
+              testCase.profileId,
+              "Needs Work",
+              "low_flex_before_break_buffer"
+            ) as any}
+          />
+        </MemoryRouter>
+      );
+
+      expect(screen.getByText("COST PER SF")).toBeInTheDocument();
+      expect(screen.getByText("SALES PER SF")).toBeInTheDocument();
+      expect(screen.getByText("PRIME COST %")).toBeInTheDocument();
+      expect(screen.getByText("BUILDOUT PAYBACK")).toBeInTheDocument();
+      expect(screen.queryByText("INVESTMENT PER UNIT")).not.toBeInTheDocument();
+      expect(screen.queryByText("Total Units")).not.toBeInTheDocument();
+    }
+
+    rerender(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject("office", "class_a", "office_class_a_v1")}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "office_class_a_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("INVESTMENT PER UNIT")).toBeInTheDocument();
+  });
+
   it("keeps canonical decision status/reason/provenance contract parity across restaurant, hospitality, multifamily, and industrial", () => {
     const { rerender } = render(
       <MemoryRouter>
@@ -933,7 +1094,109 @@ describe("ExecutiveViewComplete", () => {
       ).toBeInTheDocument();
       expect(screen.queryAllByText("Simple Payback (yrs)")).toHaveLength(0);
       expect(screen.queryByText("INVESTMENT PER UNIT")).not.toBeInTheDocument();
+
+      if (testCase.subtype === "cold_storage") {
+        expect(
+          screen.getByText((text) =>
+            text.includes(
+              "For cold storage, this signals whether refrigeration/utility load + commissioning ramp assumptions can clear both equity and lender hurdles."
+            )
+          )
+        ).toBeInTheDocument();
+      }
+
+      if (testCase.subtype === "warehouse") {
+        expect(
+          screen.getByText((text) =>
+            text.includes(
+              "validate slab thickness, dock package, ESFR, truck court and utility routing"
+            )
+          )
+        ).toBeInTheDocument();
+      } else if (testCase.subtype === "cold_storage") {
+        expect(
+          screen.getByText((text) =>
+            text.includes(
+              "prioritize insulated slab + vapor barrier, panel/envelope performance, refrigeration utility loads, and commissioning gates to keep the budget aligned"
+            )
+          )
+        ).toBeInTheDocument();
+      } else if (testCase.decisionStatus === "Needs Work") {
+        expect(
+          screen.getByText((text) =>
+            text.includes(
+              "prioritize slab thickness, dock count, ESFR coverage, and truck court design"
+            )
+          )
+        ).toBeInTheDocument();
+      }
     }
+  });
+
+  it("uses warehouse-only Cushion badge wording when revenue feasibility card is present", () => {
+    const warehouseProject = buildCrossTypeProject(
+      "industrial",
+      "warehouse",
+      "industrial_warehouse_v1"
+    );
+    warehouseProject.analysis.calculations.revenue_requirements = {
+      required_value: 300000,
+      market_value: 310000,
+      required_revenue_per_sf: 37.5,
+      actual_revenue_per_sf: 38.75,
+      feasibility: {
+        status: "Feasible",
+        recommendation: "Maintain underwriting discipline.",
+      },
+    };
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={warehouseProject}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "industrial_warehouse_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/^Cushion$/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Marginal$/)).not.toBeInTheDocument();
+
+    const distributionProject = buildCrossTypeProject(
+      "industrial",
+      "distribution_center",
+      "industrial_distribution_center_v1"
+    );
+    distributionProject.analysis.calculations.revenue_requirements = {
+      required_value: 300000,
+      market_value: 310000,
+      required_revenue_per_sf: 37.5,
+      actual_revenue_per_sf: 38.75,
+      feasibility: {
+        status: "Feasible",
+        recommendation: "Maintain underwriting discipline.",
+      },
+    };
+
+    rerender(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={distributionProject}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "industrial_distribution_center_v1",
+            "Needs Work",
+            "tight_flex_band"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/^Marginal$/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Cushion$/)).not.toBeInTheDocument();
   });
 
   it("adds manufacturing-specific downside note in NO-GO decision explanation", () => {
@@ -975,6 +1238,42 @@ describe("ExecutiveViewComplete", () => {
         "For manufacturing, also validate commissioning/qualification timeline and process utility loads—those usually drive the downside.",
         { exact: false }
       )
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses cold-storage-native NO-GO action levers instead of generic scope-cut wording", () => {
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject("industrial", "cold_storage", "industrial_cold_storage_v1")}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "industrial_cold_storage_v1",
+            "NO-GO",
+            "base_value_gap_non_positive"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getByText("Confirm refrigeration plant scope + utility rates", { exact: false })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Underwrite commissioning-to-stabilization ramp (don't assume day-1 utilization)",
+        { exact: false }
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Reduce basis via envelope/plant VE, not generic scope cuts",
+        { exact: false }
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Improve rents, cut scope, or rework the capital stack before advancing.", {
+        exact: false,
+      })
     ).not.toBeInTheDocument();
   });
 
