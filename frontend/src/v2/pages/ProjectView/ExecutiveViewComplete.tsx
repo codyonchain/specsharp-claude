@@ -103,6 +103,29 @@ const normalizeBackendDecision = (value: unknown): DecisionStatus | undefined =>
   return undefined;
 };
 
+const doesBreakConditionHold = (
+  operator: string,
+  observedValue: number | null,
+  thresholdValue: number | null
+): boolean | null => {
+  if (observedValue === null || thresholdValue === null) return null;
+  switch (operator) {
+    case '<=':
+      return observedValue <= thresholdValue;
+    case '<':
+      return observedValue < thresholdValue;
+    case '>=':
+      return observedValue >= thresholdValue;
+    case '>':
+      return observedValue > thresholdValue;
+    case '=':
+    case '==':
+      return Math.abs(observedValue - thresholdValue) <= 1e-9;
+    default:
+      return null;
+  }
+};
+
 const decisionReasonCopy = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const key = value.trim().toLowerCase();
@@ -325,6 +348,25 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const hasBaseBreakCondition =
     hasFirstBreakCondition &&
     (firstBreakScenarioId === 'base' || firstBreakScenarioLabel === 'base');
+  const firstBreakOperator =
+    typeof firstBreakConditionRecord.operator === 'string'
+      ? firstBreakConditionRecord.operator.trim()
+      : '';
+  const firstBreakThresholdValue = toFiniteNumber(firstBreakConditionRecord.threshold);
+  const firstBreakObservedValue = toFiniteNumber(
+    firstBreakConditionRecord.observed_value ?? firstBreakConditionRecord.observedValue
+  );
+  const firstBreakConditionHolds = doesBreakConditionHold(
+    firstBreakOperator,
+    firstBreakObservedValue,
+    firstBreakThresholdValue
+  );
+  const hasVerifiedBaseBreakCondition = hasBaseBreakCondition && firstBreakConditionHolds === true;
+  const hasVerifiedNonBaseBreakCondition = Boolean(
+    hasFirstBreakCondition &&
+    !hasBaseBreakCondition &&
+    firstBreakConditionHolds === true
+  );
   const flexBeforeBreakReason = toComparableKey(flexBeforeBreakProvenanceRecord.reason);
   const hasBaseAlreadyBroken = flexBeforeBreakReason === 'base_already_broken';
   const flexBeforeBreakBand = toComparableKey(
@@ -1657,19 +1699,23 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     typeof canonicalValueGap === 'number' && Number.isFinite(canonicalValueGap)
       ? canonicalValueGap <= 0
       : false;
+  const hasVerifiedHotelBaseBreak = hasVerifiedBaseBreakCondition || hasBaseAlreadyBroken;
   const limitedServiceDecisionLeadText = `At ADR ${hospitalityAdrText} / Occ ${hospitalityOccPercentText} / RevPAR ${hospitalityRevparMetricText}, NOI is ${hospitalityNoiText}; debt coverage is ${hospitalityDebtCoverageText}.`;
   const limitedServiceDecisionDetailText = (() => {
     if (decisionStatus === 'NO-GO') {
-      if (hospitalityHasNonPositiveValueGap && dscrMeetsTarget === true && hospitalityYieldClearsMarket === true) {
+      if (hasVerifiedHotelBaseBreak && hospitalityHasNonPositiveValueGap && dscrMeetsTarget === true && hospitalityYieldClearsMarket === true) {
         return 'NO-GO because the base-case value gap is non-positive even though DSCR and yield clear. This usually means the value model (exit yield/benchmark/stabilization assumptions) is more conservative than the operating model. Use DealShield to isolate the forcing assumption.';
       }
-      if (hospitalityHasNonPositiveValueGap && dscrMeetsTarget === true) {
+      if (hasVerifiedHotelBaseBreak && hospitalityHasNonPositiveValueGap && dscrMeetsTarget === true) {
         return 'NO-GO because the base-case value gap is non-positive even with debt coverage clearing target. Use DealShield to isolate whether benchmark, exit, or stabilization assumptions are forcing the gap.';
       }
-      if (hospitalityHasNonPositiveValueGap && dscrMeetsTarget === false) {
+      if (hasVerifiedHotelBaseBreak && hospitalityHasNonPositiveValueGap && dscrMeetsTarget === false) {
         return `NO-GO because value gap is non-positive and DSCR ${dscrText ?? '—'} remains below ${dscrTargetText}. Use DealShield to isolate the first-break driver.`;
       }
-      return 'NO-GO because policy break conditions are already triggered under current assumptions. Use DealShield to isolate the first-break driver.';
+      if (hasVerifiedNonBaseBreakCondition) {
+        return 'NO-GO because a non-base stress scenario reaches the break threshold first. Use DealShield to isolate the first-break driver.';
+      }
+      return 'NO-GO under current ADR, occupancy, and benchmark value assumptions. Use DealShield to isolate the forcing assumption.';
     }
     if (decisionStatus === 'GO') {
       return 'Still validate ADR/RevPAR against comp sets and confirm franchise, management, and FF&E reserve assumptions before IC sign-off.';
@@ -1678,6 +1724,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   })();
   const fullServiceNoGoMismatchText =
     "NO-GO because the policy's value-gap threshold breaks in Base even though DSCR and yield appear strong. This typically indicates conservative value/break assumptions (e.g., F&B/ballroom scope, program timing, or ADR mix) are dominating the policy outcome; use DealShield to see the first-break driver and validate it.";
+  const fullServiceNoGoFallbackText =
+    'NO-GO under current ADR mix, F&B/ballroom program scope, and benchmark value assumptions. Use DealShield to isolate which first-break scenario is forcing the policy outcome.';
   const limitedServiceCostPerKeyValue =
     typeof hospitalityCostPerKey === 'number' && Number.isFinite(hospitalityCostPerKey)
       ? hospitalityCostPerKey
@@ -2397,8 +2445,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                   <p className="mt-1 text-xs text-slate-600">
                     {isLimitedServiceHospitalityProject
                       ? limitedServiceDecisionDetailText
-                      : isFullServiceHospitalityProject && decisionStatus === 'NO-GO'
+                      : isFullServiceHospitalityProject && decisionStatus === 'NO-GO' && hasVerifiedHotelBaseBreak
                         ? fullServiceNoGoMismatchText
+                      : isFullServiceHospitalityProject && decisionStatus === 'NO-GO'
+                        ? fullServiceNoGoFallbackText
                       : 'Hospitality memo: validate ADR and RevPAR against comp sets, keep DSCR comfortably above lender hotel hurdles, and confirm franchise, management, and FF&E reserves stay in sync with brand requirements.'}
                   </p>
                   {decisionReasonText && (

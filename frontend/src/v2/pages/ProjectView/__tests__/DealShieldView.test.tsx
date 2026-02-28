@@ -2423,6 +2423,72 @@ describe("DealShieldView", () => {
     ).toBeInTheDocument();
   });
 
+  it("uses hotel fallback NO-GO wording when base-break condition is not verified", () => {
+    const limitedServicePayload = buildHospitalityDealShieldPayload("hospitality_limited_service_hotel_v1") as any;
+    limitedServicePayload.view_model.decision_status = "NO-GO";
+    limitedServicePayload.view_model.decision_reason_code = "base_case_break_condition";
+    limitedServicePayload.view_model.first_break_condition = {
+      scenario_id: "base",
+      scenario_label: "Base",
+      break_metric: "value_gap",
+      operator: "<=",
+      threshold: 0,
+      observed_value: 12000,
+      observed_value_pct: 0.4,
+    };
+
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_hospitality_limited_service_unverified_base_break"
+        data={limitedServicePayload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.getByText("Policy flags NO-GO under current ADR, occupancy, and value-benchmark assumptions.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Policy indicates NO-GO under current ADR, occupancy, and value-benchmark assumptions.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Base case already breaks the policy threshold (value gap non-positive).")
+    ).not.toBeInTheDocument();
+
+    const fullServicePayload = buildHospitalityDealShieldPayload("hospitality_full_service_hotel_v1") as any;
+    fullServicePayload.view_model.decision_status = "NO-GO";
+    fullServicePayload.view_model.decision_reason_code = "base_case_break_condition";
+    fullServicePayload.view_model.first_break_condition = {
+      scenario_id: "base",
+      scenario_label: "Base",
+      break_metric: "value_gap",
+      operator: "<=",
+      threshold: 0,
+      observed_value: 18000,
+      observed_value_pct: 0.5,
+    };
+
+    rerender(
+      <DealShieldView
+        projectId="proj_hospitality_full_service_unverified_base_break"
+        data={fullServicePayload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.getByText("Policy flags NO-GO under current ADR mix, F&B/ballroom program scope, and value-benchmark assumptions.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Policy indicates NO-GO under current ADR mix, F&B/ballroom program assumptions, and value-benchmark inputs.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Base case already breaks the policy threshold (value gap non-positive).")
+    ).not.toBeInTheDocument();
+  });
+
   it("uses subtype-specific multifamily NO-GO threshold copy for market-rate and affordable while preserving legacy wording for luxury", () => {
     const marketRatePayload = buildPolicyBackedDealShieldPayload(MULTIFAMILY_POLICY_CONTRACT_CASES[0]) as any;
     marketRatePayload.view_model.decision_status = "NO-GO";

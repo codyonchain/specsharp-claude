@@ -837,6 +837,14 @@ describe("ExecutiveViewComplete", () => {
       ...buildHospitalityDealShieldViewModel("hospitality_limited_service_hotel_v1"),
       decision_status: "NO-GO",
       decision_reason_code: "base_case_break_condition",
+      first_break_condition: {
+        scenario_id: "base",
+        scenario_label: "Base",
+        break_metric: "value_gap",
+        operator: "<=",
+        threshold: 0,
+        observed_value: -320000,
+      },
       decision_summary: {
         value_gap: -320000,
         value_gap_pct: -0.9,
@@ -910,6 +918,14 @@ describe("ExecutiveViewComplete", () => {
       ...buildHospitalityDealShieldViewModel("hospitality_full_service_hotel_v1"),
       decision_status: "NO-GO",
       decision_reason_code: "base_case_break_condition",
+      first_break_condition: {
+        scenario_id: "base",
+        scenario_label: "Base",
+        break_metric: "value_gap",
+        operator: "<=",
+        threshold: 0,
+        observed_value: -450000,
+      },
       decision_summary: {
         value_gap: -450000,
         value_gap_pct: -1.1,
@@ -936,6 +952,84 @@ describe("ExecutiveViewComplete", () => {
         text.includes("use DealShield to see the first-break driver and validate it")
       )
     ).toBeInTheDocument();
+  });
+
+  it("uses hotel fallback NO-GO narrative when base-break truth is not verified", () => {
+    const limitedServiceDealShield = {
+      ...buildHospitalityDealShieldViewModel("hospitality_limited_service_hotel_v1"),
+      decision_status: "NO-GO",
+      decision_reason_code: "base_case_break_condition",
+      first_break_condition: {
+        scenario_id: "base",
+        scenario_label: "Base",
+        break_metric: "value_gap",
+        operator: "<=",
+        threshold: 0,
+        observed_value: 25000,
+      },
+      decision_summary: {
+        value_gap: -210000,
+        value_gap_pct: -0.6,
+      },
+    } as any;
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildHospitalityProject("hospitality_limited_service_hotel_v1")}
+          dealShieldData={limitedServiceDealShield}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getByText((text) =>
+        text.includes("NO-GO under current ADR, occupancy, and benchmark value assumptions")
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText((text) =>
+        text.includes("NO-GO because the base-case value gap is non-positive even though DSCR and yield clear")
+      )
+    ).not.toBeInTheDocument();
+
+    const fullServiceDealShield = {
+      ...buildHospitalityDealShieldViewModel("hospitality_full_service_hotel_v1"),
+      decision_status: "NO-GO",
+      decision_reason_code: "base_case_break_condition",
+      first_break_condition: {
+        scenario_id: "base",
+        scenario_label: "Base",
+        break_metric: "value_gap",
+        operator: "<=",
+        threshold: 0,
+        observed_value: 18000,
+      },
+      decision_summary: {
+        value_gap: -390000,
+        value_gap_pct: -0.8,
+      },
+    } as any;
+
+    rerender(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildHospitalityProject("hospitality_full_service_hotel_v1")}
+          dealShieldData={fullServiceDealShield}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getByText((text) =>
+        text.includes("NO-GO under current ADR mix, F&B/ballroom program scope, and benchmark value assumptions")
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText((text) =>
+        text.includes("NO-GO because the policy's value-gap threshold breaks in Base")
+      )
+    ).not.toBeInTheDocument();
   });
 
   it("keeps restaurant NO-GO detail DSCR wording truthful across all five restaurant subtypes", () => {

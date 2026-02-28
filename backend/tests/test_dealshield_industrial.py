@@ -67,6 +67,48 @@ INDUSTRIAL_SCOPE_PROFILE_IDS = {
 }
 
 
+def _is_numeric(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _normalize_scenario_key(value):
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower().replace(" ", "_")
+    return normalized if normalized else None
+
+
+def _normalize_percentish_value(value):
+    if not _is_numeric(value):
+        return None
+    parsed = float(value)
+    if abs(parsed) <= 1.5:
+        return parsed * 100.0
+    return parsed
+
+
+def _classify_break_risk(first_break_condition, flex_before_break_pct):
+    scenario_key = None
+    if isinstance(first_break_condition, dict):
+        scenario_key = _normalize_scenario_key(
+            first_break_condition.get("scenario_label")
+        ) or _normalize_scenario_key(first_break_condition.get("scenario_id"))
+    flex_normalized = _normalize_percentish_value(flex_before_break_pct)
+    if scenario_key == "base":
+        return "High", "Base case breaks first."
+    if flex_normalized is not None:
+        if flex_normalized < 2.0:
+            return "High", "<2% flex before break."
+        if flex_normalized <= 5.0:
+            return "Medium", "2-5% flex before break."
+        return "Low", ">5% flex before break."
+    if scenario_key == "conservative":
+        return "Medium", "First break appears in conservative stress."
+    if scenario_key == "ugly":
+        return "Low", "First break appears only in ugly stress."
+    return None, None
+
+
 def _resolve_metric_ref(payload, metric_ref):
     current = payload
     for part in metric_ref.split("."):
@@ -557,7 +599,11 @@ def test_industrial_decision_insurance_outputs_and_provenance():
 
         assert "primary_control_variable" in view_model
         assert "first_break_condition" in view_model
+        assert "first_break_condition_holds" in view_model
         assert "flex_before_break_pct" in view_model
+        assert "break_risk_level" in view_model
+        assert "break_risk_reason" in view_model
+        assert "break_risk" in view_model
         assert "exposure_concentration_pct" in view_model
         assert "ranked_likely_wrong" in view_model
         assert "decision_insurance_provenance" in view_model
@@ -619,6 +665,21 @@ def test_industrial_decision_insurance_outputs_and_provenance():
         assert flex_block.get("band") in {"tight", "moderate", "comfortable"}
         assert view_model.get("flex_before_break_band") == flex_block.get("band")
 
+        first_break_holds_block = di_provenance.get("first_break_condition_holds")
+        assert isinstance(first_break_holds_block, dict)
+        if isinstance(view_model.get("first_break_condition"), dict):
+            assert first_break_holds_block.get("source") == "decision_insurance.first_break_condition"
+        else:
+            assert first_break_holds_block.get("status") == "unavailable"
+            assert first_break_holds_block.get("reason") == "first_break_condition_unavailable"
+
+        break_risk_block = di_provenance.get("break_risk")
+        assert isinstance(break_risk_block, dict)
+        assert break_risk_block.get("source") == "decision_insurance.break_risk"
+        if view_model.get("break_risk") is not None:
+            assert break_risk_block.get("level") == view_model.get("break_risk_level")
+            assert break_risk_block.get("reason") == view_model.get("break_risk_reason")
+
         model_provenance = view_model.get("provenance")
         assert isinstance(model_provenance, dict)
         assert model_provenance.get("decision_insurance") == di_provenance
@@ -641,7 +702,9 @@ def test_industrial_decision_insurance_outputs_and_provenance():
         for key in (
             "primary_control_variable",
             "first_break_condition",
+            "first_break_condition_holds",
             "flex_before_break_pct",
+            "break_risk",
             "exposure_concentration_pct",
             "ranked_likely_wrong",
         ):
@@ -662,6 +725,7 @@ def test_industrial_decision_insurance_outputs_and_provenance():
             assert primary_control.get("severity") in {"Low", "Med", "High"}
 
         first_break = view_model.get("first_break_condition")
+        first_break_holds = view_model.get("first_break_condition_holds")
         if first_break is not None:
             assert isinstance(first_break, dict)
             assert isinstance(first_break.get("observed_value"), (int, float))
@@ -672,17 +736,37 @@ def test_industrial_decision_insurance_outputs_and_provenance():
             first_break_threshold = float(first_break.get("threshold", 0.0))
             if first_break_operator == "<=":
                 assert first_break_observed <= first_break_threshold
+                assert first_break_holds is True
             elif first_break_operator == "<":
                 assert first_break_observed < first_break_threshold
+                assert first_break_holds is True
             elif first_break_operator == ">=":
                 assert first_break_observed >= first_break_threshold
+                assert first_break_holds is True
             elif first_break_operator == ">":
                 assert first_break_observed > first_break_threshold
+                assert first_break_holds is True
+        else:
+            assert first_break_holds is None
 
         flex_before_break = view_model.get("flex_before_break_pct")
         if flex_before_break is not None:
             assert isinstance(flex_before_break, (int, float))
             assert flex_before_break >= 0
+
+        expected_break_risk_level, expected_break_risk_reason = _classify_break_risk(
+            first_break_condition=first_break,
+            flex_before_break_pct=flex_before_break,
+        )
+        assert view_model.get("break_risk_level") == expected_break_risk_level
+        assert view_model.get("break_risk_reason") == expected_break_risk_reason
+        if expected_break_risk_level is None:
+            assert view_model.get("break_risk") is None
+        else:
+            assert view_model.get("break_risk") == {
+                "level": expected_break_risk_level,
+                "reason": expected_break_risk_reason,
+            }
 
         concentration = view_model.get("exposure_concentration_pct")
         if concentration is not None:

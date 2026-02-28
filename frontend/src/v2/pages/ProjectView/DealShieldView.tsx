@@ -1090,15 +1090,37 @@ export const DealShieldView: React.FC<Props> = ({
   ].some((value) => typeof value === 'string' && value.startsWith('hospitality_limited_service_hotel'));
   const normalizedDecisionReasonKey =
     typeof decisionReasonCode === 'string' ? decisionReasonCode.trim().toLowerCase() : null;
+  const isBaseBreakReason = normalizedDecisionReasonKey === 'base_case_break_condition';
+  const hasVerifiedBaseBreakForCopy = Boolean(
+    canonicalDecisionStatus === 'NO-GO' &&
+    isBaseBreakReason &&
+    (hasVerifiedBaseBreakCondition || hasBaseAlreadyBroken)
+  );
+  const shouldUseThresholdNoGoSummary =
+    canonicalDecisionStatus === 'NO-GO' && (
+      isManufacturingStatusProfile ||
+      isColdStorageStatusProfile ||
+      isRestaurantFullServiceStatusProfile ||
+      isMarketRateMultifamilyStatusProfile ||
+      isAffordableHousingStatusProfile ||
+      (isFullServiceHotelStatusProfile && hasVerifiedBaseBreakForCopy) ||
+      (isLimitedServiceHotelStatusProfile && hasVerifiedBaseBreakForCopy)
+    );
+  const hotelNoGoSummaryText =
+    isFullServiceHotelStatusProfile
+      ? 'Policy flags NO-GO under current ADR mix, F&B/ballroom program scope, and value-benchmark assumptions.'
+      : isLimitedServiceHotelStatusProfile
+        ? 'Policy flags NO-GO under current ADR, occupancy, and value-benchmark assumptions.'
+        : null;
   const decisionStatusSummaryText =
     canonicalDecisionStatus === 'GO'
       ? 'Base case remains positive under canonical DealShield policy.'
       : canonicalDecisionStatus === 'Needs Work'
         ? 'Downside pressure is present; policy marks this as near-break risk.'
         : canonicalDecisionStatus === 'NO-GO'
-          ? (isManufacturingStatusProfile || isColdStorageStatusProfile || isRestaurantFullServiceStatusProfile || isMarketRateMultifamilyStatusProfile || isAffordableHousingStatusProfile || isFullServiceHotelStatusProfile || isLimitedServiceHotelStatusProfile)
+          ? shouldUseThresholdNoGoSummary
             ? 'Base case already breaks the policy threshold (value gap non-positive).'
-            : 'Base case has already collapsed or value gap is non-positive.'
+            : hotelNoGoSummaryText ?? 'Base case has already collapsed or value gap is non-positive.'
           : 'Canonical status is pending due to missing modeled inputs.';
   const manufacturingDecisionStatusDetailText =
     isManufacturingStatusProfile && normalizedDecisionReasonKey === 'base_case_break_condition'
@@ -1122,13 +1144,26 @@ export const DealShieldView: React.FC<Props> = ({
       : null;
   const limitedServiceHotelDecisionStatusDetailText =
     isLimitedServiceHotelStatusProfile &&
-    canonicalDecisionStatus === 'NO-GO' &&
-    normalizedDecisionReasonKey === 'base_case_break_condition'
-      ? 'This is a value-gap mismatch under current ADR, occupancy, and exit-yield assumptions.'
+    canonicalDecisionStatus === 'NO-GO'
+      ? hasVerifiedBaseBreakForCopy
+        ? 'This is a value-gap mismatch under current ADR, occupancy, and exit-yield assumptions.'
+        : hasVerifiedNonBaseBreakCondition
+          ? firstBreakSummaryText
+          : 'Policy indicates NO-GO under current ADR, occupancy, and value-benchmark assumptions.'
+      : null;
+  const fullServiceHotelDecisionStatusDetailText =
+    isFullServiceHotelStatusProfile &&
+    canonicalDecisionStatus === 'NO-GO'
+      ? hasVerifiedBaseBreakForCopy
+        ? 'This is driven by hotel value-gap pressure under ADR mix, F&B/ballroom program scope, and exit-yield assumptions.'
+        : hasVerifiedNonBaseBreakCondition
+          ? firstBreakSummaryText
+          : 'Policy indicates NO-GO under current ADR mix, F&B/ballroom program assumptions, and value-benchmark inputs.'
       : null;
   const decisionStatusDetailText = manufacturingDecisionStatusDetailText
     ?? marketRateDecisionStatusDetailText
     ?? affordableDecisionStatusDetailText
+    ?? fullServiceHotelDecisionStatusDetailText
     ?? limitedServiceHotelDecisionStatusDetailText
     ?? decisionReasonCopy(decisionReasonCode)
     ?? provenanceNotModeledReason
