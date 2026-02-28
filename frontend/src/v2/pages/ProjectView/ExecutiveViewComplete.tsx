@@ -935,19 +935,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     ? displayData.roi
     : undefined;
   const investmentDecisionFromDisplay = displayData.investmentDecision;
-  const feasibilityFlag = typeof displayData.feasible === 'boolean' ? displayData.feasible : undefined;
-  const backendDecision = normalizeBackendDecision(
-    typeof investmentDecisionFromDisplay === 'string'
-      ? investmentDecisionFromDisplay
-      : investmentDecisionFromDisplay?.recommendation ?? investmentDecisionFromDisplay?.status
-  );
-  const fallbackDecisionStatus: DecisionStatus =
-    backendDecision ??
-    (feasibilityFlag === true
-      ? 'GO'
-      : feasibilityFlag === false
-        ? 'NO-GO'
-        : 'PENDING');
   const spreadBpsValue =
     typeof yieldOnCost === 'number' &&
     Number.isFinite(yieldOnCost) &&
@@ -987,7 +974,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     return explicitDealShieldDecision;
   })();
   const decisionStatus: DecisionStatus =
-    canonicalDealShieldDecisionStatus ?? fallbackDecisionStatus;
+    canonicalDealShieldDecisionStatus ?? 'PENDING';
   const isDealShieldCanonicalStatusActive = Boolean(canonicalDealShieldDecisionStatus);
   const decisionStatusLabel =
     decisionStatus === 'Needs Work'
@@ -1449,9 +1436,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     typeof displayData.irr === 'number' && Number.isFinite(displayData.irr)
       ? displayData.irr
       : undefined;
-  const normalizedInvestmentDecision = isDealShieldCanonicalStatusActive
-    ? decisionStatus
-    : backendDecision ?? decisionStatus;
+  const normalizedInvestmentDecision = decisionStatus;
   const irrBelowHurdle =
     normalizedInvestmentDecision === 'NO-GO' &&
     (

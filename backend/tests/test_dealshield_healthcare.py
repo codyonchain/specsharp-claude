@@ -14,6 +14,7 @@ from app.v2.config.type_profiles.scope_items import healthcare as healthcare_sco
 from app.v2.engines.unified_engine import unified_engine
 from app.v2.services.dealshield_scenarios import build_dealshield_scenarios
 from app.v2.services.dealshield_service import build_dealshield_view_model
+from tests.dealshield_contract_assertions import assert_decision_insurance_truth_parity
 
 
 HEALTHCARE_PROFILE_IDS = {
@@ -549,6 +550,7 @@ def test_healthcare_di_contract_and_provenance_are_policy_driven_for_all_profile
             payload=payload,
             profile=profile,
         )
+        assert_decision_insurance_truth_parity(view_model)
         assert view_model.get("decision_status") in {"GO", "Needs Work", "NO-GO", "PENDING"}
         assert isinstance(view_model.get("decision_reason_code"), str)
         assert isinstance(view_model.get("decision_status_provenance"), dict)

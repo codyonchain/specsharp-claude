@@ -832,6 +832,21 @@ describe("ExecutiveViewComplete", () => {
     }
   });
 
+  it("does not derive decision status from feasibility when DealShield status is missing", () => {
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildRestaurantProject()}
+          dealShieldData={{ profile_id: "restaurant_full_service_v1" } as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Investment Decision: Under Review")).toBeInTheDocument();
+    expect(screen.queryByText("Investment Decision: GO")).not.toBeInTheDocument();
+    expect(screen.queryByText("Investment Decision: NO-GO")).not.toBeInTheDocument();
+  });
+
   it("uses limited-service hotel NO-GO narrative that explains value-gap mismatch when debt and yield clear", () => {
     const limitedServiceDealShield = {
       ...buildHospitalityDealShieldViewModel("hospitality_limited_service_hotel_v1"),

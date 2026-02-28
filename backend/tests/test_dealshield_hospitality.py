@@ -8,6 +8,7 @@ from app.v2.config.type_profiles.dealshield_tiles import hospitality as hospital
 from app.v2.config.type_profiles.scope_items import hospitality as hospitality_scope_profiles
 from app.v2.engines.unified_engine import build_construction_schedule, unified_engine
 from app.v2.services.dealshield_service import build_dealshield_view_model
+from tests.dealshield_contract_assertions import assert_decision_insurance_truth_parity
 
 
 HOSPITALITY_PROFILE_IDS = {
@@ -338,6 +339,7 @@ def test_hospitality_decision_insurance_outputs_and_provenance():
             payload=payload,
             profile=profile,
         )
+        assert_decision_insurance_truth_parity(view_model)
 
         assert "primary_control_variable" in view_model
         assert "first_break_condition" in view_model

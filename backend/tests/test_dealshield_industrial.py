@@ -10,6 +10,7 @@ from app.v2.config.type_profiles.dealshield_tiles import industrial as industria
 from app.v2.config.type_profiles.scope_items import industrial as industrial_scope_profiles
 from app.v2.engines.unified_engine import unified_engine
 from app.v2.services.dealshield_service import build_dealshield_view_model
+from tests.dealshield_contract_assertions import assert_decision_insurance_truth_parity
 
 
 INDUSTRIAL_PROFILE_IDS = {
@@ -596,6 +597,7 @@ def test_industrial_decision_insurance_outputs_and_provenance():
             payload=payload,
             profile=profile,
         )
+        assert_decision_insurance_truth_parity(view_model)
 
         assert "primary_control_variable" in view_model
         assert "first_break_condition" in view_model

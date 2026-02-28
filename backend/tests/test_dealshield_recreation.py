@@ -13,6 +13,7 @@ from app.v2.config.type_profiles.dealshield_content import recreation as recreat
 from app.v2.config.type_profiles.scope_items import recreation as recreation_scope
 from app.v2.engines.unified_engine import unified_engine
 from app.v2.services.dealshield_service import build_dealshield_view_model
+from tests.dealshield_contract_assertions import assert_decision_insurance_truth_parity
 
 
 RECREATION_PROFILE_MAP = {
@@ -310,6 +311,8 @@ def test_recreation_decision_insurance_contract_and_provenance_are_policy_driven
         assert isinstance(di_provenance, dict)
         assert di_provenance.get("enabled") is True
         assert di_provenance.get("profile_id") == expected_profile_id
+        assert_decision_insurance_truth_parity(view_a)
+        assert_decision_insurance_truth_parity(view_b)
 
         policy_block = di_provenance.get("decision_insurance_policy")
         assert isinstance(policy_block, dict)
