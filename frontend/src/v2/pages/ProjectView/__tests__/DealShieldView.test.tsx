@@ -2772,6 +2772,78 @@ describe("DealShieldView", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("uses multifamily fallback NO-GO wording when base-break condition is not verified", () => {
+    const marketRatePayload = buildPolicyBackedDealShieldPayload(MULTIFAMILY_POLICY_CONTRACT_CASES[0]) as any;
+    marketRatePayload.view_model.decision_status = "NO-GO";
+    marketRatePayload.view_model.decision_reason_code = "base_case_break_condition";
+    applyFirstBreakCondition(marketRatePayload.view_model, {
+      scenario_id: "base",
+      scenario_label: "Base",
+      break_metric: "value_gap_pct",
+      operator: "<=",
+      threshold: 6.0,
+      observed_value: 6.8,
+      observed_value_pct: 6.8,
+    });
+
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_multifamily_market_rate_unverified_base_break"
+        data={marketRatePayload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.getByText("Policy flags NO-GO under current rent, occupancy, and value-benchmark assumptions.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Policy indicates NO-GO under current rent, occupancy, and value-benchmark assumptions.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Base case already breaks the policy threshold (value gap non-positive).")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("This is a basis/NOI mismatch under current rent + occupancy + operating assumptions.")
+    ).not.toBeInTheDocument();
+
+    const affordablePayload = buildPolicyBackedDealShieldPayload(MULTIFAMILY_POLICY_CONTRACT_CASES[2]) as any;
+    affordablePayload.view_model.decision_status = "NO-GO";
+    affordablePayload.view_model.decision_reason_code = "base_case_break_condition";
+    applyFirstBreakCondition(affordablePayload.view_model, {
+      scenario_id: "base",
+      scenario_label: "Base",
+      break_metric: "value_gap_pct",
+      operator: "<=",
+      threshold: 8.0,
+      observed_value: 8.4,
+      observed_value_pct: 8.4,
+    });
+
+    rerender(
+      <DealShieldView
+        projectId="proj_multifamily_affordable_unverified_base_break"
+        data={affordablePayload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.getByText("Policy flags NO-GO under capped revenue, compliance-cost, and value-benchmark assumptions.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Policy indicates NO-GO under capped revenue, compliance-cost, and value-benchmark assumptions.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Base case already breaks the policy threshold (value gap non-positive).")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("This is a funding-gap / compliance-cost sensitivity issue under capped revenue.")
+    ).not.toBeInTheDocument();
+  });
+
   it("renders hospitality canonical decision and decision-insurance contract fields for both hotel profiles", () => {
     const { rerender } = render(
       <DealShieldView
