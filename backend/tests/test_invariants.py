@@ -38,6 +38,74 @@ from app.v2.config.type_profiles.scope_items import parking as parking_scope_pro
 from app.v2.config.type_profiles.scope_items import recreation as recreation_scope_profiles
 from app.v2.services.dealshield_service import build_dealshield_view_model
 
+
+def _is_numeric(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _normalize_scenario_key(value):
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower().replace(" ", "_")
+    return normalized if normalized else None
+
+
+def _normalize_percentish_value(value):
+    if not _is_numeric(value):
+        return None
+    parsed = float(value)
+    if abs(parsed) <= 1.5:
+        return parsed * 100.0
+    return parsed
+
+
+def _evaluate_threshold_condition(operator, observed_value, threshold_value):
+    if not isinstance(operator, str) or not operator.strip():
+        return None
+    op = operator.strip()
+    if op not in {"<=", "<", ">=", ">", "=", "=="}:
+        return None
+    if not _is_numeric(observed_value) or not _is_numeric(threshold_value):
+        return None
+    observed = float(observed_value)
+    threshold = float(threshold_value)
+    if op == "<=":
+        return observed <= threshold
+    if op == "<":
+        return observed < threshold
+    if op == ">=":
+        return observed >= threshold
+    if op == ">":
+        return observed > threshold
+    return abs(observed - threshold) <= 1e-9
+
+
+def _classify_break_risk(first_break_condition, flex_before_break_pct):
+    scenario_key = None
+    if isinstance(first_break_condition, dict):
+        scenario_key = _normalize_scenario_key(
+            first_break_condition.get("scenario_label")
+        ) or _normalize_scenario_key(first_break_condition.get("scenario_id"))
+    flex_normalized = _normalize_percentish_value(flex_before_break_pct)
+    context = {
+        "scenario_key": scenario_key,
+        "flex_before_break_pct_normalized": flex_normalized,
+    }
+    if scenario_key == "base":
+        return "High", "Base case breaks first.", context
+    if flex_normalized is not None:
+        if flex_normalized < 2.0:
+            return "High", "<2% flex before break.", context
+        if flex_normalized <= 5.0:
+            return "Medium", "2-5% flex before break.", context
+        return "Low", ">5% flex before break.", context
+    if scenario_key == "conservative":
+        return "Medium", "First break appears in conservative stress.", context
+    if scenario_key == "ugly":
+        return "Low", "First break appears only in ugly stress.", context
+    return None, None, context
+
+
 INDUSTRIAL_POLICY_EXPECTATIONS_BY_PROFILE_ID = {
     "industrial_warehouse_v1": {
         "tile_id": "structural_plus_10",
@@ -842,7 +910,11 @@ def test_multifamily_decision_insurance_outputs_are_deterministic():
     for key in (
         "primary_control_variable",
         "first_break_condition",
+        "first_break_condition_holds",
         "flex_before_break_pct",
+        "break_risk_level",
+        "break_risk_reason",
+        "break_risk",
         "exposure_concentration_pct",
         "ranked_likely_wrong",
         "decision_insurance_provenance",
@@ -882,7 +954,11 @@ def test_industrial_decision_insurance_outputs_are_deterministic():
     for key in (
         "primary_control_variable",
         "first_break_condition",
+        "first_break_condition_holds",
         "flex_before_break_pct",
+        "break_risk_level",
+        "break_risk_reason",
+        "break_risk",
         "exposure_concentration_pct",
         "ranked_likely_wrong",
         "decision_insurance_provenance",
@@ -1015,6 +1091,30 @@ def test_policy_curated_decision_insurance_is_applied_for_hardened_profiles():
         if first_break_provenance.get("status") == "unavailable":
             assert first_break_provenance.get("reason") != "no_modeled_break_condition"
 
+        first_break_condition_holds = view_model.get("first_break_condition_holds")
+        first_break_holds_provenance = di_provenance.get("first_break_condition_holds")
+        assert isinstance(first_break_holds_provenance, dict)
+        expected_holds = (
+            _evaluate_threshold_condition(
+                first_break.get("operator"),
+                first_break.get("observed_value"),
+                first_break.get("threshold"),
+            )
+            if isinstance(first_break, dict)
+            else None
+        )
+        assert first_break_condition_holds == expected_holds
+        if isinstance(first_break, dict):
+            if expected_holds is None:
+                assert first_break_holds_provenance.get("status") == "unavailable"
+                assert first_break_holds_provenance.get("reason") == "operator_or_numeric_inputs_unavailable"
+            else:
+                assert first_break_holds_provenance.get("status") == "available"
+                assert first_break_holds_provenance.get("value") is expected_holds
+        else:
+            assert first_break_holds_provenance.get("status") == "unavailable"
+            assert first_break_holds_provenance.get("reason") == "first_break_condition_unavailable"
+
         flex_provenance = di_provenance.get("flex_before_break_pct")
         assert isinstance(flex_provenance, dict)
         assert flex_provenance.get("status") == "available"
@@ -1022,6 +1122,41 @@ def test_policy_curated_decision_insurance_is_applied_for_hardened_profiles():
         assert flex_provenance.get("band") in {"tight", "moderate", "comfortable"}
         assert view_model.get("flex_before_break_band") in {"tight", "moderate", "comfortable"}
         assert view_model.get("flex_before_break_band") == flex_provenance.get("band")
+
+        break_risk_level = view_model.get("break_risk_level")
+        break_risk_reason = view_model.get("break_risk_reason")
+        break_risk_payload = view_model.get("break_risk")
+        expected_break_level, expected_break_reason, expected_break_context = _classify_break_risk(
+            first_break_condition=first_break,
+            flex_before_break_pct=view_model.get("flex_before_break_pct"),
+        )
+        assert break_risk_level == expected_break_level
+        assert break_risk_reason == expected_break_reason
+        if expected_break_level is None:
+            assert break_risk_payload is None
+        else:
+            assert break_risk_payload == {
+                "level": expected_break_level,
+                "reason": expected_break_reason,
+            }
+
+        break_risk_provenance = di_provenance.get("break_risk")
+        assert isinstance(break_risk_provenance, dict)
+        assert break_risk_provenance.get("source") == "decision_insurance.break_risk"
+        assert break_risk_provenance.get("scenario_key") == expected_break_context.get("scenario_key")
+        expected_flex_normalized = expected_break_context.get("flex_before_break_pct_normalized")
+        observed_flex_normalized = break_risk_provenance.get("flex_before_break_pct_normalized")
+        if expected_flex_normalized is None:
+            assert observed_flex_normalized is None
+        else:
+            assert observed_flex_normalized == pytest.approx(expected_flex_normalized)
+        if expected_break_level is None:
+            assert break_risk_provenance.get("status") == "unavailable"
+            assert break_risk_provenance.get("reason") == "insufficient_break_risk_inputs"
+        else:
+            assert break_risk_provenance.get("status") == "available"
+            assert break_risk_provenance.get("level") == expected_break_level
+            assert break_risk_provenance.get("reason") == expected_break_reason
 
 
 def test_multifamily_policy_contract_is_explicit_for_first_break_and_flex_band():
@@ -1978,8 +2113,12 @@ def test_educational_profiles_resolve_canonical_di_policy_and_deterministic_cont
             "decision_status",
             "decision_reason_code",
             "first_break_condition",
+            "first_break_condition_holds",
             "flex_before_break_pct",
             "flex_before_break_band",
+            "break_risk_level",
+            "break_risk_reason",
+            "break_risk",
             "decision_status_provenance",
             "decision_insurance_provenance",
         ):

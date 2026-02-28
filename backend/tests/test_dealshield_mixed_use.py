@@ -13,6 +13,7 @@ from app.v2.config.type_profiles.scope_items import mixed_use as mixed_use_scope
 from app.v2.engines.unified_engine import unified_engine
 from app.v2.services.dealshield_scenarios import WAVE1_PROFILES
 from app.v2.services.dealshield_service import build_dealshield_view_model
+from tests.dealshield_contract_assertions import assert_decision_insurance_truth_parity
 
 
 MIXED_USE_PROFILE_MAP = {
@@ -226,6 +227,7 @@ def test_mixed_use_runtime_payload_and_view_model_resolve_profiles():
             payload=payload,
             profile=profile,
         )
+        assert_decision_insurance_truth_parity(view_model)
         assert view_model.get("tile_profile_id") == expected["tile"]
         assert view_model.get("content_profile_id") == expected["tile"]
         assert view_model.get("scope_items_profile_id") == expected["scope"]

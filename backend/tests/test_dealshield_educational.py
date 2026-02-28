@@ -16,6 +16,7 @@ from app.v2.config.type_profiles.scope_items import educational as educational_s
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.v2.engines.unified_engine import unified_engine
 from app.v2.services.dealshield_service import build_dealshield_view_model
+from tests.dealshield_contract_assertions import assert_decision_insurance_truth_parity
 
 
 EDUCATIONAL_PROFILE_IDS = {
@@ -347,6 +348,7 @@ def test_educational_di_contract_and_provenance_are_policy_driven_for_all_profil
             payload=payload,
             profile=profile,
         )
+        assert_decision_insurance_truth_parity(view_model)
         assert view_model.get("decision_status") in {"GO", "Needs Work", "NO-GO", "PENDING"}
         assert isinstance(view_model.get("decision_reason_code"), str)
         assert isinstance(view_model.get("decision_status_provenance"), dict)

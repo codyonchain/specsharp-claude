@@ -385,6 +385,11 @@ export interface DecisionInsuranceRankedLikelyWrongItem {
   severity?: 'Low' | 'Med' | 'High' | 'Unknown' | string | null;
 }
 
+export interface DecisionInsuranceBreakRisk {
+  level?: 'High' | 'Medium' | 'Low' | string | null;
+  reason?: string | null;
+}
+
 export interface DecisionInsuranceProvenanceEntry {
   status?: 'available' | 'unavailable' | string;
   reason?: string | null;
@@ -407,8 +412,10 @@ export interface DecisionInsuranceProvenance {
   profile_id?: string | null;
   primary_control_variable?: DecisionInsuranceProvenanceEntry;
   first_break_condition?: DecisionInsuranceProvenanceEntry;
+  first_break_condition_holds?: DecisionInsuranceProvenanceEntry;
   flex_before_break_pct?: DecisionInsuranceProvenanceEntry;
   flex_before_break_bands?: DecisionInsuranceFlexBandPolicy;
+  break_risk?: DecisionInsuranceProvenanceEntry;
   exposure_concentration_pct?: DecisionInsuranceProvenanceEntry;
   ranked_likely_wrong?: DecisionInsuranceProvenanceEntry;
   [key: string]: any;
@@ -417,8 +424,12 @@ export interface DecisionInsuranceProvenance {
 export interface DealShieldDecisionInsuranceFields {
   primary_control_variable?: DecisionInsurancePrimaryControlVariable | null;
   first_break_condition?: DecisionInsuranceFirstBreakCondition | null;
+  first_break_condition_holds?: boolean | null;
   flex_before_break_pct?: number | null;
   flex_before_break_band?: string | null;
+  break_risk_level?: 'High' | 'Medium' | 'Low' | string | null;
+  break_risk_reason?: string | null;
+  break_risk?: DecisionInsuranceBreakRisk | null;
   exposure_concentration_pct?: number | null;
   ranked_likely_wrong?: DecisionInsuranceRankedLikelyWrongItem[];
   decision_insurance_provenance?: DecisionInsuranceProvenance;

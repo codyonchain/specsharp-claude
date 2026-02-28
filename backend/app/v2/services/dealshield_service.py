@@ -1300,6 +1300,63 @@ def _resolve_flex_band(flex_value_pct: Optional[float], calibration: Optional[Di
     return "comfortable"
 
 
+def _normalize_scenario_key(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower().replace(" ", "_")
+    return normalized if normalized else None
+
+
+def _evaluate_threshold_condition(operator: Any, observed_value: Any, threshold_value: Any) -> Optional[bool]:
+    if not isinstance(operator, str) or not operator.strip():
+        return None
+    op = operator.strip()
+    if op not in {"<=", "<", ">=", ">", "=", "=="}:
+        return None
+    if not _is_number(observed_value) or not _is_number(threshold_value):
+        return None
+    observed = float(observed_value)
+    threshold = float(threshold_value)
+    if op == "<=":
+        return observed <= threshold
+    if op == "<":
+        return observed < threshold
+    if op == ">=":
+        return observed >= threshold
+    if op == ">":
+        return observed > threshold
+    return abs(observed - threshold) <= 1e-9
+
+
+def _classify_break_risk(
+    first_break_condition: Optional[Dict[str, Any]],
+    flex_before_break_pct: Any,
+) -> Tuple[Optional[str], Optional[str], Dict[str, Any]]:
+    scenario_key = None
+    if isinstance(first_break_condition, dict):
+        scenario_key = _normalize_scenario_key(
+            first_break_condition.get("scenario_label")
+        ) or _normalize_scenario_key(first_break_condition.get("scenario_id"))
+    flex_normalized = _normalize_percentish_value(flex_before_break_pct)
+    context = {
+        "scenario_key": scenario_key,
+        "flex_before_break_pct_normalized": flex_normalized,
+    }
+    if scenario_key == "base":
+        return "High", "Base case breaks first.", context
+    if flex_normalized is not None:
+        if flex_normalized < 2.0:
+            return "High", "<2% flex before break.", context
+        if flex_normalized <= 5.0:
+            return "Medium", "2-5% flex before break.", context
+        return "Low", ">5% flex before break.", context
+    if scenario_key == "conservative":
+        return "Medium", "First break appears in conservative stress.", context
+    if scenario_key == "ugly":
+        return "Low", "First break appears only in ugly stress.", context
+    return None, None, context
+
+
 def _build_multifamily_decision_insurance(
     payload: Dict[str, Any],
     profile: Dict[str, Any],
@@ -1313,7 +1370,11 @@ def _build_multifamily_decision_insurance(
     outputs: Dict[str, Any] = {
         "primary_control_variable": None,
         "first_break_condition": None,
+        "first_break_condition_holds": None,
         "flex_before_break_pct": None,
+        "break_risk_level": None,
+        "break_risk_reason": None,
+        "break_risk": None,
         "exposure_concentration_pct": None,
         "ranked_likely_wrong": [],
     }
@@ -1625,6 +1686,46 @@ def _build_multifamily_decision_insurance(
             "policy_id": DECISION_INSURANCE_POLICY_ID if isinstance(collapse_cfg, dict) else None,
         }
 
+    first_break_condition = (
+        outputs.get("first_break_condition")
+        if isinstance(outputs.get("first_break_condition"), dict)
+        else None
+    )
+    first_break_condition_holds = (
+        _evaluate_threshold_condition(
+            first_break_condition.get("operator"),
+            first_break_condition.get("observed_value"),
+            first_break_condition.get("threshold"),
+        )
+        if isinstance(first_break_condition, dict)
+        else None
+    )
+    outputs["first_break_condition_holds"] = first_break_condition_holds
+    if isinstance(first_break_condition, dict) and first_break_condition_holds is not None:
+        provenance["first_break_condition_holds"] = {
+            "status": "available",
+            "value": first_break_condition_holds,
+            "source": "decision_insurance.first_break_condition",
+            "operator": first_break_condition.get("operator"),
+            "observed_value": first_break_condition.get("observed_value"),
+            "threshold": first_break_condition.get("threshold"),
+        }
+    elif isinstance(first_break_condition, dict):
+        provenance["first_break_condition_holds"] = {
+            "status": "unavailable",
+            "reason": "operator_or_numeric_inputs_unavailable",
+            "source": "decision_insurance.first_break_condition",
+            "operator": first_break_condition.get("operator"),
+            "observed_value": first_break_condition.get("observed_value"),
+            "threshold": first_break_condition.get("threshold"),
+        }
+    else:
+        provenance["first_break_condition_holds"] = {
+            "status": "unavailable",
+            "reason": "first_break_condition_unavailable",
+            "source": "decision_insurance.first_break_condition",
+        }
+
     if base_row_snapshot is None:
         provenance["flex_before_break_pct"] = {
             "status": "unavailable",
@@ -1790,6 +1891,36 @@ def _build_multifamily_decision_insurance(
             if isinstance(provenance.get("flex_before_break_pct"), dict):
                 provenance["flex_before_break_pct"]["band"] = band
                 provenance["flex_before_break_pct"]["calibration_source"] = "decision_insurance_policy.flex_calibration"
+
+    break_risk_level, break_risk_reason, break_risk_context = _classify_break_risk(
+        first_break_condition=first_break_condition,
+        flex_before_break_pct=outputs.get("flex_before_break_pct"),
+    )
+    outputs["break_risk_level"] = break_risk_level
+    outputs["break_risk_reason"] = break_risk_reason
+    outputs["break_risk"] = (
+        {
+            "level": break_risk_level,
+            "reason": break_risk_reason,
+        }
+        if isinstance(break_risk_level, str) and isinstance(break_risk_reason, str)
+        else None
+    )
+    if outputs["break_risk"] is not None:
+        provenance["break_risk"] = {
+            "status": "available",
+            "level": break_risk_level,
+            "reason": break_risk_reason,
+            "source": "decision_insurance.break_risk",
+            **break_risk_context,
+        }
+    else:
+        provenance["break_risk"] = {
+            "status": "unavailable",
+            "reason": "insufficient_break_risk_inputs",
+            "source": "decision_insurance.break_risk",
+            **break_risk_context,
+        }
 
     impact_by_tile: Dict[str, Optional[float]] = {}
     for entry in driver_impacts:

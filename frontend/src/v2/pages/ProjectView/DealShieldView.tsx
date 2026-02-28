@@ -274,61 +274,13 @@ const formatAssumptionPercentFixed2 = (value: unknown) => {
   }).format(numeric)}%`;
 };
 
-const classifyFlexBeforeBreak = (value: number): 'Structurally Tight' | 'Moderate' | 'Flexible' => {
-  if (value < 2.0) return 'Structurally Tight';
-  if (value < 5.0) return 'Moderate';
-  return 'Flexible';
-};
-
-type BreakRiskLevel = 'High' | 'Medium' | 'Low';
-
-const classifyBreakRisk = (
-  scenarioLabel: string | null,
-  flexBeforeBreakPct: number | null
-): { level: BreakRiskLevel; reason: string } | null => {
-  const scenarioKey = toComparableKey(scenarioLabel);
-  if (scenarioKey === 'base') {
-    return { level: 'High', reason: 'Base case breaks first.' };
-  }
-  if (flexBeforeBreakPct !== null) {
-    if (flexBeforeBreakPct < 2) {
-      return { level: 'High', reason: '<2% flex before break.' };
-    }
-    if (flexBeforeBreakPct <= 5) {
-      return { level: 'Medium', reason: '2-5% flex before break.' };
-    }
-    return { level: 'Low', reason: '>5% flex before break.' };
-  }
-  if (scenarioKey === 'conservative') {
-    return { level: 'Medium', reason: 'First break appears in conservative stress.' };
-  }
-  if (scenarioKey === 'ugly') {
-    return { level: 'Low', reason: 'First break appears only in ugly stress.' };
-  }
+const describeFlexBand = (bandValue: unknown): string | null => {
+  const key = toComparableKey(bandValue);
+  if (!key) return null;
+  if (key.includes('tight')) return 'Structurally Tight';
+  if (key.includes('moderate')) return 'Moderate';
+  if (key.includes('comfortable') || key.includes('flexible')) return 'Flexible';
   return null;
-};
-
-const doesBreakConditionHold = (
-  operator: string,
-  observedValue: number | null,
-  thresholdValue: number | null
-): boolean | null => {
-  if (observedValue === null || thresholdValue === null) return null;
-  switch (operator) {
-    case '<=':
-      return observedValue <= thresholdValue;
-    case '<':
-      return observedValue < thresholdValue;
-    case '>=':
-      return observedValue >= thresholdValue;
-    case '>':
-      return observedValue > thresholdValue;
-    case '=':
-    case '==':
-      return Math.abs(observedValue - thresholdValue) <= 1e-9;
-    default:
-      return null;
-  }
 };
 
 const formatAssumptionYears = (value: unknown) => {
@@ -641,13 +593,42 @@ export const DealShieldView: React.FC<Props> = ({
   const firstBreakOperator =
     typeof firstBreakCondition?.operator === 'string' ? firstBreakCondition.operator.trim() : '';
   const firstBreakThresholdNumeric = toFiniteNumber(firstBreakCondition?.threshold);
-  const firstBreakObservedNumeric = toFiniteNumber(
-    firstBreakCondition?.observed_value ?? (firstBreakCondition as any)?.observedValue
-  );
-  const firstBreakConditionHolds = doesBreakConditionHold(
-    firstBreakOperator,
-    firstBreakObservedNumeric,
-    firstBreakThresholdNumeric
+  const firstBreakConditionHoldsRaw =
+    (viewModel as any)?.first_break_condition_holds ??
+    (viewModel as any)?.firstBreakConditionHolds ??
+    (decisionInsuranceProvenance?.first_break_condition_holds as any)?.value;
+  const firstBreakConditionHolds =
+    typeof firstBreakConditionHoldsRaw === 'boolean' ? firstBreakConditionHoldsRaw : null;
+  const breakRiskRaw =
+    (viewModel as any)?.break_risk ??
+    (viewModel as any)?.breakRisk;
+  const breakRiskRecord =
+    breakRiskRaw && typeof breakRiskRaw === 'object' ? (breakRiskRaw as Record<string, unknown>) : null;
+  const breakRiskLevelRaw =
+    (viewModel as any)?.break_risk_level ??
+    (viewModel as any)?.breakRiskLevel ??
+    breakRiskRecord?.level;
+  const breakRiskReasonRaw =
+    (viewModel as any)?.break_risk_reason ??
+    (viewModel as any)?.breakRiskReason ??
+    breakRiskRecord?.reason;
+  const breakRiskLevel =
+    typeof breakRiskLevelRaw === 'string' && breakRiskLevelRaw.trim() ? breakRiskLevelRaw.trim() : null;
+  const breakRiskReason =
+    typeof breakRiskReasonRaw === 'string' && breakRiskReasonRaw.trim() ? breakRiskReasonRaw.trim() : null;
+  const breakRisk = breakRiskLevel
+    ? {
+        level: breakRiskLevel,
+        reason: breakRiskReason,
+      }
+    : null;
+  const flexBeforeBreakBandRaw =
+    (viewModel as any)?.flex_before_break_band ??
+    (viewModel as any)?.flexBeforeBreakBand ??
+    (decisionInsuranceProvenance?.flex_before_break_pct as any)?.band;
+  const flexBeforeBreakBandLabel = describeFlexBand(flexBeforeBreakBandRaw);
+  const flexBeforeBreakReasonKey = toComparableKey(
+    (decisionInsuranceProvenance?.flex_before_break_pct as any)?.reason
   );
   const firstBreakSummaryText =
     firstBreakMetric === 'value_gap'
@@ -673,7 +654,7 @@ export const DealShieldView: React.FC<Props> = ({
     return formatDecisionMetricValue(value, firstBreakMetricRaw);
   };
   const flexBeforeBreakDisplay = flexBeforeBreakPct !== null
-    ? `${formatAssumptionPercentFixed2(flexBeforeBreakPct)} (${classifyFlexBeforeBreak(flexBeforeBreakPct)})`
+    ? `${formatAssumptionPercentFixed2(flexBeforeBreakPct)}${flexBeforeBreakBandLabel ? ` (${flexBeforeBreakBandLabel})` : ''}`
     : null;
   const exposureConcentrationSentence = exposureConcentrationPct !== null
     ? `Primary control variable contributes ${formatAssumptionPercentFixed2(exposureConcentrationPct)} of modeled downside sensitivity.`
@@ -911,14 +892,6 @@ export const DealShieldView: React.FC<Props> = ({
   const firstBreakScenarioLabelKey = toComparableKey(
     firstBreakCondition?.scenario_label ?? (firstBreakCondition as any)?.scenarioLabel
   );
-  const breakRisk = useMemo(
-    () =>
-      classifyBreakRisk(
-        firstBreakScenarioLabel ?? firstBreakScenarioLabelKey ?? null,
-        flexBeforeBreakPct
-      ),
-    [firstBreakScenarioLabel, firstBreakScenarioLabelKey, flexBeforeBreakPct]
-  );
   const firstBreakThresholdDisplay = useMemo(() => {
     if (!firstBreakCondition) return MISSING_VALUE;
     const thresholdDisplay = formatFirstBreakMetricValue(firstBreakCondition.threshold);
@@ -939,18 +912,7 @@ export const DealShieldView: React.FC<Props> = ({
   const hasVerifiedNonBaseBreakCondition = Boolean(
     firstBreakCondition && !hasBaseBreakCondition && firstBreakConditionHolds === true
   );
-  const flexBeforeBreakReasonKey = toComparableKey(
-    (decisionInsuranceProvenance?.flex_before_break_pct as any)?.reason
-  );
   const hasBaseAlreadyBroken = flexBeforeBreakReasonKey === 'base_already_broken';
-  const flexBeforeBreakBandKey = toComparableKey(
-    (viewModel as any)?.flex_before_break_band ??
-    (viewModel as any)?.flexBeforeBreakBand ??
-    (decisionInsuranceProvenance?.flex_before_break_pct as any)?.band
-  );
-  const hasTightFlexBand =
-    typeof flexBeforeBreakBandKey === 'string' &&
-    flexBeforeBreakBandKey.includes('tight');
   const explicitDecisionStatus = normalizeBackendDecision(
     (viewModel as any)?.decision_status ??
     (viewModel as any)?.decisionStatus ??
@@ -978,23 +940,7 @@ export const DealShieldView: React.FC<Props> = ({
       : typeof decisionStatusProvenance?.notModeledReason === 'string'
         ? decisionStatusProvenance.notModeledReason
         : null;
-  const canonicalDecisionStatus: DecisionStatus = (() => {
-    if (explicitDecisionStatus) return explicitDecisionStatus;
-    if (decisionSummary.notModeledReason) return 'PENDING';
-    if (hasBaseBreakCondition || hasBaseAlreadyBroken) return 'NO-GO';
-    if (typeof decisionSummary.valueGap === 'number') {
-      if (decisionSummary.valueGap <= 0) return 'NO-GO';
-      if (typeof flexBeforeBreakPct === 'number' && flexBeforeBreakPct <= 2) {
-        return 'Needs Work';
-      }
-      return 'GO';
-    }
-    if (hasTightFlexBand) return 'Needs Work';
-    if (typeof flexBeforeBreakPct === 'number') {
-      return flexBeforeBreakPct <= 2 ? 'Needs Work' : 'GO';
-    }
-    return 'PENDING';
-  })();
+  const canonicalDecisionStatus: DecisionStatus = explicitDecisionStatus ?? 'PENDING';
   const decisionStatusLabel =
     canonicalDecisionStatus === 'PENDING' ? 'Under Review' : canonicalDecisionStatus;
   const isManufacturingStatusProfile = [
@@ -1090,15 +1036,37 @@ export const DealShieldView: React.FC<Props> = ({
   ].some((value) => typeof value === 'string' && value.startsWith('hospitality_limited_service_hotel'));
   const normalizedDecisionReasonKey =
     typeof decisionReasonCode === 'string' ? decisionReasonCode.trim().toLowerCase() : null;
+  const isBaseBreakReason = normalizedDecisionReasonKey === 'base_case_break_condition';
+  const hasVerifiedBaseBreakForCopy = Boolean(
+    canonicalDecisionStatus === 'NO-GO' &&
+    isBaseBreakReason &&
+    (hasVerifiedBaseBreakCondition || hasBaseAlreadyBroken)
+  );
+  const shouldUseThresholdNoGoSummary =
+    canonicalDecisionStatus === 'NO-GO' && (
+      isManufacturingStatusProfile ||
+      isColdStorageStatusProfile ||
+      isRestaurantFullServiceStatusProfile ||
+      isMarketRateMultifamilyStatusProfile ||
+      isAffordableHousingStatusProfile ||
+      (isFullServiceHotelStatusProfile && hasVerifiedBaseBreakForCopy) ||
+      (isLimitedServiceHotelStatusProfile && hasVerifiedBaseBreakForCopy)
+    );
+  const hotelNoGoSummaryText =
+    isFullServiceHotelStatusProfile
+      ? 'Policy flags NO-GO under current ADR mix, F&B/ballroom program scope, and value-benchmark assumptions.'
+      : isLimitedServiceHotelStatusProfile
+        ? 'Policy flags NO-GO under current ADR, occupancy, and value-benchmark assumptions.'
+        : null;
   const decisionStatusSummaryText =
     canonicalDecisionStatus === 'GO'
       ? 'Base case remains positive under canonical DealShield policy.'
       : canonicalDecisionStatus === 'Needs Work'
         ? 'Downside pressure is present; policy marks this as near-break risk.'
         : canonicalDecisionStatus === 'NO-GO'
-          ? (isManufacturingStatusProfile || isColdStorageStatusProfile || isRestaurantFullServiceStatusProfile || isMarketRateMultifamilyStatusProfile || isAffordableHousingStatusProfile || isFullServiceHotelStatusProfile || isLimitedServiceHotelStatusProfile)
+          ? shouldUseThresholdNoGoSummary
             ? 'Base case already breaks the policy threshold (value gap non-positive).'
-            : 'Base case has already collapsed or value gap is non-positive.'
+            : hotelNoGoSummaryText ?? 'Base case has already collapsed or value gap is non-positive.'
           : 'Canonical status is pending due to missing modeled inputs.';
   const manufacturingDecisionStatusDetailText =
     isManufacturingStatusProfile && normalizedDecisionReasonKey === 'base_case_break_condition'
@@ -1122,13 +1090,26 @@ export const DealShieldView: React.FC<Props> = ({
       : null;
   const limitedServiceHotelDecisionStatusDetailText =
     isLimitedServiceHotelStatusProfile &&
-    canonicalDecisionStatus === 'NO-GO' &&
-    normalizedDecisionReasonKey === 'base_case_break_condition'
-      ? 'This is a value-gap mismatch under current ADR, occupancy, and exit-yield assumptions.'
+    canonicalDecisionStatus === 'NO-GO'
+      ? hasVerifiedBaseBreakForCopy
+        ? 'This is a value-gap mismatch under current ADR, occupancy, and exit-yield assumptions.'
+        : hasVerifiedNonBaseBreakCondition
+          ? firstBreakSummaryText
+          : 'Policy indicates NO-GO under current ADR, occupancy, and value-benchmark assumptions.'
+      : null;
+  const fullServiceHotelDecisionStatusDetailText =
+    isFullServiceHotelStatusProfile &&
+    canonicalDecisionStatus === 'NO-GO'
+      ? hasVerifiedBaseBreakForCopy
+        ? 'This is driven by hotel value-gap pressure under ADR mix, F&B/ballroom program scope, and exit-yield assumptions.'
+        : hasVerifiedNonBaseBreakCondition
+          ? firstBreakSummaryText
+          : 'Policy indicates NO-GO under current ADR mix, F&B/ballroom program assumptions, and value-benchmark inputs.'
       : null;
   const decisionStatusDetailText = manufacturingDecisionStatusDetailText
     ?? marketRateDecisionStatusDetailText
     ?? affordableDecisionStatusDetailText
+    ?? fullServiceHotelDecisionStatusDetailText
     ?? limitedServiceHotelDecisionStatusDetailText
     ?? decisionReasonCopy(decisionReasonCode)
     ?? provenanceNotModeledReason

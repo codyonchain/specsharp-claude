@@ -13,6 +13,7 @@ from app.v2.config.type_profiles.dealshield_content import office as office_cont
 from app.v2.config.type_profiles.scope_items import office as office_scope_profiles
 from app.v2.engines.unified_engine import unified_engine
 from app.v2.services.dealshield_service import build_dealshield_view_model
+from tests.dealshield_contract_assertions import assert_decision_insurance_truth_parity
 
 
 OFFICE_PROFILE_MAP = {
@@ -227,6 +228,7 @@ def test_office_decision_insurance_contract_and_provenance():
             payload=payload,
             profile=profile,
         )
+        assert_decision_insurance_truth_parity(view_model)
 
         di_provenance = view_model.get("decision_insurance_provenance")
         assert isinstance(di_provenance, dict)

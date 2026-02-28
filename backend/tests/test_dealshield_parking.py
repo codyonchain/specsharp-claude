@@ -10,6 +10,8 @@ from app.v2.config.type_profiles.dealshield_tiles import parking as parking_tile
 from app.v2.config.type_profiles import scope_items as shared_scope_registry
 from app.v2.config.type_profiles.scope_items import parking as parking_scope_profiles
 from app.v2.engines.unified_engine import unified_engine
+from app.v2.services.dealshield_service import build_dealshield_view_model
+from tests.dealshield_contract_assertions import assert_decision_insurance_truth_parity
 
 
 PARKING_PROFILE_MAP = {
@@ -217,6 +219,16 @@ def test_parking_runtime_payload_and_scope_trade_reconciliation():
             assert isinstance(systems, list) and len(systems) >= minimum
             systems_total = sum(float(system.get("total_cost", 0.0) or 0.0) for system in systems)
             assert systems_total == pytest.approx(float(trade_breakdown.get(trade_key, 0.0) or 0.0), rel=0, abs=1e-6)
+
+        profile = get_dealshield_profile(expected["tile"])
+        view_model = build_dealshield_view_model(
+            project_id=f"parking-di-{subtype}",
+            payload=payload,
+            profile=profile,
+        )
+        assert view_model.get("tile_profile_id") == expected["tile"]
+        assert view_model.get("scope_items_profile_id") == expected["scope"]
+        assert_decision_insurance_truth_parity(view_model)
 
 
 def test_parking_runtime_emits_scenario_snapshots_and_provenance():

@@ -325,23 +325,20 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const hasBaseBreakCondition =
     hasFirstBreakCondition &&
     (firstBreakScenarioId === 'base' || firstBreakScenarioLabel === 'base');
+  const firstBreakConditionHoldsRaw =
+    dealShieldRecord.first_break_condition_holds ??
+    dealShieldRecord.firstBreakConditionHolds ??
+    dealShieldProvenanceRecord.first_break_condition_holds?.value;
+  const firstBreakConditionHolds =
+    typeof firstBreakConditionHoldsRaw === 'boolean' ? firstBreakConditionHoldsRaw : null;
+  const hasVerifiedBaseBreakCondition = hasBaseBreakCondition && firstBreakConditionHolds === true;
+  const hasVerifiedNonBaseBreakCondition = Boolean(
+    hasFirstBreakCondition &&
+    !hasBaseBreakCondition &&
+    firstBreakConditionHolds === true
+  );
   const flexBeforeBreakReason = toComparableKey(flexBeforeBreakProvenanceRecord.reason);
   const hasBaseAlreadyBroken = flexBeforeBreakReason === 'base_already_broken';
-  const flexBeforeBreakBand = toComparableKey(
-    dealShieldRecord.flex_before_break_band ??
-    dealShieldRecord.flexBeforeBreakBand ??
-    flexBeforeBreakProvenanceRecord.band
-  );
-  const hasTightFlexBand =
-    typeof flexBeforeBreakBand === 'string' &&
-    flexBeforeBreakBand.includes('tight');
-  const flexBeforeBreakPctValue = toFiniteNumber(
-    dealShieldRecord.flex_before_break_pct ?? dealShieldRecord.flexBeforeBreakPct
-  );
-  const normalizedFlexBeforeBreakPct =
-    typeof flexBeforeBreakPctValue === 'number'
-      ? (Math.abs(flexBeforeBreakPctValue) <= 1.5 ? flexBeforeBreakPctValue * 100 : flexBeforeBreakPctValue)
-      : null;
   const decisionSummaryRecord = coalesceRecord(
     dealShieldRecord.decision_summary,
     dealShieldRecord.decisionSummary
@@ -351,9 +348,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     decisionSummaryRecord.valueGap ??
     dealShieldRecord.value_gap ??
     dealShieldRecord.valueGap
-  );
-  const canonicalNotModeledReason = toComparableKey(
-    decisionSummaryRecord.not_modeled_reason ?? decisionSummaryRecord.notModeledReason
   );
   const displaySubtypeLower = (displayData?.buildingSubtype || '')
     .toString()
@@ -941,19 +935,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     ? displayData.roi
     : undefined;
   const investmentDecisionFromDisplay = displayData.investmentDecision;
-  const feasibilityFlag = typeof displayData.feasible === 'boolean' ? displayData.feasible : undefined;
-  const backendDecision = normalizeBackendDecision(
-    typeof investmentDecisionFromDisplay === 'string'
-      ? investmentDecisionFromDisplay
-      : investmentDecisionFromDisplay?.recommendation ?? investmentDecisionFromDisplay?.status
-  );
-  const fallbackDecisionStatus: DecisionStatus =
-    backendDecision ??
-    (feasibilityFlag === true
-      ? 'GO'
-      : feasibilityFlag === false
-        ? 'NO-GO'
-        : 'PENDING');
   const spreadBpsValue =
     typeof yieldOnCost === 'number' &&
     Number.isFinite(yieldOnCost) &&
@@ -963,24 +944,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
       : undefined;
   const dscrValue = typeof dscr === 'number' && Number.isFinite(dscr) ? dscr : undefined;
   const spreadPctValue = typeof spreadBpsValue === 'number' ? spreadBpsValue / 100 : undefined;
-  const derivedDecisionStatus: DecisionStatus | undefined = (() => {
-    if (
-      typeof spreadBpsValue === 'number' &&
-      typeof marketCapRateDisplay === 'number' &&
-      typeof yieldOnCost === 'number' &&
-      Number.isFinite(yieldOnCost) &&
-      typeof dscrValue === 'number'
-    ) {
-      if (spreadBpsValue >= 200 && dscrValue >= resolvedTargetDscr) {
-        return 'GO';
-      }
-      if (spreadBpsValue >= 0 && dscrValue >= resolvedTargetDscr) {
-        return 'Needs Work';
-      }
-      return 'NO-GO';
-    }
-    return undefined;
-  })();
   const explicitDealShieldDecision = normalizeBackendDecision(
     dealShieldRecord.decision_status ??
       dealShieldRecord.decisionStatus ??
@@ -1010,66 +973,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     if (!hasDealShieldPayload || !explicitDealShieldDecision) return undefined;
     return explicitDealShieldDecision;
   })();
-  const fallbackDealShieldDecisionStatus: DecisionStatus | undefined = (() => {
-    if (!hasDealShieldPayload || canonicalDealShieldDecisionStatus) return undefined;
-    if (canonicalNotModeledReason) return 'PENDING';
-    if (hasBaseBreakCondition || hasBaseAlreadyBroken) return 'NO-GO';
-    if (typeof canonicalValueGap === 'number') {
-      if (canonicalValueGap <= 0) return 'NO-GO';
-      if (
-        typeof normalizedFlexBeforeBreakPct === 'number' &&
-        normalizedFlexBeforeBreakPct <= 2
-      ) {
-        return 'Needs Work';
-      }
-      return 'GO';
-    }
-    if (hasTightFlexBand) return 'Needs Work';
-    if (typeof normalizedFlexBeforeBreakPct === 'number') {
-      return normalizedFlexBeforeBreakPct <= 2 ? 'Needs Work' : 'GO';
-    }
-    return undefined;
-  })();
-  let decisionStatus: DecisionStatus =
-    canonicalDealShieldDecisionStatus ?? fallbackDealShieldDecisionStatus ?? derivedDecisionStatus ?? fallbackDecisionStatus;
-  // Preserve historical industrial fallback when no DealShield-based status is available.
-  (() => {
-    if (canonicalDealShieldDecisionStatus || fallbackDealShieldDecisionStatus) return;
-    const bt = (buildingType || '').toLowerCase();
-    if (bt !== 'industrial') return;
-
-    const yoc =
-      typeof displayData.yieldOnCost === 'number' && Number.isFinite(displayData.yieldOnCost)
-        ? displayData.yieldOnCost
-        : undefined;
-    const targetYieldFromDisplay =
-      typeof displayData.targetYield === 'number' && Number.isFinite(displayData.targetYield)
-        ? displayData.targetYield
-        : undefined;
-    const dscrOk =
-      typeof dscrValue === 'number' &&
-      typeof resolvedTargetDscr === 'number' &&
-      Number.isFinite(dscrValue) &&
-      Number.isFinite(resolvedTargetDscr)
-        ? dscrValue >= resolvedTargetDscr
-        : false;
-
-    if (typeof yoc !== 'number' || typeof targetYieldFromDisplay !== 'number') {
-      return;
-    }
-
-    if (dscrOk && yoc >= targetYieldFromDisplay) {
-      decisionStatus = 'GO';
-      return;
-    }
-
-    if (dscrOk && yoc >= targetYieldFromDisplay * 0.95) {
-      decisionStatus = 'Needs Work';
-      return;
-    }
-
-    decisionStatus = 'NO-GO';
-  })();
+  const decisionStatus: DecisionStatus =
+    canonicalDealShieldDecisionStatus ?? 'PENDING';
   const isDealShieldCanonicalStatusActive = Boolean(canonicalDealShieldDecisionStatus);
   const decisionStatusLabel =
     decisionStatus === 'Needs Work'
@@ -1531,9 +1436,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     typeof displayData.irr === 'number' && Number.isFinite(displayData.irr)
       ? displayData.irr
       : undefined;
-  const normalizedInvestmentDecision = isDealShieldCanonicalStatusActive
-    ? decisionStatus
-    : backendDecision ?? decisionStatus;
+  const normalizedInvestmentDecision = decisionStatus;
   const irrBelowHurdle =
     normalizedInvestmentDecision === 'NO-GO' &&
     (
@@ -1657,19 +1560,23 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     typeof canonicalValueGap === 'number' && Number.isFinite(canonicalValueGap)
       ? canonicalValueGap <= 0
       : false;
+  const hasVerifiedHotelBaseBreak = hasVerifiedBaseBreakCondition || hasBaseAlreadyBroken;
   const limitedServiceDecisionLeadText = `At ADR ${hospitalityAdrText} / Occ ${hospitalityOccPercentText} / RevPAR ${hospitalityRevparMetricText}, NOI is ${hospitalityNoiText}; debt coverage is ${hospitalityDebtCoverageText}.`;
   const limitedServiceDecisionDetailText = (() => {
     if (decisionStatus === 'NO-GO') {
-      if (hospitalityHasNonPositiveValueGap && dscrMeetsTarget === true && hospitalityYieldClearsMarket === true) {
+      if (hasVerifiedHotelBaseBreak && hospitalityHasNonPositiveValueGap && dscrMeetsTarget === true && hospitalityYieldClearsMarket === true) {
         return 'NO-GO because the base-case value gap is non-positive even though DSCR and yield clear. This usually means the value model (exit yield/benchmark/stabilization assumptions) is more conservative than the operating model. Use DealShield to isolate the forcing assumption.';
       }
-      if (hospitalityHasNonPositiveValueGap && dscrMeetsTarget === true) {
+      if (hasVerifiedHotelBaseBreak && hospitalityHasNonPositiveValueGap && dscrMeetsTarget === true) {
         return 'NO-GO because the base-case value gap is non-positive even with debt coverage clearing target. Use DealShield to isolate whether benchmark, exit, or stabilization assumptions are forcing the gap.';
       }
-      if (hospitalityHasNonPositiveValueGap && dscrMeetsTarget === false) {
+      if (hasVerifiedHotelBaseBreak && hospitalityHasNonPositiveValueGap && dscrMeetsTarget === false) {
         return `NO-GO because value gap is non-positive and DSCR ${dscrText ?? '—'} remains below ${dscrTargetText}. Use DealShield to isolate the first-break driver.`;
       }
-      return 'NO-GO because policy break conditions are already triggered under current assumptions. Use DealShield to isolate the first-break driver.';
+      if (hasVerifiedNonBaseBreakCondition) {
+        return 'NO-GO because a non-base stress scenario reaches the break threshold first. Use DealShield to isolate the first-break driver.';
+      }
+      return 'NO-GO under current ADR, occupancy, and benchmark value assumptions. Use DealShield to isolate the forcing assumption.';
     }
     if (decisionStatus === 'GO') {
       return 'Still validate ADR/RevPAR against comp sets and confirm franchise, management, and FF&E reserve assumptions before IC sign-off.';
@@ -1678,6 +1585,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   })();
   const fullServiceNoGoMismatchText =
     "NO-GO because the policy's value-gap threshold breaks in Base even though DSCR and yield appear strong. This typically indicates conservative value/break assumptions (e.g., F&B/ballroom scope, program timing, or ADR mix) are dominating the policy outcome; use DealShield to see the first-break driver and validate it.";
+  const fullServiceNoGoFallbackText =
+    'NO-GO under current ADR mix, F&B/ballroom program scope, and benchmark value assumptions. Use DealShield to isolate which first-break scenario is forcing the policy outcome.';
   const limitedServiceCostPerKeyValue =
     typeof hospitalityCostPerKey === 'number' && Number.isFinite(hospitalityCostPerKey)
       ? hospitalityCostPerKey
@@ -2397,8 +2306,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                   <p className="mt-1 text-xs text-slate-600">
                     {isLimitedServiceHospitalityProject
                       ? limitedServiceDecisionDetailText
-                      : isFullServiceHospitalityProject && decisionStatus === 'NO-GO'
+                      : isFullServiceHospitalityProject && decisionStatus === 'NO-GO' && hasVerifiedHotelBaseBreak
                         ? fullServiceNoGoMismatchText
+                      : isFullServiceHospitalityProject && decisionStatus === 'NO-GO'
+                        ? fullServiceNoGoFallbackText
                       : 'Hospitality memo: validate ADR and RevPAR against comp sets, keep DSCR comfortably above lender hotel hurdles, and confirm franchise, management, and FF&E reserves stay in sync with brand requirements.'}
                   </p>
                   {decisionReasonText && (

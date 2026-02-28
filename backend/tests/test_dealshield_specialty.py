@@ -6,6 +6,7 @@ from app.v2.config.type_profiles.scope_items import specialty as specialty_scope
 from app.v2.engines.unified_engine import unified_engine
 from app.v2.config.master_config import ProjectClass
 from app.v2.services.dealshield_service import build_dealshield_view_model
+from tests.dealshield_contract_assertions import assert_decision_insurance_truth_parity
 
 
 SPECIALTY_PROFILE_MAP = {
@@ -253,6 +254,7 @@ def test_specialty_decision_insurance_policy_contract_outputs():
             payload=payload,
             profile=profile,
         )
+        assert_decision_insurance_truth_parity(view_model)
 
         provenance = view_model.get("decision_insurance_provenance")
         assert isinstance(provenance, dict)

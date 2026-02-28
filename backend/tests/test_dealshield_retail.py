@@ -15,6 +15,7 @@ from app.v2.config.type_profiles import scope_items as shared_scope_registry
 from app.v2.config.type_profiles.scope_items import retail as retail_scope_profiles
 from app.v2.engines.unified_engine import unified_engine
 from app.v2.services.dealshield_service import build_dealshield_view_model
+from tests.dealshield_contract_assertions import assert_decision_insurance_truth_parity
 
 
 RETAIL_PROFILE_MAP = {
@@ -380,6 +381,7 @@ def test_retail_decision_insurance_contract_and_provenance_is_deterministic():
         )
 
         for view_model in (view_model_a, view_model_b):
+            assert_decision_insurance_truth_parity(view_model)
             assert view_model.get("scope_items_profile_id") == expected["scope"]
             assert view_model.get("decision_status") in {"GO", "Needs Work", "NO-GO", "PENDING"}
             assert isinstance(view_model.get("decision_reason_code"), str) and view_model.get("decision_reason_code")
