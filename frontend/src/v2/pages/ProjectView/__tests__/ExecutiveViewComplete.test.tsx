@@ -832,6 +832,112 @@ describe("ExecutiveViewComplete", () => {
     }
   });
 
+  it("uses limited-service hotel NO-GO narrative that explains value-gap mismatch when debt and yield clear", () => {
+    const limitedServiceDealShield = {
+      ...buildHospitalityDealShieldViewModel("hospitality_limited_service_hotel_v1"),
+      decision_status: "NO-GO",
+      decision_reason_code: "base_case_break_condition",
+      decision_summary: {
+        value_gap: -320000,
+        value_gap_pct: -0.9,
+      },
+    } as any;
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildHospitalityProject("hospitality_limited_service_hotel_v1")}
+          dealShieldData={limitedServiceDealShield}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getByText((text) =>
+        text.includes("At ADR") && text.includes("/ Occ") && text.includes("/ RevPAR")
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((text) =>
+        text.includes("NO-GO because") && text.includes("Use DealShield to isolate")
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText((text) => text.includes("Hotel clears underwriting at"))
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses hotel-native footer metrics for both limited-service and full-service hotels", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildHospitalityProject("hospitality_limited_service_hotel_v1")}
+          dealShieldData={buildHospitalityDealShieldViewModel(
+            "hospitality_limited_service_hotel_v1"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("KEYS")).toBeInTheDocument();
+    expect(screen.getByText("COST / KEY")).toBeInTheDocument();
+    expect(screen.getByText("REVPAR")).toBeInTheDocument();
+    expect(screen.getByText("DEBT LENS: DSCR")).toBeInTheDocument();
+    expect(screen.queryByText("INVESTMENT PER UNIT")).not.toBeInTheDocument();
+    expect(screen.queryByText("Total Units")).not.toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildHospitalityProject("hospitality_full_service_hotel_v1")}
+          dealShieldData={buildHospitalityDealShieldViewModel(
+            "hospitality_full_service_hotel_v1"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("KEYS")).toBeInTheDocument();
+    expect(screen.getByText("COST / KEY")).toBeInTheDocument();
+    expect(screen.getByText("REVPAR")).toBeInTheDocument();
+    expect(screen.getByText("DEBT LENS: DSCR")).toBeInTheDocument();
+    expect(screen.queryByText("INVESTMENT PER UNIT")).not.toBeInTheDocument();
+    expect(screen.queryByText("Total Units")).not.toBeInTheDocument();
+  });
+
+  it("adds full-service hotel NO-GO mismatch explanation when policy breaks despite strong debt/yield lenses", () => {
+    const fullServiceDealShield = {
+      ...buildHospitalityDealShieldViewModel("hospitality_full_service_hotel_v1"),
+      decision_status: "NO-GO",
+      decision_reason_code: "base_case_break_condition",
+      decision_summary: {
+        value_gap: -450000,
+        value_gap_pct: -1.1,
+      },
+    } as any;
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildHospitalityProject("hospitality_full_service_hotel_v1")}
+          dealShieldData={fullServiceDealShield}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Debt Lens: DSCR")).toBeInTheDocument();
+    expect(
+      screen.getByText((text) =>
+        text.includes("NO-GO because the policy's value-gap threshold breaks in Base")
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((text) =>
+        text.includes("use DealShield to see the first-break driver and validate it")
+      )
+    ).toBeInTheDocument();
+  });
+
   it("keeps restaurant NO-GO detail DSCR wording truthful across all five restaurant subtypes", () => {
     const { rerender } = render(
       <MemoryRouter>

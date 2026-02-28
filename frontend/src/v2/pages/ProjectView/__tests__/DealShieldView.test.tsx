@@ -130,6 +130,18 @@ const formatExpectedPrimaryControlLabel = (profileId: string, label: string): st
   ) {
     return "Compliance + Agency Revisions (Electrical / Life Safety)";
   }
+  if (
+    profileId === "hospitality_limited_service_hotel_v1" &&
+    label.trim().toLowerCase() === "guestroom turnover + ff&e +10%"
+  ) {
+    return "FF&E + room-turn turnover timing";
+  }
+  if (
+    profileId === "hospitality_full_service_hotel_v1" &&
+    label.trim().toLowerCase() === "ballroom and f&b fit-out +12%"
+  ) {
+    return "Ballroom + F&B Fit-Out Scope (Operator-Driven)";
+  }
   return label;
 };
 
@@ -2215,8 +2227,8 @@ describe("DealShieldView", () => {
 
     expect(screen.getByText("Stabilized Value:")).toBeInTheDocument();
     expect(screen.getByText("Cap Rate Used:")).toBeInTheDocument();
-    expect(screen.getByText("Driver Impact Severity:")).toBeInTheDocument();
-    expect(screen.queryByText("Isolated Sensitivity Rank:")).not.toBeInTheDocument();
+    expect(screen.getByText("Isolated Sensitivity Rank:")).toBeInTheDocument();
+    expect(screen.queryByText("Driver Impact Severity:")).not.toBeInTheDocument();
     expect(screen.queryByText("Implied Store Value (NOI / exit yield):")).not.toBeInTheDocument();
     expect(screen.queryByText("Market return benchmark:")).not.toBeInTheDocument();
   });
@@ -2301,6 +2313,114 @@ describe("DealShieldView", () => {
     expect(
       screen.queryByText("Base case already breaks the policy threshold (value gap non-positive).")
     ).not.toBeInTheDocument();
+  });
+
+  it("applies limited-service and full-service hotel trust copy with subtype-authored labels", () => {
+    const limitedServicePayload = buildHospitalityDealShieldPayload("hospitality_limited_service_hotel_v1") as any;
+    limitedServicePayload.view_model.decision_status = "NO-GO";
+    limitedServicePayload.view_model.decision_reason_code = "base_case_break_condition";
+    limitedServicePayload.view_model.first_break_condition = {
+      scenario_id: "base",
+      scenario_label: "Base",
+      break_metric: "value_gap",
+      operator: "<=",
+      threshold: 0,
+      observed_value: -25000,
+      observed_value_pct: -0.9,
+    };
+    limitedServicePayload.view_model.primary_control_variable = {
+      tile_id: "cost_plus_10",
+      label: "Guestroom Turnover + FF&E +10%",
+      impact_pct: 1.57,
+      delta_cost: 120000,
+      severity: "Low",
+    };
+    limitedServicePayload.view_model.flex_before_break_pct = 0;
+
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_hospitality_limited_service_nogo_copy"
+        data={limitedServicePayload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.getByText("Base case already breaks the policy threshold (value gap non-positive).")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("This is a value-gap mismatch under current ADR, occupancy, and exit-yield assumptions.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Base case has already collapsed or value gap is non-positive.")
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("FF&E + room-turn turnover timing")).toBeInTheDocument();
+    expect(screen.getByText("Impact (local):")).toBeInTheDocument();
+    expect(screen.getByText("Isolated Sensitivity Rank:")).toBeInTheDocument();
+    expect(screen.getByText("Break Risk:")).toBeInTheDocument();
+    expect(screen.queryByText("Driver Impact Severity:")).not.toBeInTheDocument();
+
+    const fullServicePayload = buildHospitalityDealShieldPayload("hospitality_full_service_hotel_v1") as any;
+    fullServicePayload.view_model.decision_status = "NO-GO";
+    fullServicePayload.view_model.decision_reason_code = "base_case_break_condition";
+    fullServicePayload.view_model.first_break_condition = {
+      scenario_id: "base",
+      scenario_label: "Base",
+      break_metric: "value_gap",
+      operator: "<=",
+      threshold: 0,
+      observed_value: -17000,
+      observed_value_pct: -0.6,
+    };
+    fullServicePayload.view_model.primary_control_variable = {
+      tile_id: "cost_plus_10",
+      label: "Ballroom and F&B Fit-Out +12%",
+      impact_pct: 1.24,
+      delta_cost: 90000,
+      severity: "Low",
+    };
+    fullServicePayload.view_model.ranked_likely_wrong = [
+      {
+        id: "mlw_hotel_1",
+        text: "Banquet/group mix assumptions are not yet validated against signed demand.",
+        why: "Group demand volatility can move NOI and break timing quickly.",
+        driver_tile_id: "revenue_minus_10",
+        impact_pct: 2.4,
+        severity: "Unknown",
+      },
+    ];
+
+    rerender(
+      <DealShieldView
+        projectId="proj_hospitality_full_service_nogo_regression"
+        data={fullServicePayload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.getByText("Base case already breaks the policy threshold (value gap non-positive).")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Base case has already collapsed or value gap is non-positive.")
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Ballroom + F&B Fit-Out Scope (Operator-Driven)")).toBeInTheDocument();
+    expect(screen.getByText("Isolated Sensitivity Rank:")).toBeInTheDocument();
+    expect(screen.queryByText("Driver Impact Severity:")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Isolated rank reflects isolated driver sensitivity; Break Risk reflects first-break/flex policy risk."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return text.includes("| Severity: Unscored");
+      })
+    ).toBeInTheDocument();
   });
 
   it("uses subtype-specific multifamily NO-GO threshold copy for market-rate and affordable while preserving legacy wording for luxury", () => {

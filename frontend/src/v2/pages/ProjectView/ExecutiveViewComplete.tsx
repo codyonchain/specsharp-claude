@@ -260,6 +260,22 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     (dealShieldData as any)?.content_profile_id,
     (dealShieldData as any)?.contentProfileId,
   ].some((value) => typeof value === 'string' && value.startsWith('restaurant_fine_dining'));
+  const hasFullServiceHotelProfileId = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (dealShieldData as any)?.tile_profile_id,
+    (dealShieldData as any)?.tileProfileId,
+    (dealShieldData as any)?.content_profile_id,
+    (dealShieldData as any)?.contentProfileId,
+  ].some((value) => typeof value === 'string' && value.startsWith('hospitality_full_service_hotel'));
+  const hasLimitedServiceHotelProfileId = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (dealShieldData as any)?.tile_profile_id,
+    (dealShieldData as any)?.tileProfileId,
+    (dealShieldData as any)?.content_profile_id,
+    (dealShieldData as any)?.contentProfileId,
+  ].some((value) => typeof value === 'string' && value.startsWith('hospitality_limited_service_hotel'));
   const hasMarketRateMultifamilyProfileId = [
     (dealShieldData as any)?.profile_id,
     (dealShieldData as any)?.profileId,
@@ -1592,6 +1608,12 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const showRestaurantFacilityMetrics = normalizedFacilityType === 'RESTAURANT';
   const isOfficeProject = isOffice;
   const isHospitalityProject = showHotelFacilityMetrics;
+  const isFullServiceHospitalityProject =
+    isHospitalityProject && (parsedSubtype === 'full_service_hotel' || hasFullServiceHotelProfileId);
+  const isLimitedServiceHospitalityProject =
+    isHospitalityProject && (parsedSubtype === 'limited_service_hotel' || hasLimitedServiceHotelProfileId);
+  const useHotelNativeFooterMetrics =
+    isFullServiceHospitalityProject || isLimitedServiceHospitalityProject;
   const hospitalityRooms =
     typeof facilityMetrics?.rooms === 'number' ? facilityMetrics.rooms : undefined;
   const hospitalityAdr =
@@ -1611,6 +1633,60 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     typeof operatingMargin === 'number'
       ? `${(operatingMargin * 100).toFixed(1)}% NOI margin`
       : 'NOI margin pending';
+  const hospitalityOccPercentText =
+    hospitalityOccupancy !== undefined ? `${(hospitalityOccupancy * 100).toFixed(0)}%` : 'stabilized';
+  const hospitalityRevparMetricText =
+    hospitalityRevpar !== undefined ? `$${hospitalityRevpar.toFixed(0)}` : 'loading';
+  const hospitalityNoiText =
+    typeof currentNoi === 'number' && Number.isFinite(currentNoi)
+      ? `~${formatters.currency(currentNoi)}`
+      : 'loading';
+  const hospitalityDebtCoverageText = dscrText
+    ? (dscrMeetsTarget === false
+      ? `below target (DSCR ${dscrText} vs ${dscrTargetText})`
+      : `healthy (DSCR ${dscrText} vs ${dscrTargetText} target)`)
+    : `being validated against ${dscrTargetText}`;
+  const hospitalityYieldClearsMarket =
+    typeof yieldOnCost === 'number' &&
+    Number.isFinite(yieldOnCost) &&
+    typeof marketCapRateDisplay === 'number' &&
+    Number.isFinite(marketCapRateDisplay)
+      ? yieldOnCost >= marketCapRateDisplay
+      : undefined;
+  const hospitalityHasNonPositiveValueGap =
+    typeof canonicalValueGap === 'number' && Number.isFinite(canonicalValueGap)
+      ? canonicalValueGap <= 0
+      : false;
+  const limitedServiceDecisionLeadText = `At ADR ${hospitalityAdrText} / Occ ${hospitalityOccPercentText} / RevPAR ${hospitalityRevparMetricText}, NOI is ${hospitalityNoiText}; debt coverage is ${hospitalityDebtCoverageText}.`;
+  const limitedServiceDecisionDetailText = (() => {
+    if (decisionStatus === 'NO-GO') {
+      if (hospitalityHasNonPositiveValueGap && dscrMeetsTarget === true && hospitalityYieldClearsMarket === true) {
+        return 'NO-GO because the base-case value gap is non-positive even though DSCR and yield clear. This usually means the value model (exit yield/benchmark/stabilization assumptions) is more conservative than the operating model. Use DealShield to isolate the forcing assumption.';
+      }
+      if (hospitalityHasNonPositiveValueGap && dscrMeetsTarget === true) {
+        return 'NO-GO because the base-case value gap is non-positive even with debt coverage clearing target. Use DealShield to isolate whether benchmark, exit, or stabilization assumptions are forcing the gap.';
+      }
+      if (hospitalityHasNonPositiveValueGap && dscrMeetsTarget === false) {
+        return `NO-GO because value gap is non-positive and DSCR ${dscrText ?? '—'} remains below ${dscrTargetText}. Use DealShield to isolate the first-break driver.`;
+      }
+      return 'NO-GO because policy break conditions are already triggered under current assumptions. Use DealShield to isolate the first-break driver.';
+    }
+    if (decisionStatus === 'GO') {
+      return 'Still validate ADR/RevPAR against comp sets and confirm franchise, management, and FF&E reserve assumptions before IC sign-off.';
+    }
+    return 'Validate ADR/RevPAR comp support, debt-lens coverage, and reserve assumptions before final recommendation.';
+  })();
+  const fullServiceNoGoMismatchText =
+    "NO-GO because the policy's value-gap threshold breaks in Base even though DSCR and yield appear strong. This typically indicates conservative value/break assumptions (e.g., F&B/ballroom scope, program timing, or ADR mix) are dominating the policy outcome; use DealShield to see the first-break driver and validate it.";
+  const limitedServiceCostPerKeyValue =
+    typeof hospitalityCostPerKey === 'number' && Number.isFinite(hospitalityCostPerKey)
+      ? hospitalityCostPerKey
+      : typeof totalProjectCost === 'number' &&
+          Number.isFinite(totalProjectCost) &&
+          typeof hospitalityRooms === 'number' &&
+          hospitalityRooms > 0
+        ? totalProjectCost / hospitalityRooms
+        : undefined;
   const restaurantSalesPerSf =
     typeof facilityMetrics?.restaurantSalesPerSf === 'number'
       ? facilityMetrics.restaurantSalesPerSf
@@ -2243,6 +2319,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                   ? 'Debt Lens: DSCR'
                 : isIndustrialProject
                   ? 'Debt Lens: DSCR'
+                  : isHospitalityProject
+                    ? 'Debt Lens: DSCR'
                   : 'DSCR VS TARGET'}
             </p>
             <p className="text-2xl sm:text-3xl font-bold">
@@ -2312,10 +2390,16 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
               {isHospitalityProject ? (
                 <>
                   <p className={decisionBodyClass}>
-                    Hotel clears underwriting at {hospitalityAdrText}, {hospitalityOccupancyText}, and {hospitalityRevparText}, generating {hospitalityMarginText} to support the flagged room count and debt sizing.
+                    {isLimitedServiceHospitalityProject
+                      ? limitedServiceDecisionLeadText
+                      : `Hotel clears underwriting at ${hospitalityAdrText}, ${hospitalityOccupancyText}, and ${hospitalityRevparText}, generating ${hospitalityMarginText} to support the flagged room count and debt sizing.`}
                   </p>
                   <p className="mt-1 text-xs text-slate-600">
-                    Hospitality memo: validate ADR and RevPAR against comp sets, keep DSCR comfortably above lender hotel hurdles, and confirm franchise, management, and FF&E reserves stay in sync with brand requirements.
+                    {isLimitedServiceHospitalityProject
+                      ? limitedServiceDecisionDetailText
+                      : isFullServiceHospitalityProject && decisionStatus === 'NO-GO'
+                        ? fullServiceNoGoMismatchText
+                      : 'Hospitality memo: validate ADR and RevPAR against comp sets, keep DSCR comfortably above lender hotel hurdles, and confirm franchise, management, and FF&E reserves stay in sync with brand requirements.'}
                   </p>
                   {decisionReasonText && (
                     <p className="mt-2 text-xs text-slate-600">
@@ -4138,46 +4222,85 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
             <p className="text-3xl font-bold text-white">{formatters.currency(noi)}</p>
             <p className="text-sm text-slate-500">After operating expenses</p>
           </div>
-          <div className="text-center">
-            <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">
-              {isIndustrialProject
-                ? 'INVESTMENT PER SF'
-                : isRestaurantProject
-                  ? 'COST PER SF'
-                  : 'INVESTMENT PER UNIT'}
-            </p>
-            <p className="text-3xl font-bold text-white">
-              {isIndustrialProject
-                ? typeof industrialCostPerSfValue === 'number'
-                  ? formatters.costPerSF(industrialCostPerSfValue)
-                  : 'N/A'
-                : isRestaurantProject
-                  ? restaurantFooterCostPerSfText
-                  : displayData.costPerUnit > 0
-                    ? formatters.currencyExact(displayData.costPerUnit)
-                    : 'N/A'}
-            </p>
-            <p className="text-sm text-slate-500">
-              {isIndustrialProject
-                ? 'Total project cost normalized by gross square footage'
-                : isRestaurantProject
-                  ? 'Total project cost normalized by square footage'
-                  : 'Total project cost divided by units'}
-            </p>
-          </div>
-          <div className="text-center">
-            <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">
-              {isRestaurantProject ? 'SALES PER SF' : 'DEBT COVERAGE'}
-            </p>
-            <p className="text-3xl font-bold text-white">
-              {isRestaurantProject ? restaurantFooterSalesPerSfText : formatters.multiplier(displayData.dscr)}
-            </p>
-            <p className="text-sm text-slate-500">
-              {isRestaurantProject
-                ? 'Current sales velocity per square foot'
-                : `DSCR (Target: ${dscrTargetDisplay})`}
-            </p>
-          </div>
+          {useHotelNativeFooterMetrics ? (
+            <>
+              <div className="text-center">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">KEYS</p>
+                <p className="text-3xl font-bold text-white">
+                  {typeof hospitalityRooms === 'number' && Number.isFinite(hospitalityRooms)
+                    ? hospitalityRooms.toLocaleString()
+                    : '—'}
+                </p>
+                <p className="text-sm text-slate-500">Modeled room count</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">COST / KEY</p>
+                <p className="text-3xl font-bold text-white">
+                  {typeof limitedServiceCostPerKeyValue === 'number' && Number.isFinite(limitedServiceCostPerKeyValue)
+                    ? formatters.currencyExact(limitedServiceCostPerKeyValue)
+                    : '—'}
+                </p>
+                <p className="text-sm text-slate-500">Total project cost normalized by room key</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">REVPAR</p>
+                <p className="text-3xl font-bold text-white">
+                  {typeof hospitalityCurrentRevparValue === 'number' && Number.isFinite(hospitalityCurrentRevparValue)
+                    ? `$${hospitalityCurrentRevparValue.toFixed(0)}`
+                    : '—'}
+                </p>
+                <p className="text-sm text-slate-500">Revenue per available room</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">DEBT LENS: DSCR</p>
+                <p className="text-3xl font-bold text-white">{formatters.multiplier(displayData.dscr)}</p>
+                <p className="text-sm text-slate-500">Target: {dscrTargetDisplay}</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-center">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">
+                  {isIndustrialProject
+                    ? 'INVESTMENT PER SF'
+                    : isRestaurantProject
+                      ? 'COST PER SF'
+                      : 'INVESTMENT PER UNIT'}
+                </p>
+                <p className="text-3xl font-bold text-white">
+                  {isIndustrialProject
+                    ? typeof industrialCostPerSfValue === 'number'
+                      ? formatters.costPerSF(industrialCostPerSfValue)
+                      : 'N/A'
+                    : isRestaurantProject
+                      ? restaurantFooterCostPerSfText
+                      : displayData.costPerUnit > 0
+                        ? formatters.currencyExact(displayData.costPerUnit)
+                        : 'N/A'}
+                </p>
+                <p className="text-sm text-slate-500">
+                  {isIndustrialProject
+                    ? 'Total project cost normalized by gross square footage'
+                    : isRestaurantProject
+                      ? 'Total project cost normalized by square footage'
+                      : 'Total project cost divided by units'}
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">
+                  {isRestaurantProject ? 'SALES PER SF' : 'DEBT COVERAGE'}
+                </p>
+                <p className="text-3xl font-bold text-white">
+                  {isRestaurantProject ? restaurantFooterSalesPerSfText : formatters.multiplier(displayData.dscr)}
+                </p>
+                <p className="text-sm text-slate-500">
+                  {isRestaurantProject
+                    ? 'Current sales velocity per square foot'
+                    : `DSCR (Target: ${dscrTargetDisplay})`}
+                </p>
+              </div>
+            </>
+          )}
           {isRestaurantProject && (
             <>
               <div className="text-center">
@@ -4198,6 +4321,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
           )}
           {(() => {
             const showTotalUnitsFooter =
+              !useHotelNativeFooterMetrics &&
               parsedBuildingType !== 'industrial' &&
               parsedBuildingType !== 'restaurant' &&
               typeof displayData.units === 'number' &&

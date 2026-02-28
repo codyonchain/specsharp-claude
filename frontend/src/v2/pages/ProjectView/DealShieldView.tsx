@@ -195,7 +195,9 @@ const formatPrimaryControlLabel = (
   label: string,
   isIndustrialProfile: boolean,
   isMarketRateMultifamilyProfile: boolean,
-  isAffordableHousingProfile: boolean
+  isAffordableHousingProfile: boolean,
+  isLimitedServiceHotelProfile: boolean,
+  isFullServiceHotelProfile: boolean
 ): string => {
   if (isIndustrialProfile) {
     return label.replace(/^IC-First(?:\s*[:\-]\s*|\s+)/i, '').trim();
@@ -210,6 +212,18 @@ const formatPrimaryControlLabel = (
     const normalized = label.trim().toLowerCase();
     if (normalized === 'compliance electrical +8%') {
       return 'Compliance + Agency Revisions (Electrical / Life Safety)';
+    }
+  }
+  if (isLimitedServiceHotelProfile) {
+    const normalized = label.trim().toLowerCase();
+    if (normalized === 'guestroom turnover + ff&e +10%') {
+      return 'FF&E + room-turn turnover timing';
+    }
+  }
+  if (isFullServiceHotelProfile) {
+    const normalized = label.trim().toLowerCase();
+    if (normalized === 'ballroom and f&b fit-out +12%') {
+      return 'Ballroom + F&B Fit-Out Scope (Operator-Driven)';
     }
   }
   return label;
@@ -1048,6 +1062,32 @@ export const DealShieldView: React.FC<Props> = ({
     provenance?.content_profile_id,
     content?.profile_id,
   ].some((value) => typeof value === 'string' && value.startsWith('multifamily_affordable_housing'));
+  const isFullServiceHotelStatusProfile = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (viewModel as any)?.profile_id,
+    (viewModel as any)?.profileId,
+    (viewModel as any)?.tile_profile_id,
+    (viewModel as any)?.tileProfileId,
+    provenance?.profile_id,
+    (viewModel as any)?.content_profile_id,
+    (viewModel as any)?.contentProfileId,
+    provenance?.content_profile_id,
+    content?.profile_id,
+  ].some((value) => typeof value === 'string' && value.startsWith('hospitality_full_service_hotel'));
+  const isLimitedServiceHotelStatusProfile = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (viewModel as any)?.profile_id,
+    (viewModel as any)?.profileId,
+    (viewModel as any)?.tile_profile_id,
+    (viewModel as any)?.tileProfileId,
+    provenance?.profile_id,
+    (viewModel as any)?.content_profile_id,
+    (viewModel as any)?.contentProfileId,
+    provenance?.content_profile_id,
+    content?.profile_id,
+  ].some((value) => typeof value === 'string' && value.startsWith('hospitality_limited_service_hotel'));
   const normalizedDecisionReasonKey =
     typeof decisionReasonCode === 'string' ? decisionReasonCode.trim().toLowerCase() : null;
   const decisionStatusSummaryText =
@@ -1056,7 +1096,7 @@ export const DealShieldView: React.FC<Props> = ({
       : canonicalDecisionStatus === 'Needs Work'
         ? 'Downside pressure is present; policy marks this as near-break risk.'
         : canonicalDecisionStatus === 'NO-GO'
-          ? (isManufacturingStatusProfile || isColdStorageStatusProfile || isRestaurantFullServiceStatusProfile || isMarketRateMultifamilyStatusProfile || isAffordableHousingStatusProfile)
+          ? (isManufacturingStatusProfile || isColdStorageStatusProfile || isRestaurantFullServiceStatusProfile || isMarketRateMultifamilyStatusProfile || isAffordableHousingStatusProfile || isFullServiceHotelStatusProfile || isLimitedServiceHotelStatusProfile)
             ? 'Base case already breaks the policy threshold (value gap non-positive).'
             : 'Base case has already collapsed or value gap is non-positive.'
           : 'Canonical status is pending due to missing modeled inputs.';
@@ -1080,9 +1120,16 @@ export const DealShieldView: React.FC<Props> = ({
     normalizedDecisionReasonKey === 'base_case_break_condition'
       ? 'This is a funding-gap / compliance-cost sensitivity issue under capped revenue.'
       : null;
+  const limitedServiceHotelDecisionStatusDetailText =
+    isLimitedServiceHotelStatusProfile &&
+    canonicalDecisionStatus === 'NO-GO' &&
+    normalizedDecisionReasonKey === 'base_case_break_condition'
+      ? 'This is a value-gap mismatch under current ADR, occupancy, and exit-yield assumptions.'
+      : null;
   const decisionStatusDetailText = manufacturingDecisionStatusDetailText
     ?? marketRateDecisionStatusDetailText
     ?? affordableDecisionStatusDetailText
+    ?? limitedServiceHotelDecisionStatusDetailText
     ?? decisionReasonCopy(decisionReasonCode)
     ?? provenanceNotModeledReason
     ?? decisionSummary.notModeledReason
@@ -1175,8 +1222,15 @@ export const DealShieldView: React.FC<Props> = ({
   const isAffordableHousingProfile = [profileId, tileProfileId, contentProfileId].some(
     (value) => typeof value === 'string' && value.startsWith('multifamily_affordable_housing')
   );
+  const isFullServiceHotelProfile = [profileId, tileProfileId, contentProfileId].some(
+    (value) => typeof value === 'string' && value.startsWith('hospitality_full_service_hotel')
+  );
+  const isLimitedServiceHotelProfile = [profileId, tileProfileId, contentProfileId].some(
+    (value) => typeof value === 'string' && value.startsWith('hospitality_limited_service_hotel')
+  );
   const useIsolatedSensitivityLabel =
-    isIndustrialProfile || isRestaurantProfile || isMarketRateMultifamilyProfile;
+    isIndustrialProfile || isRestaurantProfile || isMarketRateMultifamilyProfile || isFullServiceHotelProfile || isLimitedServiceHotelProfile;
+  const useHotelSensitivityClarifier = isFullServiceHotelProfile || isLimitedServiceHotelProfile;
   const useRestaurantDecisionSummaryLabels = isRestaurantProfile;
   const isManufacturingProfile = [profileId, tileProfileId, contentProfileId].some(
     (value) => typeof value === 'string' && value.startsWith('industrial_manufacturing')
@@ -1418,12 +1472,14 @@ export const DealShieldView: React.FC<Props> = ({
                             labelFrom(primaryControlVariable, '-'),
                             isIndustrialProfile,
                             isMarketRateMultifamilyProfile,
-                            isAffordableHousingProfile
+                            isAffordableHousingProfile,
+                            isLimitedServiceHotelProfile,
+                            isFullServiceHotelProfile
                           )}</span>
                         </p>
                         <p>
                           <span className="font-medium text-slate-600">
-                            {isIndustrialProfile ? 'Impact (local):' : 'Impact:'}
+                            {(isIndustrialProfile || isLimitedServiceHotelProfile) ? 'Impact (local):' : 'Impact:'}
                           </span>{' '}
                           <span>{formatAssumptionPercent(primaryControlVariable.impact_pct)}</span>
                         </p>
@@ -1442,7 +1498,9 @@ export const DealShieldView: React.FC<Props> = ({
                         )}
                         {useIsolatedSensitivityLabel && (
                           <p className="text-xs text-slate-500">
-                            Isolated Sensitivity Rank scores isolated driver sensitivity; Break Risk reflects first-break/flex policy risk.
+                            {useHotelSensitivityClarifier
+                              ? 'Isolated rank reflects isolated driver sensitivity; Break Risk reflects first-break/flex policy risk.'
+                              : 'Isolated Sensitivity Rank scores isolated driver sensitivity; Break Risk reflects first-break/flex policy risk.'}
                           </p>
                         )}
                       </div>
@@ -1507,7 +1565,7 @@ export const DealShieldView: React.FC<Props> = ({
                         <li key={`${entry.id ?? 'ranked-likely-wrong'}-${index}`} className="rounded border border-slate-200 bg-white px-2.5 py-2">
                           <p className="font-medium text-slate-800">{formatValue(entry.text ?? entry.id)}</p>
                           <p className="mt-1 text-xs text-slate-600">
-                            Impact: {formatAssumptionPercent(entry.impact_pct)} | {isManufacturingProfile ? 'Risk' : 'Severity'}: {formatValue(entry.severity)}
+                            Impact: {formatAssumptionPercent(entry.impact_pct)} | {isManufacturingProfile ? 'Risk' : 'Severity'}: {isFullServiceHotelProfile && String(formatValue(entry.severity)).toLowerCase() === 'unknown' ? 'Unscored' : formatValue(entry.severity)}
                           </p>
                           <p className="mt-1 text-xs text-slate-600">Why: {formatValue(entry.why)}</p>
                         </li>
