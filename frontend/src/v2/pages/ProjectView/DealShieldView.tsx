@@ -1047,8 +1047,8 @@ export const DealShieldView: React.FC<Props> = ({
       isManufacturingStatusProfile ||
       isColdStorageStatusProfile ||
       isRestaurantFullServiceStatusProfile ||
-      isMarketRateMultifamilyStatusProfile ||
-      isAffordableHousingStatusProfile ||
+      (isMarketRateMultifamilyStatusProfile && hasVerifiedBaseBreakForCopy) ||
+      (isAffordableHousingStatusProfile && hasVerifiedBaseBreakForCopy) ||
       (isFullServiceHotelStatusProfile && hasVerifiedBaseBreakForCopy) ||
       (isLimitedServiceHotelStatusProfile && hasVerifiedBaseBreakForCopy)
     );
@@ -1058,15 +1058,21 @@ export const DealShieldView: React.FC<Props> = ({
       : isLimitedServiceHotelStatusProfile
         ? 'Policy flags NO-GO under current ADR, occupancy, and value-benchmark assumptions.'
         : null;
+  const multifamilyNoGoSummaryText =
+    isMarketRateMultifamilyStatusProfile
+      ? 'Policy flags NO-GO under current rent, occupancy, and value-benchmark assumptions.'
+      : isAffordableHousingStatusProfile
+        ? 'Policy flags NO-GO under capped revenue, compliance-cost, and value-benchmark assumptions.'
+        : null;
   const decisionStatusSummaryText =
     canonicalDecisionStatus === 'GO'
       ? 'Base case remains positive under canonical DealShield policy.'
       : canonicalDecisionStatus === 'Needs Work'
         ? 'Downside pressure is present; policy marks this as near-break risk.'
-        : canonicalDecisionStatus === 'NO-GO'
+      : canonicalDecisionStatus === 'NO-GO'
           ? shouldUseThresholdNoGoSummary
             ? 'Base case already breaks the policy threshold (value gap non-positive).'
-            : hotelNoGoSummaryText ?? 'Base case has already collapsed or value gap is non-positive.'
+            : hotelNoGoSummaryText ?? multifamilyNoGoSummaryText ?? 'Base case has already collapsed or value gap is non-positive.'
           : 'Canonical status is pending due to missing modeled inputs.';
   const manufacturingDecisionStatusDetailText =
     isManufacturingStatusProfile && normalizedDecisionReasonKey === 'base_case_break_condition'
@@ -1078,15 +1084,21 @@ export const DealShieldView: React.FC<Props> = ({
       : null;
   const marketRateDecisionStatusDetailText =
     isMarketRateMultifamilyStatusProfile &&
-    canonicalDecisionStatus === 'NO-GO' &&
-    normalizedDecisionReasonKey === 'base_case_break_condition'
-      ? 'This is a basis/NOI mismatch under current rent + occupancy + operating assumptions.'
+    canonicalDecisionStatus === 'NO-GO'
+      ? hasVerifiedBaseBreakForCopy
+        ? 'This is a basis/NOI mismatch under current rent + occupancy + operating assumptions.'
+        : hasVerifiedNonBaseBreakCondition
+          ? firstBreakSummaryText
+          : 'Policy indicates NO-GO under current rent, occupancy, and value-benchmark assumptions.'
       : null;
   const affordableDecisionStatusDetailText =
     isAffordableHousingStatusProfile &&
-    canonicalDecisionStatus === 'NO-GO' &&
-    normalizedDecisionReasonKey === 'base_case_break_condition'
-      ? 'This is a funding-gap / compliance-cost sensitivity issue under capped revenue.'
+    canonicalDecisionStatus === 'NO-GO'
+      ? hasVerifiedBaseBreakForCopy
+        ? 'This is a funding-gap / compliance-cost sensitivity issue under capped revenue.'
+        : hasVerifiedNonBaseBreakCondition
+          ? firstBreakSummaryText
+          : 'Policy indicates NO-GO under capped revenue, compliance-cost, and value-benchmark assumptions.'
       : null;
   const limitedServiceHotelDecisionStatusDetailText =
     isLimitedServiceHotelStatusProfile &&
