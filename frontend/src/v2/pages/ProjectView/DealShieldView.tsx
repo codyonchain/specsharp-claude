@@ -195,6 +195,7 @@ const formatPrimaryControlLabel = (
   label: string,
   isIndustrialProfile: boolean,
   isMarketRateMultifamilyProfile: boolean,
+  isLuxuryMultifamilyProfile: boolean,
   isAffordableHousingProfile: boolean,
   isLimitedServiceHotelProfile: boolean,
   isFullServiceHotelProfile: boolean
@@ -205,7 +206,13 @@ const formatPrimaryControlLabel = (
   if (isMarketRateMultifamilyProfile) {
     const normalized = label.trim().toLowerCase();
     if (normalized === 'structural base carry proxy +5%') {
-      return 'Lease-Up + Concessions Carry + Basis Drift';
+      return 'Cost Basis Drift + Carry Risk';
+    }
+  }
+  if (isLuxuryMultifamilyProfile) {
+    const normalized = label.trim().toLowerCase();
+    if (normalized === 'amenity finishes +15%') {
+      return 'Luxury Amenity + Finish Package Scope +15%';
     }
   }
   if (isAffordableHousingProfile) {
@@ -807,13 +814,13 @@ export const DealShieldView: React.FC<Props> = ({
     const capRateUsedPct = toFiniteNumber(
       summaryRaw.cap_rate_used_pct ?? summaryRaw.capRateUsedPct ?? fallbackCapRate
     );
-    const stabilizedValueFromSummary = toFiniteNumber(
+    const stabilizedValue = toFiniteNumber(
       summaryRaw.stabilized_value ?? summaryRaw.stabilizedValue
     );
-    let valueGap = toFiniteNumber(
+    const valueGap = toFiniteNumber(
       summaryRaw.value_gap ?? summaryRaw.valueGap ?? fallbackValueGap
     );
-    let valueGapPct = toFiniteNumber(
+    const valueGapPct = toFiniteNumber(
       summaryRaw.value_gap_pct ?? summaryRaw.valueGapPct ?? fallbackValueGapPct
     );
     const notModeledRaw = summaryRaw.not_modeled_reason ?? summaryRaw.notModeledReason;
@@ -821,50 +828,7 @@ export const DealShieldView: React.FC<Props> = ({
       typeof notModeledRaw === 'string' && notModeledRaw.trim()
         ? notModeledRaw.trim()
         : null;
-
-    const baseRow = rows.find((row: any) => {
-      if (!row || typeof row !== 'object') return false;
-      const scenarioId = typeof row?.scenario_id === 'string' ? row.scenario_id.toLowerCase() : '';
-      const label = typeof row?.label === 'string' ? row.label.toLowerCase() : '';
-      return scenarioId === 'base' || label === 'base';
-    }) ?? rows[0];
-
-    let baseStabilizedValue = stabilizedValueFromSummary;
-    let baseTotalCost: number | null = null;
-    if (baseRow && typeof baseRow === 'object') {
-      const baseCells = Array.isArray(baseRow?.cells)
-        ? baseRow.cells
-        : Array.isArray(baseRow?.values)
-          ? baseRow.values
-          : [];
-      const cellMap = new Map<string, any>();
-      baseCells.forEach((cell: any, index: number) => {
-        if (!cell || typeof cell !== 'object') {
-          cellMap.set(String(index), cell);
-          return;
-        }
-        const cellId =
-          cell?.col_id ??
-          cell?.colId ??
-          cell?.tile_id ??
-          cell?.tileId ??
-          cell?.id ??
-          String(index);
-        cellMap.set(String(cellId), cell);
-      });
-      const stabilizedCell = cellMap.get('stabilized_value');
-      const totalCostCell = cellMap.get('total_cost');
-      baseStabilizedValue = toFiniteNumber(stabilizedCell?.value ?? stabilizedCell ?? stabilizedValueFromSummary);
-      baseTotalCost = toFiniteNumber(totalCostCell?.value ?? totalCostCell);
-    }
-
-    if (valueGap === null && baseStabilizedValue !== null && baseTotalCost !== null) {
-      valueGap = baseStabilizedValue - baseTotalCost;
-    }
-    if (valueGapPct === null && valueGap !== null && baseTotalCost !== null && baseTotalCost !== 0) {
-      valueGapPct = (valueGap / baseTotalCost) * 100;
-    }
-    if (!notModeledReason && baseStabilizedValue === null && capRateUsedPct === null) {
+    if (!notModeledReason && stabilizedValue === null && capRateUsedPct === null) {
       const capRateDisclosure = dealShieldDisclosures.find((item) => /cap rate missing/i.test(item));
       if (capRateDisclosure) {
         notModeledReason = capRateDisclosure;
@@ -872,14 +836,13 @@ export const DealShieldView: React.FC<Props> = ({
     }
 
     return {
-      stabilizedValue: baseStabilizedValue,
-      baseTotalCost,
+      stabilizedValue,
       capRateUsedPct,
       valueGap,
       valueGapPct,
       notModeledReason,
     };
-  }, [dealShieldDisclosures, rows, viewModel]);
+  }, [dealShieldDisclosures, viewModel]);
   const decisionSummaryRaw =
     ((viewModel as any)?.decision_summary && typeof (viewModel as any).decision_summary === 'object'
       ? (viewModel as any).decision_summary
@@ -894,17 +857,8 @@ export const DealShieldView: React.FC<Props> = ({
   );
   const firstBreakThresholdDisplay = useMemo(() => {
     if (!firstBreakCondition) return MISSING_VALUE;
-    const thresholdDisplay = formatFirstBreakMetricValue(firstBreakCondition.threshold);
-    if (firstBreakMetric !== 'value_gap') return thresholdDisplay;
-    const thresholdNumeric = toFiniteNumber(firstBreakCondition.threshold);
-    const baseTotalCost = decisionSummary.baseTotalCost;
-    if (thresholdNumeric === null || baseTotalCost === null || baseTotalCost === 0) return thresholdDisplay;
-    const thresholdPct = (thresholdNumeric / baseTotalCost) * 100;
-    return `${thresholdDisplay} (${formatValue(firstBreakCondition.operator)} ${new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: 1,
-      maximumFractionDigits: 1,
-    }).format(thresholdPct)}% of cost)`;
-  }, [decisionSummary.baseTotalCost, firstBreakCondition, firstBreakMetric, formatFirstBreakMetricValue]);
+    return formatFirstBreakMetricValue(firstBreakCondition.threshold);
+  }, [firstBreakCondition, formatFirstBreakMetricValue]);
   const hasBaseBreakCondition = Boolean(
     firstBreakCondition && (firstBreakScenarioIdKey === 'base' || firstBreakScenarioLabelKey === 'base')
   );
@@ -995,6 +949,19 @@ export const DealShieldView: React.FC<Props> = ({
     provenance?.content_profile_id,
     content?.profile_id,
   ].some((value) => typeof value === 'string' && value.startsWith('multifamily_market_rate_apartments'));
+  const isLuxuryMultifamilyStatusProfile = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (viewModel as any)?.profile_id,
+    (viewModel as any)?.profileId,
+    (viewModel as any)?.tile_profile_id,
+    (viewModel as any)?.tileProfileId,
+    provenance?.profile_id,
+    (viewModel as any)?.content_profile_id,
+    (viewModel as any)?.contentProfileId,
+    provenance?.content_profile_id,
+    content?.profile_id,
+  ].some((value) => typeof value === 'string' && value.startsWith('multifamily_luxury_apartments'));
   const isAffordableHousingStatusProfile = [
     (dealShieldData as any)?.profile_id,
     (dealShieldData as any)?.profileId,
@@ -1060,7 +1027,7 @@ export const DealShieldView: React.FC<Props> = ({
         : null;
   const multifamilyNoGoSummaryText =
     isMarketRateMultifamilyStatusProfile
-      ? 'Policy flags NO-GO under current rent, occupancy, and value-benchmark assumptions.'
+      ? 'Policy flags NO-GO under current cost-basis, rent, expense, and value-benchmark assumptions.'
       : isAffordableHousingStatusProfile
         ? 'Policy flags NO-GO under capped revenue, compliance-cost, and value-benchmark assumptions.'
         : null;
@@ -1086,10 +1053,10 @@ export const DealShieldView: React.FC<Props> = ({
     isMarketRateMultifamilyStatusProfile &&
     canonicalDecisionStatus === 'NO-GO'
       ? hasVerifiedBaseBreakForCopy
-        ? 'This is a basis/NOI mismatch under current rent + occupancy + operating assumptions.'
+        ? 'This is primarily a cost-basis / value-gap break under current rent and expense assumptions.'
         : hasVerifiedNonBaseBreakCondition
           ? firstBreakSummaryText
-          : 'Policy indicates NO-GO under current rent, occupancy, and value-benchmark assumptions.'
+          : 'Policy indicates NO-GO under current cost-basis, rent, expense, and value-benchmark assumptions.'
       : null;
   const affordableDecisionStatusDetailText =
     isAffordableHousingStatusProfile &&
@@ -1099,6 +1066,12 @@ export const DealShieldView: React.FC<Props> = ({
         : hasVerifiedNonBaseBreakCondition
           ? firstBreakSummaryText
           : 'Policy indicates NO-GO under capped revenue, compliance-cost, and value-benchmark assumptions.'
+      : null;
+  const luxuryMultifamilyDecisionStatusDetailText =
+    isLuxuryMultifamilyStatusProfile &&
+    canonicalDecisionStatus === 'GO' &&
+    hasVerifiedNonBaseBreakCondition
+      ? `GO, but first break occurs in ${firstBreakScenarioLabel} (thin cushion).`
       : null;
   const limitedServiceHotelDecisionStatusDetailText =
     isLimitedServiceHotelStatusProfile &&
@@ -1120,6 +1093,7 @@ export const DealShieldView: React.FC<Props> = ({
       : null;
   const decisionStatusDetailText = manufacturingDecisionStatusDetailText
     ?? marketRateDecisionStatusDetailText
+    ?? luxuryMultifamilyDecisionStatusDetailText
     ?? affordableDecisionStatusDetailText
     ?? fullServiceHotelDecisionStatusDetailText
     ?? limitedServiceHotelDecisionStatusDetailText
@@ -1212,6 +1186,9 @@ export const DealShieldView: React.FC<Props> = ({
   const isMarketRateMultifamilyProfile = [profileId, tileProfileId, contentProfileId].some(
     (value) => typeof value === 'string' && value.startsWith('multifamily_market_rate_apartments')
   );
+  const isLuxuryMultifamilyProfile = [profileId, tileProfileId, contentProfileId].some(
+    (value) => typeof value === 'string' && value.startsWith('multifamily_luxury_apartments')
+  );
   const isAffordableHousingProfile = [profileId, tileProfileId, contentProfileId].some(
     (value) => typeof value === 'string' && value.startsWith('multifamily_affordable_housing')
   );
@@ -1222,7 +1199,21 @@ export const DealShieldView: React.FC<Props> = ({
     (value) => typeof value === 'string' && value.startsWith('hospitality_limited_service_hotel')
   );
   const useIsolatedSensitivityLabel =
-    isIndustrialProfile || isRestaurantProfile || isMarketRateMultifamilyProfile || isFullServiceHotelProfile || isLimitedServiceHotelProfile;
+    isIndustrialProfile ||
+    isRestaurantProfile ||
+    isMarketRateMultifamilyProfile ||
+    isLuxuryMultifamilyProfile ||
+    isFullServiceHotelProfile ||
+    isLimitedServiceHotelProfile;
+  const useMultifamilySensitivityClarifier =
+    isMarketRateMultifamilyProfile || isLuxuryMultifamilyProfile;
+  const breakRiskReasonForDisplay =
+    breakRisk?.reason &&
+    isLuxuryMultifamilyProfile &&
+    breakRisk.level.toLowerCase() === 'low' &&
+    /base case breaks first/i.test(breakRisk.reason)
+      ? 'Tight cushion; stress band breach is near.'
+      : breakRisk?.reason ?? null;
   const useHotelSensitivityClarifier = isFullServiceHotelProfile || isLimitedServiceHotelProfile;
   const useRestaurantDecisionSummaryLabels = isRestaurantProfile;
   const isManufacturingProfile = [profileId, tileProfileId, contentProfileId].some(
@@ -1465,6 +1456,7 @@ export const DealShieldView: React.FC<Props> = ({
                             labelFrom(primaryControlVariable, '-'),
                             isIndustrialProfile,
                             isMarketRateMultifamilyProfile,
+                            isLuxuryMultifamilyProfile,
                             isAffordableHousingProfile,
                             isLimitedServiceHotelProfile,
                             isFullServiceHotelProfile
@@ -1485,13 +1477,18 @@ export const DealShieldView: React.FC<Props> = ({
                         {breakRisk && (
                           <p>
                             <span className="font-medium text-slate-600">Break Risk:</span>{' '}
-                            <span>{breakRisk.level}</span>{' '}
-                            <span className="text-xs text-slate-500">({breakRisk.reason})</span>
+                            <span>{breakRisk.level}</span>
+                            {breakRiskReasonForDisplay && (
+                              <>
+                                {' '}
+                                <span className="text-xs text-slate-500">({breakRiskReasonForDisplay})</span>
+                              </>
+                            )}
                           </p>
                         )}
                         {useIsolatedSensitivityLabel && (
                           <p className="text-xs text-slate-500">
-                            {useHotelSensitivityClarifier
+                            {(useHotelSensitivityClarifier || useMultifamilySensitivityClarifier)
                               ? 'Isolated rank reflects isolated driver sensitivity; Break Risk reflects first-break/flex policy risk.'
                               : 'Isolated Sensitivity Rank scores isolated driver sensitivity; Break Risk reflects first-break/flex policy risk.'}
                           </p>

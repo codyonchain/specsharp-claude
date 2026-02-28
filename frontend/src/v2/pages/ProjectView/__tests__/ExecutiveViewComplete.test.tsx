@@ -1828,6 +1828,56 @@ describe("ExecutiveViewComplete", () => {
     ).toBeInTheDocument();
   });
 
+  it("uses market-rate value-gap-first NO-GO copy when DSCR is below target and shows program-assumption footer language", () => {
+    const marketRateProject = buildCrossTypeProject(
+      "multifamily",
+      "market_rate_apartments",
+      "multifamily_market_rate_apartments_v1"
+    );
+    marketRateProject.analysis.calculations.ownership_analysis.debt_metrics.calculated_dscr = 1.19;
+    marketRateProject.analysis.calculations.ownership_analysis.debt_metrics.target_dscr = 1.2;
+    marketRateProject.analysis.calculations.dealshield_scenarios.scenarios.base.ownership_analysis.debt_metrics.calculated_dscr =
+      1.19;
+    marketRateProject.analysis.calculations.dealshield_scenarios.scenarios.base.ownership_analysis.debt_metrics.target_dscr =
+      1.2;
+
+    const marketRateDealShield = buildCrossTypeDealShieldViewModel(
+      "multifamily_market_rate_apartments_v1",
+      "NO-GO",
+      "base_case_break_condition"
+    ) as any;
+    marketRateDealShield.decision_summary = {
+      value_gap: -3_600_000,
+      value_gap_pct: -7.8,
+    };
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={marketRateProject}
+          dealShieldData={marketRateDealShield}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getByText((text) =>
+        text.includes(
+          "NO-GO because value gap is non-positive (policy break), and Debt Lens DSCR 1.19× is below 1.20×."
+        )
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((text) =>
+        text.includes(
+          "Bottom line: policy breaks on value gap; Debt Lens DSCR is below target (1.19× vs 1.20×); focus diligence on cost basis + carry drivers before IC."
+        )
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText("Program assumption")).toBeInTheDocument();
+    expect(screen.queryByText("Derived from square footage and density")).not.toBeInTheDocument();
+  });
+
   it("renders explicit multifamily canonical decision status/reason/provenance parity", () => {
     const { rerender } = render(
       <MemoryRouter>
@@ -1909,6 +1959,97 @@ describe("ExecutiveViewComplete", () => {
         text.includes("Reality Check:")
       )
     ).toBeInTheDocument();
+  });
+
+  it("applies luxury multifamily target-yield and footer copy overrides without changing GO verdict logic", () => {
+    const luxuryProject = buildCrossTypeProject(
+      "multifamily",
+      "luxury_apartments",
+      "multifamily_luxury_apartments_v1"
+    );
+    luxuryProject.analysis.calculations.revenue_analysis = {
+      annual_revenue: 5_040_000,
+      net_income: 250_000,
+    };
+    luxuryProject.analysis.calculations.revenue_requirements = {
+      required_value: 296_000,
+      market_value: 250_000,
+      required_revenue_per_sf: 462.5,
+      actual_revenue_per_sf: 630,
+      feasibility: {
+        status: "Not Feasible",
+        recommendation: "Margin and occupancy assumptions need tightening.",
+      },
+    };
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={luxuryProject}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "multifamily_luxury_apartments_v1",
+            "GO",
+            "base_value_gap_positive"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Investment Decision: GO")).toBeInTheDocument();
+    expect(screen.getByText("Below Target Yield (Thin Cushion)")).toBeInTheDocument();
+    expect(screen.queryByText("Not Feasible")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This section tests the target yield hurdle; the overall verdict is driven by DealShield policy/value gap."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText("Planning timeline (schedule risk not modeled in base case).")).toBeInTheDocument();
+    expect(screen.getByText("COST PER UNIT")).toBeInTheDocument();
+    expect(screen.getByText("Cost per modeled unit")).toBeInTheDocument();
+    expect(screen.getByText("Program assumption")).toBeInTheDocument();
+    expect(screen.queryByText("Derived from square footage and density")).not.toBeInTheDocument();
+    expect(screen.queryByText("Total project cost divided by units")).not.toBeInTheDocument();
+
+    const marketRateProject = buildCrossTypeProject(
+      "multifamily",
+      "market_rate_apartments",
+      "multifamily_market_rate_apartments_v1"
+    );
+    marketRateProject.analysis.calculations.revenue_analysis = {
+      annual_revenue: 5_040_000,
+      net_income: 250_000,
+    };
+    marketRateProject.analysis.calculations.revenue_requirements = {
+      required_value: 296_000,
+      market_value: 250_000,
+      required_revenue_per_sf: 462.5,
+      actual_revenue_per_sf: 630,
+      feasibility: {
+        status: "Not Feasible",
+        recommendation: "Margin and occupancy assumptions need tightening.",
+      },
+    };
+
+    rerender(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={marketRateProject}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "multifamily_market_rate_apartments_v1",
+            "GO",
+            "base_value_gap_positive"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Not Feasible")).toBeInTheDocument();
+    expect(screen.queryByText("Below Target Yield (Thin Cushion)")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "This section tests the target yield hurdle; the overall verdict is driven by DealShield policy/value gap."
+      )
+    ).not.toBeInTheDocument();
   });
 
   it("keeps canonical decision status/reason/provenance parity for office class_a and class_b", () => {

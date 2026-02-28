@@ -201,7 +201,13 @@ const formatExpectedPrimaryControlLabel = (profileId: string, label: string): st
     profileId === "multifamily_market_rate_apartments_v1" &&
     label.trim().toLowerCase() === "structural base carry proxy +5%"
   ) {
-    return "Lease-Up + Concessions Carry + Basis Drift";
+    return "Cost Basis Drift + Carry Risk";
+  }
+  if (
+    profileId === "multifamily_luxury_apartments_v1" &&
+    label.trim().toLowerCase() === "amenity finishes +15%"
+  ) {
+    return "Luxury Amenity + Finish Package Scope +15%";
   }
   if (
     profileId === "multifamily_affordable_housing_v1" &&
@@ -2701,7 +2707,7 @@ describe("DealShieldView", () => {
       screen.getByText("Base case already breaks the policy threshold (value gap non-positive).")
     ).toBeInTheDocument();
     expect(
-      screen.getByText("This is a basis/NOI mismatch under current rent + occupancy + operating assumptions.")
+      screen.getByText("This is primarily a cost-basis / value-gap break under current rent and expense assumptions.")
     ).toBeInTheDocument();
     expect(
       screen.queryByText("Base case has already collapsed or value gap is non-positive.")
@@ -2765,7 +2771,7 @@ describe("DealShieldView", () => {
       screen.getByText("Base case has already collapsed or value gap is non-positive.")
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("This is a basis/NOI mismatch under current rent + occupancy + operating assumptions.")
+      screen.queryByText("This is primarily a cost-basis / value-gap break under current rent and expense assumptions.")
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText("This is a funding-gap / compliance-cost sensitivity issue under capped revenue.")
@@ -2796,16 +2802,16 @@ describe("DealShieldView", () => {
     );
 
     expect(
-      screen.getByText("Policy flags NO-GO under current rent, occupancy, and value-benchmark assumptions.")
+      screen.getByText("Policy flags NO-GO under current cost-basis, rent, expense, and value-benchmark assumptions.")
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Policy indicates NO-GO under current rent, occupancy, and value-benchmark assumptions.")
+      screen.getByText("Policy indicates NO-GO under current cost-basis, rent, expense, and value-benchmark assumptions.")
     ).toBeInTheDocument();
     expect(
       screen.queryByText("Base case already breaks the policy threshold (value gap non-positive).")
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByText("This is a basis/NOI mismatch under current rent + occupancy + operating assumptions.")
+      screen.queryByText("This is primarily a cost-basis / value-gap break under current rent and expense assumptions.")
     ).not.toBeInTheDocument();
 
     const affordablePayload = buildPolicyBackedDealShieldPayload(MULTIFAMILY_POLICY_CONTRACT_CASES[2]) as any;
@@ -2842,6 +2848,49 @@ describe("DealShieldView", () => {
     expect(
       screen.queryByText("This is a funding-gap / compliance-cost sensitivity issue under capped revenue.")
     ).not.toBeInTheDocument();
+  });
+
+  it("applies luxury multifamily sensitivity wording and GO thin-cushion detail without UI math", () => {
+    const luxuryPayload = buildPolicyBackedDealShieldPayload(MULTIFAMILY_POLICY_CONTRACT_CASES[1]) as any;
+    luxuryPayload.view_model.decision_status = "GO";
+    luxuryPayload.view_model.decision_reason_code = "base_value_gap_positive";
+    applyFirstBreakCondition(luxuryPayload.view_model, {
+      scenario_id: "conservative",
+      scenario_label: "Conservative",
+      break_metric: "value_gap",
+      operator: "<=",
+      threshold: 250000,
+      observed_value: 240000,
+      observed_value_pct: -0.8,
+    });
+    luxuryPayload.view_model.break_risk_level = "Low";
+    luxuryPayload.view_model.break_risk_reason = "Base case breaks first.";
+    luxuryPayload.view_model.break_risk = {
+      level: "Low",
+      reason: "Base case breaks first.",
+    };
+
+    render(
+      <DealShieldView
+        projectId="proj_multifamily_luxury_go_thin_cushion"
+        data={luxuryPayload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(screen.getByText("Luxury Amenity + Finish Package Scope +15%")).toBeInTheDocument();
+    expect(screen.getByText("Isolated Sensitivity Rank:")).toBeInTheDocument();
+    expect(screen.queryByText("Driver Impact Severity:")).not.toBeInTheDocument();
+    expect(screen.getByText("GO, but first break occurs in Conservative (thin cushion).")).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return text.includes("Break Risk:") && text.includes("Low");
+      })
+    ).toBeInTheDocument();
+    expect(screen.getByText("(Tight cushion; stress band breach is near.)")).toBeInTheDocument();
   });
 
   it("renders hospitality canonical decision and decision-insurance contract fields for both hotel profiles", () => {
@@ -2927,12 +2976,15 @@ describe("DealShieldView", () => {
       expect(screen.getByText(formatExpectedPrimaryControlLabel(testCase.profileId, testCase.primaryControlLabel))).toBeInTheDocument();
       expect(screen.getByText("Impact:")).toBeInTheDocument();
       expect(screen.queryByText("Impact (local):")).not.toBeInTheDocument();
-      if (testCase.profileId === "multifamily_market_rate_apartments_v1") {
+      if (
+        testCase.profileId === "multifamily_market_rate_apartments_v1" ||
+        testCase.profileId === "multifamily_luxury_apartments_v1"
+      ) {
         expect(screen.getByText("Isolated Sensitivity Rank:")).toBeInTheDocument();
         expect(screen.queryByText("Driver Impact Severity:")).not.toBeInTheDocument();
         expect(
           screen.getByText(
-            "Isolated Sensitivity Rank scores isolated driver sensitivity; Break Risk reflects first-break/flex policy risk."
+            "Isolated rank reflects isolated driver sensitivity; Break Risk reflects first-break/flex policy risk."
           )
         ).toBeInTheDocument();
       } else {
@@ -2987,13 +3039,6 @@ describe("DealShieldView", () => {
               text.includes(testCase.breakOperator) &&
               text.includes("$")
             );
-          })
-        ).toBeInTheDocument();
-        expect(
-          screen.getByText((_, element) => {
-            if (element?.tagName.toLowerCase() !== "p") return false;
-            const text = element.textContent ?? "";
-            return text.includes("Threshold:") && text.includes("% of cost");
           })
         ).toBeInTheDocument();
       }

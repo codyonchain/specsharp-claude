@@ -284,6 +284,14 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     (dealShieldData as any)?.content_profile_id,
     (dealShieldData as any)?.contentProfileId,
   ].some((value) => typeof value === 'string' && value.startsWith('multifamily_market_rate_apartments'));
+  const hasLuxuryMultifamilyProfileId = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (dealShieldData as any)?.tile_profile_id,
+    (dealShieldData as any)?.tileProfileId,
+    (dealShieldData as any)?.content_profile_id,
+    (dealShieldData as any)?.contentProfileId,
+  ].some((value) => typeof value === 'string' && value.startsWith('multifamily_luxury_apartments'));
   const isFullServiceRestaurantProject =
     isRestaurantProject && (parsedSubtype === 'full_service' || hasRestaurantFullServiceProfileId);
   const isQuickServiceRestaurantProject =
@@ -293,6 +301,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const isMarketRateMultifamilyProject =
     parsedBuildingType.includes('multifamily') &&
     (parsedSubtype === 'market_rate_apartments' || hasMarketRateMultifamilyProfileId);
+  const isLuxuryMultifamilyProject =
+    parsedBuildingType.includes('multifamily') &&
+    (parsedSubtype === 'luxury_apartments' || hasLuxuryMultifamilyProfileId);
   const isManufacturingIndustrialProject =
     parsedBuildingType === 'industrial' && parsedSubtype === 'manufacturing';
   const isWarehouseIndustrialProject =
@@ -934,7 +945,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const equityReturn = typeof displayData.roi === 'number' && Number.isFinite(displayData.roi)
     ? displayData.roi
     : undefined;
-  const investmentDecisionFromDisplay = displayData.investmentDecision;
   const spreadBpsValue =
     typeof yieldOnCost === 'number' &&
     Number.isFinite(yieldOnCost) &&
@@ -995,11 +1005,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const decisionReasonText = decisionReasonCopy(decisionReasonCode)
     || (typeof decisionStatusProvenanceRecord.not_modeled_reason === 'string' ? decisionStatusProvenanceRecord.not_modeled_reason : undefined)
     || (typeof decisionStatusProvenanceRecord.notModeledReason === 'string' ? decisionStatusProvenanceRecord.notModeledReason : undefined)
-    || displayData.decisionReason || (
-    typeof investmentDecisionFromDisplay === 'object'
-      ? investmentDecisionFromDisplay?.summary
-    : undefined
-  ) || 'Debt coverage and yield metrics are still loading.';
+    || (decisionStatus === 'PENDING'
+      ? 'Canonical decision reason is pending backend policy outputs.'
+      : undefined);
   const formatPct = (value?: number) =>
     typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(1)}%` : '—';
   const yieldPctValue = typeof yieldOnCost === 'number' && Number.isFinite(yieldOnCost)
@@ -1085,7 +1093,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
             return `NO-GO because value gap is non-positive (equity lens), even with DSCR ${dscrText ?? '—'} meeting ${dscrTargetText} (debt lens).`;
           }
           if (hasNonPositiveValueGap && dscrMeetsTarget === false) {
-            return `NO-GO because DSCR ${dscrText ?? '—'} is below ${dscrTargetText} (debt lens) and value gap is non-positive (equity lens).`;
+            return `NO-GO because value gap is non-positive (policy break), and Debt Lens DSCR ${dscrText ?? '—'} is below ${dscrTargetText}.`;
           }
           if (hasNonPositiveValueGap) {
             return `NO-GO because value gap is non-positive (equity lens) while debt-lens coverage is still being verified against ${dscrTargetText}.`;
@@ -1755,6 +1763,17 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     currentRevenuePerSf >= requiredRevenuePerSf &&
     typeof noiGap === 'number' &&
     noiGap < 0;
+  const revenueFeasibilityStatusRaw = revenueReq?.feasibility?.status || revenueReq?.feasibility;
+  const isRevenueFeasible = revenueFeasibilityStatusRaw === 'Feasible';
+  const shouldShowLuxuryRevenueClarifier =
+    isLuxuryMultifamilyProject &&
+    decisionStatus === 'GO' &&
+    typeof revenueFeasibilityStatusRaw === 'string' &&
+    revenueFeasibilityStatusRaw.toLowerCase() === 'not feasible';
+  const revenueFeasibilityStatusDisplay =
+    shouldShowLuxuryRevenueClarifier
+      ? 'Below Target Yield (Thin Cushion)'
+      : revenueFeasibilityStatusRaw;
 
   const isIndustrialProject = (buildingType || '').toLowerCase() === 'industrial';
   const industrialYieldSpreadDisplay =
@@ -1905,6 +1924,16 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
       } else if (isQuickServiceRestaurantProject) {
         returnsText +=
           " QSR reality check: validate peak-hour throughput (cars/hour or tickets/hour) and service time assumptions; that's the first-break driver.";
+      } else if (isMarketRateMultifamilyProject && decisionStatus === 'NO-GO') {
+        const hasNonPositiveValueGap =
+          typeof canonicalValueGap === 'number' && Number.isFinite(canonicalValueGap) && canonicalValueGap <= 0;
+        if (hasNonPositiveValueGap && dscrMeetsTarget === false) {
+          returnsText += ` Bottom line: policy breaks on value gap; Debt Lens DSCR is below target (${dscrText ?? '—'} vs ${dscrTarget.toFixed(2)}×); focus diligence on cost basis + carry drivers before IC.`;
+        } else if (hasNonPositiveValueGap) {
+          returnsText += ' Bottom line: policy breaks on value gap; focus diligence on cost basis + carry drivers before IC.';
+        } else {
+          returnsText += ' Bottom line: policy remains tight; focus diligence on cost basis + carry drivers before IC.';
+        }
       } else {
         returnsText += ' Together these determine whether the project clears both equity and lender hurdles.';
       }
@@ -3471,8 +3500,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
             )}
 
             <div className={`p-4 rounded-lg ${
-              (revenueReq.feasibility?.status || revenueReq.feasibility) === 'Feasible' 
-                ? 'bg-green-50 border border-green-200' 
+              isRevenueFeasible
+                ? 'bg-green-50 border border-green-200'
                 : 'bg-amber-50 border border-amber-200'
             }`}>
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -3488,11 +3517,16 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                       Sales/SF clears easily; the hurdle is margin/prime cost and occupancy cost, not top-line demand.
                     </p>
                   )}
+                  {shouldShowLuxuryRevenueClarifier && (
+                    <p className="text-xs text-gray-600 leading-snug mt-2">
+                      This section tests the target yield hurdle; the overall verdict is driven by DealShield policy/value gap.
+                    </p>
+                  )}
                 </div>
                 <span className={`font-bold ${
-                  (revenueReq.feasibility?.status || revenueReq.feasibility) === 'Feasible' ? 'text-green-600' : 'text-amber-600'
+                  isRevenueFeasible ? 'text-green-600' : 'text-amber-600'
                 }`}>
-                  {revenueReq.feasibility?.status || revenueReq.feasibility}
+                  {revenueFeasibilityStatusDisplay}
                 </span>
               </div>
               {revenueReq.feasibility?.recommendation && (
@@ -3784,7 +3818,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
               Key Milestones
             </h3>
             <p className="text-sm text-gray-600 mb-6">
-              Milestones are baseline planning assumptions. Yield, DSCR, and NOI metrics do not currently include schedule-delay or acceleration effects.
+              {isLuxuryMultifamilyProject
+                ? 'Planning timeline (schedule risk not modeled in base case).'
+                : 'Milestones are baseline planning assumptions. Yield, DSCR, and NOI metrics do not currently include schedule-delay or acceleration effects.'}
             </p>
             <div className="relative">
               <div className="absolute left-10 top-10 bottom-0 w-0.5 bg-gradient-to-b from-blue-400 via-purple-400 to-pink-400"></div>
@@ -4176,7 +4212,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                     ? 'INVESTMENT PER SF'
                     : isRestaurantProject
                       ? 'COST PER SF'
-                      : 'INVESTMENT PER UNIT'}
+                      : isLuxuryMultifamilyProject
+                        ? 'COST PER UNIT'
+                        : 'INVESTMENT PER UNIT'}
                 </p>
                 <p className="text-3xl font-bold text-white">
                   {isIndustrialProject
@@ -4194,7 +4232,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                     ? 'Total project cost normalized by gross square footage'
                     : isRestaurantProject
                       ? 'Total project cost normalized by square footage'
-                      : 'Total project cost divided by units'}
+                      : isLuxuryMultifamilyProject
+                        ? 'Cost per modeled unit'
+                        : 'Total project cost divided by units'}
                 </p>
               </div>
               <div className="text-center">
@@ -4259,7 +4299,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                 {footerUnitLabel}
               </p>
               <p className="text-3xl font-bold text-white">{displayData.units.toLocaleString()}</p>
-              <p className="text-sm text-slate-500">Derived from square footage and density</p>
+              <p className="text-sm text-slate-500">
+                {(isLuxuryMultifamilyProject || isMarketRateMultifamilyProject)
+                  ? 'Program assumption'
+                  : 'Derived from square footage and density'}
+              </p>
             </div>
             );
           })()}
