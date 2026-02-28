@@ -114,6 +114,85 @@ const DECISION_REASON_TEXT: Record<string, string> = {
   base_value_gap_positive: "Base value gap is positive under current assumptions.",
 };
 
+const evaluateBreakConditionHolds = (
+  operator: string,
+  observedValue: number,
+  thresholdValue: number
+): boolean | null => {
+  switch (operator) {
+    case "<=":
+      return observedValue <= thresholdValue;
+    case "<":
+      return observedValue < thresholdValue;
+    case ">=":
+      return observedValue >= thresholdValue;
+    case ">":
+      return observedValue > thresholdValue;
+    case "=":
+    case "==":
+      return Math.abs(observedValue - thresholdValue) <= 1e-9;
+    default:
+      return null;
+  }
+};
+
+const classifyBreakRisk = (
+  scenarioLabel: string,
+  flexBeforeBreakPct: number
+): { level: "High" | "Medium" | "Low"; reason: string } => {
+  const scenarioKey = scenarioLabel.trim().toLowerCase().replace(/\s+/g, "_");
+  if (scenarioKey === "base") {
+    return { level: "High", reason: "Base case breaks first." };
+  }
+  if (flexBeforeBreakPct < 2) {
+    return { level: "High", reason: "<2% flex before break." };
+  }
+  if (flexBeforeBreakPct <= 5) {
+    return { level: "Medium", reason: "2-5% flex before break." };
+  }
+  return { level: "Low", reason: ">5% flex before break." };
+};
+
+const applyFirstBreakCondition = (
+  viewModel: any,
+  condition: {
+    scenario_id: string;
+    scenario_label: string;
+    break_metric: string;
+    operator: string;
+    threshold: number;
+    observed_value: number;
+    observed_value_pct: number;
+  }
+) => {
+  viewModel.first_break_condition = condition;
+  const holds = evaluateBreakConditionHolds(
+    condition.operator,
+    condition.observed_value,
+    condition.threshold
+  );
+  viewModel.first_break_condition_holds = holds;
+  const flexBeforeBreakPct =
+    typeof viewModel.flex_before_break_pct === "number" ? viewModel.flex_before_break_pct : 0;
+  const breakRisk = classifyBreakRisk(condition.scenario_label, flexBeforeBreakPct);
+  viewModel.break_risk_level = breakRisk.level;
+  viewModel.break_risk_reason = breakRisk.reason;
+  viewModel.break_risk = breakRisk;
+  if (viewModel?.decision_insurance_provenance) {
+    viewModel.decision_insurance_provenance.first_break_condition_holds = {
+      status: holds === null ? "unavailable" : "available",
+      value: holds,
+      source: "decision_insurance.first_break_condition",
+    };
+    viewModel.decision_insurance_provenance.break_risk = {
+      status: "available",
+      source: "decision_insurance.break_risk",
+      level: breakRisk.level,
+      reason: breakRisk.reason,
+    };
+  }
+};
+
 const formatExpectedPrimaryControlLabel = (profileId: string, label: string): string => {
   if (profileId.startsWith("industrial_")) {
     return label.replace(/^IC-First(?:\s*[:\-]\s*|\s+)/i, "").trim();
@@ -1098,9 +1177,12 @@ const MULTIFAMILY_POLICY_CONTRACT_CASES: Array<(typeof POLICY_CONTRACT_CASES)[nu
   },
 ];
 
-const buildRestaurantDealShieldPayload = (profileId: string) => ({
-  profile_id: profileId,
-  view_model: {
+const buildRestaurantDealShieldPayload = (profileId: string) => {
+  const firstBreakConditionHolds = evaluateBreakConditionHolds("<=", -25000, 0.0);
+  const breakRisk = classifyBreakRisk("Conservative", 2.1);
+  return {
+    profile_id: profileId,
+    view_model: {
     profile_id: profileId,
     tile_profile_id: profileId,
     content_profile_id: profileId,
@@ -1203,7 +1285,11 @@ const buildRestaurantDealShieldPayload = (profileId: string) => ({
       observed_value: -25000,
       observed_value_pct: -0.8,
     },
+    first_break_condition_holds: firstBreakConditionHolds,
     flex_before_break_pct: 2.1,
+    break_risk_level: breakRisk.level,
+    break_risk_reason: breakRisk.reason,
+    break_risk: breakRisk,
     exposure_concentration_pct: 43.2,
     ranked_likely_wrong: [
       {
@@ -1220,7 +1306,12 @@ const buildRestaurantDealShieldPayload = (profileId: string) => ({
       profile_id: profileId,
       primary_control_variable: { status: "available" },
       first_break_condition: { status: "available" },
+      first_break_condition_holds: {
+        status: firstBreakConditionHolds === null ? "unavailable" : "available",
+        value: firstBreakConditionHolds,
+      },
       flex_before_break_pct: { status: "available" },
+      break_risk: { status: "available", level: breakRisk.level, reason: breakRisk.reason },
       exposure_concentration_pct: { status: "available" },
       ranked_likely_wrong: { status: "available" },
     },
@@ -1248,7 +1339,12 @@ const buildRestaurantDealShieldPayload = (profileId: string) => ({
         profile_id: profileId,
         primary_control_variable: { status: "available" },
         first_break_condition: { status: "available" },
+        first_break_condition_holds: {
+          status: firstBreakConditionHolds === null ? "unavailable" : "available",
+          value: firstBreakConditionHolds,
+        },
         flex_before_break_pct: { status: "available" },
+        break_risk: { status: "available", level: breakRisk.level, reason: breakRisk.reason },
         exposure_concentration_pct: { status: "available" },
         ranked_likely_wrong: { status: "available" },
       },
@@ -1258,12 +1354,16 @@ const buildRestaurantDealShieldPayload = (profileId: string) => ({
         anchor_total_project_cost: 3000000,
       },
     },
-  },
-});
+    },
+  };
+};
 
-const buildHospitalityDealShieldPayload = (profileId: string) => ({
-  profile_id: profileId,
-  view_model: {
+const buildHospitalityDealShieldPayload = (profileId: string) => {
+  const firstBreakConditionHolds = evaluateBreakConditionHolds("<=", -320000, 0.0);
+  const breakRisk = classifyBreakRisk("Ugly", 1.8);
+  return {
+    profile_id: profileId,
+    view_model: {
     profile_id: profileId,
     tile_profile_id: profileId,
     content_profile_id: profileId,
@@ -1371,7 +1471,11 @@ const buildHospitalityDealShieldPayload = (profileId: string) => ({
       observed_value: -320000,
       observed_value_pct: -1.1,
     },
+    first_break_condition_holds: firstBreakConditionHolds,
     flex_before_break_pct: 1.8,
+    break_risk_level: breakRisk.level,
+    break_risk_reason: breakRisk.reason,
+    break_risk: breakRisk,
     exposure_concentration_pct: 61.5,
     ranked_likely_wrong: [
       {
@@ -1387,7 +1491,12 @@ const buildHospitalityDealShieldPayload = (profileId: string) => ({
       profile_id: profileId,
       primary_control_variable: { status: "available" },
       first_break_condition: { status: "available" },
+      first_break_condition_holds: {
+        status: firstBreakConditionHolds === null ? "unavailable" : "available",
+        value: firstBreakConditionHolds,
+      },
       flex_before_break_pct: { status: "available" },
+      break_risk: { status: "available", level: breakRisk.level, reason: breakRisk.reason },
       exposure_concentration_pct: { status: "available" },
       ranked_likely_wrong: { status: "available" },
     },
@@ -1436,201 +1545,156 @@ const buildHospitalityDealShieldPayload = (profileId: string) => ({
         profile_id: profileId,
         primary_control_variable: { status: "available" },
         first_break_condition: { status: "available" },
+        first_break_condition_holds: {
+          status: firstBreakConditionHolds === null ? "unavailable" : "available",
+          value: firstBreakConditionHolds,
+        },
         flex_before_break_pct: { status: "available" },
+        break_risk: { status: "available", level: breakRisk.level, reason: breakRisk.reason },
         exposure_concentration_pct: { status: "available" },
         ranked_likely_wrong: { status: "available" },
       },
     },
-  },
-});
+    },
+  };
+};
 
 const buildPolicyBackedDealShieldPayload = (
   input: (typeof POLICY_CONTRACT_CASES)[number]
-) => ({
-  profile_id: input.profileId,
-  view_model: {
+) => {
+  const firstBreakConditionHolds = evaluateBreakConditionHolds(
+    input.breakOperator,
+    input.observedValue,
+    input.threshold
+  );
+  const breakRisk = classifyBreakRisk(input.breakScenarioLabel, input.flexBeforeBreakPct);
+  return {
     profile_id: input.profileId,
-    tile_profile_id: input.profileId,
-    content_profile_id: input.profileId,
-    scope_items_profile_id: input.scopeProfileId,
-    decision_status: input.decisionStatus,
-    decision_reason_code: input.decisionReasonCode,
-    decision_status_provenance: {
-      status_source: "dealshield_policy_v1",
-      policy_id: "dealshield_canonical_policy_v1",
-    },
-    columns: [
-      {
-        id: "total_cost",
-        label: "Total Project Cost",
-        metric_ref: "totals.total_project_cost",
+    view_model: {
+      profile_id: input.profileId,
+      tile_profile_id: input.profileId,
+      content_profile_id: input.profileId,
+      scope_items_profile_id: input.scopeProfileId,
+      decision_status: input.decisionStatus,
+      decision_reason_code: input.decisionReasonCode,
+      decision_status_provenance: {
+        status_source: "dealshield_policy_v1",
+        policy_id: "dealshield_canonical_policy_v1",
       },
-      {
-        id: "annual_revenue",
-        label: "Annual Revenue",
-        metric_ref: "revenue_analysis.annual_revenue",
-      },
-      {
-        id: "break_metric",
-        label: "Break Metric",
-        metric_ref: input.breakMetricRef,
-      },
-    ],
-    rows: [
-      {
-        scenario_id: "base",
-        label: "Base",
-        cells: [
-          { col_id: "total_cost", value: 12000000, metric_ref: "totals.total_project_cost" },
-          { col_id: "annual_revenue", value: 3200000, metric_ref: "revenue_analysis.annual_revenue" },
-          { col_id: "break_metric", value: 62.0, metric_ref: input.breakMetricRef },
-        ],
-      },
-      {
-        scenario_id: "conservative",
-        label: "Conservative",
-        cells: [
-          { col_id: "total_cost", value: 13200000, metric_ref: "totals.total_project_cost" },
-          { col_id: "annual_revenue", value: 2880000, metric_ref: "revenue_analysis.annual_revenue" },
-          { col_id: "break_metric", value: input.observedValue, metric_ref: input.breakMetricRef },
-        ],
-      },
-      {
-        scenario_id: "ugly",
-        label: "Ugly",
-        cells: [
-          { col_id: "total_cost", value: 13800000, metric_ref: "totals.total_project_cost" },
-          { col_id: "annual_revenue", value: 2760000, metric_ref: "revenue_analysis.annual_revenue" },
+      columns: [
+        {
+          id: "total_cost",
+          label: "Total Project Cost",
+          metric_ref: "totals.total_project_cost",
+        },
+        {
+          id: "annual_revenue",
+          label: "Annual Revenue",
+          metric_ref: "revenue_analysis.annual_revenue",
+        },
+        {
+          id: "break_metric",
+          label: "Break Metric",
+          metric_ref: input.breakMetricRef,
+        },
+      ],
+      rows: [
+        {
+          scenario_id: "base",
+          label: "Base",
+          cells: [
+            { col_id: "total_cost", value: 12000000, metric_ref: "totals.total_project_cost" },
+            { col_id: "annual_revenue", value: 3200000, metric_ref: "revenue_analysis.annual_revenue" },
+            { col_id: "break_metric", value: 62.0, metric_ref: input.breakMetricRef },
+          ],
+        },
+        {
+          scenario_id: "conservative",
+          label: "Conservative",
+          cells: [
+            { col_id: "total_cost", value: 13200000, metric_ref: "totals.total_project_cost" },
+            { col_id: "annual_revenue", value: 2880000, metric_ref: "revenue_analysis.annual_revenue" },
+            { col_id: "break_metric", value: input.observedValue, metric_ref: input.breakMetricRef },
+          ],
+        },
+        {
+          scenario_id: "ugly",
+          label: "Ugly",
+          cells: [
+            { col_id: "total_cost", value: 13800000, metric_ref: "totals.total_project_cost" },
+            { col_id: "annual_revenue", value: 2760000, metric_ref: "revenue_analysis.annual_revenue" },
+            {
+              col_id: "break_metric",
+              value: input.breakMetric === "value_gap_pct" ? input.observedValue - 1.5 : input.observedValue - 50000,
+              metric_ref: input.breakMetricRef,
+            },
+          ],
+        },
+      ],
+      content: {
+        profile_id: input.profileId,
+        fastest_change: {
+          drivers: [
+            { tile_id: "cost_plus_10", label: "Confirm hard costs +/-10%" },
+            { tile_id: "revenue_minus_10", label: "Validate demand revenue +/-10%" },
+          ],
+        },
+        most_likely_wrong: [
           {
-            col_id: "break_metric",
-            value: input.breakMetric === "value_gap_pct" ? input.observedValue - 1.5 : input.observedValue - 50000,
-            metric_ref: input.breakMetricRef,
+            id: "mlw_1",
+            text: `${input.buildingType} downside concentration is under-modeled.`,
+            why: "Single-driver sensitivity dominates downside exposure.",
+            driver_tile_id: "cost_plus_10",
+          },
+        ],
+        question_bank: [
+          {
+            id: "qb_1",
+            driver_tile_id: "cost_plus_10",
+            questions: ["Which key assumptions still rely on placeholders?"],
+          },
+        ],
+        red_flags_actions: [
+          {
+            id: "rf_1",
+            flag: "Procurement sequencing remains partially open.",
+            action: "Lock top three risk trades before GMP validation.",
           },
         ],
       },
-    ],
-    content: {
-      profile_id: input.profileId,
-      fastest_change: {
-        drivers: [
-          { tile_id: "cost_plus_10", label: "Confirm hard costs +/-10%" },
-          { tile_id: "revenue_minus_10", label: "Validate demand revenue +/-10%" },
-        ],
+      primary_control_variable: {
+        tile_id: "policy_primary_tile",
+        label: input.primaryControlLabel,
+        impact_pct: 7.5,
+        delta_cost: 120000,
+        severity: "High",
       },
-      most_likely_wrong: [
+      first_break_condition: {
+        scenario_id: input.breakScenarioLabel.toLowerCase(),
+        scenario_label: input.breakScenarioLabel,
+        break_metric: input.breakMetric,
+        operator: input.breakOperator,
+        threshold: input.threshold,
+        observed_value: input.observedValue,
+        observed_value_pct: input.breakMetric === "value_gap_pct" ? input.observedValue : -1.4,
+      },
+      first_break_condition_holds: firstBreakConditionHolds,
+      flex_before_break_pct: input.flexBeforeBreakPct,
+      break_risk_level: breakRisk.level,
+      break_risk_reason: breakRisk.reason,
+      break_risk: breakRisk,
+      exposure_concentration_pct: 58.4,
+      ranked_likely_wrong: [
         {
           id: "mlw_1",
           text: `${input.buildingType} downside concentration is under-modeled.`,
           why: "Single-driver sensitivity dominates downside exposure.",
           driver_tile_id: "cost_plus_10",
+          impact_pct: 7.5,
+          severity: "High",
         },
       ],
-      question_bank: [
-        {
-          id: "qb_1",
-          driver_tile_id: "cost_plus_10",
-          questions: ["Which key assumptions still rely on placeholders?"],
-        },
-      ],
-      red_flags_actions: [
-        {
-          id: "rf_1",
-          flag: "Procurement sequencing remains partially open.",
-          action: "Lock top three risk trades before GMP validation.",
-        },
-      ],
-    },
-    primary_control_variable: {
-      tile_id: "policy_primary_tile",
-      label: input.primaryControlLabel,
-      impact_pct: 7.5,
-      delta_cost: 120000,
-      severity: "High",
-    },
-    first_break_condition: {
-      scenario_id: input.breakScenarioLabel.toLowerCase(),
-      scenario_label: input.breakScenarioLabel,
-      break_metric: input.breakMetric,
-      operator: input.breakOperator,
-      threshold: input.threshold,
-      observed_value: input.observedValue,
-      observed_value_pct: input.breakMetric === "value_gap_pct" ? input.observedValue : -1.4,
-    },
-    flex_before_break_pct: input.flexBeforeBreakPct,
-    exposure_concentration_pct: 58.4,
-    ranked_likely_wrong: [
-      {
-        id: "mlw_1",
-        text: `${input.buildingType} downside concentration is under-modeled.`,
-        why: "Single-driver sensitivity dominates downside exposure.",
-        driver_tile_id: "cost_plus_10",
-        impact_pct: 7.5,
-        severity: "High",
-      },
-    ],
-    decision_insurance_provenance: {
-      enabled: true,
-      profile_id: input.profileId,
-      decision_insurance_policy: {
-        status: "available",
-        source: "decision_insurance_policy",
-        policy_id: "decision_insurance_subtype_policy_v1",
-        profile_id: input.profileId,
-      },
-      primary_control_variable: {
-        status: "available",
-        source: "decision_insurance_policy.primary_control_variable",
-      },
-      first_break_condition: {
-        status: "available",
-        source: "decision_insurance_policy.collapse_trigger",
-        policy_metric: input.breakMetric,
-        policy_threshold: input.threshold,
-        policy_operator: input.breakOperator,
-      },
-      flex_before_break_pct: {
-        status: "available",
-        calibration_source: "decision_insurance_policy.flex_calibration",
-        band:
-          input.flexBeforeBreakPct <= 2.0
-            ? "tight"
-            : input.flexBeforeBreakPct <= 5.0
-              ? "moderate"
-              : "comfortable",
-      },
-      exposure_concentration_pct: { status: "available" },
-      ranked_likely_wrong: { status: "available" },
-    },
-    provenance: {
-      profile_id: input.profileId,
-      content_profile_id: input.profileId,
-      scope_items_profile_id: input.scopeProfileId,
-      scenario_inputs: {
-        base: {
-          scenario_label: "Base",
-          applied_tile_ids: [],
-          cost_scalar: 1.0,
-          revenue_scalar: 1.0,
-        },
-        conservative: {
-          scenario_label: "Conservative",
-          applied_tile_ids: ["cost_plus_10", "revenue_minus_10"],
-          cost_scalar: 1.1,
-          revenue_scalar: 0.9,
-        },
-        ugly: {
-          scenario_label: "Ugly",
-          applied_tile_ids: ["cost_plus_10", "revenue_minus_10"],
-          cost_scalar: 1.15,
-          revenue_scalar: 0.88,
-        },
-      },
-      metric_refs_used: [
-        "totals.total_project_cost",
-        "revenue_analysis.annual_revenue",
-        input.breakMetricRef,
-      ],
-      decision_insurance: {
+      decision_insurance_provenance: {
         enabled: true,
         profile_id: input.profileId,
         decision_insurance_policy: {
@@ -1639,34 +1703,127 @@ const buildPolicyBackedDealShieldPayload = (
           policy_id: "decision_insurance_subtype_policy_v1",
           profile_id: input.profileId,
         },
-        primary_control_variable: { status: "available" },
-        first_break_condition: { status: "available" },
-        flex_before_break_pct: { status: "available" },
+        primary_control_variable: {
+          status: "available",
+          source: "decision_insurance_policy.primary_control_variable",
+        },
+        first_break_condition: {
+          status: "available",
+          source: "decision_insurance_policy.collapse_trigger",
+          policy_metric: input.breakMetric,
+          policy_threshold: input.threshold,
+          policy_operator: input.breakOperator,
+        },
+        first_break_condition_holds: {
+          status: firstBreakConditionHolds === null ? "unavailable" : "available",
+          value: firstBreakConditionHolds,
+          source: "decision_insurance.first_break_condition",
+        },
+        flex_before_break_pct: {
+          status: "available",
+          calibration_source: "decision_insurance_policy.flex_calibration",
+          band:
+            input.flexBeforeBreakPct <= 2.0
+              ? "tight"
+              : input.flexBeforeBreakPct <= 5.0
+                ? "moderate"
+                : "comfortable",
+        },
+        break_risk: {
+          status: "available",
+          source: "decision_insurance.break_risk",
+          level: breakRisk.level,
+          reason: breakRisk.reason,
+        },
         exposure_concentration_pct: { status: "available" },
         ranked_likely_wrong: { status: "available" },
       },
-      dealshield_controls: {
-        stress_band_pct: 10,
-        use_cost_anchor: false,
-        use_revenue_anchor: false,
+      provenance: {
+        profile_id: input.profileId,
+        content_profile_id: input.profileId,
+        scope_items_profile_id: input.scopeProfileId,
+        scenario_inputs: {
+          base: {
+            scenario_label: "Base",
+            applied_tile_ids: [],
+            cost_scalar: 1.0,
+            revenue_scalar: 1.0,
+          },
+          conservative: {
+            scenario_label: "Conservative",
+            applied_tile_ids: ["cost_plus_10", "revenue_minus_10"],
+            cost_scalar: 1.1,
+            revenue_scalar: 0.9,
+          },
+          ugly: {
+            scenario_label: "Ugly",
+            applied_tile_ids: ["cost_plus_10", "revenue_minus_10"],
+            cost_scalar: 1.15,
+            revenue_scalar: 0.88,
+          },
+        },
+        metric_refs_used: [
+          "totals.total_project_cost",
+          "revenue_analysis.annual_revenue",
+          input.breakMetricRef,
+        ],
+        decision_insurance: {
+          enabled: true,
+          profile_id: input.profileId,
+          decision_insurance_policy: {
+            status: "available",
+            source: "decision_insurance_policy",
+            policy_id: "decision_insurance_subtype_policy_v1",
+            profile_id: input.profileId,
+          },
+          primary_control_variable: { status: "available" },
+          first_break_condition: { status: "available" },
+          first_break_condition_holds: {
+            status: firstBreakConditionHolds === null ? "unavailable" : "available",
+            value: firstBreakConditionHolds,
+          },
+          flex_before_break_pct: { status: "available" },
+          break_risk: { status: "available", level: breakRisk.level, reason: breakRisk.reason },
+          exposure_concentration_pct: { status: "available" },
+          ranked_likely_wrong: { status: "available" },
+        },
+        dealshield_controls: {
+          stress_band_pct: 10,
+          use_cost_anchor: false,
+          use_revenue_anchor: false,
+        },
       },
     },
-  },
-});
+  };
+};
 
 const buildFlexExposurePolicyPayload = (
   flexBeforeBreakPct: number,
   exposureConcentrationPct: number
 ) => {
   const payload = buildPolicyBackedDealShieldPayload(POLICY_CONTRACT_CASES[0]) as any;
+  const scenarioLabel =
+    payload?.view_model?.first_break_condition?.scenario_label ??
+    payload?.view_model?.first_break_condition?.scenario_id ??
+    "Conservative";
+  const breakRisk = classifyBreakRisk(String(scenarioLabel), flexBeforeBreakPct);
   payload.view_model.flex_before_break_pct = flexBeforeBreakPct;
   payload.view_model.exposure_concentration_pct = exposureConcentrationPct;
+  payload.view_model.break_risk_level = breakRisk.level;
+  payload.view_model.break_risk_reason = breakRisk.reason;
+  payload.view_model.break_risk = breakRisk;
   payload.view_model.decision_insurance_provenance.flex_before_break_pct.band =
     flexBeforeBreakPct < 2
       ? "tight"
       : flexBeforeBreakPct < 5
         ? "moderate"
         : "comfortable";
+  payload.view_model.decision_insurance_provenance.break_risk = {
+    status: "available",
+    source: "decision_insurance.break_risk",
+    level: breakRisk.level,
+    reason: breakRisk.reason,
+  };
   return payload;
 };
 
@@ -1694,9 +1851,16 @@ type SubtypePolicyContractCase = {
 
 const buildSubtypePolicyPayload = (
   input: SubtypePolicyContractCase
-) => ({
-  profile_id: input.profileId,
-  view_model: {
+) => {
+  const firstBreakConditionHolds = evaluateBreakConditionHolds(
+    input.breakOperator,
+    input.observedValue,
+    input.threshold
+  );
+  const breakRisk = classifyBreakRisk(input.breakScenarioLabel, input.flexBeforeBreakPct);
+  return {
+    profile_id: input.profileId,
+    view_model: {
     profile_id: input.profileId,
     tile_profile_id: input.profileId,
     content_profile_id: input.profileId,
@@ -1855,7 +2019,11 @@ const buildSubtypePolicyPayload = (
       observed_value: input.observedValue,
       observed_value_pct: input.breakMetric === "value_gap_pct" ? input.observedValue : -1.1,
     },
+    first_break_condition_holds: firstBreakConditionHolds,
     flex_before_break_pct: input.flexBeforeBreakPct,
+    break_risk_level: breakRisk.level,
+    break_risk_reason: breakRisk.reason,
+    break_risk: breakRisk,
     exposure_concentration_pct: 61.2,
     ranked_likely_wrong: [
       {
@@ -1891,6 +2059,11 @@ const buildSubtypePolicyPayload = (
         policy_threshold: input.threshold,
         policy_operator: input.breakOperator,
       },
+      first_break_condition_holds: {
+        status: firstBreakConditionHolds === null ? "unavailable" : "available",
+        value: firstBreakConditionHolds,
+        source: "decision_insurance.first_break_condition",
+      },
       flex_before_break_pct: {
         status: "available",
         calibration_source: "decision_insurance_policy.flex_calibration",
@@ -1900,6 +2073,12 @@ const buildSubtypePolicyPayload = (
             : input.flexBeforeBreakPct <= 5.0
               ? "moderate"
               : "comfortable",
+      },
+      break_risk: {
+        status: "available",
+        source: "decision_insurance.break_risk",
+        level: breakRisk.level,
+        reason: breakRisk.reason,
       },
       exposure_concentration_pct: { status: "available" },
       ranked_likely_wrong: { status: "available" },
@@ -1987,7 +2166,12 @@ const buildSubtypePolicyPayload = (
         },
         primary_control_variable: { status: "available" },
         first_break_condition: { status: "available" },
+        first_break_condition_holds: {
+          status: firstBreakConditionHolds === null ? "unavailable" : "available",
+          value: firstBreakConditionHolds,
+        },
         flex_before_break_pct: { status: "available" },
+        break_risk: { status: "available", level: breakRisk.level, reason: breakRisk.reason },
         exposure_concentration_pct: { status: "available" },
         ranked_likely_wrong: { status: "available" },
       },
@@ -1997,8 +2181,9 @@ const buildSubtypePolicyPayload = (
         use_revenue_anchor: false,
       },
     },
-  },
-});
+    },
+  };
+};
 
 describe("DealShieldView", () => {
   it("renders restaurant decision status, DI provenance, and backend-shaped scenario rows", () => {
@@ -2259,7 +2444,7 @@ describe("DealShieldView", () => {
     const fullServicePayload = buildRestaurantDealShieldPayload("restaurant_full_service_v1") as any;
     fullServicePayload.view_model.decision_status = "NO-GO";
     fullServicePayload.view_model.decision_reason_code = "base_case_break_condition";
-    fullServicePayload.view_model.first_break_condition = {
+    applyFirstBreakCondition(fullServicePayload.view_model, {
       scenario_id: "base",
       scenario_label: "Base",
       break_metric: "value_gap",
@@ -2267,7 +2452,7 @@ describe("DealShieldView", () => {
       threshold: 0,
       observed_value: -20000,
       observed_value_pct: -0.7,
-    };
+    });
 
     const { rerender } = render(
       <DealShieldView
@@ -2288,7 +2473,7 @@ describe("DealShieldView", () => {
     const quickServicePayload = buildRestaurantDealShieldPayload("restaurant_quick_service_v1") as any;
     quickServicePayload.view_model.decision_status = "NO-GO";
     quickServicePayload.view_model.decision_reason_code = "base_case_break_condition";
-    quickServicePayload.view_model.first_break_condition = {
+    applyFirstBreakCondition(quickServicePayload.view_model, {
       scenario_id: "base",
       scenario_label: "Base",
       break_metric: "value_gap",
@@ -2296,7 +2481,7 @@ describe("DealShieldView", () => {
       threshold: 0,
       observed_value: -18000,
       observed_value_pct: -0.6,
-    };
+    });
 
     rerender(
       <DealShieldView
@@ -2319,7 +2504,7 @@ describe("DealShieldView", () => {
     const limitedServicePayload = buildHospitalityDealShieldPayload("hospitality_limited_service_hotel_v1") as any;
     limitedServicePayload.view_model.decision_status = "NO-GO";
     limitedServicePayload.view_model.decision_reason_code = "base_case_break_condition";
-    limitedServicePayload.view_model.first_break_condition = {
+    applyFirstBreakCondition(limitedServicePayload.view_model, {
       scenario_id: "base",
       scenario_label: "Base",
       break_metric: "value_gap",
@@ -2327,7 +2512,7 @@ describe("DealShieldView", () => {
       threshold: 0,
       observed_value: -25000,
       observed_value_pct: -0.9,
-    };
+    });
     limitedServicePayload.view_model.primary_control_variable = {
       tile_id: "cost_plus_10",
       label: "Guestroom Turnover + FF&E +10%",
@@ -2364,7 +2549,7 @@ describe("DealShieldView", () => {
     const fullServicePayload = buildHospitalityDealShieldPayload("hospitality_full_service_hotel_v1") as any;
     fullServicePayload.view_model.decision_status = "NO-GO";
     fullServicePayload.view_model.decision_reason_code = "base_case_break_condition";
-    fullServicePayload.view_model.first_break_condition = {
+    applyFirstBreakCondition(fullServicePayload.view_model, {
       scenario_id: "base",
       scenario_label: "Base",
       break_metric: "value_gap",
@@ -2372,7 +2557,7 @@ describe("DealShieldView", () => {
       threshold: 0,
       observed_value: -17000,
       observed_value_pct: -0.6,
-    };
+    });
     fullServicePayload.view_model.primary_control_variable = {
       tile_id: "cost_plus_10",
       label: "Ballroom and F&B Fit-Out +12%",
@@ -2427,7 +2612,7 @@ describe("DealShieldView", () => {
     const limitedServicePayload = buildHospitalityDealShieldPayload("hospitality_limited_service_hotel_v1") as any;
     limitedServicePayload.view_model.decision_status = "NO-GO";
     limitedServicePayload.view_model.decision_reason_code = "base_case_break_condition";
-    limitedServicePayload.view_model.first_break_condition = {
+    applyFirstBreakCondition(limitedServicePayload.view_model, {
       scenario_id: "base",
       scenario_label: "Base",
       break_metric: "value_gap",
@@ -2435,7 +2620,7 @@ describe("DealShieldView", () => {
       threshold: 0,
       observed_value: 12000,
       observed_value_pct: 0.4,
-    };
+    });
 
     const { rerender } = render(
       <DealShieldView
@@ -2459,7 +2644,7 @@ describe("DealShieldView", () => {
     const fullServicePayload = buildHospitalityDealShieldPayload("hospitality_full_service_hotel_v1") as any;
     fullServicePayload.view_model.decision_status = "NO-GO";
     fullServicePayload.view_model.decision_reason_code = "base_case_break_condition";
-    fullServicePayload.view_model.first_break_condition = {
+    applyFirstBreakCondition(fullServicePayload.view_model, {
       scenario_id: "base",
       scenario_label: "Base",
       break_metric: "value_gap",
@@ -2467,7 +2652,7 @@ describe("DealShieldView", () => {
       threshold: 0,
       observed_value: 18000,
       observed_value_pct: 0.5,
-    };
+    });
 
     rerender(
       <DealShieldView
@@ -2493,7 +2678,7 @@ describe("DealShieldView", () => {
     const marketRatePayload = buildPolicyBackedDealShieldPayload(MULTIFAMILY_POLICY_CONTRACT_CASES[0]) as any;
     marketRatePayload.view_model.decision_status = "NO-GO";
     marketRatePayload.view_model.decision_reason_code = "base_case_break_condition";
-    marketRatePayload.view_model.first_break_condition = {
+    applyFirstBreakCondition(marketRatePayload.view_model, {
       scenario_id: "base",
       scenario_label: "Base",
       break_metric: "value_gap_pct",
@@ -2501,7 +2686,7 @@ describe("DealShieldView", () => {
       threshold: 6.0,
       observed_value: 5.1,
       observed_value_pct: 5.1,
-    };
+    });
 
     const { rerender } = render(
       <DealShieldView
@@ -2525,7 +2710,7 @@ describe("DealShieldView", () => {
     const affordablePayload = buildPolicyBackedDealShieldPayload(MULTIFAMILY_POLICY_CONTRACT_CASES[2]) as any;
     affordablePayload.view_model.decision_status = "NO-GO";
     affordablePayload.view_model.decision_reason_code = "base_case_break_condition";
-    affordablePayload.view_model.first_break_condition = {
+    applyFirstBreakCondition(affordablePayload.view_model, {
       scenario_id: "base",
       scenario_label: "Base",
       break_metric: "value_gap_pct",
@@ -2533,7 +2718,7 @@ describe("DealShieldView", () => {
       threshold: 8.0,
       observed_value: 7.0,
       observed_value_pct: 7.0,
-    };
+    });
 
     rerender(
       <DealShieldView
@@ -2557,7 +2742,7 @@ describe("DealShieldView", () => {
     const luxuryPayload = buildPolicyBackedDealShieldPayload(MULTIFAMILY_POLICY_CONTRACT_CASES[1]) as any;
     luxuryPayload.view_model.decision_status = "NO-GO";
     luxuryPayload.view_model.decision_reason_code = "base_case_break_condition";
-    luxuryPayload.view_model.first_break_condition = {
+    applyFirstBreakCondition(luxuryPayload.view_model, {
       scenario_id: "base",
       scenario_label: "Base",
       break_metric: "value_gap",
@@ -2565,7 +2750,7 @@ describe("DealShieldView", () => {
       threshold: 250000,
       observed_value: 190000,
       observed_value_pct: -1.2,
-    };
+    });
 
     rerender(
       <DealShieldView
@@ -2999,7 +3184,7 @@ describe("DealShieldView", () => {
     const payload = buildSubtypePolicyPayload(manufacturingCase!) as any;
     payload.view_model.decision_status = "NO-GO";
     payload.view_model.decision_reason_code = "base_case_break_condition";
-    payload.view_model.first_break_condition = {
+    applyFirstBreakCondition(payload.view_model, {
       scenario_id: "base",
       scenario_label: "Base",
       break_metric: "value_gap",
@@ -3007,7 +3192,7 @@ describe("DealShieldView", () => {
       threshold: 0,
       observed_value: -25000,
       observed_value_pct: -0.8,
-    };
+    });
     payload.view_model.ranked_likely_wrong = [
       {
         id: "mlw_1",
@@ -3081,7 +3266,7 @@ describe("DealShieldView", () => {
     const payload = buildSubtypePolicyPayload(manufacturingCase!) as any;
     payload.view_model.decision_status = "NO-GO";
     payload.view_model.decision_reason_code = "base_case_break_condition";
-    payload.view_model.first_break_condition = {
+    applyFirstBreakCondition(payload.view_model, {
       scenario_id: "conservative",
       scenario_label: "Conservative",
       break_metric: "value_gap_pct",
@@ -3089,7 +3274,7 @@ describe("DealShieldView", () => {
       threshold: -35,
       observed_value: -38.1,
       observed_value_pct: -38.1,
-    };
+    });
 
     render(
       <DealShieldView
@@ -3115,7 +3300,7 @@ describe("DealShieldView", () => {
     const payload = buildSubtypePolicyPayload(coldStorageCase!) as any;
     payload.view_model.decision_status = "NO-GO";
     payload.view_model.decision_reason_code = "base_case_break_condition";
-    payload.view_model.first_break_condition = {
+    applyFirstBreakCondition(payload.view_model, {
       scenario_id: "base",
       scenario_label: "Base",
       break_metric: "value_gap",
@@ -3123,7 +3308,7 @@ describe("DealShieldView", () => {
       threshold: 0,
       observed_value: -125000,
       observed_value_pct: -1.2,
-    };
+    });
 
     render(
       <DealShieldView
@@ -3152,7 +3337,7 @@ describe("DealShieldView", () => {
     const payload = buildSubtypePolicyPayload(manufacturingCase!) as any;
     payload.view_model.decision_status = "NO-GO";
     payload.view_model.decision_reason_code = "base_case_break_condition";
-    payload.view_model.first_break_condition = {
+    applyFirstBreakCondition(payload.view_model, {
       scenario_id: "base",
       scenario_label: "Base",
       break_metric: "value_gap",
@@ -3160,7 +3345,7 @@ describe("DealShieldView", () => {
       threshold: 0,
       observed_value: 25000,
       observed_value_pct: 0.8,
-    };
+    });
 
     render(
       <DealShieldView

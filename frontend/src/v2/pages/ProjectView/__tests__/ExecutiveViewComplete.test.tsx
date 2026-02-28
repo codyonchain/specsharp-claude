@@ -845,6 +845,7 @@ describe("ExecutiveViewComplete", () => {
         threshold: 0,
         observed_value: -320000,
       },
+      first_break_condition_holds: true,
       decision_summary: {
         value_gap: -320000,
         value_gap_pct: -0.9,
@@ -926,6 +927,7 @@ describe("ExecutiveViewComplete", () => {
         threshold: 0,
         observed_value: -450000,
       },
+      first_break_condition_holds: true,
       decision_summary: {
         value_gap: -450000,
         value_gap_pct: -1.1,
@@ -967,6 +969,7 @@ describe("ExecutiveViewComplete", () => {
         threshold: 0,
         observed_value: 25000,
       },
+      first_break_condition_holds: false,
       decision_summary: {
         value_gap: -210000,
         value_gap_pct: -0.6,
@@ -1005,6 +1008,7 @@ describe("ExecutiveViewComplete", () => {
         threshold: 0,
         observed_value: 18000,
       },
+      first_break_condition_holds: false,
       decision_summary: {
         value_gap: -390000,
         value_gap_pct: -0.8,

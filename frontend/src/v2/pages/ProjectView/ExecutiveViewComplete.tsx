@@ -103,29 +103,6 @@ const normalizeBackendDecision = (value: unknown): DecisionStatus | undefined =>
   return undefined;
 };
 
-const doesBreakConditionHold = (
-  operator: string,
-  observedValue: number | null,
-  thresholdValue: number | null
-): boolean | null => {
-  if (observedValue === null || thresholdValue === null) return null;
-  switch (operator) {
-    case '<=':
-      return observedValue <= thresholdValue;
-    case '<':
-      return observedValue < thresholdValue;
-    case '>=':
-      return observedValue >= thresholdValue;
-    case '>':
-      return observedValue > thresholdValue;
-    case '=':
-    case '==':
-      return Math.abs(observedValue - thresholdValue) <= 1e-9;
-    default:
-      return null;
-  }
-};
-
 const decisionReasonCopy = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const key = value.trim().toLowerCase();
@@ -348,19 +325,12 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const hasBaseBreakCondition =
     hasFirstBreakCondition &&
     (firstBreakScenarioId === 'base' || firstBreakScenarioLabel === 'base');
-  const firstBreakOperator =
-    typeof firstBreakConditionRecord.operator === 'string'
-      ? firstBreakConditionRecord.operator.trim()
-      : '';
-  const firstBreakThresholdValue = toFiniteNumber(firstBreakConditionRecord.threshold);
-  const firstBreakObservedValue = toFiniteNumber(
-    firstBreakConditionRecord.observed_value ?? firstBreakConditionRecord.observedValue
-  );
-  const firstBreakConditionHolds = doesBreakConditionHold(
-    firstBreakOperator,
-    firstBreakObservedValue,
-    firstBreakThresholdValue
-  );
+  const firstBreakConditionHoldsRaw =
+    dealShieldRecord.first_break_condition_holds ??
+    dealShieldRecord.firstBreakConditionHolds ??
+    dealShieldProvenanceRecord.first_break_condition_holds?.value;
+  const firstBreakConditionHolds =
+    typeof firstBreakConditionHoldsRaw === 'boolean' ? firstBreakConditionHoldsRaw : null;
   const hasVerifiedBaseBreakCondition = hasBaseBreakCondition && firstBreakConditionHolds === true;
   const hasVerifiedNonBaseBreakCondition = Boolean(
     hasFirstBreakCondition &&
@@ -369,21 +339,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   );
   const flexBeforeBreakReason = toComparableKey(flexBeforeBreakProvenanceRecord.reason);
   const hasBaseAlreadyBroken = flexBeforeBreakReason === 'base_already_broken';
-  const flexBeforeBreakBand = toComparableKey(
-    dealShieldRecord.flex_before_break_band ??
-    dealShieldRecord.flexBeforeBreakBand ??
-    flexBeforeBreakProvenanceRecord.band
-  );
-  const hasTightFlexBand =
-    typeof flexBeforeBreakBand === 'string' &&
-    flexBeforeBreakBand.includes('tight');
-  const flexBeforeBreakPctValue = toFiniteNumber(
-    dealShieldRecord.flex_before_break_pct ?? dealShieldRecord.flexBeforeBreakPct
-  );
-  const normalizedFlexBeforeBreakPct =
-    typeof flexBeforeBreakPctValue === 'number'
-      ? (Math.abs(flexBeforeBreakPctValue) <= 1.5 ? flexBeforeBreakPctValue * 100 : flexBeforeBreakPctValue)
-      : null;
   const decisionSummaryRecord = coalesceRecord(
     dealShieldRecord.decision_summary,
     dealShieldRecord.decisionSummary
@@ -393,9 +348,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     decisionSummaryRecord.valueGap ??
     dealShieldRecord.value_gap ??
     dealShieldRecord.valueGap
-  );
-  const canonicalNotModeledReason = toComparableKey(
-    decisionSummaryRecord.not_modeled_reason ?? decisionSummaryRecord.notModeledReason
   );
   const displaySubtypeLower = (displayData?.buildingSubtype || '')
     .toString()
@@ -1005,24 +957,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
       : undefined;
   const dscrValue = typeof dscr === 'number' && Number.isFinite(dscr) ? dscr : undefined;
   const spreadPctValue = typeof spreadBpsValue === 'number' ? spreadBpsValue / 100 : undefined;
-  const derivedDecisionStatus: DecisionStatus | undefined = (() => {
-    if (
-      typeof spreadBpsValue === 'number' &&
-      typeof marketCapRateDisplay === 'number' &&
-      typeof yieldOnCost === 'number' &&
-      Number.isFinite(yieldOnCost) &&
-      typeof dscrValue === 'number'
-    ) {
-      if (spreadBpsValue >= 200 && dscrValue >= resolvedTargetDscr) {
-        return 'GO';
-      }
-      if (spreadBpsValue >= 0 && dscrValue >= resolvedTargetDscr) {
-        return 'Needs Work';
-      }
-      return 'NO-GO';
-    }
-    return undefined;
-  })();
   const explicitDealShieldDecision = normalizeBackendDecision(
     dealShieldRecord.decision_status ??
       dealShieldRecord.decisionStatus ??
@@ -1052,66 +986,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     if (!hasDealShieldPayload || !explicitDealShieldDecision) return undefined;
     return explicitDealShieldDecision;
   })();
-  const fallbackDealShieldDecisionStatus: DecisionStatus | undefined = (() => {
-    if (!hasDealShieldPayload || canonicalDealShieldDecisionStatus) return undefined;
-    if (canonicalNotModeledReason) return 'PENDING';
-    if (hasBaseBreakCondition || hasBaseAlreadyBroken) return 'NO-GO';
-    if (typeof canonicalValueGap === 'number') {
-      if (canonicalValueGap <= 0) return 'NO-GO';
-      if (
-        typeof normalizedFlexBeforeBreakPct === 'number' &&
-        normalizedFlexBeforeBreakPct <= 2
-      ) {
-        return 'Needs Work';
-      }
-      return 'GO';
-    }
-    if (hasTightFlexBand) return 'Needs Work';
-    if (typeof normalizedFlexBeforeBreakPct === 'number') {
-      return normalizedFlexBeforeBreakPct <= 2 ? 'Needs Work' : 'GO';
-    }
-    return undefined;
-  })();
-  let decisionStatus: DecisionStatus =
-    canonicalDealShieldDecisionStatus ?? fallbackDealShieldDecisionStatus ?? derivedDecisionStatus ?? fallbackDecisionStatus;
-  // Preserve historical industrial fallback when no DealShield-based status is available.
-  (() => {
-    if (canonicalDealShieldDecisionStatus || fallbackDealShieldDecisionStatus) return;
-    const bt = (buildingType || '').toLowerCase();
-    if (bt !== 'industrial') return;
-
-    const yoc =
-      typeof displayData.yieldOnCost === 'number' && Number.isFinite(displayData.yieldOnCost)
-        ? displayData.yieldOnCost
-        : undefined;
-    const targetYieldFromDisplay =
-      typeof displayData.targetYield === 'number' && Number.isFinite(displayData.targetYield)
-        ? displayData.targetYield
-        : undefined;
-    const dscrOk =
-      typeof dscrValue === 'number' &&
-      typeof resolvedTargetDscr === 'number' &&
-      Number.isFinite(dscrValue) &&
-      Number.isFinite(resolvedTargetDscr)
-        ? dscrValue >= resolvedTargetDscr
-        : false;
-
-    if (typeof yoc !== 'number' || typeof targetYieldFromDisplay !== 'number') {
-      return;
-    }
-
-    if (dscrOk && yoc >= targetYieldFromDisplay) {
-      decisionStatus = 'GO';
-      return;
-    }
-
-    if (dscrOk && yoc >= targetYieldFromDisplay * 0.95) {
-      decisionStatus = 'Needs Work';
-      return;
-    }
-
-    decisionStatus = 'NO-GO';
-  })();
+  const decisionStatus: DecisionStatus =
+    canonicalDealShieldDecisionStatus ?? fallbackDecisionStatus;
   const isDealShieldCanonicalStatusActive = Boolean(canonicalDealShieldDecisionStatus);
   const decisionStatusLabel =
     decisionStatus === 'Needs Work'
