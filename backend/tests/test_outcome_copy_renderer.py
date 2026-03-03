@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
 import pytest
 
+from app.v2.config import outcome_copy_packs
 from app.v2.presentation.client_text_sanitizer import sanitize_client_text
 from app.v2.presentation.dealshield_outcome_copy_renderer import build_outcome_copy_bundle
 
@@ -110,6 +113,113 @@ def test_outcome_copy_renderer_uses_subtype_pack_phrase_for_cafe():
     detail = bundle["dealshield"]["decision_status_detail"].lower()
 
     assert "ticket/throughput consistency" in detail
+
+
+def test_outcome_copy_renderer_uses_multifamily_market_rate_template_override_for_go_thin():
+    payload = {
+        "building_type": "multifamily",
+        "subtype": "market_rate_apartments",
+        "ownership_analysis": {
+            "debt_metrics": {
+                "calculated_dscr": 1.30,
+                "target_dscr": 1.20,
+            }
+        },
+    }
+    view_model = {
+        "decision_status": "GO",
+        "decision_reason_code": "base_value_gap_positive",
+        "decision_summary": {"value_gap": 150000.0},
+        "value_gap": 150000.0,
+        "flex_before_break_pct": 4.2,
+        "first_break_condition": {"scenario_label": "conservative", "scenario_id": "conservative"},
+    }
+
+    bundle = build_outcome_copy_bundle(payload=payload, view_model=view_model)
+
+    assert bundle["outcome_state"] == "GO_THIN"
+    assert bundle["dealshield"]["decision_status_summary"] == "Base case clears the policy threshold, but cushion is thin."
+    assert bundle["dealshield"]["decision_status_detail"] == (
+        "Validate cost basis and carry discipline under lease-up timing, and rent/concession elasticity versus expense growth before commitment."
+    )
+    assert bundle["executive"]["how_to_interpret"] == (
+        "GO (thin cushion): policy clears, but break proximity is tight. Pressure-test lease-up carry and concession elasticity versus expense growth."
+    )
+    assert bundle["executive"]["target_yield_lens_label"] == "Target Yield: Thin Cushion"
+
+
+def test_outcome_copy_renderer_falls_back_to_global_templates_when_no_subtype_override():
+    payload = {
+        "building_type": "industrial",
+        "subtype": "warehouse",
+        "ownership_analysis": {
+            "debt_metrics": {
+                "calculated_dscr": 1.04,
+                "target_dscr": 1.20,
+            }
+        },
+    }
+    view_model = {
+        "decision_status": "NO-GO",
+        "decision_reason_code": "base_case_break_condition",
+        "decision_summary": {"value_gap": -100000.0},
+        "value_gap": -100000.0,
+        "flex_before_break_pct": 0.0,
+        "first_break_condition": {"scenario_label": "base", "scenario_id": "base"},
+    }
+
+    bundle = build_outcome_copy_bundle(payload=payload, view_model=view_model)
+
+    assert bundle["outcome_state"] == "NOGO_DEBT_FAILS"
+    assert bundle["dealshield"]["decision_status_summary"] == (
+        "Base case breaks the policy threshold and debt coverage is below target."
+    )
+    assert bundle["dealshield"]["decision_status_detail"] == (
+        "Primary repair drivers: sitework/civil and shell basis and lease-up absorption shape. Rework basis/NOI and debt terms before rerun."
+    )
+    assert bundle["executive"]["target_yield_lens_label"] == "Target Yield: Not Met"
+
+
+def test_outcome_copy_renderer_honors_runtime_temporary_pack_override(monkeypatch: pytest.MonkeyPatch):
+    key = ("multifamily", "market_rate_apartments")
+    original_pack = deepcopy(outcome_copy_packs.SUBTYPE_PACKS.get(key, {}))
+    override_pack = deepcopy(original_pack)
+    override_pack.setdefault("templates", {}).setdefault("dealshield", {})["GO_THIN"] = {
+        "summary": "Runtime override summary.",
+        "detail": "Runtime override detail.",
+    }
+    override_pack.setdefault("templates", {}).setdefault("executive", {})["GO_THIN"] = {
+        "how_to_interpret": "Runtime override executive narrative.",
+        "target_yield_lens_label": "Target Yield: Thin Cushion",
+    }
+    monkeypatch.setitem(outcome_copy_packs.SUBTYPE_PACKS, key, override_pack)
+
+    payload = {
+        "building_type": "multifamily",
+        "subtype": "market_rate_apartments",
+        "ownership_analysis": {
+            "debt_metrics": {
+                "calculated_dscr": 1.31,
+                "target_dscr": 1.20,
+            }
+        },
+    }
+    view_model = {
+        "decision_status": "GO",
+        "decision_reason_code": "base_value_gap_positive",
+        "decision_summary": {"value_gap": 120000.0},
+        "value_gap": 120000.0,
+        "flex_before_break_pct": 3.0,
+        "first_break_condition": {"scenario_label": "conservative", "scenario_id": "conservative"},
+    }
+
+    bundle = build_outcome_copy_bundle(payload=payload, view_model=view_model)
+
+    assert bundle["outcome_state"] == "GO_THIN"
+    assert bundle["dealshield"]["decision_status_summary"] == "Runtime override summary."
+    assert bundle["dealshield"]["decision_status_detail"] == "Runtime override detail."
+    assert bundle["executive"]["how_to_interpret"] == "Runtime override executive narrative."
+    assert bundle["executive"]["target_yield_lens_label"] == "Target Yield: Thin Cushion"
 
 
 def test_client_text_sanitizer_removes_debug_tokens_without_corrupting_content():

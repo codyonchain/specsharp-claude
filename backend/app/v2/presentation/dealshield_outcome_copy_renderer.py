@@ -4,6 +4,7 @@ from enum import Enum
 from typing import Any, Dict, Optional, Tuple
 
 from app.v2.config.outcome_copy_packs import get_outcome_copy_pack
+from app.v2.presentation.client_text_sanitizer import sanitize_client_text
 
 
 class OutcomeState(str, Enum):
@@ -147,11 +148,44 @@ def select_outcome_state(inputs: Dict[str, Any]) -> OutcomeState:
     return OutcomeState.NOGO_DEBT_PASSES if debt_pass else OutcomeState.NOGO_DEBT_FAILS
 
 
-def _join_drivers(pack: Dict[str, Any]) -> str:
-    drivers = pack.get("drivers_primary")
-    if not isinstance(drivers, list) or not drivers:
-        return "cost basis and NOI durability"
-    formatted = [str(item).strip() for item in drivers if str(item).strip()]
+def _state_key(state: OutcomeState) -> str:
+    return state.value if isinstance(state, OutcomeState) else str(state).strip().upper()
+
+
+def get_pack_drivers(pack: Dict[str, Any], view: str, state: OutcomeState) -> list[str]:
+    fallback = pack.get("drivers_primary")
+    fallback_list = [str(item).strip() for item in fallback if str(item).strip()] if isinstance(fallback, list) else []
+
+    drivers = pack.get("drivers")
+    if isinstance(drivers, dict):
+        view_drivers = drivers.get(_normalize_key(view))
+        if isinstance(view_drivers, dict):
+            state_drivers = view_drivers.get(_state_key(state))
+            if isinstance(state_drivers, list):
+                resolved = [str(item).strip() for item in state_drivers if str(item).strip()]
+                if resolved:
+                    return resolved
+
+    if fallback_list:
+        return fallback_list
+    return ["cost basis discipline", "NOI durability"]
+
+
+def get_pack_template_override(pack: Dict[str, Any], view: str, state: OutcomeState) -> Optional[Dict[str, str]]:
+    templates = pack.get("templates")
+    if not isinstance(templates, dict):
+        return None
+    view_templates = templates.get(_normalize_key(view))
+    if not isinstance(view_templates, dict):
+        return None
+    template = view_templates.get(_state_key(state))
+    if not isinstance(template, dict):
+        return None
+    return template
+
+
+def _join_drivers(drivers: list[str]) -> str:
+    formatted = [item for item in drivers if item]
     if not formatted:
         return "cost basis and NOI durability"
     if len(formatted) == 1:
@@ -160,7 +194,7 @@ def _join_drivers(pack: Dict[str, Any]) -> str:
 
 
 def render_dealshield_copy(state: OutcomeState, pack: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, str]:
-    drivers = _join_drivers(pack)
+    drivers = _join_drivers(get_pack_drivers(pack=pack, view="dealshield", state=state))
     first_break_label = context.get("first_break_label") or "modeled stress"
 
     if state == OutcomeState.GO_STRONG:
@@ -176,15 +210,24 @@ def render_dealshield_copy(state: OutcomeState, pack: Dict[str, Any], context: D
         summary = "Base case breaks the policy threshold and debt coverage is below target."
         detail = f"Primary repair drivers: {drivers}. Rework basis/NOI and debt terms before rerun."
 
-    return {
+    override = get_pack_template_override(pack=pack, view="dealshield", state=state)
+    if isinstance(override, dict):
+        override_summary = override.get("summary")
+        override_detail = override.get("detail")
+        if isinstance(override_summary, str) and override_summary.strip():
+            summary = override_summary.strip()
+        if isinstance(override_detail, str) and override_detail.strip():
+            detail = override_detail.strip()
+
+    return sanitize_client_text({
         "decision_status_summary": summary,
         "decision_status_detail": detail,
         "policy_basis_line": "Policy basis: DealShield canonical policy.",
-    }
+    })
 
 
 def render_execview_copy(state: OutcomeState, pack: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, str]:
-    drivers = _join_drivers(pack)
+    drivers = _join_drivers(get_pack_drivers(pack=pack, view="executive", state=state))
     dscr_value = context.get("dscr_value")
     dscr_target = context.get("target_dscr")
 
@@ -214,11 +257,20 @@ def render_execview_copy(state: OutcomeState, pack: Dict[str, Any], context: Dic
         )
         target_yield_lens_label = "Target Yield: Not Met"
 
-    return {
+    override = get_pack_template_override(pack=pack, view="executive", state=state)
+    if isinstance(override, dict):
+        override_how_to_interpret = override.get("how_to_interpret")
+        override_target_yield_lens_label = override.get("target_yield_lens_label")
+        if isinstance(override_how_to_interpret, str) and override_how_to_interpret.strip():
+            how_to_interpret = override_how_to_interpret.strip()
+        if isinstance(override_target_yield_lens_label, str) and override_target_yield_lens_label.strip():
+            target_yield_lens_label = override_target_yield_lens_label.strip()
+
+    return sanitize_client_text({
         "how_to_interpret": how_to_interpret,
         "policy_basis_line": "Policy basis: DealShield canonical policy.",
         "target_yield_lens_label": target_yield_lens_label,
-    }
+    })
 
 
 def build_outcome_copy_bundle(payload: Dict[str, Any], view_model: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
