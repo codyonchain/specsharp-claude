@@ -103,26 +103,6 @@ const normalizeBackendDecision = (value: unknown): DecisionStatus | undefined =>
   return undefined;
 };
 
-const decisionReasonCopy = (value: unknown): string | undefined => {
-  if (typeof value !== 'string') return undefined;
-  const key = value.trim().toLowerCase();
-  if (!key) return undefined;
-  const map: Record<string, string> = {
-    explicit_status_signal: 'Decision status is set directly by backend policy output.',
-    not_modeled_inputs_missing: 'Decision status is pending because required modeled inputs are missing.',
-    base_case_break_condition: 'Decision status is NO-GO because the base scenario already breaks.',
-    base_value_gap_non_positive: 'Decision status is NO-GO because base value gap is non-positive.',
-    low_flex_before_break_buffer: 'Decision status reflects low flex-before-break buffer.',
-    base_value_gap_positive: 'Decision status is GO because base value gap is positive.',
-    tight_flex_band: 'Decision status reflects a tight flex-before-break band.',
-    flex_before_break_buffer_positive: 'Decision status reflects positive flex-before-break buffer.',
-    insufficient_modeled_inputs: 'Decision status is pending due to insufficient modeled inputs.',
-  };
-  if (map[key]) return map[key];
-  const label = key.replace(/_/g, ' ');
-  return `${label.charAt(0).toUpperCase()}${label.slice(1)}.`;
-};
-
 const buildSafeAnalysis = (project?: Project | null): AnyRecord => {
   const projectRecord = toRecord(project);
   const rawAnalysis = toRecord(projectRecord.analysis);
@@ -236,6 +216,14 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     (dealShieldData as any)?.content_profile_id,
     (dealShieldData as any)?.contentProfileId,
   ].some((value) => typeof value === 'string' && value.startsWith('industrial_cold_storage'));
+  const hasDistributionCenterProfileId = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (dealShieldData as any)?.tile_profile_id,
+    (dealShieldData as any)?.tileProfileId,
+    (dealShieldData as any)?.content_profile_id,
+    (dealShieldData as any)?.contentProfileId,
+  ].some((value) => typeof value === 'string' && value.startsWith('industrial_distribution_center'));
   const hasRestaurantFullServiceProfileId = [
     (dealShieldData as any)?.profile_id,
     (dealShieldData as any)?.profileId,
@@ -284,6 +272,14 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     (dealShieldData as any)?.content_profile_id,
     (dealShieldData as any)?.contentProfileId,
   ].some((value) => typeof value === 'string' && value.startsWith('multifamily_market_rate_apartments'));
+  const hasAffordableMultifamilyProfileId = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (dealShieldData as any)?.tile_profile_id,
+    (dealShieldData as any)?.tileProfileId,
+    (dealShieldData as any)?.content_profile_id,
+    (dealShieldData as any)?.contentProfileId,
+  ].some((value) => typeof value === 'string' && value.startsWith('multifamily_affordable_housing'));
   const hasLuxuryMultifamilyProfileId = [
     (dealShieldData as any)?.profile_id,
     (dealShieldData as any)?.profileId,
@@ -292,6 +288,14 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     (dealShieldData as any)?.content_profile_id,
     (dealShieldData as any)?.contentProfileId,
   ].some((value) => typeof value === 'string' && value.startsWith('multifamily_luxury_apartments'));
+  const hasManufacturingProfileId = [
+    (dealShieldData as any)?.profile_id,
+    (dealShieldData as any)?.profileId,
+    (dealShieldData as any)?.tile_profile_id,
+    (dealShieldData as any)?.tileProfileId,
+    (dealShieldData as any)?.content_profile_id,
+    (dealShieldData as any)?.contentProfileId,
+  ].some((value) => typeof value === 'string' && value.startsWith('industrial_manufacturing'));
   const isFullServiceRestaurantProject =
     isRestaurantProject && (parsedSubtype === 'full_service' || hasRestaurantFullServiceProfileId);
   const isQuickServiceRestaurantProject =
@@ -301,55 +305,21 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const isMarketRateMultifamilyProject =
     parsedBuildingType.includes('multifamily') &&
     (parsedSubtype === 'market_rate_apartments' || hasMarketRateMultifamilyProfileId);
+  const isAffordableMultifamilyProject =
+    parsedBuildingType.includes('multifamily') &&
+    (parsedSubtype === 'affordable_housing' || hasAffordableMultifamilyProfileId);
   const isLuxuryMultifamilyProject =
     parsedBuildingType.includes('multifamily') &&
     (parsedSubtype === 'luxury_apartments' || hasLuxuryMultifamilyProfileId);
   const isManufacturingIndustrialProject =
-    parsedBuildingType === 'industrial' && parsedSubtype === 'manufacturing';
+    (parsedBuildingType === 'industrial' && parsedSubtype === 'manufacturing') ||
+    hasManufacturingProfileId;
   const isWarehouseIndustrialProject =
     parsedBuildingType === 'industrial' && parsedSubtype === 'warehouse';
   const isColdStorageIndustrialProject =
     (parsedBuildingType === 'industrial' && parsedSubtype === 'cold_storage') || hasColdStorageProfileId;
   const dealShieldRecord = toRecord(dealShieldData);
   const hasDealShieldPayload = Object.keys(dealShieldRecord).length > 0;
-  const dealShieldProvenanceRecord = coalesceRecord(
-    dealShieldRecord.decision_insurance_provenance,
-    dealShieldRecord.decisionInsuranceProvenance,
-    toRecord(dealShieldRecord.provenance).decision_insurance,
-    toRecord(dealShieldRecord.provenance).decisionInsurance
-  );
-  const flexBeforeBreakProvenanceRecord = coalesceRecord(
-    dealShieldProvenanceRecord.flex_before_break_pct,
-    dealShieldProvenanceRecord.flexBeforeBreakPct
-  );
-  const firstBreakConditionRecord = coalesceRecord(
-    dealShieldRecord.first_break_condition,
-    dealShieldRecord.firstBreakCondition
-  );
-  const hasFirstBreakCondition = Object.keys(firstBreakConditionRecord).length > 0;
-  const firstBreakScenarioId = toComparableKey(
-    firstBreakConditionRecord.scenario_id ?? firstBreakConditionRecord.scenarioId
-  );
-  const firstBreakScenarioLabel = toComparableKey(
-    firstBreakConditionRecord.scenario_label ?? firstBreakConditionRecord.scenarioLabel
-  );
-  const hasBaseBreakCondition =
-    hasFirstBreakCondition &&
-    (firstBreakScenarioId === 'base' || firstBreakScenarioLabel === 'base');
-  const firstBreakConditionHoldsRaw =
-    dealShieldRecord.first_break_condition_holds ??
-    dealShieldRecord.firstBreakConditionHolds ??
-    dealShieldProvenanceRecord.first_break_condition_holds?.value;
-  const firstBreakConditionHolds =
-    typeof firstBreakConditionHoldsRaw === 'boolean' ? firstBreakConditionHoldsRaw : null;
-  const hasVerifiedBaseBreakCondition = hasBaseBreakCondition && firstBreakConditionHolds === true;
-  const hasVerifiedNonBaseBreakCondition = Boolean(
-    hasFirstBreakCondition &&
-    !hasBaseBreakCondition &&
-    firstBreakConditionHolds === true
-  );
-  const flexBeforeBreakReason = toComparableKey(flexBeforeBreakProvenanceRecord.reason);
-  const hasBaseAlreadyBroken = flexBeforeBreakReason === 'base_already_broken';
   const decisionSummaryRecord = coalesceRecord(
     dealShieldRecord.decision_summary,
     dealShieldRecord.decisionSummary
@@ -430,6 +400,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const isDistributionCenterProject =
     typeof projectInfo?.subtype === 'string' &&
     projectInfo.subtype.toLowerCase() === 'distribution_center';
+  const isDistributionCenterIndustrialProject =
+    (parsedBuildingType === 'industrial' && parsedSubtype === 'distribution_center') ||
+    isDistributionCenterProject ||
+    hasDistributionCenterProfileId;
   const distributionCenterLabel = 'Class A Distribution Center';
   const sanitizeDistributionCopy = (value?: string | null): string | undefined => {
     if (!isDistributionCenterProject) {
@@ -962,23 +936,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
       decisionSummaryRecord.recommendation ??
       decisionSummaryRecord.status
   );
-  const decisionReasonCode =
-    (typeof dealShieldRecord.decision_reason_code === 'string' ? dealShieldRecord.decision_reason_code : undefined) ??
-    (typeof dealShieldRecord.decisionReasonCode === 'string' ? dealShieldRecord.decisionReasonCode : undefined) ??
-    (typeof decisionSummaryRecord.decision_reason_code === 'string' ? decisionSummaryRecord.decision_reason_code : undefined) ??
-    (typeof decisionSummaryRecord.decisionReasonCode === 'string' ? decisionSummaryRecord.decisionReasonCode : undefined);
-  const decisionStatusProvenanceRecord = coalesceRecord(
-    dealShieldRecord.decision_status_provenance,
-    dealShieldRecord.decisionStatusProvenance,
-    decisionSummaryRecord.decision_status_provenance,
-    decisionSummaryRecord.decisionStatusProvenance
-  );
-  const decisionStatusSource =
-    (typeof decisionStatusProvenanceRecord.status_source === 'string' ? decisionStatusProvenanceRecord.status_source : undefined) ??
-    (typeof decisionStatusProvenanceRecord.statusSource === 'string' ? decisionStatusProvenanceRecord.statusSource : undefined);
-  const decisionPolicyId =
-    (typeof decisionStatusProvenanceRecord.policy_id === 'string' ? decisionStatusProvenanceRecord.policy_id : undefined) ??
-    (typeof decisionStatusProvenanceRecord.policyId === 'string' ? decisionStatusProvenanceRecord.policyId : undefined);
   const canonicalDealShieldDecisionStatus: DecisionStatus | undefined = (() => {
     if (!hasDealShieldPayload || !explicitDealShieldDecision) return undefined;
     return explicitDealShieldDecision;
@@ -1002,12 +959,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
         : decisionStatus === 'GO'
           ? 'GO'
           : 'Needs Review';
-  const decisionReasonText = decisionReasonCopy(decisionReasonCode)
-    || (typeof decisionStatusProvenanceRecord.not_modeled_reason === 'string' ? decisionStatusProvenanceRecord.not_modeled_reason : undefined)
-    || (typeof decisionStatusProvenanceRecord.notModeledReason === 'string' ? decisionStatusProvenanceRecord.notModeledReason : undefined)
-    || (decisionStatus === 'PENDING'
-      ? 'Canonical decision reason is pending backend policy outputs.'
-      : undefined);
   const formatPct = (value?: number) =>
     typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(1)}%` : '—';
   const yieldPctValue = typeof yieldOnCost === 'number' && Number.isFinite(yieldOnCost)
@@ -1025,99 +976,51 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     typeof canonicalValueGap === 'number' && Number.isFinite(canonicalValueGap)
       ? `${canonicalValueGap >= 0 ? '+' : '-'}${formatters.currency(Math.abs(canonicalValueGap))}`
       : '—';
-  const decisionCopy = (() => {
-    const yieldText = formatPct(yieldPctValue);
-    const marketText = formatPct(marketCapPctValue);
-    const marketBenchmarkLabel = isRestaurantProject ? 'market return benchmark' : 'market cap';
-    const fullServiceLeadLine =
-      'Full Service viability is driven by sales per SF and prime cost (labor + food) under the current layout/turn assumptions.';
-    const spreadText = typeof spreadPctValue === 'number'
-      ? `${spreadPctValue >= 0 ? '+' : ''}${spreadPctValue.toFixed(1)}%`
-      : undefined;
-    if (decisionStatus === 'GO') {
-      if (isMultifamilyProject) {
-        return {
-          body: 'Project clears multifamily underwriting across equity and debt lenses.',
-          detail: `Equity Lens: ${yieldPctValue !== undefined ? `yield on cost ${yieldText}` : 'yield on cost'}${marketCapPctValue !== undefined ? ` vs market cap ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''}. Debt Lens: DSCR ${dscrText ?? '—'} meets target ${dscrTargetText}. Reality Check: stabilized value gap ${stabilizedValueGapDisplay}.`
-        };
-      }
-      const goDetail = `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'}${marketCapPctValue !== undefined ? ` vs ${marketBenchmarkLabel} ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''}${
-        dscrText
-          ? ` and DSCR ${dscrText} ${dscrMeetsTarget === false ? `is below` : `meets`} the ${dscrTargetText} requirement.`
-          : '.'
-      }`;
-      if (isFullServiceRestaurantProject) {
-        return {
-          body: 'Project meets underwriting criteria with strong returns and healthy debt coverage.',
-          detail: `${fullServiceLeadLine} ${goDetail} Still validate occupancy cost % at projected sales and table turns by daypart.`,
-        };
-      }
-      return {
-        body: 'Project meets underwriting criteria with strong returns and healthy debt coverage.',
-        detail: goDetail,
-      };
-    }
-    if (decisionStatus === 'Needs Work') {
-      return {
-        body: 'Project is close to the yield hurdle but still needs improvement.',
-        detail: `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'} is roughly in line with the ${marketBenchmarkLabel}${spreadText ? ` (${spreadText})` : ''}. Keep DSCR ${dscrText ?? '—'}× at or above ${dscrTargetText} while lifting NOI or trimming costs to add at least 200 bp of spread.`
-      };
-    }
-    if (decisionStatus === 'NO-GO') {
-      const coldStorageActionPlan =
-        ' Confirm refrigeration plant scope + utility rates. Underwrite commissioning-to-stabilization ramp (don\'t assume day-1 utilization). Reduce basis via envelope/plant VE, not generic scope cuts.';
-      const marketRateActionPlan =
-        ' Primary fix paths: concessions + lease-up pace (market reality), expense load / payroll / utilities (ops reality), basis discipline (hard + soft) / fee stack, and debt sizing / rate / IO period (debt lens).';
-      const defaultActionPlan =
-        ' Improve rents, cut scope, or rework the capital stack before advancing.';
-      const fullServiceActionPlan =
-        ' Primary fix paths: raise sales per SF (turns/check), reduce prime cost %, or renegotiate occupancy cost.';
-      const restaurantDscrDetail = dscrText
-        ? ` DSCR ${dscrText} ${dscrMeetsTarget === false ? 'is below' : 'meets'} the ${dscrTargetText} requirement.`
-        : ` DSCR data is still loading against the ${dscrTargetText} requirement.`;
-      const noGoDetail = `${yieldPctValue !== undefined ? `Yield on cost ${yieldText}` : 'Yield on cost'}${marketCapPctValue !== undefined ? ` vs ${marketBenchmarkLabel} ${marketText}` : ''}${spreadText ? ` (${spreadText})` : ''}${
-        isRestaurantProject
-          ? `.${restaurantDscrDetail}`
-          : ` and/or DSCR ${dscrText ?? '—'}× are below the ${dscrTargetText} requirement.`
-      }`;
-      if (isFullServiceRestaurantProject) {
-        return {
-          body: 'Project currently falls below underwriting thresholds.',
-          detail: `${fullServiceLeadLine} ${noGoDetail}${fullServiceActionPlan}`,
-        };
-      }
-      if (isMarketRateMultifamilyProject) {
-        const hasNonPositiveValueGap = typeof canonicalValueGap === 'number' && canonicalValueGap <= 0;
-        const marketRateNoGoDetail = (() => {
-          if (hasNonPositiveValueGap && dscrMeetsTarget === true) {
-            return `NO-GO because value gap is non-positive (equity lens), even with DSCR ${dscrText ?? '—'} meeting ${dscrTargetText} (debt lens).`;
-          }
-          if (hasNonPositiveValueGap && dscrMeetsTarget === false) {
-            return `NO-GO because value gap is non-positive (policy break), and Debt Lens DSCR ${dscrText ?? '—'} is below ${dscrTargetText}.`;
-          }
-          if (hasNonPositiveValueGap) {
-            return `NO-GO because value gap is non-positive (equity lens) while debt-lens coverage is still being verified against ${dscrTargetText}.`;
-          }
-          if (dscrMeetsTarget === false) {
-            return `NO-GO because DSCR ${dscrText ?? '—'} is below ${dscrTargetText} (debt lens) and yield spread remains below market (equity lens).`;
-          }
-          return noGoDetail;
-        })();
-        return {
-          body: 'Project currently falls below underwriting thresholds.',
-          detail: `${marketRateNoGoDetail}${marketRateActionPlan}`,
-        };
-      }
-      return {
-        body: 'Project currently falls below underwriting thresholds.',
-        detail: `${noGoDetail}${isManufacturingIndustrialProject ? ' For manufacturing, also validate commissioning/qualification timeline and process utility loads—those usually drive the downside.' : ''}${isColdStorageIndustrialProject ? coldStorageActionPlan : defaultActionPlan}`
-      };
-    }
-    return {
-      body: 'Investment analysis is still running.',
-      detail: 'Once NOI, yield on cost, and DSCR metrics are available, this banner will classify the deal automatically.'
-    };
-  })();
+  const backendExecCopyFromDealShield = coalesceRecord(
+    dealShieldRecord.executive_rendered_copy,
+    dealShieldRecord.executiveRenderedCopy,
+    dealShieldRecord.rendered_copy,
+    dealShieldRecord.renderedCopy,
+    toRecord(dealShieldRecord.view_model).executive_rendered_copy,
+    toRecord(dealShieldRecord.view_model).executiveRenderedCopy,
+    toRecord(dealShieldRecord.viewModel).executive_rendered_copy,
+    toRecord(dealShieldRecord.viewModel).executiveRenderedCopy
+  );
+  const backendExecCopyFromProject = coalesceRecord(
+    toRecord(analysis?.executive_view).rendered_copy,
+    toRecord(analysis?.executive_view).renderedCopy,
+    toRecord(calculations?.executive_view).rendered_copy,
+    toRecord(calculations?.executive_view).renderedCopy
+  );
+  const backendExecCopy = Object.keys(backendExecCopyFromDealShield).length > 0
+    ? backendExecCopyFromDealShield
+    : backendExecCopyFromProject;
+  const backendHowToInterpret = (
+    typeof backendExecCopy.how_to_interpret === 'string'
+      ? backendExecCopy.how_to_interpret
+      : typeof backendExecCopy.howToInterpret === 'string'
+        ? backendExecCopy.howToInterpret
+        : ''
+  ).trim();
+  const backendPolicyBasisLine = (
+    typeof backendExecCopy.policy_basis_line === 'string'
+      ? backendExecCopy.policy_basis_line
+      : typeof backendExecCopy.policyBasisLine === 'string'
+        ? backendExecCopy.policyBasisLine
+        : ''
+  ).trim();
+  const targetYieldLensLabelFromBackend = (
+    typeof backendExecCopy.target_yield_lens_label === 'string'
+      ? backendExecCopy.target_yield_lens_label
+      : typeof backendExecCopy.targetYieldLensLabel === 'string'
+        ? backendExecCopy.targetYieldLensLabel
+        : ''
+  ).trim();
+  const decisionNarrative = {
+    body: backendHowToInterpret || '—',
+    detail: backendPolicyBasisLine || '—',
+  };
+  const targetYieldLensLabel = targetYieldLensLabelFromBackend || '—';
   const decisionBodyClass = `mt-1 text-sm ${
     decisionStatus === 'GO' ? 'text-green-700' : decisionStatus === 'NO-GO' ? 'text-red-700' : 'text-amber-700'
   }`;
@@ -1535,66 +1438,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     typeof facilityMetrics?.revpar === 'number' ? facilityMetrics.revpar : undefined;
   const hospitalityCostPerKey =
     typeof facilityMetrics?.costPerKey === 'number' ? facilityMetrics.costPerKey : undefined;
-  const hospitalityAdrText = hospitalityAdr !== undefined ? `$${hospitalityAdr.toFixed(0)}` : 'ADR pending';
-  const hospitalityOccupancyText =
-    hospitalityOccupancy !== undefined ? `${(hospitalityOccupancy * 100).toFixed(0)}% occupancy` : 'stabilized occupancy';
-  const hospitalityRevparText =
-    hospitalityRevpar !== undefined ? `$${hospitalityRevpar.toFixed(0)} RevPAR` : 'RevPAR loading';
-  const hospitalityMarginText =
-    typeof operatingMargin === 'number'
-      ? `${(operatingMargin * 100).toFixed(1)}% NOI margin`
-      : 'NOI margin pending';
-  const hospitalityOccPercentText =
-    hospitalityOccupancy !== undefined ? `${(hospitalityOccupancy * 100).toFixed(0)}%` : 'stabilized';
-  const hospitalityRevparMetricText =
-    hospitalityRevpar !== undefined ? `$${hospitalityRevpar.toFixed(0)}` : 'loading';
-  const hospitalityNoiText =
-    typeof currentNoi === 'number' && Number.isFinite(currentNoi)
-      ? `~${formatters.currency(currentNoi)}`
-      : 'loading';
-  const hospitalityDebtCoverageText = dscrText
-    ? (dscrMeetsTarget === false
-      ? `below target (DSCR ${dscrText} vs ${dscrTargetText})`
-      : `healthy (DSCR ${dscrText} vs ${dscrTargetText} target)`)
-    : `being validated against ${dscrTargetText}`;
-  const hospitalityYieldClearsMarket =
-    typeof yieldOnCost === 'number' &&
-    Number.isFinite(yieldOnCost) &&
-    typeof marketCapRateDisplay === 'number' &&
-    Number.isFinite(marketCapRateDisplay)
-      ? yieldOnCost >= marketCapRateDisplay
-      : undefined;
-  const hospitalityHasNonPositiveValueGap =
-    typeof canonicalValueGap === 'number' && Number.isFinite(canonicalValueGap)
-      ? canonicalValueGap <= 0
-      : false;
-  const hasVerifiedHotelBaseBreak = hasVerifiedBaseBreakCondition || hasBaseAlreadyBroken;
-  const limitedServiceDecisionLeadText = `At ADR ${hospitalityAdrText} / Occ ${hospitalityOccPercentText} / RevPAR ${hospitalityRevparMetricText}, NOI is ${hospitalityNoiText}; debt coverage is ${hospitalityDebtCoverageText}.`;
-  const limitedServiceDecisionDetailText = (() => {
-    if (decisionStatus === 'NO-GO') {
-      if (hasVerifiedHotelBaseBreak && hospitalityHasNonPositiveValueGap && dscrMeetsTarget === true && hospitalityYieldClearsMarket === true) {
-        return 'NO-GO because the base-case value gap is non-positive even though DSCR and yield clear. This usually means the value model (exit yield/benchmark/stabilization assumptions) is more conservative than the operating model. Use DealShield to isolate the forcing assumption.';
-      }
-      if (hasVerifiedHotelBaseBreak && hospitalityHasNonPositiveValueGap && dscrMeetsTarget === true) {
-        return 'NO-GO because the base-case value gap is non-positive even with debt coverage clearing target. Use DealShield to isolate whether benchmark, exit, or stabilization assumptions are forcing the gap.';
-      }
-      if (hasVerifiedHotelBaseBreak && hospitalityHasNonPositiveValueGap && dscrMeetsTarget === false) {
-        return `NO-GO because value gap is non-positive and DSCR ${dscrText ?? '—'} remains below ${dscrTargetText}. Use DealShield to isolate the first-break driver.`;
-      }
-      if (hasVerifiedNonBaseBreakCondition) {
-        return 'NO-GO because a non-base stress scenario reaches the break threshold first. Use DealShield to isolate the first-break driver.';
-      }
-      return 'NO-GO under current ADR, occupancy, and benchmark value assumptions. Use DealShield to isolate the forcing assumption.';
-    }
-    if (decisionStatus === 'GO') {
-      return 'Still validate ADR/RevPAR against comp sets and confirm franchise, management, and FF&E reserve assumptions before IC sign-off.';
-    }
-    return 'Validate ADR/RevPAR comp support, debt-lens coverage, and reserve assumptions before final recommendation.';
-  })();
-  const fullServiceNoGoMismatchText =
-    "NO-GO because the policy's value-gap threshold breaks in Base even though DSCR and yield appear strong. This typically indicates conservative value/break assumptions (e.g., F&B/ballroom scope, program timing, or ADR mix) are dominating the policy outcome; use DealShield to see the first-break driver and validate it.";
-  const fullServiceNoGoFallbackText =
-    'NO-GO under current ADR mix, F&B/ballroom program scope, and benchmark value assumptions. Use DealShield to isolate which first-break scenario is forcing the policy outcome.';
   const limitedServiceCostPerKeyValue =
     typeof hospitalityCostPerKey === 'number' && Number.isFinite(hospitalityCostPerKey)
       ? hospitalityCostPerKey
@@ -1764,16 +1607,19 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     typeof noiGap === 'number' &&
     noiGap < 0;
   const revenueFeasibilityStatusRaw = revenueReq?.feasibility?.status || revenueReq?.feasibility;
-  const isRevenueFeasible = revenueFeasibilityStatusRaw === 'Feasible';
+  const isRevenueFeasible = decisionStatus === 'GO';
   const shouldShowLuxuryRevenueClarifier =
     isLuxuryMultifamilyProject &&
     decisionStatus === 'GO' &&
-    typeof revenueFeasibilityStatusRaw === 'string' &&
-    revenueFeasibilityStatusRaw.toLowerCase() === 'not feasible';
-  const revenueFeasibilityStatusDisplay =
-    shouldShowLuxuryRevenueClarifier
-      ? 'Below Target Yield (Thin Cushion)'
-      : revenueFeasibilityStatusRaw;
+    /thin cushion/i.test(targetYieldLensLabel);
+  const shouldShowAffordableRevenueClarifier =
+    isAffordableMultifamilyProject &&
+    decisionStatus === 'NO-GO' &&
+    /(not met|below target noi)/i.test(targetYieldLensLabel) &&
+    typeof currentRevenuePerSf === 'number' &&
+    typeof requiredRevenuePerSf === 'number' &&
+    currentRevenuePerSf >= requiredRevenuePerSf;
+  const revenueFeasibilityStatusDisplay = targetYieldLensLabel || revenueFeasibilityStatusRaw;
 
   const isIndustrialProject = (buildingType || '').toLowerCase() === 'industrial';
   const industrialYieldSpreadDisplay =
@@ -1915,6 +1761,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
       if (isIndustrialProject && isFlexIndustrial) {
         returnsText +=
           ' For flex industrial, this reflects the balance between office and warehouse lease mix, tenant flexibility, and achievable blended rents.';
+      } else if (isIndustrialProject && isManufacturingIndustrialProject) {
+        returnsText +=
+          ' For manufacturing, this signals whether utility/service capacity, process MEP integration, commissioning/qualification timeline, and throughput ramp assumptions can clear both equity and lender hurdles.';
       } else if (isIndustrialProject && isColdStorageIndustrialProject) {
         returnsText +=
           ' For cold storage, this signals whether refrigeration/utility load + commissioning ramp assumptions can clear both equity and lender hurdles.';
@@ -1933,6 +1782,16 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
           returnsText += ' Bottom line: policy breaks on value gap; focus diligence on cost basis + carry drivers before IC.';
         } else {
           returnsText += ' Bottom line: policy remains tight; focus diligence on cost basis + carry drivers before IC.';
+        }
+      } else if (isAffordableMultifamilyProject && decisionStatus === 'NO-GO') {
+        const hasNonPositiveValueGap =
+          typeof canonicalValueGap === 'number' && Number.isFinite(canonicalValueGap) && canonicalValueGap <= 0;
+        if (hasNonPositiveValueGap && dscrMeetsTarget === true) {
+          returnsText += ' Bottom line: DSCR clears, but the policy fails on negative value gap—diligence should focus on compliance-driven scope drift, allowances/contingency realism, and cost controls under capped rents.';
+        } else if (hasNonPositiveValueGap) {
+          returnsText += ' Bottom line: policy fails on negative value gap—diligence should focus on compliance-driven scope drift, allowances/contingency realism, cost controls under capped rents, and debt sizing assumptions.';
+        } else {
+          returnsText += ' Bottom line: policy remains tight under capped rents; focus diligence on compliance-driven scope drift and cost controls.';
         }
       } else {
         returnsText += ' Together these determine whether the project clears both equity and lender hurdles.';
@@ -2311,12 +2170,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
               >
                 Investment Decision: {decisionStatusLabel}
               </h3>
-              {isDealShieldCanonicalStatusActive && (
-                <p className="mt-1 text-xs text-slate-600">
-                  Policy source: {decisionStatusSource ?? 'dealshield_policy_v1'}
-                  {decisionPolicyId ? ` (${decisionPolicyId})` : ''}
-                  {decisionReasonCode ? ` · reason: ${decisionReasonCode}` : ''}
-                </p>
+              {isDealShieldCanonicalStatusActive && backendPolicyBasisLine && (
+                <p className="mt-1 text-xs text-slate-600">{backendPolicyBasisLine}</p>
               )}
               <button
                 type="button"
@@ -2325,74 +2180,14 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
               >
                 How to interpret this recommendation
               </button>
-              {isHospitalityProject ? (
-                <>
-                  <p className={decisionBodyClass}>
-                    {isLimitedServiceHospitalityProject
-                      ? limitedServiceDecisionLeadText
-                      : `Hotel clears underwriting at ${hospitalityAdrText}, ${hospitalityOccupancyText}, and ${hospitalityRevparText}, generating ${hospitalityMarginText} to support the flagged room count and debt sizing.`}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-600">
-                    {isLimitedServiceHospitalityProject
-                      ? limitedServiceDecisionDetailText
-                      : isFullServiceHospitalityProject && decisionStatus === 'NO-GO' && hasVerifiedHotelBaseBreak
-                        ? fullServiceNoGoMismatchText
-                      : isFullServiceHospitalityProject && decisionStatus === 'NO-GO'
-                        ? fullServiceNoGoFallbackText
-                      : 'Hospitality memo: validate ADR and RevPAR against comp sets, keep DSCR comfortably above lender hotel hurdles, and confirm franchise, management, and FF&E reserves stay in sync with brand requirements.'}
-                  </p>
-                  {decisionReasonText && (
-                    <p className="mt-2 text-xs text-slate-600">
-                      Analyst context: {decisionReasonText}
-                    </p>
-                  )}
-                </>
-              ) : (
-                <>
-                  {isOffice ? (
-                    <>
-                      <p className="text-sm text-slate-700">
-                        Office deal currently underperforms Class A underwriting targets. With current rent levels, occupancy, and TI/LC load, stabilized NOI is not sufficient to clear both equity and lender hurdles.
-                      </p>
-                      <p className="mt-1 text-sm text-slate-700">
-                        Yield on cost and DSCR here should be read in the context of lease-up risk, tenant credit, and renewal probabilities. Use this view to test whether the rent and occupancy story is strong enough for this basis.
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Analyzer note: Focus first on achievable rent per SF, realistic stabilized occupancy, and the average TI/LC burden for this submarket. Debt sizing and return metrics will follow from the rent roll quality. If the gap is large, re-scope the project, lower hard costs, or revisit the target tenant mix.
-                      </p>
-                      {decisionReasonText && (
-                        <p className="mt-2 text-xs text-slate-600">
-                          Additional analyzer note: {decisionReasonText}
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <p className={decisionBodyClass}>
-                        {decisionCopy.body}
-                      </p>
-                      {decisionCopy.detail && (
-                        <p className={decisionDetailClass}>
-                          {decisionCopy.detail}
-                        </p>
-                      )}
-                      {decisionReasonText && (
-                        <p className="mt-2 text-xs text-slate-600">
-                          Analyzer note: {decisionReasonText}
-                        </p>
-                      )}
-                    </>
-                  )}
-                </>
+              <p className={decisionBodyClass}>
+                {decisionNarrative.body}
+              </p>
+              {decisionNarrative.detail && decisionNarrative.detail !== '—' && (
+                <p className={decisionDetailClass}>
+                  {decisionNarrative.detail}
+                </p>
               )}
-              {hasDebt &&
-                typeof dscr === 'number' &&
-                Number.isFinite(dscr) &&
-                dscr < resolvedTargetDscr && (
-                  <p className="text-xs md:text-sm opacity-80 mt-0.5 text-red-700">
-                    DSCR {dscr.toFixed(2)}× vs target {resolvedTargetDscr.toFixed(2)}×: coverage is below lender sizing.
-                  </p>
-                )}
               {typeof yieldOnCost === 'number' && yieldOnCost > 0 && (
                 <p className="text-xs md:text-sm opacity-90 mt-0.5">
                   Yield on cost of {(yieldOnCost * 100).toFixed(1)}%
@@ -3429,16 +3224,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                 Feasibility vs Target Yield
               </div>
               {(() => {
-                const label =
-                  decisionStatus === 'GO'
-                    ? 'GO'
-                    : decisionStatus === 'NO-GO'
-                      ? 'Not Feasible'
-                      : decisionStatus === 'PENDING'
-                        ? 'Needs Review'
-                        : isWarehouseIndustrialProject
-                          ? 'Cushion'
-                          : 'Marginal';
+                const label = targetYieldLensLabel;
                 const baseClasses =
                   'rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide';
                 const colorClasses =
@@ -3520,6 +3306,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                   {shouldShowLuxuryRevenueClarifier && (
                     <p className="text-xs text-gray-600 leading-snug mt-2">
                       This section tests the target yield hurdle; the overall verdict is driven by DealShield policy/value gap.
+                    </p>
+                  )}
+                  {shouldShowAffordableRevenueClarifier && (
+                    <p className="text-xs text-gray-600 leading-snug mt-2">
+                      Revenue per SF is sufficient; the shortfall is driven by NOI/expense/cost basis, not rent levels.
                     </p>
                   )}
                 </div>
@@ -3818,7 +3609,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
               Key Milestones
             </h3>
             <p className="text-sm text-gray-600 mb-6">
-              {isLuxuryMultifamilyProject
+              {isLuxuryMultifamilyProject || isDistributionCenterIndustrialProject || isManufacturingIndustrialProject
                 ? 'Planning timeline (schedule risk not modeled in base case).'
                 : 'Milestones are baseline planning assumptions. Yield, DSCR, and NOI metrics do not currently include schedule-delay or acceleration effects.'}
             </p>
@@ -4300,7 +4091,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
               </p>
               <p className="text-3xl font-bold text-white">{displayData.units.toLocaleString()}</p>
               <p className="text-sm text-slate-500">
-                {(isLuxuryMultifamilyProject || isMarketRateMultifamilyProject)
+                {(isLuxuryMultifamilyProject || isMarketRateMultifamilyProject || isAffordableMultifamilyProject)
                   ? 'Program assumption'
                   : 'Derived from square footage and density'}
               </p>

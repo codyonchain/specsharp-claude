@@ -252,26 +252,6 @@ const normalizeBackendDecision = (value: unknown): DecisionStatus | undefined =>
   return undefined;
 };
 
-const decisionReasonCopy = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const key = value.trim().toLowerCase();
-  if (!key) return null;
-  const map: Record<string, string> = {
-    explicit_status_signal: 'Status is set by an explicit backend policy signal.',
-    not_modeled_inputs_missing: 'Status is pending because required modeled inputs are missing.',
-    base_case_break_condition: 'Base scenario already trips the break condition.',
-    base_value_gap_non_positive: 'Base value gap is non-positive.',
-    low_flex_before_break_buffer: 'Status reflects low flex-before-break buffer.',
-    base_value_gap_positive: 'Base value gap is positive under current assumptions.',
-    tight_flex_band: 'Status reflects a tight flex-before-break band.',
-    flex_before_break_buffer_positive: 'Status reflects positive flex-before-break buffer.',
-    insufficient_modeled_inputs: 'Status is pending due to insufficient modeled inputs.',
-  };
-  if (map[key]) return map[key];
-  const label = key.replace(/_/g, ' ');
-  return `${label.charAt(0).toUpperCase()}${label.slice(1)}.`;
-};
-
 const formatAssumptionPercentFixed2 = (value: unknown) => {
   const numeric = toFiniteNumber(value);
   if (numeric === null) return MISSING_VALUE;
@@ -587,9 +567,6 @@ export const DealShieldView: React.FC<Props> = ({
   const exposureConcentrationPct = toFiniteNumber(
     (viewModel as any)?.exposure_concentration_pct ?? (viewModel as any)?.exposureConcentrationPct
   );
-  const firstBreakScenarioLabel = formatValue(
-    firstBreakCondition?.scenario_label ?? firstBreakCondition?.scenario_id
-  );
   const firstBreakMetricRaw =
     firstBreakCondition?.break_metric ??
     (firstBreakCondition as any)?.breakMetric;
@@ -597,9 +574,6 @@ export const DealShieldView: React.FC<Props> = ({
     typeof firstBreakMetricRaw === 'string' && firstBreakMetricRaw.trim()
       ? firstBreakMetricRaw.trim().toLowerCase()
       : 'value_gap';
-  const firstBreakOperator =
-    typeof firstBreakCondition?.operator === 'string' ? firstBreakCondition.operator.trim() : '';
-  const firstBreakThresholdNumeric = toFiniteNumber(firstBreakCondition?.threshold);
   const firstBreakConditionHoldsRaw =
     (viewModel as any)?.first_break_condition_holds ??
     (viewModel as any)?.firstBreakConditionHolds ??
@@ -634,17 +608,15 @@ export const DealShieldView: React.FC<Props> = ({
     (viewModel as any)?.flexBeforeBreakBand ??
     (decisionInsuranceProvenance?.flex_before_break_pct as any)?.band;
   const flexBeforeBreakBandLabel = describeFlexBand(flexBeforeBreakBandRaw);
-  const flexBeforeBreakReasonKey = toComparableKey(
-    (decisionInsuranceProvenance?.flex_before_break_pct as any)?.reason
-  );
+  const firstBreakSummaryRaw =
+    (firstBreakCondition as any)?.summary_text ??
+    (firstBreakCondition as any)?.summaryText ??
+    (firstBreakCondition as any)?.description ??
+    (firstBreakCondition as any)?.detail;
   const firstBreakSummaryText =
-    firstBreakMetric === 'value_gap'
-      ? firstBreakOperator === '<=' && firstBreakThresholdNumeric !== null && Math.abs(firstBreakThresholdNumeric) < 1e-9
-        ? `Break occurs in ${firstBreakScenarioLabel}: value gap turns negative.`
-        : `Break occurs in ${firstBreakScenarioLabel}: value gap crosses threshold.`
-      : firstBreakMetric === 'value_gap_pct'
-        ? `Break occurs in ${firstBreakScenarioLabel}: value-gap percentage crosses threshold.`
-        : `Break occurs in ${firstBreakScenarioLabel}: ${firstBreakMetricRaw} crosses threshold.`;
+    typeof firstBreakSummaryRaw === 'string' && firstBreakSummaryRaw.trim()
+      ? firstBreakSummaryRaw.trim()
+      : null;
   const formatFirstBreakMetricValue = (value: unknown) => {
     if (firstBreakMetric === 'value_gap') {
       return formatDecisionMetricValue(value, 'derived.value_gap');
@@ -849,24 +821,10 @@ export const DealShieldView: React.FC<Props> = ({
       : (viewModel as any)?.decisionSummary && typeof (viewModel as any).decisionSummary === 'object'
         ? (viewModel as any).decisionSummary
         : {}) as Record<string, unknown>;
-  const firstBreakScenarioIdKey = toComparableKey(
-    firstBreakCondition?.scenario_id ?? (firstBreakCondition as any)?.scenarioId
-  );
-  const firstBreakScenarioLabelKey = toComparableKey(
-    firstBreakCondition?.scenario_label ?? (firstBreakCondition as any)?.scenarioLabel
-  );
   const firstBreakThresholdDisplay = useMemo(() => {
     if (!firstBreakCondition) return MISSING_VALUE;
     return formatFirstBreakMetricValue(firstBreakCondition.threshold);
   }, [firstBreakCondition, formatFirstBreakMetricValue]);
-  const hasBaseBreakCondition = Boolean(
-    firstBreakCondition && (firstBreakScenarioIdKey === 'base' || firstBreakScenarioLabelKey === 'base')
-  );
-  const hasVerifiedBaseBreakCondition = hasBaseBreakCondition && firstBreakConditionHolds === true;
-  const hasVerifiedNonBaseBreakCondition = Boolean(
-    firstBreakCondition && !hasBaseBreakCondition && firstBreakConditionHolds === true
-  );
-  const hasBaseAlreadyBroken = flexBeforeBreakReasonKey === 'base_already_broken';
   const explicitDecisionStatus = normalizeBackendDecision(
     (viewModel as any)?.decision_status ??
     (viewModel as any)?.decisionStatus ??
@@ -875,25 +833,6 @@ export const DealShieldView: React.FC<Props> = ({
     decisionSummaryRaw?.recommendation ??
     decisionSummaryRaw?.status
   );
-  const decisionReasonCode =
-    (viewModel as any)?.decision_reason_code ??
-    (viewModel as any)?.decisionReasonCode ??
-    decisionSummaryRaw?.decision_reason_code ??
-    decisionSummaryRaw?.decisionReasonCode ??
-    provenance?.decision_reason_code ??
-    provenance?.decisionReasonCode;
-  const statusSource =
-    typeof decisionStatusProvenance?.status_source === 'string'
-      ? decisionStatusProvenance.status_source
-      : typeof decisionStatusProvenance?.statusSource === 'string'
-        ? decisionStatusProvenance.statusSource
-        : null;
-  const provenanceNotModeledReason =
-    typeof decisionStatusProvenance?.not_modeled_reason === 'string'
-      ? decisionStatusProvenance.not_modeled_reason
-      : typeof decisionStatusProvenance?.notModeledReason === 'string'
-        ? decisionStatusProvenance.notModeledReason
-        : null;
   const canonicalDecisionStatus: DecisionStatus = explicitDecisionStatus ?? 'PENDING';
   const decisionStatusLabel =
     canonicalDecisionStatus === 'PENDING' ? 'Under Review' : canonicalDecisionStatus;
@@ -910,58 +849,6 @@ export const DealShieldView: React.FC<Props> = ({
     provenance?.content_profile_id,
     content?.profile_id,
   ].some((value) => typeof value === 'string' && value.startsWith('industrial_manufacturing'));
-  const isColdStorageStatusProfile = [
-    (dealShieldData as any)?.profile_id,
-    (dealShieldData as any)?.profileId,
-    (viewModel as any)?.profile_id,
-    (viewModel as any)?.profileId,
-    (viewModel as any)?.tile_profile_id,
-    (viewModel as any)?.tileProfileId,
-    provenance?.profile_id,
-    (viewModel as any)?.content_profile_id,
-    (viewModel as any)?.contentProfileId,
-    provenance?.content_profile_id,
-    content?.profile_id,
-  ].some((value) => typeof value === 'string' && value.startsWith('industrial_cold_storage'));
-  const isRestaurantFullServiceStatusProfile = [
-    (dealShieldData as any)?.profile_id,
-    (dealShieldData as any)?.profileId,
-    (viewModel as any)?.profile_id,
-    (viewModel as any)?.profileId,
-    (viewModel as any)?.tile_profile_id,
-    (viewModel as any)?.tileProfileId,
-    provenance?.profile_id,
-    (viewModel as any)?.content_profile_id,
-    (viewModel as any)?.contentProfileId,
-    provenance?.content_profile_id,
-    content?.profile_id,
-  ].some((value) => typeof value === 'string' && value.startsWith('restaurant_full_service'));
-  const isMarketRateMultifamilyStatusProfile = [
-    (dealShieldData as any)?.profile_id,
-    (dealShieldData as any)?.profileId,
-    (viewModel as any)?.profile_id,
-    (viewModel as any)?.profileId,
-    (viewModel as any)?.tile_profile_id,
-    (viewModel as any)?.tileProfileId,
-    provenance?.profile_id,
-    (viewModel as any)?.content_profile_id,
-    (viewModel as any)?.contentProfileId,
-    provenance?.content_profile_id,
-    content?.profile_id,
-  ].some((value) => typeof value === 'string' && value.startsWith('multifamily_market_rate_apartments'));
-  const isLuxuryMultifamilyStatusProfile = [
-    (dealShieldData as any)?.profile_id,
-    (dealShieldData as any)?.profileId,
-    (viewModel as any)?.profile_id,
-    (viewModel as any)?.profileId,
-    (viewModel as any)?.tile_profile_id,
-    (viewModel as any)?.tileProfileId,
-    provenance?.profile_id,
-    (viewModel as any)?.content_profile_id,
-    (viewModel as any)?.contentProfileId,
-    provenance?.content_profile_id,
-    content?.profile_id,
-  ].some((value) => typeof value === 'string' && value.startsWith('multifamily_luxury_apartments'));
   const isAffordableHousingStatusProfile = [
     (dealShieldData as any)?.profile_id,
     (dealShieldData as any)?.profileId,
@@ -975,135 +862,37 @@ export const DealShieldView: React.FC<Props> = ({
     provenance?.content_profile_id,
     content?.profile_id,
   ].some((value) => typeof value === 'string' && value.startsWith('multifamily_affordable_housing'));
-  const isFullServiceHotelStatusProfile = [
-    (dealShieldData as any)?.profile_id,
-    (dealShieldData as any)?.profileId,
-    (viewModel as any)?.profile_id,
-    (viewModel as any)?.profileId,
-    (viewModel as any)?.tile_profile_id,
-    (viewModel as any)?.tileProfileId,
-    provenance?.profile_id,
-    (viewModel as any)?.content_profile_id,
-    (viewModel as any)?.contentProfileId,
-    provenance?.content_profile_id,
-    content?.profile_id,
-  ].some((value) => typeof value === 'string' && value.startsWith('hospitality_full_service_hotel'));
-  const isLimitedServiceHotelStatusProfile = [
-    (dealShieldData as any)?.profile_id,
-    (dealShieldData as any)?.profileId,
-    (viewModel as any)?.profile_id,
-    (viewModel as any)?.profileId,
-    (viewModel as any)?.tile_profile_id,
-    (viewModel as any)?.tileProfileId,
-    provenance?.profile_id,
-    (viewModel as any)?.content_profile_id,
-    (viewModel as any)?.contentProfileId,
-    provenance?.content_profile_id,
-    content?.profile_id,
-  ].some((value) => typeof value === 'string' && value.startsWith('hospitality_limited_service_hotel'));
-  const normalizedDecisionReasonKey =
-    typeof decisionReasonCode === 'string' ? decisionReasonCode.trim().toLowerCase() : null;
-  const isBaseBreakReason = normalizedDecisionReasonKey === 'base_case_break_condition';
-  const hasVerifiedBaseBreakForCopy = Boolean(
-    canonicalDecisionStatus === 'NO-GO' &&
-    isBaseBreakReason &&
-    (hasVerifiedBaseBreakCondition || hasBaseAlreadyBroken)
-  );
-  const shouldUseThresholdNoGoSummary =
-    canonicalDecisionStatus === 'NO-GO' && (
-      isManufacturingStatusProfile ||
-      isColdStorageStatusProfile ||
-      isRestaurantFullServiceStatusProfile ||
-      (isMarketRateMultifamilyStatusProfile && hasVerifiedBaseBreakForCopy) ||
-      (isAffordableHousingStatusProfile && hasVerifiedBaseBreakForCopy) ||
-      (isFullServiceHotelStatusProfile && hasVerifiedBaseBreakForCopy) ||
-      (isLimitedServiceHotelStatusProfile && hasVerifiedBaseBreakForCopy)
-    );
-  const hotelNoGoSummaryText =
-    isFullServiceHotelStatusProfile
-      ? 'Policy flags NO-GO under current ADR mix, F&B/ballroom program scope, and value-benchmark assumptions.'
-      : isLimitedServiceHotelStatusProfile
-        ? 'Policy flags NO-GO under current ADR, occupancy, and value-benchmark assumptions.'
-        : null;
-  const multifamilyNoGoSummaryText =
-    isMarketRateMultifamilyStatusProfile
-      ? 'Policy flags NO-GO under current cost-basis, rent, expense, and value-benchmark assumptions.'
-      : isAffordableHousingStatusProfile
-        ? 'Policy flags NO-GO under capped revenue, compliance-cost, and value-benchmark assumptions.'
-        : null;
-  const decisionStatusSummaryText =
-    canonicalDecisionStatus === 'GO'
-      ? 'Base case remains positive under canonical DealShield policy.'
-      : canonicalDecisionStatus === 'Needs Work'
-        ? 'Downside pressure is present; policy marks this as near-break risk.'
-      : canonicalDecisionStatus === 'NO-GO'
-          ? shouldUseThresholdNoGoSummary
-            ? 'Base case already breaks the policy threshold (value gap non-positive).'
-            : hotelNoGoSummaryText ?? multifamilyNoGoSummaryText ?? 'Base case has already collapsed or value gap is non-positive.'
-          : 'Canonical status is pending due to missing modeled inputs.';
-  const manufacturingDecisionStatusDetailText =
-    isManufacturingStatusProfile && normalizedDecisionReasonKey === 'base_case_break_condition'
-      ? hasVerifiedBaseBreakCondition
-        ? 'Break occurs immediately in Base.'
-        : hasVerifiedNonBaseBreakCondition
-          ? firstBreakSummaryText
-          : 'Break condition is flagged by policy; verify scenario and threshold inputs.'
-      : null;
-  const marketRateDecisionStatusDetailText =
-    isMarketRateMultifamilyStatusProfile &&
-    canonicalDecisionStatus === 'NO-GO'
-      ? hasVerifiedBaseBreakForCopy
-        ? 'This is primarily a cost-basis / value-gap break under current rent and expense assumptions.'
-        : hasVerifiedNonBaseBreakCondition
-          ? firstBreakSummaryText
-          : 'Policy indicates NO-GO under current cost-basis, rent, expense, and value-benchmark assumptions.'
-      : null;
-  const affordableDecisionStatusDetailText =
-    isAffordableHousingStatusProfile &&
-    canonicalDecisionStatus === 'NO-GO'
-      ? hasVerifiedBaseBreakForCopy
-        ? 'This is a funding-gap / compliance-cost sensitivity issue under capped revenue.'
-        : hasVerifiedNonBaseBreakCondition
-          ? firstBreakSummaryText
-          : 'Policy indicates NO-GO under capped revenue, compliance-cost, and value-benchmark assumptions.'
-      : null;
-  const luxuryMultifamilyDecisionStatusDetailText =
-    isLuxuryMultifamilyStatusProfile &&
-    canonicalDecisionStatus === 'GO' &&
-    hasVerifiedNonBaseBreakCondition
-      ? `GO, but first break occurs in ${firstBreakScenarioLabel} (thin cushion).`
-      : null;
-  const limitedServiceHotelDecisionStatusDetailText =
-    isLimitedServiceHotelStatusProfile &&
-    canonicalDecisionStatus === 'NO-GO'
-      ? hasVerifiedBaseBreakForCopy
-        ? 'This is a value-gap mismatch under current ADR, occupancy, and exit-yield assumptions.'
-        : hasVerifiedNonBaseBreakCondition
-          ? firstBreakSummaryText
-          : 'Policy indicates NO-GO under current ADR, occupancy, and value-benchmark assumptions.'
-      : null;
-  const fullServiceHotelDecisionStatusDetailText =
-    isFullServiceHotelStatusProfile &&
-    canonicalDecisionStatus === 'NO-GO'
-      ? hasVerifiedBaseBreakForCopy
-        ? 'This is driven by hotel value-gap pressure under ADR mix, F&B/ballroom program scope, and exit-yield assumptions.'
-        : hasVerifiedNonBaseBreakCondition
-          ? firstBreakSummaryText
-          : 'Policy indicates NO-GO under current ADR mix, F&B/ballroom program assumptions, and value-benchmark inputs.'
-      : null;
-  const decisionStatusDetailText = manufacturingDecisionStatusDetailText
-    ?? marketRateDecisionStatusDetailText
-    ?? luxuryMultifamilyDecisionStatusDetailText
-    ?? affordableDecisionStatusDetailText
-    ?? fullServiceHotelDecisionStatusDetailText
-    ?? limitedServiceHotelDecisionStatusDetailText
-    ?? decisionReasonCopy(decisionReasonCode)
-    ?? provenanceNotModeledReason
-    ?? decisionSummary.notModeledReason
-    ?? firstBreakUnavailableReason
-    ?? flexBeforeBreakUnavailableReason
-    ?? (statusSource ? `Status source: ${statusSource}.` : null)
-    ?? 'Status uses backend Decision Insurance and decision-summary outputs with deterministic fallback.';
+  const renderedCopy =
+    (viewModel as any)?.rendered_copy && typeof (viewModel as any).rendered_copy === 'object'
+      ? ((viewModel as any).rendered_copy as Record<string, unknown>)
+      : (viewModel as any)?.renderedCopy && typeof (viewModel as any).renderedCopy === 'object'
+        ? ((viewModel as any).renderedCopy as Record<string, unknown>)
+        : {};
+  const renderedPolicyBasisLine =
+    typeof renderedCopy.policy_basis_line === 'string'
+      ? renderedCopy.policy_basis_line.trim()
+      : typeof renderedCopy.policyBasisLine === 'string'
+        ? renderedCopy.policyBasisLine.trim()
+        : '';
+  const policyBasisLine =
+    renderedPolicyBasisLine ||
+    '—';
+  const renderedDecisionStatusSummary =
+    typeof renderedCopy.decision_status_summary === 'string'
+      ? renderedCopy.decision_status_summary.trim()
+      : typeof renderedCopy.decisionStatusSummary === 'string'
+        ? renderedCopy.decisionStatusSummary.trim()
+        : '';
+  const renderedDecisionStatusDetail =
+    typeof renderedCopy.decision_status_detail === 'string'
+      ? renderedCopy.decision_status_detail.trim()
+      : typeof renderedCopy.decisionStatusDetail === 'string'
+        ? renderedCopy.decisionStatusDetail.trim()
+        : '';
+  const decisionSummaryDisplayText =
+    renderedDecisionStatusSummary || '—';
+  const decisionDetailDisplayText =
+    renderedDecisionStatusDetail || '—';
   const decisionStatusPanelClass =
     canonicalDecisionStatus === 'GO'
       ? 'border-green-200 bg-green-50'
@@ -1153,14 +942,6 @@ export const DealShieldView: React.FC<Props> = ({
   useEffect(() => {
     setControls(controlsFromPayload);
   }, [controlsFromPayload]);
-  const metricRefsUsed = Array.isArray(provenance?.metric_refs_used)
-    ? provenance.metric_refs_used
-    : Array.isArray((viewModel as any)?.metric_refs_used)
-      ? (viewModel as any).metric_refs_used
-      : [];
-  const metricRefPills = metricRefsUsed
-    .map((ref: any) => (ref == null ? '' : String(ref).trim()))
-    .filter(Boolean);
 
   const profileId =
     (dealShieldData as any)?.profile_id ??
@@ -1203,10 +984,11 @@ export const DealShieldView: React.FC<Props> = ({
     isRestaurantProfile ||
     isMarketRateMultifamilyProfile ||
     isLuxuryMultifamilyProfile ||
+    isAffordableHousingProfile ||
     isFullServiceHotelProfile ||
     isLimitedServiceHotelProfile;
   const useMultifamilySensitivityClarifier =
-    isMarketRateMultifamilyProfile || isLuxuryMultifamilyProfile;
+    isMarketRateMultifamilyProfile || isLuxuryMultifamilyProfile || isAffordableHousingProfile;
   const breakRiskReasonForDisplay =
     breakRisk?.reason &&
     isLuxuryMultifamilyProfile &&
@@ -1433,10 +1215,10 @@ export const DealShieldView: React.FC<Props> = ({
                 Investment Decision: {decisionStatusLabel}
               </p>
               <p className={`mt-1 text-sm ${decisionStatusTextClass}`}>
-                {decisionStatusSummaryText}
+                {decisionSummaryDisplayText}
               </p>
               <p className="mt-1 text-xs text-slate-600">
-                {decisionStatusDetailText}
+                {decisionDetailDisplayText}
               </p>
             </div>
           </section>
@@ -1503,7 +1285,7 @@ export const DealShieldView: React.FC<Props> = ({
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">First Break Condition</p>
                     {firstBreakCondition ? (
                       <div className="mt-2 space-y-1 text-sm text-slate-700">
-                        <p>{firstBreakSummaryText}</p>
+                        {firstBreakSummaryText && <p>{firstBreakSummaryText}</p>}
                         <p>
                           <span className="font-medium text-slate-600">Scenario:</span>{' '}
                           <span>{formatValue(firstBreakCondition.scenario_label ?? firstBreakCondition.scenario_id)}</span>
@@ -1555,7 +1337,7 @@ export const DealShieldView: React.FC<Props> = ({
                         <li key={`${entry.id ?? 'ranked-likely-wrong'}-${index}`} className="rounded border border-slate-200 bg-white px-2.5 py-2">
                           <p className="font-medium text-slate-800">{formatValue(entry.text ?? entry.id)}</p>
                           <p className="mt-1 text-xs text-slate-600">
-                            Impact: {formatAssumptionPercent(entry.impact_pct)} | {isManufacturingProfile ? 'Risk' : 'Severity'}: {isFullServiceHotelProfile && String(formatValue(entry.severity)).toLowerCase() === 'unknown' ? 'Unscored' : formatValue(entry.severity)}
+                            Impact: {formatAssumptionPercent(entry.impact_pct)} | {isManufacturingProfile ? 'Risk' : 'Severity'}: {String(formatValue(entry.severity)).toLowerCase() === 'unknown' ? 'Unscored' : formatValue(entry.severity)}
                           </p>
                           <p className="mt-1 text-xs text-slate-600">Why: {formatValue(entry.why)}</p>
                         </li>
@@ -1770,11 +1552,6 @@ export const DealShieldView: React.FC<Props> = ({
                       {hasDriverTileId && (
                         <p className="text-sm font-semibold text-slate-700">
                           {driverLabelByTileId.get(groupKey) ?? groupKey}
-                          {groupKey !== '-' && (
-                            <span className="ml-2 align-middle text-[10px] font-medium text-slate-400 font-mono">
-                              (tile: {groupKey})
-                            </span>
-                          )}
                         </p>
                       )}
                       <ul className="list-disc pl-5 text-sm text-slate-700 space-y-1">
@@ -1833,7 +1610,7 @@ export const DealShieldView: React.FC<Props> = ({
             </p>
             <p className="mb-3 text-xs text-slate-600">
               <span className="font-semibold text-slate-700">Decision Policy:</span>{' '}
-              Status: {decisionStatusLabel} | Reason: {formatValue(decisionReasonCode)} | Source: {formatValue(statusSource)}
+              {policyBasisLine}
             </p>
             {scenarioInputs.length > 0 ? (
               <div className="overflow-x-auto">
@@ -1893,21 +1670,6 @@ export const DealShieldView: React.FC<Props> = ({
               <p className="text-sm text-slate-500">-</p>
             )}
 
-            {metricRefPills.length > 0 && (
-              <div className="mt-4">
-                <div className="text-sm font-medium text-slate-700">metric_refs_used:</div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {metricRefPills.map((ref: string, index: number) => (
-                    <span
-                      key={`${ref}-${index}`}
-                      className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600 font-mono"
-                    >
-                      {ref}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
           </section>
         </>
       )}

@@ -68,14 +68,15 @@ def test_project_pdf_prefers_canonical_dealshield_decision_when_available():
             "decision_status": "GO",
             "decision_reason_code": "base_value_gap_positive",
             "decision_status_provenance": {
-                "status_source": "dealshield_policy_v1",
-                "policy_id": "dealshield_canonical_policy_v1",
+                "status_source": "canonical_policy",
+                "policy_id": "decision_insurance_subtype_policy_v1",
             },
         },
     )
 
     assert 'class="badge go">GO<' in html
-    assert "Policy source: dealshield_policy_v1 (dealshield_canonical_policy_v1) · reason: base_value_gap_positive" in html
+    assert "Policy basis: DealShield canonical policy." in html
+    assert "Policy source:" not in html
     assert "Consider phased development or value engineering to reduce costs" not in html
 
 
@@ -91,4 +92,3 @@ def test_project_pdf_falls_back_to_feasibility_when_canonical_decision_missing()
 
     assert 'class="badge nogo">NO-GO<' in html
     assert recommendation in html
-

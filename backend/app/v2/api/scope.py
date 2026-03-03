@@ -26,6 +26,7 @@ from app.v2.config.master_config import (
 )
 from app.v2.services.industrial_override_extractor import extract_industrial_overrides
 from app.v2.services.dealshield_service import build_dealshield_view_model, DealShieldResolutionError
+from app.v2.presentation.client_text_sanitizer import sanitize_client_text
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.core.building_taxonomy import normalize_building_type, validate_building_type
 from app.core.auth import AuthContext, get_auth_context
@@ -1033,7 +1034,7 @@ async def get_dealshield_view(
 
     return ProjectResponse(
         success=True,
-        data=view_model
+        data=sanitize_client_text(view_model)
     )
 
 @router.delete("/scope/projects/{project_id}")

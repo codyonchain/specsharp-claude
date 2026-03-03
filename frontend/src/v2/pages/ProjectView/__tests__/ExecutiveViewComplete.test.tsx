@@ -667,6 +667,12 @@ const restaurantDealShieldViewModel = {
   tile_profile_id: "restaurant_full_service_v1",
   content_profile_id: "restaurant_full_service_v1",
   scope_items_profile_id: "restaurant_full_service_structural_v1",
+  executive_rendered_copy: {
+    how_to_interpret:
+      "GO because policy threshold clears under current assumptions.",
+    policy_basis_line: "Policy basis: DealShield canonical policy.",
+    target_yield_lens_label: "Target Yield: Not Met",
+  },
 };
 
 const buildHospitalityDealShieldViewModel = (profileId: string) => ({
@@ -686,6 +692,12 @@ const buildHospitalityDealShieldViewModel = (profileId: string) => ({
     profileId === "hospitality_full_service_hotel_v1"
       ? "hospitality_full_service_hotel_structural_v1"
       : "hospitality_limited_service_hotel_structural_v1",
+  executive_rendered_copy: {
+    how_to_interpret:
+      "Needs Work because policy cushion is tight under current assumptions.",
+    policy_basis_line: "Policy basis: DealShield canonical policy.",
+    target_yield_lens_label: "Target Yield: Not Met",
+  },
 });
 
 const buildCrossTypeProject = (
@@ -748,6 +760,12 @@ const buildCrossTypeDealShieldViewModel = (
   tile_profile_id: profileId,
   content_profile_id: profileId,
   scope_items_profile_id: `${profileId.replace(/_v1$/, "")}_structural_v1`,
+  executive_rendered_copy: {
+    how_to_interpret:
+      `${decisionStatus} is supplied by backend policy outputs.`,
+    policy_basis_line: "Policy basis: DealShield canonical policy.",
+    target_yield_lens_label: "Target Yield: Not Met",
+  },
   ...(options?.mixedUseSplitValue
     ? {
         provenance: {
@@ -770,7 +788,44 @@ const buildCrossTypeDealShieldViewModel = (
     : {}),
 });
 
+const withExecutiveRenderedCopy = (
+  viewModel: any,
+  copy: {
+    how_to_interpret: string;
+    policy_basis_line?: string;
+    target_yield_lens_label?: string;
+  }
+) => ({
+  ...viewModel,
+  executive_rendered_copy: {
+    how_to_interpret: copy.how_to_interpret,
+    policy_basis_line: copy.policy_basis_line ?? "Policy basis: DealShield canonical policy.",
+    target_yield_lens_label: copy.target_yield_lens_label ?? "Target Yield: Not Met",
+  },
+});
+
 describe("ExecutiveViewComplete", () => {
+  it("does not synthesize executive narrative copy when backend executive_rendered_copy is missing", () => {
+    const payload = { ...restaurantDealShieldViewModel } as any;
+    delete payload.executive_rendered_copy;
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildRestaurantProject()}
+          dealShieldData={payload}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.queryByText("Recommendation is supplied by backend policy outputs.")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Policy basis: DealShield canonical policy.")
+    ).not.toBeInTheDocument();
+  });
+
   it("renders canonical restaurant decision status and provenance source", () => {
     render(
       <MemoryRouter>
@@ -786,9 +841,7 @@ describe("ExecutiveViewComplete", () => {
       if (element?.tagName.toLowerCase() !== "p") return false;
       const text = element.textContent ?? "";
       return (
-        text.includes("Policy source: payload_or_decision_summary") &&
-        text.includes("restaurant_policy_v1") &&
-        text.includes("reason: explicit_status_signal")
+        text.includes("Policy basis: DealShield canonical policy")
       );
     });
     expect(policyLineMatches.length).toBeGreaterThan(0);
@@ -822,9 +875,7 @@ describe("ExecutiveViewComplete", () => {
         if (element?.tagName.toLowerCase() !== "p") return false;
         const text = element.textContent ?? "";
         return (
-          text.includes("Policy source: dealshield_policy_v1") &&
-          text.includes("dealshield_canonical_policy_v1") &&
-          text.includes("reason: low_flex_before_break_buffer")
+          text.includes("Policy basis: DealShield canonical policy")
         );
       });
       expect(policyLineMatches.length).toBeGreaterThan(0);
@@ -852,6 +903,10 @@ describe("ExecutiveViewComplete", () => {
       ...buildHospitalityDealShieldViewModel("hospitality_limited_service_hotel_v1"),
       decision_status: "NO-GO",
       decision_reason_code: "base_case_break_condition",
+      executive_rendered_copy: {
+        how_to_interpret:
+          "At ADR $195 / Occ 72% / RevPAR $140, NOI is ~$3.7M; debt coverage is healthy. NO-GO because the base-case value gap is non-positive even though DSCR and yield clear. Use DealShield to isolate the first-break driver and validate it.",
+      },
       first_break_condition: {
         scenario_id: "base",
         scenario_label: "Base",
@@ -934,6 +989,10 @@ describe("ExecutiveViewComplete", () => {
       ...buildHospitalityDealShieldViewModel("hospitality_full_service_hotel_v1"),
       decision_status: "NO-GO",
       decision_reason_code: "base_case_break_condition",
+      executive_rendered_copy: {
+        how_to_interpret:
+          "NO-GO because the policy's value-gap threshold breaks in Base even though DSCR and yield appear strong; use DealShield to see the first-break driver and validate it.",
+      },
       first_break_condition: {
         scenario_id: "base",
         scenario_label: "Base",
@@ -976,6 +1035,10 @@ describe("ExecutiveViewComplete", () => {
       ...buildHospitalityDealShieldViewModel("hospitality_limited_service_hotel_v1"),
       decision_status: "NO-GO",
       decision_reason_code: "base_case_break_condition",
+      executive_rendered_copy: {
+        how_to_interpret:
+          "NO-GO under current ADR, occupancy, and benchmark value assumptions.",
+      },
       first_break_condition: {
         scenario_id: "base",
         scenario_label: "Base",
@@ -1015,6 +1078,10 @@ describe("ExecutiveViewComplete", () => {
       ...buildHospitalityDealShieldViewModel("hospitality_full_service_hotel_v1"),
       decision_status: "NO-GO",
       decision_reason_code: "base_case_break_condition",
+      executive_rendered_copy: {
+        how_to_interpret:
+          "NO-GO under current ADR mix, F&B/ballroom program scope, and benchmark value assumptions.",
+      },
       first_break_condition: {
         scenario_id: "base",
         scenario_label: "Base",
@@ -1060,10 +1127,16 @@ describe("ExecutiveViewComplete", () => {
             RESTAURANT_POLICY_CASES[0].subtype,
             RESTAURANT_POLICY_CASES[0].profileId
           )}
-          dealShieldData={buildCrossTypeDealShieldViewModel(
-            RESTAURANT_POLICY_CASES[0].profileId,
-            "NO-GO",
-            "base_case_break_condition"
+          dealShieldData={withExecutiveRenderedCopy(
+            buildCrossTypeDealShieldViewModel(
+              RESTAURANT_POLICY_CASES[0].profileId,
+              "NO-GO",
+              "base_case_break_condition"
+            ),
+            {
+              how_to_interpret:
+                "NO-GO because value support is below policy threshold while DSCR 1.46× meets the 1.30× requirement.",
+            }
           ) as any}
         />
       </MemoryRouter>
@@ -1074,10 +1147,16 @@ describe("ExecutiveViewComplete", () => {
         <MemoryRouter>
           <ExecutiveViewComplete
             project={buildCrossTypeProject("restaurant", testCase.subtype, testCase.profileId)}
-            dealShieldData={buildCrossTypeDealShieldViewModel(
-              testCase.profileId,
-              "NO-GO",
-              "base_case_break_condition"
+            dealShieldData={withExecutiveRenderedCopy(
+              buildCrossTypeDealShieldViewModel(
+                testCase.profileId,
+                "NO-GO",
+                "base_case_break_condition"
+              ),
+              {
+                how_to_interpret:
+                  "NO-GO because value support is below policy threshold while DSCR 1.46× meets the 1.30× requirement.",
+              }
             ) as any}
           />
         </MemoryRouter>
@@ -1112,10 +1191,16 @@ describe("ExecutiveViewComplete", () => {
       <MemoryRouter>
         <ExecutiveViewComplete
           project={restaurantProject}
-          dealShieldData={buildCrossTypeDealShieldViewModel(
-            "restaurant_full_service_v1",
-            "NO-GO",
-            "base_case_break_condition"
+          dealShieldData={withExecutiveRenderedCopy(
+            buildCrossTypeDealShieldViewModel(
+              "restaurant_full_service_v1",
+              "NO-GO",
+              "base_case_break_condition"
+            ),
+            {
+              how_to_interpret:
+                "NO-GO because value support is below policy threshold; DSCR data is still loading against the 1.30× requirement.",
+            }
           ) as any}
         />
       </MemoryRouter>
@@ -1138,10 +1223,16 @@ describe("ExecutiveViewComplete", () => {
       <MemoryRouter>
         <ExecutiveViewComplete
           project={buildCrossTypeProject("restaurant", "full_service", "restaurant_full_service_v1")}
-          dealShieldData={buildCrossTypeDealShieldViewModel(
-            "restaurant_full_service_v1",
-            "NO-GO",
-            "base_case_break_condition"
+          dealShieldData={withExecutiveRenderedCopy(
+            buildCrossTypeDealShieldViewModel(
+              "restaurant_full_service_v1",
+              "NO-GO",
+              "base_case_break_condition"
+            ),
+            {
+              how_to_interpret:
+                "Full Service viability is driven by sales per SF and prime cost (labor + food) under the current layout/turn assumptions. Primary fix paths: raise sales per SF (turns/check), reduce prime cost %, or renegotiate occupancy cost.",
+            }
           ) as any}
         />
       </MemoryRouter>
@@ -1166,10 +1257,17 @@ describe("ExecutiveViewComplete", () => {
       <MemoryRouter>
         <ExecutiveViewComplete
           project={buildCrossTypeProject("restaurant", "full_service", "restaurant_full_service_v1")}
-          dealShieldData={buildCrossTypeDealShieldViewModel(
-            "restaurant_full_service_v1",
-            "GO",
-            "base_value_gap_positive"
+          dealShieldData={withExecutiveRenderedCopy(
+            buildCrossTypeDealShieldViewModel(
+              "restaurant_full_service_v1",
+              "GO",
+              "base_value_gap_positive"
+            ),
+            {
+              how_to_interpret:
+                "GO with policy cushion. Still validate occupancy cost % at projected sales and table turns by daypart.",
+              target_yield_lens_label: "Target Yield: Met (Cushion)",
+            }
           ) as any}
         />
       </MemoryRouter>
@@ -1489,9 +1587,7 @@ describe("ExecutiveViewComplete", () => {
         if (element?.tagName.toLowerCase() !== "p") return false;
         const text = element.textContent ?? "";
         return (
-          text.includes("Policy source: dealshield_policy_v1") &&
-          text.includes("decision_insurance_subtype_policy_v1") &&
-          text.includes(`reason: ${testCase.decisionReasonCode}`)
+          text.includes("Policy basis: DealShield canonical policy")
         );
       });
       expect(policyLineMatches.length).toBeGreaterThan(0);
@@ -1520,14 +1616,134 @@ describe("ExecutiveViewComplete", () => {
     const policyLineMatches = screen.getAllByText((_, element) => {
       if (element?.tagName.toLowerCase() !== "p") return false;
       const text = element.textContent ?? "";
-      return (
-        text.includes("Policy source: dealshield_policy_v1") &&
-        text.includes("decision_insurance_subtype_policy_v1") &&
-        text.includes("reason: tight_flex_band")
-      );
+      return text.includes("Policy basis: DealShield canonical policy");
     });
     expect(policyLineMatches.length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Scenario" })).toBeInTheDocument();
+  });
+
+  it("uses distribution-center NO-GO policy basis copy, target-yield badge wording, and milestone disclaimer updates", () => {
+    const distributionProject = buildCrossTypeProject(
+      "industrial",
+      "distribution_center",
+      "industrial_distribution_center_v1"
+    );
+    distributionProject.analysis.calculations.revenue_requirements = {
+      required_value: 1_250_000,
+      market_value: 1_050_000,
+      required_revenue_per_sf: 52.5,
+      actual_revenue_per_sf: 46.2,
+      feasibility: {
+        status: "Not Feasible",
+        recommendation: "Tighten yield drivers before IC.",
+      },
+    };
+
+    const distributionDealShield = {
+      ...buildCrossTypeDealShieldViewModel(
+        "industrial_distribution_center_v1",
+        "NO-GO",
+        "base_case_break_condition"
+      ),
+      executive_rendered_copy: {
+        how_to_interpret:
+          "NO-GO because value support is below policy threshold under current distribution-center assumptions.",
+        policy_basis_line:
+          "Policy basis: DealShield canonical policy — Base case breaks (value gap non-positive).",
+        target_yield_lens_label: "Below Target Yield",
+      },
+      first_break_condition: {
+        scenario_id: "base",
+        scenario_label: "Base",
+        break_metric: "value_gap",
+        operator: "<=",
+        threshold: 0,
+        observed_value: -220000,
+      },
+      first_break_condition_holds: true,
+      decision_summary: {
+        value_gap: -220000,
+        value_gap_pct: -1.1,
+      },
+    } as any;
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={distributionProject}
+          dealShieldData={distributionDealShield}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getAllByText(
+        "Policy basis: DealShield canonical policy — Base case breaks (value gap non-positive)."
+      ).length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByText((text) => text.includes("Policy source: dealshield_policy_v1"))
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText("Below Target Yield").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Not Feasible")).not.toBeInTheDocument();
+    expect(screen.getByText("Planning timeline (schedule risk not modeled in base case).")).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Milestones are baseline planning assumptions. Yield, DSCR, and NOI metrics do not currently include schedule-delay or acceleration effects."
+      )
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses distribution-center NO-GO policy fallback copy when base-break evidence is unverified", () => {
+    const distributionDealShield = {
+      ...buildCrossTypeDealShieldViewModel(
+        "industrial_distribution_center_v1",
+        "NO-GO",
+        "base_case_break_condition"
+      ),
+      executive_rendered_copy: {
+        how_to_interpret:
+          "NO-GO under current distribution-center assumptions with value support below threshold.",
+        policy_basis_line:
+          "Policy basis: DealShield canonical policy — NO-GO under current value-gap threshold stress.",
+        target_yield_lens_label: "Below Target Yield",
+      },
+      first_break_condition: {
+        scenario_id: "base",
+        scenario_label: "Base",
+        break_metric: "value_gap",
+        operator: "<=",
+        threshold: 0,
+        observed_value: 45000,
+      },
+      first_break_condition_holds: false,
+      decision_summary: {
+        value_gap: 45000,
+        value_gap_pct: 0.2,
+      },
+    } as any;
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject(
+            "industrial",
+            "distribution_center",
+            "industrial_distribution_center_v1"
+          )}
+          dealShieldData={distributionDealShield}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getAllByText(
+        "Policy basis: DealShield canonical policy — NO-GO under current value-gap threshold stress."
+      ).length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByText("Policy basis: DealShield canonical policy — Base case breaks (value gap non-positive).")
+    ).not.toBeInTheDocument();
   });
 
   it("renders industrial-native executive metric framing for all five industrial subtypes", () => {
@@ -1630,16 +1846,23 @@ describe("ExecutiveViewComplete", () => {
       <MemoryRouter>
         <ExecutiveViewComplete
           project={warehouseProject}
-          dealShieldData={buildCrossTypeDealShieldViewModel(
-            "industrial_warehouse_v1",
-            "Needs Work",
-            "low_flex_before_break_buffer"
+          dealShieldData={withExecutiveRenderedCopy(
+            buildCrossTypeDealShieldViewModel(
+              "industrial_warehouse_v1",
+              "Needs Work",
+              "low_flex_before_break_buffer"
+            ),
+            {
+              how_to_interpret:
+                "Needs Work due to thin policy cushion under current warehouse assumptions.",
+              target_yield_lens_label: "Cushion",
+            }
           ) as any}
         />
       </MemoryRouter>
     );
 
-    expect(screen.getByText(/^Cushion$/)).toBeInTheDocument();
+    expect(screen.getAllByText(/^Cushion$/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/^Marginal$/)).not.toBeInTheDocument();
 
     const distributionProject = buildCrossTypeProject(
@@ -1662,17 +1885,24 @@ describe("ExecutiveViewComplete", () => {
       <MemoryRouter>
         <ExecutiveViewComplete
           project={distributionProject}
-          dealShieldData={buildCrossTypeDealShieldViewModel(
-            "industrial_distribution_center_v1",
-            "Needs Work",
-            "tight_flex_band"
+          dealShieldData={withExecutiveRenderedCopy(
+            buildCrossTypeDealShieldViewModel(
+              "industrial_distribution_center_v1",
+              "Needs Work",
+              "tight_flex_band"
+            ),
+            {
+              how_to_interpret:
+                "Needs Work due to tight flex band in distribution-center downside tests.",
+              target_yield_lens_label: "Marginal",
+            }
           ) as any}
         />
       </MemoryRouter>
     );
 
-    expect(screen.getByText(/^Marginal$/)).toBeInTheDocument();
-    expect(screen.queryByText(/^Cushion$/)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/^Marginal$/).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/^Cushion$/).length).toBe(0);
   });
 
   it("adds manufacturing-specific downside note in NO-GO decision explanation", () => {
@@ -1680,10 +1910,16 @@ describe("ExecutiveViewComplete", () => {
       <MemoryRouter>
         <ExecutiveViewComplete
           project={buildCrossTypeProject("industrial", "manufacturing", "industrial_manufacturing_v1")}
-          dealShieldData={buildCrossTypeDealShieldViewModel(
-            "industrial_manufacturing_v1",
-            "NO-GO",
-            "base_value_gap_non_positive"
+          dealShieldData={withExecutiveRenderedCopy(
+            buildCrossTypeDealShieldViewModel(
+              "industrial_manufacturing_v1",
+              "NO-GO",
+              "base_value_gap_non_positive"
+            ),
+            {
+              how_to_interpret:
+                "NO-GO under current manufacturing assumptions. For manufacturing, also validate commissioning/qualification timeline and process utility loads—those usually drive the downside.",
+            }
           ) as any}
         />
       </MemoryRouter>
@@ -1700,10 +1936,16 @@ describe("ExecutiveViewComplete", () => {
       <MemoryRouter>
         <ExecutiveViewComplete
           project={buildCrossTypeProject("industrial", "distribution_center", "industrial_distribution_center_v1")}
-          dealShieldData={buildCrossTypeDealShieldViewModel(
-            "industrial_distribution_center_v1",
-            "NO-GO",
-            "base_value_gap_non_positive"
+          dealShieldData={withExecutiveRenderedCopy(
+            buildCrossTypeDealShieldViewModel(
+              "industrial_distribution_center_v1",
+              "NO-GO",
+              "base_value_gap_non_positive"
+            ),
+            {
+              how_to_interpret:
+                "NO-GO under current distribution-center assumptions with value support below threshold.",
+            }
           ) as any}
         />
       </MemoryRouter>
@@ -1717,15 +1959,178 @@ describe("ExecutiveViewComplete", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("uses manufacturing policy-basis copy and lens-safe target-yield wording without debug identifiers", () => {
+    const manufacturingProject = buildCrossTypeProject(
+      "industrial",
+      "manufacturing",
+      "industrial_manufacturing_v1"
+    );
+    manufacturingProject.analysis.calculations.revenue_requirements = {
+      required_value: 1_520_000,
+      market_value: 1_280_000,
+      required_revenue_per_sf: 74.2,
+      actual_revenue_per_sf: 65.0,
+      feasibility: {
+        status: "Not Feasible",
+        recommendation: "Rework process MEP scope and commissioning assumptions.",
+      },
+    };
+
+    const manufacturingDealShield = {
+      ...buildCrossTypeDealShieldViewModel(
+        "industrial_manufacturing_v1",
+        "NO-GO",
+        "base_case_break_condition"
+      ),
+      executive_rendered_copy: {
+        how_to_interpret:
+          "NO-GO under current manufacturing assumptions with value support below threshold.",
+        policy_basis_line:
+          "Policy basis: DealShield canonical policy — Base case breaks (value gap non-positive).",
+        target_yield_lens_label: "Target Yield: Not Met",
+      },
+      first_break_condition: {
+        scenario_id: "base",
+        scenario_label: "Base",
+        break_metric: "value_gap",
+        operator: "<=",
+        threshold: 0,
+        observed_value: -140000,
+      },
+      first_break_condition_holds: true,
+      decision_summary: {
+        value_gap: -140000,
+        value_gap_pct: -0.8,
+      },
+    } as any;
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={manufacturingProject}
+          dealShieldData={manufacturingDealShield}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getAllByText(
+        "Policy basis: DealShield canonical policy — Base case breaks (value gap non-positive)."
+      ).length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByText((text) => text.includes("Policy source: dealshield_policy_v1"))
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText("Target Yield: Not Met").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Not Feasible")).not.toBeInTheDocument();
+    expect(
+      screen.getByText((text) =>
+        text.includes(
+          "utility/service capacity, process MEP integration, commissioning/qualification timeline, and throughput ramp assumptions"
+        )
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText((text) =>
+        text.includes("dock configuration") || text.includes("truck flow")
+      )
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Planning timeline (schedule risk not modeled in base case).")).toBeInTheDocument();
+  });
+
+  it("applies manufacturing trust-copy via manufacturing profile ids even when parsed subtype is not manufacturing", () => {
+    const project = buildCrossTypeProject(
+      "industrial",
+      "warehouse",
+      "industrial_manufacturing_v1"
+    );
+    project.analysis.calculations.revenue_requirements = {
+      required_value: 1_520_000,
+      market_value: 1_280_000,
+      required_revenue_per_sf: 74.2,
+      actual_revenue_per_sf: 65.0,
+      feasibility: {
+        status: "Not Feasible",
+        recommendation: "Rework process MEP scope and commissioning assumptions.",
+      },
+    };
+
+    const dealShield = {
+      ...buildCrossTypeDealShieldViewModel(
+        "industrial_manufacturing_v1",
+        "NO-GO",
+        "base_case_break_condition"
+      ),
+      executive_rendered_copy: {
+        how_to_interpret:
+          "NO-GO under current manufacturing assumptions with value support below threshold.",
+        policy_basis_line:
+          "Policy basis: DealShield canonical policy — Base case breaks (value gap non-positive).",
+        target_yield_lens_label: "Target Yield: Not Met",
+      },
+      first_break_condition: {
+        scenario_id: "base",
+        scenario_label: "Base",
+        break_metric: "value_gap",
+        operator: "<=",
+        threshold: 0,
+        observed_value: -140000,
+      },
+      first_break_condition_holds: true,
+      decision_summary: {
+        value_gap: -140000,
+        value_gap_pct: -0.8,
+      },
+    } as any;
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={project}
+          dealShieldData={dealShield}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getAllByText(
+        "Policy basis: DealShield canonical policy — Base case breaks (value gap non-positive)."
+      ).length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByText((text) => text.includes("Policy source: dealshield_policy_v1"))
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText("Target Yield: Not Met").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText((text) =>
+        text.includes(
+          "For manufacturing, this signals whether utility/service capacity, process MEP integration, commissioning/qualification timeline, and throughput ramp assumptions can clear both equity and lender hurdles."
+        )
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText((text) =>
+        text.includes("For industrial, this signals whether the rent roll, dock configuration, and truck flow can clear both equity and lender hurdles.")
+      )
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Planning timeline (schedule risk not modeled in base case).")).toBeInTheDocument();
+  });
+
   it("uses cold-storage-native NO-GO action levers instead of generic scope-cut wording", () => {
     render(
       <MemoryRouter>
         <ExecutiveViewComplete
           project={buildCrossTypeProject("industrial", "cold_storage", "industrial_cold_storage_v1")}
-          dealShieldData={buildCrossTypeDealShieldViewModel(
-            "industrial_cold_storage_v1",
-            "NO-GO",
-            "base_value_gap_non_positive"
+          dealShieldData={withExecutiveRenderedCopy(
+            buildCrossTypeDealShieldViewModel(
+              "industrial_cold_storage_v1",
+              "NO-GO",
+              "base_value_gap_non_positive"
+            ),
+            {
+              how_to_interpret:
+                "Confirm refrigeration plant scope + utility rates\nUnderwrite commissioning-to-stabilization ramp (don't assume day-1 utilization)\nReduce basis via envelope/plant VE, not generic scope cuts",
+            }
           ) as any}
         />
       </MemoryRouter>
@@ -1759,6 +2164,12 @@ describe("ExecutiveViewComplete", () => {
       "NO-GO",
       "base_case_break_condition"
     ) as any;
+    marketRateDealShield.executive_rendered_copy = {
+      how_to_interpret:
+        "NO-GO because value gap is non-positive (equity lens), even with DSCR 1.46× meeting 1.30× (debt lens). Primary fix paths: concessions + lease-up pace (market reality), expense load / payroll / utilities (ops reality), basis discipline (hard + soft) / fee stack, and debt sizing / rate / IO period (debt lens).",
+      policy_basis_line: "Policy basis: DealShield canonical policy.",
+      target_yield_lens_label: "Target Yield: Not Met",
+    };
     marketRateDealShield.decision_summary = {
       value_gap: -250000,
       value_gap_pct: -3.4,
@@ -1822,10 +2233,12 @@ describe("ExecutiveViewComplete", () => {
       )
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText("Improve rents, cut scope, or rework the capital stack before advancing.", {
-        exact: false,
-      })
-    ).toBeInTheDocument();
+      screen.queryByText((text) =>
+        text.includes(
+          "Primary fix paths: concessions + lease-up pace (market reality), expense load / payroll / utilities (ops reality), basis discipline (hard + soft) / fee stack, and debt sizing / rate / IO period (debt lens)."
+        )
+      )
+    ).not.toBeInTheDocument();
   });
 
   it("uses market-rate value-gap-first NO-GO copy when DSCR is below target and shows program-assumption footer language", () => {
@@ -1846,6 +2259,12 @@ describe("ExecutiveViewComplete", () => {
       "NO-GO",
       "base_case_break_condition"
     ) as any;
+    marketRateDealShield.executive_rendered_copy = {
+      how_to_interpret:
+        "NO-GO because value gap is non-positive (policy break), and Debt Lens DSCR 1.19× is below 1.20×. Bottom line: policy breaks on value gap; Debt Lens DSCR is below target (1.19× vs 1.20×); focus diligence on cost basis + carry drivers before IC.",
+      policy_basis_line: "Policy basis: DealShield canonical policy.",
+      target_yield_lens_label: "Target Yield: Not Met",
+    };
     marketRateDealShield.decision_summary = {
       value_gap: -3_600_000,
       value_gap_pct: -7.8,
@@ -1868,10 +2287,92 @@ describe("ExecutiveViewComplete", () => {
       )
     ).toBeInTheDocument();
     expect(
-      screen.getByText((text) =>
+      screen.getAllByText((text) =>
         text.includes(
           "Bottom line: policy breaks on value gap; Debt Lens DSCR is below target (1.19× vs 1.20×); focus diligence on cost basis + carry drivers before IC."
         )
+      ).length
+    ).toBeGreaterThan(0);
+    expect(screen.getByText("Program assumption")).toBeInTheDocument();
+    expect(screen.queryByText("Derived from square footage and density")).not.toBeInTheDocument();
+  });
+
+  it("uses affordable-housing lens-separated NO-GO copy and NOI-driven feasibility messaging", () => {
+    const affordableProject = buildCrossTypeProject(
+      "multifamily",
+      "affordable_housing",
+      "multifamily_affordable_housing_v1"
+    );
+    affordableProject.analysis.calculations.ownership_analysis.debt_metrics.calculated_dscr = 2.61;
+    affordableProject.analysis.calculations.ownership_analysis.debt_metrics.target_dscr = 1.15;
+    affordableProject.analysis.calculations.dealshield_scenarios.scenarios.base.ownership_analysis.debt_metrics.calculated_dscr =
+      2.61;
+    affordableProject.analysis.calculations.dealshield_scenarios.scenarios.base.ownership_analysis.debt_metrics.target_dscr =
+      1.15;
+    affordableProject.analysis.calculations.revenue_requirements = {
+      required_value: 2_950_000,
+      market_value: 2_620_000,
+      required_revenue_per_sf: 13,
+      actual_revenue_per_sf: 21,
+      feasibility: {
+        status: "Not Feasible",
+        recommendation: "Cost controls and scope alignment are required to close NOI gap.",
+      },
+    };
+
+    const affordableDealShield = buildCrossTypeDealShieldViewModel(
+      "multifamily_affordable_housing_v1",
+      "NO-GO",
+      "base_case_break_condition"
+    ) as any;
+    affordableDealShield.executive_rendered_copy = {
+      how_to_interpret:
+        "NO-GO because the policy breaks on stabilized value gap (negative). Debt Lens: DSCR 2.61× clears target 1.15×, so this is not a lender-coverage failure. Equity/Market Lens: yield on cost (5.2%) is below the market benchmark (7.5%), indicating weak value support at this basis. Bottom line: DSCR clears, but the policy fails on negative value gap—diligence should focus on compliance-driven scope drift, allowances/contingency realism, and cost controls under capped rents.",
+      policy_basis_line: "Policy basis: DealShield canonical policy.",
+      target_yield_lens_label: "Below Target NOI (Cost/Expense Driven)",
+    };
+    affordableDealShield.decision_summary = {
+      value_gap: -3_600_000,
+      value_gap_pct: -7.8,
+    };
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={affordableProject}
+          dealShieldData={affordableDealShield}
+        />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getByText((text) =>
+        text.includes("NO-GO because the policy breaks on stabilized value gap (negative).")
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((text) =>
+        text.includes("Debt Lens: DSCR 2.61× clears target 1.15×, so this is not a lender-coverage failure.")
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((text) =>
+        text.includes("Equity/Market Lens: yield on cost") &&
+        text.includes("is below the market benchmark") &&
+        text.includes("indicating weak value support at this basis.")
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText((text) =>
+        text.includes(
+          "Bottom line: DSCR clears, but the policy fails on negative value gap—diligence should focus on compliance-driven scope drift, allowances/contingency realism, and cost controls under capped rents."
+        )
+      ).length
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText("Below Target NOI (Cost/Expense Driven)").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(
+        "Revenue per SF is sufficient; the shortfall is driven by NOI/expense/cost basis, not rent levels."
       )
     ).toBeInTheDocument();
     expect(screen.getByText("Program assumption")).toBeInTheDocument();
@@ -1921,9 +2422,7 @@ describe("ExecutiveViewComplete", () => {
         if (element?.tagName.toLowerCase() !== "p") return false;
         const text = element.textContent ?? "";
         return (
-          text.includes("Policy source: dealshield_policy_v1") &&
-          text.includes("decision_insurance_subtype_policy_v1") &&
-          text.includes(`reason: ${testCase.decisionReasonCode}`)
+          text.includes("Policy basis: DealShield canonical policy")
         );
       });
       expect(policyLineMatches.length).toBeGreaterThan(0);
@@ -1940,10 +2439,17 @@ describe("ExecutiveViewComplete", () => {
             "luxury_apartments",
             "multifamily_luxury_apartments_v1"
           )}
-          dealShieldData={buildCrossTypeDealShieldViewModel(
-            "multifamily_luxury_apartments_v1",
-            "GO",
-            "base_value_gap_positive"
+          dealShieldData={withExecutiveRenderedCopy(
+            buildCrossTypeDealShieldViewModel(
+              "multifamily_luxury_apartments_v1",
+              "GO",
+              "base_value_gap_positive"
+            ),
+            {
+              how_to_interpret:
+                "Project clears multifamily underwriting across equity and debt lenses. Equity Lens: value support remains positive. Debt Lens: coverage clears target. Reality Check: maintain lease-up and expense discipline.",
+              target_yield_lens_label: "Target Yield: Thin Cushion",
+            }
           ) as any}
         />
       </MemoryRouter>
@@ -1951,7 +2457,11 @@ describe("ExecutiveViewComplete", () => {
 
     expect(screen.getByText("Debt Lens: DSCR (Target 1.30×)")).toBeInTheDocument();
     expect(screen.getByText("Stabilized Value Gap")).toBeInTheDocument();
-    expect(screen.getByText("Project clears multifamily underwriting across equity and debt lenses.")).toBeInTheDocument();
+    expect(
+      screen.getByText((text) =>
+        text.includes("Project clears multifamily underwriting across equity and debt lenses.")
+      )
+    ).toBeInTheDocument();
     expect(
       screen.getByText((text) =>
         text.includes("Equity Lens:") &&
@@ -1986,17 +2496,24 @@ describe("ExecutiveViewComplete", () => {
       <MemoryRouter>
         <ExecutiveViewComplete
           project={luxuryProject}
-          dealShieldData={buildCrossTypeDealShieldViewModel(
-            "multifamily_luxury_apartments_v1",
-            "GO",
-            "base_value_gap_positive"
+          dealShieldData={withExecutiveRenderedCopy(
+            buildCrossTypeDealShieldViewModel(
+              "multifamily_luxury_apartments_v1",
+              "GO",
+              "base_value_gap_positive"
+            ),
+            {
+              how_to_interpret:
+                "Project clears multifamily underwriting across equity and debt lenses.",
+              target_yield_lens_label: "Below Target Yield (Thin Cushion)",
+            }
           ) as any}
         />
       </MemoryRouter>
     );
 
     expect(screen.getByText("Investment Decision: GO")).toBeInTheDocument();
-    expect(screen.getByText("Below Target Yield (Thin Cushion)")).toBeInTheDocument();
+    expect(screen.getAllByText("Below Target Yield (Thin Cushion)").length).toBeGreaterThan(0);
     expect(screen.queryByText("Not Feasible")).not.toBeInTheDocument();
     expect(
       screen.getByText(
@@ -2043,8 +2560,8 @@ describe("ExecutiveViewComplete", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText("Not Feasible")).toBeInTheDocument();
-    expect(screen.queryByText("Below Target Yield (Thin Cushion)")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Target Yield: Not Met").length).toBeGreaterThan(0);
+    expect(screen.queryAllByText("Below Target Yield (Thin Cushion)").length).toBe(0);
     expect(
       screen.queryByText(
         "This section tests the target yield hurdle; the overall verdict is driven by DealShield policy/value gap."
@@ -2091,9 +2608,7 @@ describe("ExecutiveViewComplete", () => {
         if (element?.tagName.toLowerCase() !== "p") return false;
         const text = element.textContent ?? "";
         return (
-          text.includes("Policy source: dealshield_policy_v1") &&
-          text.includes("decision_insurance_subtype_policy_v1") &&
-          text.includes(`reason: ${testCase.decisionReasonCode}`)
+          text.includes("Policy basis: DealShield canonical policy")
         );
       });
       expect(policyLineMatches.length).toBeGreaterThan(0);
@@ -2140,9 +2655,7 @@ describe("ExecutiveViewComplete", () => {
         if (element?.tagName.toLowerCase() !== "p") return false;
         const text = element.textContent ?? "";
         return (
-          text.includes("Policy source: dealshield_policy_v1") &&
-          text.includes("decision_insurance_subtype_policy_v1") &&
-          text.includes(`reason: ${testCase.decisionReasonCode}`)
+          text.includes("Policy basis: DealShield canonical policy")
         );
       });
       expect(policyLineMatches.length).toBeGreaterThan(0);
@@ -2193,9 +2706,7 @@ describe("ExecutiveViewComplete", () => {
         if (element?.tagName.toLowerCase() !== "p") return false;
         const text = element.textContent ?? "";
         return (
-          text.includes("Policy source: dealshield_policy_v1") &&
-          text.includes("decision_insurance_subtype_policy_v1") &&
-          text.includes(`reason: ${testCase.decisionReasonCode}`)
+          text.includes("Policy basis: DealShield canonical policy")
         );
       });
       expect(policyLineMatches.length).toBeGreaterThan(0);
@@ -2246,9 +2757,7 @@ describe("ExecutiveViewComplete", () => {
         if (element?.tagName.toLowerCase() !== "p") return false;
         const text = element.textContent ?? "";
         return (
-          text.includes("Policy source: dealshield_policy_v1") &&
-          text.includes("decision_insurance_subtype_policy_v1") &&
-          text.includes(`reason: ${testCase.decisionReasonCode}`)
+          text.includes("Policy basis: DealShield canonical policy")
         );
       });
       expect(policyLineMatches.length).toBeGreaterThan(0);
@@ -2299,9 +2808,7 @@ describe("ExecutiveViewComplete", () => {
         if (element?.tagName.toLowerCase() !== "p") return false;
         const text = element.textContent ?? "";
         return (
-          text.includes("Policy source: dealshield_policy_v1") &&
-          text.includes("decision_insurance_subtype_policy_v1") &&
-          text.includes(`reason: ${testCase.decisionReasonCode}`)
+          text.includes("Policy basis: DealShield canonical policy")
         );
       });
       expect(policyLineMatches.length).toBeGreaterThan(0);
@@ -2352,9 +2859,7 @@ describe("ExecutiveViewComplete", () => {
         if (element?.tagName.toLowerCase() !== "p") return false;
         const text = element.textContent ?? "";
         return (
-          text.includes("Policy source: dealshield_policy_v1") &&
-          text.includes("decision_insurance_subtype_policy_v1") &&
-          text.includes(`reason: ${testCase.decisionReasonCode}`)
+          text.includes("Policy basis: DealShield canonical policy")
         );
       });
       expect(policyLineMatches.length).toBeGreaterThan(0);
@@ -2405,9 +2910,7 @@ describe("ExecutiveViewComplete", () => {
         if (element?.tagName.toLowerCase() !== "p") return false;
         const text = element.textContent ?? "";
         return (
-          text.includes("Policy source: dealshield_policy_v1") &&
-          text.includes("decision_insurance_subtype_policy_v1") &&
-          text.includes(`reason: ${testCase.decisionReasonCode}`)
+          text.includes("Policy basis: DealShield canonical policy")
         );
       });
       expect(policyLineMatches.length).toBeGreaterThan(0);
@@ -2458,9 +2961,7 @@ describe("ExecutiveViewComplete", () => {
         if (element?.tagName.toLowerCase() !== "p") return false;
         const text = element.textContent ?? "";
         return (
-          text.includes("Policy source: dealshield_policy_v1") &&
-          text.includes("decision_insurance_subtype_policy_v1") &&
-          text.includes(`reason: ${testCase.decisionReasonCode}`)
+          text.includes("Policy basis: DealShield canonical policy")
         );
       });
       expect(policyLineMatches.length).toBeGreaterThan(0);
@@ -2536,9 +3037,7 @@ describe("ExecutiveViewComplete", () => {
         if (element?.tagName.toLowerCase() !== "p") return false;
         const text = element.textContent ?? "";
         return (
-          text.includes("Policy source: dealshield_policy_v1") &&
-          text.includes("decision_insurance_subtype_policy_v1") &&
-          text.includes(`reason: ${testCase.decisionReasonCode}`)
+          text.includes("Policy basis: DealShield canonical policy")
         );
       });
       expect(policyLineMatches.length).toBeGreaterThan(0);
