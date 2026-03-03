@@ -30,6 +30,10 @@ jobs:
         run: |
           cd frontend
           npm ci
+
+      - name: Enforce UI display-only decision guard
+        run: |
+          bash scripts/testing/guard-ui-display-only.sh
       
       - name: Run unit tests
         run: |
