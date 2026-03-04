@@ -283,6 +283,16 @@ class AnalyzeRequest(BaseModel):
         default_factory=list,
         description="Special feature IDs to price into the estimate"
     )
+    unit_count: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Optional explicit unit count override"
+    )
+    key_count: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Optional explicit key count override"
+    )
 
 class CalculateRequest(BaseModel):
     """Request for direct calculation"""
@@ -300,6 +310,16 @@ class CalculateRequest(BaseModel):
         alias="finishLevel",
         validation_alias=AliasChoices("finishLevel", "finish_level"),
         description="Finish level (Standard, Premium, Luxury)"
+    )
+    unit_count: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Optional explicit unit count override"
+    )
+    key_count: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Optional explicit key count override"
     )
 
 class CompareRequest(BaseModel):
