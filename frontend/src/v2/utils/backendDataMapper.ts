@@ -455,13 +455,10 @@ export class BackendDataMapper {
     const departments = this.extractDepartments(calculations, ownership);
     
     // Get operational metrics from backend (already formatted for display)
-    const operationalMetrics = ownership?.operational_metrics || 
-                              calculations?.operational_metrics ||
+    const operationalMetrics = calculations?.operational_metrics ||
+                              ownership?.operational_metrics ||
                               { staffing: [], revenue: {}, kpis: [] };
-    const perUnitMetrics = operationalMetrics?.per_unit ||
-                           ownership?.operational_metrics?.per_unit ||
-                           calculations?.operational_metrics?.per_unit ||
-                           {};
+    const perUnitMetrics = calculations?.operational_metrics?.per_unit || {};
     const sensitivityAnalysis = ownership?.sensitivity_analysis || {};
     const sensitivityBase = sensitivityAnalysis.base || {};
     const sensitivityRevenueUp = sensitivityAnalysis.revenue_up_10 || {};
@@ -489,31 +486,26 @@ export class BackendDataMapper {
 
     // Consolidated unit/per-unit metrics using backend payload first
     const backendUnits = typeof perUnitMetrics.units === 'number' ? perUnitMetrics.units : undefined;
-    const fallbackUnitCount = this.extractUnitCount(projectInfo, parsedInput);
-    const unitCount = backendUnits && backendUnits > 0 ? backendUnits : fallbackUnitCount;
+    const unitCount = backendUnits && backendUnits > 0 ? Math.round(backendUnits) : undefined;
     const backendCostPerUnit = typeof perUnitMetrics.cost_per_unit === 'number' ? perUnitMetrics.cost_per_unit : undefined;
-    const backendAnnualRevenuePerUnit = typeof perUnitMetrics.annual_revenue_per_unit === 'number'
-      ? perUnitMetrics.annual_revenue_per_unit
+    const backendRevenuePerUnit = typeof perUnitMetrics.revenue_per_unit === 'number'
+      ? perUnitMetrics.revenue_per_unit
+      : typeof perUnitMetrics.annual_revenue_per_unit === 'number'
+        ? perUnitMetrics.annual_revenue_per_unit
+        : undefined;
+    const backendAnnualRevenuePerUnit = typeof backendRevenuePerUnit === 'number'
+      ? backendRevenuePerUnit
       : undefined;
     const backendMonthlyRevenuePerUnit = typeof perUnitMetrics.monthly_revenue_per_unit === 'number'
       ? perUnitMetrics.monthly_revenue_per_unit
       : undefined;
-    const fallbackCostPerUnit = safeGet(projectInfo, 'cost_per_unit', 0);
-    const fallbackProjectRevenuePerUnit = safeGet(projectInfo, 'revenue_per_unit', 0);
-    const fallbackOperationalRevenuePerUnit = safeGet(operationalEfficiency, 'revenue_per_unit', 0);
     const annualRevenuePerUnit =
-      (typeof backendAnnualRevenuePerUnit === 'number' ? backendAnnualRevenuePerUnit : undefined) ??
-      (typeof fallbackProjectRevenuePerUnit === 'number' && fallbackProjectRevenuePerUnit > 0 ? fallbackProjectRevenuePerUnit : undefined) ??
-      (typeof fallbackOperationalRevenuePerUnit === 'number' && fallbackOperationalRevenuePerUnit > 0 ? fallbackOperationalRevenuePerUnit : undefined) ??
-      (unitCount > 0 ? annualRevenue / unitCount : 0);
+      typeof backendAnnualRevenuePerUnit === 'number' ? backendAnnualRevenuePerUnit : undefined;
     const revenuePerUnit = annualRevenuePerUnit;
-    const costPerUnit =
-      backendCostPerUnit ??
-      (typeof fallbackCostPerUnit === 'number' && fallbackCostPerUnit > 0 ? fallbackCostPerUnit : undefined) ??
-      (totalCost / Math.max(unitCount, 1));
+    const costPerUnit = backendCostPerUnit;
     const monthlyRevenuePerUnit =
       backendMonthlyRevenuePerUnit ??
-      (annualRevenuePerUnit > 0 ? annualRevenuePerUnit / 12 : 0);
+      (typeof annualRevenuePerUnit === 'number' && annualRevenuePerUnit > 0 ? annualRevenuePerUnit / 12 : undefined);
     
     // Extract core project data
     const squareFootage = safeGet(parsedInput, 'square_footage', 0);
@@ -843,7 +835,7 @@ export class BackendDataMapper {
       ? {
           units:
             payloadUnits ??
-            (unitCount > 0 ? unitCount : undefined),
+            (typeof unitCount === 'number' && unitCount > 0 ? unitCount : undefined),
           costPerUnit:
             payloadCostPerUnit ??
             (typeof costPerUnit === 'number' ? costPerUnit : undefined),
@@ -918,7 +910,7 @@ export class BackendDataMapper {
       unitType,
       revenuePerUnit,
       costPerUnit,
-      units: unitCount > 0 ? unitCount : undefined,
+      units: typeof unitCount === 'number' && unitCount > 0 ? unitCount : undefined,
       annualRevenuePerUnit,
       monthlyRevenuePerUnit,
       breakEvenOccupancy,
@@ -1128,38 +1120,6 @@ export class BackendDataMapper {
            safeGet(projectInfo, 'annual_revenue', 0) ||
            safeGet(returnMetrics, 'estimated_annual_revenue', 0) ||
            (safeGet(returnMetrics, 'estimated_annual_noi', 0) / 0.6); // Derive from NOI if needed
-  }
-  
-  private static extractUnitCount(projectInfo: any, parsedInput: any): number {
-    // Try backend first, then calculate based on building type
-    const backendCount = safeGet(projectInfo, 'unit_count', 0);
-    if (backendCount > 0) return backendCount;
-    
-    const buildingType = safeGet(parsedInput, 'building_type', '');
-    const squareFootage = safeGet(parsedInput, 'square_footage', 0);
-    const subtype = safeGet(parsedInput, 'building_subtype', safeGet(parsedInput, 'subtype', ''));
-    
-    // Calculate based on building type
-    switch (buildingType) {
-      case 'multifamily': {
-        // Vary by subtype
-        let avgUnitSize = 950;
-        if (subtype === 'luxury_apartments') avgUnitSize = 1100;
-        else if (subtype === 'affordable_housing') avgUnitSize = 750;
-        else if (subtype === 'student_housing') avgUnitSize = 650;
-        else if (subtype === 'senior_living') avgUnitSize = 900;
-        
-        return Math.round(squareFootage / avgUnitSize);
-      }
-      case 'healthcare':
-        return Math.round(squareFootage / 1333); // beds
-      case 'educational':
-        return Math.round(squareFootage / 900); // classrooms
-      case 'office':
-        return Math.max(1, Math.round(squareFootage / 15000)); // floors
-      default:
-        return 1;
-    }
   }
   
   private static extractDepartments(calculations: any, ownership: any): any[] {

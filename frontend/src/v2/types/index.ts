@@ -130,6 +130,8 @@ export interface ParsedInput {
   location: string;
   project_class: ProjectClass;
   floors: number;
+  unit_count?: number;
+  key_count?: number;
   confidence: number;
 }
 
@@ -284,6 +286,8 @@ export interface ProjectFormData {
   location?: string;
   project_class?: ProjectClass;
   floors?: number;
+  unit_count?: number;
+  key_count?: number;
   ownership_type?: OwnershipType;
   special_features?: string[];
 }

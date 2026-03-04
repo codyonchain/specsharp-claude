@@ -66,6 +66,8 @@ export interface CreateProjectParams {
   description: string;
   location?: string;
   squareFootage?: number;
+  unitCount?: number;
+  keyCount?: number;
   finishLevel?: 'Standard' | 'Premium' | 'Luxury' | 'standard' | 'premium' | 'luxury';
   projectClass?: ProjectClass | string;
   specialFeatures?: string[];
@@ -209,18 +211,31 @@ class V2APIClient {
     options: {
       square_footage?: number;
       location?: string;
+      unit_count?: number;
+      key_count?: number;
       finishLevel?: 'Standard' | 'Premium' | 'Luxury';
       projectClass?: string;
       signal?: AbortSignal;
       special_features?: string[];
     } = {}
   ): Promise<ProjectAnalysis> {
-    const { square_footage, location, finishLevel, projectClass, signal, special_features } = options;
+    const {
+      square_footage,
+      location,
+      unit_count,
+      key_count,
+      finishLevel,
+      projectClass,
+      signal,
+      special_features
+    } = options;
 
     tracer.trace('API_REQUEST', 'Sending analysis request', {
       description: text,
       square_footage,
       location,
+      unit_count,
+      key_count,
       finishLevel,
       projectClass,
       special_features_count: special_features?.length ?? 0,
@@ -232,6 +247,12 @@ class V2APIClient {
     }
     if (location && location.trim()) {
       payload.location = location.trim();
+    }
+    if (typeof unit_count === 'number' && Number.isFinite(unit_count) && unit_count > 0) {
+      payload.unit_count = Math.round(unit_count);
+    }
+    if (typeof key_count === 'number' && Number.isFinite(key_count) && key_count > 0) {
+      payload.key_count = Math.round(key_count);
     }
     if (finishLevel) {
       payload.finishLevel = finishLevel;
@@ -532,6 +553,12 @@ class V2APIClient {
 
     if (typeof params.squareFootage === 'number' && Number.isFinite(params.squareFootage)) {
       payload.square_footage = params.squareFootage;
+    }
+    if (typeof params.unitCount === 'number' && Number.isFinite(params.unitCount) && params.unitCount > 0) {
+      payload.unit_count = Math.round(params.unitCount);
+    }
+    if (typeof params.keyCount === 'number' && Number.isFinite(params.keyCount) && params.keyCount > 0) {
+      payload.key_count = Math.round(params.keyCount);
     }
 
     const normalizedFinish = normalizeFinishLevel(params.finishLevel);

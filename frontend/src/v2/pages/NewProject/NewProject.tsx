@@ -257,6 +257,8 @@ export const NewProject: React.FC = () => {
   const [description, setDescription] = useState('');
   const [squareFootageInput, setSquareFootageInput] = useState('');
   const [locationInput, setLocationInput] = useState('');
+  const [unitCountInput, setUnitCountInput] = useState('');
+  const [keyCountInput, setKeyCountInput] = useState('');
   const [activeStep, setActiveStep] = useState<'input' | 'analyzing' | 'results'>('input');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -663,6 +665,15 @@ export const NewProject: React.FC = () => {
     return undefined;
   };
 
+  const parseCountValue = (value: string): number | undefined => {
+    if (!value) return undefined;
+    const cleaned = value.replace(/,/g, '').trim();
+    if (!cleaned) return undefined;
+    const numeric = Number(cleaned);
+    if (!Number.isFinite(numeric) || numeric <= 0) return undefined;
+    return Math.round(numeric);
+  };
+
   const finishLevelForApi = (level: typeof finishLevel) =>
     (level === 'premium' ? 'Premium' : 'Standard');
 
@@ -735,6 +746,8 @@ export const NewProject: React.FC = () => {
   }, [liveDetectedLocation, locationTouched, locationInput, locationAutoFilled]);
   const parsedSubtypeRaw = parsedInput?.subtype || parsedInput?.building_subtype;
   const parsedBuildingType = parsedInput?.building_type;
+  const showUnitCountInput = parsedBuildingType === 'multifamily';
+  const showKeyCountInput = parsedBuildingType === 'hospitality';
   const parsedSubtype =
     parsedBuildingType === 'mixed_use'
       ? normalizeMixedUseSubtypeAlias(parsedSubtypeRaw)
@@ -878,9 +891,13 @@ export const NewProject: React.FC = () => {
       try {
         const squareValue = parseSquareFootageValue(squareFootageInput);
         const locationValue = normalizedLocationInput || undefined;
+        const unitCountValue = showUnitCountInput ? parseCountValue(unitCountInput) : undefined;
+        const keyCountValue = showKeyCountInput ? parseCountValue(keyCountInput) : undefined;
         const analysis = await api.analyzeProject(descriptionForAnalysis, {
           square_footage: squareValue,
           location: locationValue,
+          unit_count: unitCountValue,
+          key_count: keyCountValue,
           finishLevel: finishLevelForApi(finishLevel),
           projectClass: projectComplexity,
           special_features: specialFeatures,
@@ -923,7 +940,21 @@ export const NewProject: React.FC = () => {
         previewAbortRef.current = null;
       }
     };
-  }, [descriptionForAnalysis, normalizedDescription, squareFootageInput, normalizedLocationInput, isLocationFormatValid, finishLevel, finishLevelLocked, projectComplexity, specialFeatures]);
+  }, [
+    descriptionForAnalysis,
+    normalizedDescription,
+    squareFootageInput,
+    normalizedLocationInput,
+    unitCountInput,
+    keyCountInput,
+    showUnitCountInput,
+    showKeyCountInput,
+    isLocationFormatValid,
+    finishLevel,
+    finishLevelLocked,
+    projectComplexity,
+    specialFeatures
+  ]);
   
   // Calculate total cost including features
   const handleExampleClick = (example: any) => {
@@ -933,6 +964,8 @@ export const NewProject: React.FC = () => {
     setLocationTouched(false);
     setLocationAutoFilled(Boolean(example.location));
     setLocationSubmitAttempted(false);
+    setUnitCountInput('');
+    setKeyCountInput('');
     // Reset configuration when using example
     setSpecialFeatures([]);
     setFinishLevel('standard');
@@ -955,9 +988,13 @@ export const NewProject: React.FC = () => {
     tracer.trace('ANALYZE_START', 'Starting analysis', { description: descriptionForAnalysis });
     
     const squareValue = parseSquareFootageValue(squareFootageInput);
+    const unitCountValue = showUnitCountInput ? parseCountValue(unitCountInput) : undefined;
+    const keyCountValue = showKeyCountInput ? parseCountValue(keyCountInput) : undefined;
     const analysis = await analyzeDescription(descriptionForAnalysis, {
       squareFootage: squareValue,
       location: normalizedLocationInput,
+      unitCount: unitCountValue,
+      keyCount: keyCountValue,
       finishLevel,
       projectClass: projectComplexity,
       specialFeatures,
@@ -1079,6 +1116,8 @@ export const NewProject: React.FC = () => {
         : Array.isArray(engineFeatures)
           ? engineFeatures
           : [];
+      const derivedUnitCount = showUnitCountInput ? parseCountValue(unitCountInput) : undefined;
+      const derivedKeyCount = showKeyCountInput ? parseCountValue(keyCountInput) : undefined;
 
       console.log('[SAVE] finalProjectClass =', finalProjectClass);
 
@@ -1086,6 +1125,8 @@ export const NewProject: React.FC = () => {
         description: derivedDescription,
         location: derivedLocation,
         squareFootage: derivedSquareFootage,
+        unitCount: derivedUnitCount,
+        keyCount: derivedKeyCount,
         finishLevel: derivedFinishLevel,
         projectClass: finalProjectClass,
         specialFeatures: derivedSpecialFeatures,
@@ -1112,6 +1153,8 @@ export const NewProject: React.FC = () => {
     setDescription('');
     setSquareFootageInput('');
     setLocationInput('');
+    setUnitCountInput('');
+    setKeyCountInput('');
     setLocationTouched(false);
     setLocationAutoFilled(false);
     setActiveStep('input');
@@ -1404,8 +1447,8 @@ export const NewProject: React.FC = () => {
           )}
 
           {/* Key details inputs */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-            <div>
+	          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+	            <div>
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
                 Square Footage (optional)
               </label>
@@ -1441,10 +1484,47 @@ export const NewProject: React.FC = () => {
               {shouldShowLocationError && (
                 <p className="mt-1 text-xs text-red-600">Enter location like Dallas, TX.</p>
               )}
-            </div>
-          </div>
+	            </div>
+	          </div>
 
-          {isMixedUseProject && effectiveMixedUseSplitContract && (
+          {(showUnitCountInput || showKeyCountInput) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              {showUnitCountInput && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                    Unit Count (optional)
+                  </label>
+                  <input
+                    value={unitCountInput}
+                    onChange={(e) => setUnitCountInput(e.target.value)}
+                    placeholder="e.g. 220"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    disabled={analyzing}
+                  />
+                </div>
+              )}
+              {showKeyCountInput && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                    Key Count (optional)
+                  </label>
+                  <input
+                    value={keyCountInput}
+                    onChange={(e) => setKeyCountInput(e.target.value)}
+                    placeholder="e.g. 180"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    disabled={analyzing}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+	          {isMixedUseProject && effectiveMixedUseSplitContract && (
             <div className="mt-6 rounded-lg border border-indigo-200 bg-indigo-50 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
