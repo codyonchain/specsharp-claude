@@ -1162,6 +1162,21 @@ class NLPService:
             'has_drive_thru': self._has_drive_thru(text)
         }
 
+        # Detect program counts (units / keys)
+        unit_match = re.search(r'\b(\d{1,5})\s*[-]?\s*unit(s)?\b', text.lower())
+        if unit_match and "unit_count" not in extracted:
+            try:
+                extracted["unit_count"] = int(unit_match.group(1))
+            except Exception:
+                pass
+
+        key_match = re.search(r'\b(\d{1,5})\s*[-]?\s*keys?\b', text.lower())
+        if key_match and "key_count" not in extracted:
+            try:
+                extracted["key_count"] = int(key_match.group(1))
+            except Exception:
+                pass
+
         detection_metadata = self._last_detection_metadata if isinstance(self._last_detection_metadata, dict) else {}
         alias_mapping = detection_metadata.get("alias_mapping")
         if isinstance(alias_mapping, dict):

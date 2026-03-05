@@ -913,6 +913,8 @@ class UnifiedEngine:
         Returns:
             Comprehensive cost breakdown dictionary
         """
+        # Canonical parsed_input reference (non-mutating guardrail)
+        parsed_input = parsed_input_overrides if isinstance(parsed_input_overrides, dict) else {}
         
         # Normalize project class input if provided as a raw string
         if isinstance(project_class, str):
@@ -1248,6 +1250,7 @@ class UnifiedEngine:
         if isinstance(scope_context, dict):
             unit_override_sources.extend(self._collect_scope_override_sources(scope_context))
         explicit_unit_count: Optional[int] = None
+        explicit_key_count: Optional[int] = None
         if unit_override_sources:
             explicit_unit_value = self._get_override_number(
                 unit_override_sources,
@@ -1255,6 +1258,12 @@ class UnifiedEngine:
             )
             if explicit_unit_value is not None and explicit_unit_value > 0:
                 explicit_unit_count = max(1, int(round(explicit_unit_value)))
+            explicit_key_value = self._get_override_number(
+                unit_override_sources,
+                ["key_count", "keyCount"],
+            )
+            if explicit_key_value is not None and explicit_key_value > 0:
+                explicit_key_count = max(1, int(round(explicit_key_value)))
         scope_items = self._build_scope_items(
             building_type=building_type,
             subtype=subtype,
@@ -1346,6 +1355,7 @@ class UnifiedEngine:
                 'scenario': scenario_key,
                 'mixed_use_split': mixed_use_split_contract,
                 'unit_count': explicit_unit_count,
+                'key_count': explicit_key_count,
                 'ownership_type': ownership_type.value if hasattr(ownership_type, 'value') else ownership_type,
             },
         )
@@ -4162,7 +4172,12 @@ class UnifiedEngine:
         
         # Multifamily - uses monthly rent per unit
         elif building_enum == BuildingType.MULTIFAMILY:
-            explicit_units = self._coerce_number(context.get('unit_count'))
+            parsed_input = context.get('parsed_input') if isinstance(context.get('parsed_input'), dict) else {}
+            explicit_units = self._coerce_number(parsed_input.get('unit_count'))
+            if explicit_units is None:
+                explicit_units = self._coerce_number(parsed_input.get('unitCount'))
+            if explicit_units is None:
+                explicit_units = self._coerce_number(context.get('unit_count'))
             if explicit_units is None:
                 explicit_units = self._coerce_number(context.get('unitCount'))
             if explicit_units is not None and explicit_units > 0:
@@ -4461,6 +4476,7 @@ class UnifiedEngine:
     def _build_hospitality_financials(self, config, square_footage: float, context: Dict[str, Any]) -> Optional[Dict[str, float]]:
         """Derive select-service hotel revenue + expense assumptions from config."""
         modifiers = context.get('modifiers') or {}
+        parsed_input = context.get('parsed_input') if isinstance(context.get('parsed_input'), dict) else {}
 
         def _first_number(*candidates) -> Optional[float]:
             for candidate in candidates:
@@ -4474,6 +4490,10 @@ class UnifiedEngine:
             return None
 
         rooms_override = _first_number(
+            parsed_input.get('key_count'),
+            parsed_input.get('keyCount'),
+            context.get('key_count'),
+            context.get('keyCount'),
             context.get('rooms'),
             context.get('room_count'),
             context.get('keys'),

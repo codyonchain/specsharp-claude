@@ -554,8 +554,8 @@ class V2APIClient {
     if (typeof params.squareFootage === 'number' && Number.isFinite(params.squareFootage)) {
       payload.square_footage = params.squareFootage;
     }
-    if (typeof params.unitCount === 'number' && Number.isFinite(params.unitCount) && params.unitCount > 0) {
-      payload.unit_count = Math.round(params.unitCount);
+    if (typeof params.unitCount === 'number' && Number.isFinite(params.unitCount)) {
+      payload.unit_count = params.unitCount;
     }
     if (typeof params.keyCount === 'number' && Number.isFinite(params.keyCount) && params.keyCount > 0) {
       payload.key_count = Math.round(params.keyCount);

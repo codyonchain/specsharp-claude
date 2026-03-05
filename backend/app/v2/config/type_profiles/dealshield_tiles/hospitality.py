@@ -86,7 +86,7 @@ DEALSHIELD_TILE_PROFILES = {
         "derived_rows": _base_rows(
             "ballroom_and_fnb_fitout_plus_12",
             "banquet_program_delay",
-            "Banquet Program Delay",
+            "Ballroom and F&B Fit-Out Cost Stress",
         ),
         "provenance": {
             "notes": "Hospitality full service hotel tile profile v1."

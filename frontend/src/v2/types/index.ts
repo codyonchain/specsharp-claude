@@ -286,6 +286,7 @@ export interface ProjectFormData {
   location?: string;
   project_class?: ProjectClass;
   floors?: number;
+  unitCount?: number;
   unit_count?: number;
   key_count?: number;
   ownership_type?: OwnershipType;

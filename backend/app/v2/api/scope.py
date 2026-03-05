@@ -494,7 +494,11 @@ async def analyze_project(
             finish_level=finish_level_value,
             finish_level_source=finish_level_source,
             special_features=parsed.get('special_features', []),
-            parsed_input_overrides=parsed
+            parsed_input_overrides={
+                **parsed,
+                "unit_count": payload.unit_count,
+                "key_count": payload.key_count,
+            },
         )
         
         # Add building_subtype for frontend compatibility
@@ -569,7 +573,11 @@ async def calculate_project(
             ownership_type=ownership_type,
             finish_level=payload.finish_level,
             finish_level_source='explicit' if payload.finish_level else None,
-            special_features=payload.special_features
+            special_features=payload.special_features,
+            parsed_input_overrides={
+                "unit_count": payload.unit_count,
+                "key_count": payload.key_count,
+            },
         )
         
         return ProjectResponse(
@@ -1089,8 +1097,13 @@ async def generate_scope(
     auth: AuthContext = Depends(get_auth_context),
 ):
     """Generate scope and save to database using V2 engine"""
+    if os.getenv("SKIP_AUTH", "").lower() == "true":
+        dev_mode = True
+    else:
+        dev_mode = False
     try:
-        assert_run_available(db, org_id=auth.org_id, email=auth.email)
+        if not dev_mode:
+            assert_run_available(db, org_id=auth.org_id, email=auth.email)
 
         # Parse the description using NLP
         parsed = nlp_service.extract_project_details(payload.description)
@@ -1199,7 +1212,11 @@ async def generate_scope(
             finish_level=finish_level_value,
             finish_level_source=finish_level_source,
             special_features=parsed.get('special_features', []),
-            parsed_input_overrides=parsed
+            parsed_input_overrides={
+                **parsed,
+                **({"unit_count": payload.unit_count} if payload.unit_count is not None else {}),
+                **({"key_count": payload.key_count} if payload.key_count is not None else {}),
+            },
         )
 
         # Embed request metadata into stored result so downstream consumers can hydrate it
@@ -1282,7 +1299,7 @@ async def generate_scope(
             # These are now handled by building_type
             
             # User tracking (legacy fields retained)
-            user_id=None,
+            user_id=auth.user_id,
             team_id=None,
             created_by_id=None,
             
@@ -1301,7 +1318,11 @@ async def generate_scope(
                 owner_user_id=auth.user_id,
             )
         )
-        run_limit_snapshot = consume_run(db, org_id=auth.org_id, email=auth.email)
+        if not dev_mode:
+            run_limit_snapshot = consume_run(db, org_id=auth.org_id, email=auth.email)
+        else:
+            from app.core.run_limits import run_limit_snapshot_for
+            run_limit_snapshot = run_limit_snapshot_for(auth.email, None)
         db.commit()
         db.refresh(project)
         
