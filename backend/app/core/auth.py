@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import os
 from typing import Any, Dict, Optional
 import uuid
 
@@ -26,6 +27,10 @@ class AuthContext:
     org_id: str
     role: str
     access_token: str
+
+    def __post_init__(self):
+        self.user_id = str(self.user_id)
+        self.org_id = str(self.org_id)
 
 
 async def _fetch_supabase_user(access_token: str) -> Dict[str, Any]:
@@ -157,6 +162,16 @@ async def get_auth_context(
     requested_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
     db: Session = Depends(get_db),
 ) -> AuthContext:
+    # DEV/TEST bypass: allow local usage without bearer token
+    if os.getenv("TESTING", "false").lower() == "true" or os.getenv("SKIP_AUTH", "false").lower() == "true":
+        return AuthContext(
+            user_id="1",
+            email="local-dev@specsharp.dev",
+            org_id="1",
+            role="owner",
+            access_token="dev-bypass",
+        )
+
     if not credentials or not credentials.credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
