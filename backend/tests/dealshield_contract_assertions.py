@@ -2,6 +2,16 @@ from __future__ import annotations
 
 from typing import Any
 
+_BANNED_COPY_TOKENS = (
+    "(tile:",
+    "metric_refs_used",
+    "policy source:",
+    "dealshield_policy_v1",
+    "dealshield_canonical_policy_v1",
+    "marginal",
+    "not feasible",
+)
+
 
 def assert_decision_insurance_truth_parity(view_model: dict[str, Any]) -> None:
     assert isinstance(view_model, dict)
@@ -45,3 +55,34 @@ def assert_decision_insurance_truth_parity(view_model: dict[str, Any]) -> None:
             "level": break_risk_level,
             "reason": break_risk_reason,
         }
+
+    rendered_copy = view_model.get("rendered_copy")
+    assert isinstance(rendered_copy, dict)
+    assert isinstance(rendered_copy.get("decision_status_summary"), str)
+    assert rendered_copy["decision_status_summary"].strip()
+    assert isinstance(rendered_copy.get("policy_basis_line"), str)
+    assert rendered_copy["policy_basis_line"].strip()
+
+    executive_copy = view_model.get("executive_rendered_copy")
+    assert isinstance(executive_copy, dict)
+    assert isinstance(executive_copy.get("how_to_interpret"), str)
+    assert executive_copy["how_to_interpret"].strip()
+    assert isinstance(executive_copy.get("target_yield_lens_label"), str)
+    assert executive_copy["target_yield_lens_label"].strip()
+
+    outcome_state = view_model.get("outcome_state")
+    assert isinstance(outcome_state, str)
+    assert outcome_state in {"GO_STRONG", "GO_THIN", "NOGO_DEBT_PASSES", "NOGO_DEBT_FAILS"}
+
+    combined_copy = "\n".join(
+        [
+            str(rendered_copy.get("decision_status_summary", "")),
+            str(rendered_copy.get("decision_status_detail", "")),
+            str(rendered_copy.get("policy_basis_line", "")),
+            str(executive_copy.get("how_to_interpret", "")),
+            str(executive_copy.get("policy_basis_line", "")),
+            str(executive_copy.get("target_yield_lens_label", "")),
+        ]
+    ).lower()
+    for token in _BANNED_COPY_TOKENS:
+        assert token not in combined_copy

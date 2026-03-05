@@ -20,6 +20,8 @@ export function useProjectAnalysis() {
     overrides?: {
       squareFootage?: number;
       location?: string;
+      unitCount?: number;
+      keyCount?: number;
       finishLevel?: 'standard' | 'premium' | 'luxury';
       projectClass?: 'ground_up' | 'renovation' | 'addition';
       signal?: AbortSignal;
@@ -42,6 +44,8 @@ export function useProjectAnalysis() {
       const analysis = await api.analyzeProject(description, {
         square_footage: overrides?.squareFootage,
         location: overrides?.location,
+        unit_count: overrides?.unitCount,
+        key_count: overrides?.keyCount,
         finishLevel,
         projectClass: overrides?.projectClass,
         signal: overrides?.signal,

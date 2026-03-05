@@ -28,6 +28,7 @@ reportlab==4.0.7
 xlsxwriter==3.1.9
 openpyxl==3.1.2
 Pillow==11.3.0
+playwright==1.55.0
 
 # Payment Processing
 stripe==7.0.0

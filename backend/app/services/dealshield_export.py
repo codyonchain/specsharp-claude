@@ -5,7 +5,17 @@ import math
 from typing import Any, Dict, Optional
 import html as html_module
 
+from app.v2.presentation.client_text_sanitizer import sanitize_client_text
 from app.utils.formatting import format_currency
+
+
+def _dealshield_sanitize_text(value: Any) -> str:
+    if value is None:
+        return ""
+    sanitized = sanitize_client_text(str(value))
+    if isinstance(sanitized, str):
+        return sanitized.strip()
+    return str(sanitized).strip()
 
 
 def _dealshield_is_currency_metric(metric_ref: Optional[str]) -> bool:
@@ -341,8 +351,9 @@ def _dealshield_render_content_sections(view_model: Dict[str, Any]) -> str:
     fastest_drivers: list[Any] = []
     if isinstance(fastest_change, dict):
         headline = fastest_change.get("headline")
-        if isinstance(headline, str) and headline.strip():
-            fastest_headline = headline.strip()
+        cleaned_headline = _dealshield_sanitize_text(headline)
+        if cleaned_headline:
+            fastest_headline = cleaned_headline
         drivers = fastest_change.get("drivers")
         if isinstance(drivers, list):
             fastest_drivers = drivers
@@ -352,21 +363,27 @@ def _dealshield_render_content_sections(view_model: Dict[str, Any]) -> str:
     for driver in fastest_drivers[:3]:
         if not isinstance(driver, dict):
             continue
-        label = driver.get("label") or driver.get("id") or driver.get("tile_id") or "Driver"
+        label = _dealshield_sanitize_text(
+            driver.get("label") or driver.get("id") or driver.get("tile_id") or "Driver"
+        ) or "Driver"
         tile_id = driver.get("tile_id")
         if isinstance(tile_id, str) and tile_id:
             driver_label_by_tile[tile_id] = str(label)
         details = []
         if isinstance(tile_id, str) and tile_id:
-            details.append(f"Tile: {tile_id}")
+            details.append(_dealshield_sanitize_text(f"Tile: {tile_id}"))
             resolved = driver_map.get(tile_id)
             if isinstance(resolved, dict):
                 metric_ref = resolved.get("metric_ref")
                 if metric_ref:
-                    details.append(f"Metric: {metric_ref}")
+                    details.append(_dealshield_sanitize_text(f"Metric: {metric_ref}"))
                 transform = resolved.get("transform")
                 if transform:
-                    details.append(f"Transform: {json.dumps(transform, sort_keys=True)}")
+                    details.append(
+                        _dealshield_sanitize_text(
+                            f"Transform: {json.dumps(transform, sort_keys=True)}"
+                        )
+                    )
         detail_line = (
             f"<div class=\"content-subtle\">{html_module.escape(' | '.join(details))}</div>"
             if details
@@ -384,13 +401,13 @@ def _dealshield_render_content_sections(view_model: Dict[str, Any]) -> str:
         for entry in mlw:
             if not isinstance(entry, dict):
                 continue
-            text = entry.get("text") or "No text."
-            why = entry.get("why")
+            text = _dealshield_sanitize_text(entry.get("text") or "No text.") or "No text."
+            why = _dealshield_sanitize_text(entry.get("why"))
             why_line = (
-                f"<div class=\"content-subtle\">{html_module.escape(str(why))}</div>" if why else ""
+                f"<div class=\"content-subtle\">{html_module.escape(why)}</div>" if why else ""
             )
             mlw_items.append(
-                f"<li><span class=\"content-label\">{html_module.escape(str(text))}</span>{why_line}</li>"
+                f"<li><span class=\"content-label\">{html_module.escape(text)}</span>{why_line}</li>"
             )
     if not mlw_items:
         mlw_items.append("<li>No entries configured.</li>")
@@ -403,28 +420,24 @@ def _dealshield_render_content_sections(view_model: Dict[str, Any]) -> str:
                 continue
             raw_driver_tile_id = entry.get("driver_tile_id")
             driver_tile_id = str(raw_driver_tile_id) if raw_driver_tile_id else ""
-            driver_label = (
+            driver_label = _dealshield_sanitize_text(
                 driver_label_by_tile.get(driver_tile_id)
                 or entry.get("label")
                 or entry.get("id")
                 or "Questions"
-            )
-            tile_tag = (
-                f" <span class=\"content-inline-muted\">(tile: {html_module.escape(driver_tile_id)})</span>"
-                if driver_tile_id
-                else ""
-            )
+            ) or "Questions"
             questions = entry.get("questions")
             question_lines = []
             if isinstance(questions, list):
                 for question in questions:
-                    if isinstance(question, str) and question.strip():
-                        question_lines.append(f"<li>{html_module.escape(question.strip())}</li>")
+                    cleaned_question = _dealshield_sanitize_text(question)
+                    if cleaned_question:
+                        question_lines.append(f"<li>{html_module.escape(cleaned_question)}</li>")
             if not question_lines:
                 question_lines.append("<li>No questions configured.</li>")
             question_items.append(
                 "<li>"
-                f"<div class=\"content-label\">{html_module.escape(str(driver_label))}{tile_tag}</div>"
+                f"<div class=\"content-label\">{html_module.escape(driver_label)}</div>"
                 "<ul class=\"content-sublist\">"
                 + "".join(question_lines)
                 + "</ul>"
@@ -439,12 +452,12 @@ def _dealshield_render_content_sections(view_model: Dict[str, Any]) -> str:
         for entry in red_flags_actions:
             if not isinstance(entry, dict):
                 continue
-            flag = entry.get("flag") or "Flag not set."
-            action = entry.get("action") or "Action not set."
+            flag = _dealshield_sanitize_text(entry.get("flag") or "Flag not set.") or "Flag not set."
+            action = _dealshield_sanitize_text(entry.get("action") or "Action not set.") or "Action not set."
             red_flag_items.append(
                 "<li>"
-                f"<span class=\"content-label\">{html_module.escape(str(flag))}</span>"
-                f"<div class=\"content-subtle\">Action: {html_module.escape(str(action))}</div>"
+                f"<span class=\"content-label\">{html_module.escape(flag)}</span>"
+                f"<div class=\"content-subtle\">Action: {html_module.escape(action)}</div>"
                 "</li>"
             )
     if not red_flag_items:
@@ -625,23 +638,36 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
             or provenance_dict.get("decision_reason_code")
             or "—"
         )
-        decision_status_provenance = (
-            view_model.get("decision_status_provenance")
-            if isinstance(view_model.get("decision_status_provenance"), dict)
-            else provenance_dict.get("decision_status_provenance")
-            if isinstance(provenance_dict.get("decision_status_provenance"), dict)
+        rendered_copy = (
+            view_model.get("rendered_copy")
+            if isinstance(view_model.get("rendered_copy"), dict)
             else {}
         )
-        decision_source = (
-            decision_status_provenance.get("status_source")
-            if isinstance(decision_status_provenance.get("status_source"), str)
-            else "—"
+        decision_summary_text = (
+            rendered_copy.get("decision_status_summary")
+            if isinstance(rendered_copy.get("decision_status_summary"), str)
+            else ""
         )
-        decision_policy_id = (
-            decision_status_provenance.get("policy_id")
-            if isinstance(decision_status_provenance.get("policy_id"), str)
-            else "—"
+        decision_detail_text = (
+            rendered_copy.get("decision_status_detail")
+            if isinstance(rendered_copy.get("decision_status_detail"), str)
+            else ""
         )
+        policy_basis_line = (
+            rendered_copy.get("policy_basis_line")
+            if isinstance(rendered_copy.get("policy_basis_line"), str)
+            else "Policy basis: DealShield canonical policy."
+        )
+        policy_basis_line = sanitize_client_text(policy_basis_line)
+        decision_summary_text = sanitize_client_text(decision_summary_text)
+        decision_detail_text = sanitize_client_text(decision_detail_text)
+
+        decision_copy_line = (
+            " ".join(part for part in [decision_summary_text, decision_detail_text] if isinstance(part, str) and part.strip())
+            if decision_summary_text or decision_detail_text
+            else ""
+        )
+
         profiles_controls_block = (
             "<div class=\"provenance-note\"><strong>Profiles &amp; Controls:</strong> "
             f"Tile: {html_module.escape(str(tile_profile_id))} | "
@@ -650,10 +676,14 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
             f"Stress band: {html_module.escape(stress_label)} | "
             f"Anchor: {html_module.escape(anchor_label)}</div>"
             "<div class=\"provenance-note\"><strong>Decision Policy:</strong> "
+            f"{html_module.escape(policy_basis_line)} | "
             f"Status: {html_module.escape(str(decision_status))} | "
-            f"Reason: {html_module.escape(str(decision_reason_code))} | "
-            f"Source: {html_module.escape(str(decision_source))} | "
-            f"Policy ID: {html_module.escape(str(decision_policy_id))}</div>"
+            f"Reason: {html_module.escape(str(decision_reason_code))}</div>"
+            + (
+                f"<div class=\"provenance-note\">{html_module.escape(decision_copy_line)}</div>"
+                if decision_copy_line
+                else ""
+            )
         )
     if provenance_rows:
         provenance_table = (
@@ -670,23 +700,8 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
             + "</tbody></table>"
         )
     else:
-        metric_refs_used = []
-        if isinstance(provenance_dict, dict):
-            metric_refs_used = provenance_dict.get("metric_refs_used") or []
-        ref_pills = []
-        if isinstance(metric_refs_used, list):
-            for ref in metric_refs_used:
-                if ref is None:
-                    continue
-                ref_pills.append(f"<span class=\"ref-pill\">{html_module.escape(str(ref))}</span>")
-        if not ref_pills:
-            ref_pills.append("<span class=\"ref-pill ref-pill-empty\">—</span>")
         provenance_table = (
             "<div class=\"provenance-note\">Scenario inputs not available.</div>"
-            "<div class=\"provenance-meta\">"
-            "<span class=\"provenance-meta-label\">Metric refs used:</span>"
-            f"<div class=\"provenance-ref-list\">{''.join(ref_pills)}</div>"
-            "</div>"
         )
 
     financing_assumptions = view_model.get("financing_assumptions")

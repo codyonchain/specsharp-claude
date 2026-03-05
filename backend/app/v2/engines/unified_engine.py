@@ -913,6 +913,8 @@ class UnifiedEngine:
         Returns:
             Comprehensive cost breakdown dictionary
         """
+        # Canonical parsed_input reference (non-mutating guardrail)
+        parsed_input = parsed_input_overrides if isinstance(parsed_input_overrides, dict) else {}
         
         # Normalize project class input if provided as a raw string
         if isinstance(project_class, str):
@@ -1242,6 +1244,26 @@ class UnifiedEngine:
         if isinstance(parsed_input_overrides, dict):
             # Merge parsed_input so explicit overrides (e.g. dock_doors) are honored downstream
             scope_context = {**(scope_context or {}), **parsed_input_overrides}
+        unit_override_sources: List[Dict[str, Any]] = []
+        if isinstance(parsed_input_overrides, dict):
+            unit_override_sources.append(parsed_input_overrides)
+        if isinstance(scope_context, dict):
+            unit_override_sources.extend(self._collect_scope_override_sources(scope_context))
+        explicit_unit_count: Optional[int] = None
+        explicit_key_count: Optional[int] = None
+        if unit_override_sources:
+            explicit_unit_value = self._get_override_number(
+                unit_override_sources,
+                ["unit_count", "unitCount"],
+            )
+            if explicit_unit_value is not None and explicit_unit_value > 0:
+                explicit_unit_count = max(1, int(round(explicit_unit_value)))
+            explicit_key_value = self._get_override_number(
+                unit_override_sources,
+                ["key_count", "keyCount"],
+            )
+            if explicit_key_value is not None and explicit_key_value > 0:
+                explicit_key_count = max(1, int(round(explicit_key_value)))
         scope_items = self._build_scope_items(
             building_type=building_type,
             subtype=subtype,
@@ -1332,6 +1354,8 @@ class UnifiedEngine:
                 'location': location,
                 'scenario': scenario_key,
                 'mixed_use_split': mixed_use_split_contract,
+                'unit_count': explicit_unit_count,
+                'key_count': explicit_key_count,
                 'ownership_type': ownership_type.value if hasattr(ownership_type, 'value') else ownership_type,
             },
         )
@@ -3741,9 +3765,25 @@ class UnifiedEngine:
             healthcare_profile
             and getattr(subtype_config, "facility_metrics_profile", None) == "healthcare_outpatient"
         )
+        resolved_multifamily_units: Optional[int] = None
+        resolved_multifamily_units_source: Optional[str] = None
+        if building_enum == BuildingType.MULTIFAMILY:
+            resolved_units_raw = calculations.get('resolved_unit_count')
+            if resolved_units_raw is None:
+                resolved_units_raw = calculations.get('unit_count')
+            resolved_units_value = self._coerce_number(resolved_units_raw)
+            if resolved_units_value is not None and resolved_units_value > 0:
+                resolved_multifamily_units = max(1, int(round(resolved_units_value)))
+            source_candidate = calculations.get('unit_count_source')
+            if isinstance(source_candidate, str) and source_candidate in {'user_input', 'derived'}:
+                resolved_multifamily_units_source = source_candidate
+            elif resolved_multifamily_units is not None:
+                resolved_multifamily_units_source = 'derived'
         
         # Derive units for display/per-unit metrics when not provided.
         units = calculations.get('units')
+        if building_enum == BuildingType.MULTIFAMILY and resolved_multifamily_units is not None:
+            units = resolved_multifamily_units
         if not units:
             units = 0
             if (
@@ -3783,6 +3823,11 @@ class UnifiedEngine:
                 if units > 0:
                     calculations['cost_per_unit'] = total_cost_value / units if units else 0
                     calculations['revenue_per_unit'] = annual_revenue_value / units if units else 0
+        if building_enum == BuildingType.MULTIFAMILY and resolved_multifamily_units is not None:
+            units = resolved_multifamily_units
+            calculations['units'] = units
+            calculations['resolved_unit_count'] = units
+            calculations['unit_count_source'] = resolved_multifamily_units_source or 'derived'
         
         # Calculate display-ready operational metrics
         operational_metrics = self.calculate_operational_metrics_for_display(
@@ -3802,10 +3847,26 @@ class UnifiedEngine:
                 square_footage,
                 fallback_units=None,
             )
-        operational_metrics['per_unit'].setdefault('units', units or 0)
-        if units and units > 0:
-            cost_per_unit = total_cost / units
-            annual_revenue_per_unit = annual_revenue / units
+        derived_units_value = self._coerce_number(operational_metrics['per_unit'].get('units'))
+        if derived_units_value is not None and derived_units_value > 0:
+            derived_units = max(1, int(round(derived_units_value)))
+        else:
+            derived_units = units or 0
+        if building_enum == BuildingType.MULTIFAMILY and resolved_multifamily_units is not None:
+            canonical_units = resolved_multifamily_units
+            canonical_units_source = resolved_multifamily_units_source or 'derived'
+        else:
+            canonical_units = derived_units
+            canonical_units_source = 'derived'
+        operational_metrics['per_unit']['units'] = canonical_units
+        operational_metrics['per_unit']['units_source'] = canonical_units_source
+        if canonical_units and canonical_units > 0:
+            calculations['units'] = canonical_units
+            if building_enum == BuildingType.MULTIFAMILY:
+                calculations['resolved_unit_count'] = canonical_units
+                calculations['unit_count_source'] = canonical_units_source
+            cost_per_unit = total_cost / canonical_units
+            annual_revenue_per_unit = annual_revenue / canonical_units
             monthly_revenue_per_unit = annual_revenue_per_unit / 12.0
             operational_metrics['per_unit'].update({
                 'cost_per_unit': round(cost_per_unit, 2),
@@ -4111,9 +4172,33 @@ class UnifiedEngine:
         
         # Multifamily - uses monthly rent per unit
         elif building_enum == BuildingType.MULTIFAMILY:
-            units = square_footage * config.units_per_sf
-            monthly_rent = config.base_revenue_per_unit_monthly
-            base_revenue = units * monthly_rent * 12
+            parsed_input = context.get('parsed_input') if isinstance(context.get('parsed_input'), dict) else {}
+            explicit_units = self._coerce_number(parsed_input.get('unit_count'))
+            if explicit_units is None:
+                explicit_units = self._coerce_number(parsed_input.get('unitCount'))
+            if explicit_units is None:
+                explicit_units = self._coerce_number(context.get('unit_count'))
+            if explicit_units is None:
+                explicit_units = self._coerce_number(context.get('unitCount'))
+            if explicit_units is not None and explicit_units > 0:
+                resolved_units = max(1, int(round(explicit_units)))
+                units_source = 'user_input'
+            else:
+                derived_units = 0
+                if hasattr(config, 'units_per_sf') and square_footage > 0:
+                    try:
+                        units_estimate = float(config.units_per_sf) * float(square_footage)
+                        derived_units = max(1, int(round(units_estimate)))
+                    except (TypeError, ValueError):
+                        derived_units = 0
+                resolved_units = derived_units
+                units_source = 'derived'
+
+            context['resolved_unit_count'] = resolved_units
+            context['unit_count_source'] = units_source
+            context['units'] = resolved_units
+            monthly_rent = self._coerce_number(getattr(config, 'base_revenue_per_unit_monthly', None)) or 0.0
+            base_revenue = resolved_units * monthly_rent * 12
         
         # Hospitality - use ADR x occupancy x room count with expense profiling
         elif building_enum == BuildingType.HOSPITALITY:
@@ -4391,6 +4476,7 @@ class UnifiedEngine:
     def _build_hospitality_financials(self, config, square_footage: float, context: Dict[str, Any]) -> Optional[Dict[str, float]]:
         """Derive select-service hotel revenue + expense assumptions from config."""
         modifiers = context.get('modifiers') or {}
+        parsed_input = context.get('parsed_input') if isinstance(context.get('parsed_input'), dict) else {}
 
         def _first_number(*candidates) -> Optional[float]:
             for candidate in candidates:
@@ -4404,6 +4490,10 @@ class UnifiedEngine:
             return None
 
         rooms_override = _first_number(
+            parsed_input.get('key_count'),
+            parsed_input.get('keyCount'),
+            context.get('key_count'),
+            context.get('keyCount'),
             context.get('rooms'),
             context.get('room_count'),
             context.get('keys'),

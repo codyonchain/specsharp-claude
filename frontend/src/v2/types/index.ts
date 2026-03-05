@@ -130,6 +130,8 @@ export interface ParsedInput {
   location: string;
   project_class: ProjectClass;
   floors: number;
+  unit_count?: number;
+  key_count?: number;
   confidence: number;
 }
 
@@ -284,6 +286,9 @@ export interface ProjectFormData {
   location?: string;
   project_class?: ProjectClass;
   floors?: number;
+  unitCount?: number;
+  unit_count?: number;
+  key_count?: number;
   ownership_type?: OwnershipType;
   special_features?: string[];
 }
@@ -436,6 +441,23 @@ export interface DealShieldDecisionInsuranceFields {
   decision_status?: DecisionStatus;
   decision_reason_code?: string;
   decision_status_provenance?: DecisionStatusProvenance;
+  rendered_copy?: DealShieldRenderedCopy;
+  executive_rendered_copy?: ExecutiveRenderedCopy;
+  outcome_state?: string | null;
+}
+
+export interface DealShieldRenderedCopy {
+  decision_status_summary?: string;
+  decision_status_detail?: string;
+  policy_basis_line?: string;
+  outcome_state?: string;
+}
+
+export interface ExecutiveRenderedCopy {
+  how_to_interpret?: string;
+  policy_basis_line?: string;
+  target_yield_lens_label?: string;
+  outcome_state?: string;
 }
 
 export type DealShieldViewModel = Record<string, any> & Partial<DealShieldDecisionInsuranceFields>;

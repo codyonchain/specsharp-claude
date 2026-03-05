@@ -10,6 +10,8 @@ from app.v2.config.type_profiles.decision_insurance_policy import (
     DECISION_INSURANCE_POLICY_ID,
     get_decision_insurance_policy,
 )
+from app.v2.presentation.client_text_sanitizer import sanitize_client_text
+from app.v2.presentation.dealshield_outcome_copy_renderer import build_outcome_copy_bundle
 
 _MISSING = object()
 
@@ -2017,7 +2019,7 @@ def _resolve_canonical_decision_status(
     decision_insurance_outputs: Dict[str, Any],
     decision_insurance_provenance: Dict[str, Any],
 ) -> Tuple[str, str, Dict[str, Any]]:
-    policy_id = "dealshield_canonical_policy_v1"
+    policy_id = DECISION_INSURANCE_POLICY_ID
     explicit_sources = [
         payload.get("decision_status"),
         payload.get("decisionStatus"),
@@ -2042,7 +2044,7 @@ def _resolve_canonical_decision_status(
                 "policy_id": policy_id,
                 "status": explicit_status,
                 "reason_code": "explicit_status_signal",
-                "status_source": "payload_or_decision_summary",
+                "status_source": "explicit_signal",
                 "explicit_raw_value": explicit_raw_value,
             },
         )
@@ -2074,7 +2076,7 @@ def _resolve_canonical_decision_status(
 
     provenance = {
         "policy_id": policy_id,
-        "status_source": "dealshield_policy_v1",
+        "status_source": "canonical_policy",
         "value_gap": float(value_gap) if _is_number(value_gap) else None,
         "not_modeled_reason": not_modeled_reason if isinstance(not_modeled_reason, str) else None,
         "first_break_scenario_id": first_break_scenario,
@@ -2235,6 +2237,21 @@ def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profil
     provenance["decision_status"] = resolved_status
     provenance["decision_reason_code"] = resolved_reason_code
     provenance["decision_status_provenance"] = copy.deepcopy(status_provenance)
+
+    outcome_copy_bundle = build_outcome_copy_bundle(payload=payload, view_model=view_model)
+    outcome_state = outcome_copy_bundle.get("outcome_state")
+    view_model["outcome_state"] = outcome_state
+    view_model["rendered_copy"] = sanitize_client_text(
+        outcome_copy_bundle.get("dealshield") if isinstance(outcome_copy_bundle.get("dealshield"), dict) else {}
+    )
+    view_model["executive_rendered_copy"] = sanitize_client_text(
+        outcome_copy_bundle.get("executive") if isinstance(outcome_copy_bundle.get("executive"), dict) else {}
+    )
+    if isinstance(view_model.get("decision_summary"), dict):
+        view_model["decision_summary"]["outcome_state"] = outcome_state
+    if isinstance(provenance, dict):
+        provenance.pop("metric_refs_used", None)
+        provenance["outcome_state"] = outcome_state
 
     view_model["provenance"] = provenance
     return view_model

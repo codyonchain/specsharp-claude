@@ -388,7 +388,7 @@ def test_retail_decision_insurance_contract_and_provenance_is_deterministic():
 
             status_provenance = view_model.get("decision_status_provenance")
             assert isinstance(status_provenance, dict)
-            assert status_provenance.get("status_source") == "dealshield_policy_v1"
+            assert status_provenance.get("status_source") == "canonical_policy"
             assert isinstance(status_provenance.get("policy_id"), str) and status_provenance.get("policy_id")
 
             di_provenance = view_model.get("decision_insurance_provenance")

@@ -24,6 +24,7 @@ from app.utils.building_type_display import get_display_building_type
 from app.utils.formatting import format_currency, format_percentage
 from app.services.executive_summary_service import executive_summary_service
 from app.services.dealshield_export import render_dealshield_html
+from app.v2.presentation.client_text_sanitizer import sanitize_client_text
 
 logger = logging.getLogger(__name__)
 
@@ -449,11 +450,13 @@ class ProfessionalPDFExportService:
             ds_model.get("decision_reason_code")
             or ds_summary.get("decision_reason_code")
         )
-        ds_status_provenance = ds_model.get("decision_status_provenance")
-        if not isinstance(ds_status_provenance, dict):
-            ds_status_provenance = ds_summary.get("decision_status_provenance") if isinstance(ds_summary.get("decision_status_provenance"), dict) else {}
-        ds_status_source = ds_status_provenance.get("status_source") or ds_status_provenance.get("statusSource")
-        ds_policy_id = ds_status_provenance.get("policy_id") or ds_status_provenance.get("policyId")
+        ds_exec_copy = ds_model.get("executive_rendered_copy")
+        if not isinstance(ds_exec_copy, dict):
+            ds_exec_copy = {}
+        policy_basis_line = ds_exec_copy.get("policy_basis_line") if isinstance(ds_exec_copy.get("policy_basis_line"), str) else "Policy basis: DealShield canonical policy."
+        how_to_interpret = ds_exec_copy.get("how_to_interpret") if isinstance(ds_exec_copy.get("how_to_interpret"), str) else None
+        policy_basis_line = sanitize_client_text(policy_basis_line)
+        how_to_interpret = sanitize_client_text(how_to_interpret) if isinstance(how_to_interpret, str) else None
 
         decision: str
         decision_reason: str
@@ -467,11 +470,9 @@ class ProfessionalPDFExportService:
                 decision = "PENDING"
             else:
                 decision = "GO"
-
-            policy_source_text = str(ds_status_source or "dealshield_policy_v1")
-            policy_id_text = f" ({ds_policy_id})" if isinstance(ds_policy_id, str) and ds_policy_id.strip() else ""
-            reason_text = f" · reason: {ds_reason_code}" if isinstance(ds_reason_code, str) and ds_reason_code.strip() else ""
-            decision_reason = f"Policy source: {policy_source_text}{policy_id_text}{reason_text}"
+            reason_text = f" Reason: {ds_reason_code}." if isinstance(ds_reason_code, str) and ds_reason_code.strip() else ""
+            detail_text = f" {how_to_interpret}" if isinstance(how_to_interpret, str) and how_to_interpret.strip() else ""
+            decision_reason = f"{policy_basis_line}.{reason_text}{detail_text}".strip()
         else:
             decision = "NEEDS WORK"
             if (feasible_flag is True) or (isinstance(feasibility_text, str) and feasibility_text.strip().lower() == "feasible"):
@@ -483,7 +484,10 @@ class ProfessionalPDFExportService:
                 else:
                     decision = "NO-GO"
 
-            decision_reason = feasibility_reco or (f"Feasibility: {feasibility_status}" if feasibility_status else "Decision sourced from ExecutiveView underwriting logic.")
+            decision_reason = sanitize_client_text(
+                feasibility_reco
+                or (f"Feasibility: {feasibility_status}" if feasibility_status else "Policy basis: DealShield canonical policy.")
+            )
         decision_badge_class = "needs"
         if decision == "GO":
             decision_badge_class = "go"
