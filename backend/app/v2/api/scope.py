@@ -1299,7 +1299,6 @@ async def generate_scope(
             # These are now handled by building_type
             
             # User tracking (legacy fields retained)
-            user_id=auth.user_id,
             team_id=None,
             created_by_id=None,
             
