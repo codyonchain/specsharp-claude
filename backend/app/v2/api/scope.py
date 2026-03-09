@@ -40,6 +40,10 @@ from app.services.decision_packet_export import (
     compose_decision_packet_input,
     hydrate_project_payload_for_packet,
 )
+from app.v2.services.dealshield_scenarios import (
+    DealShieldScenarioError,
+    refresh_dealshield_scenarios_payload,
+)
 from app.config.regional_multipliers import _location_has_explicit_state
 import logging
 
@@ -942,6 +946,26 @@ def _resolve_dealshield_building_context(
     return building_type, subtype
 
 
+def _refresh_dealshield_payload_for_project(
+    project: Project,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    profile_id = payload.get("dealshield_tile_profile")
+    if not isinstance(profile_id, str) or not profile_id.strip():
+        return payload
+
+    building_type, subtype = _resolve_dealshield_building_context(project, payload)
+    if not building_type or not subtype:
+        raise DealShieldScenarioError("Unable to resolve building type/subtype for DealShield scenario rebuild")
+
+    return refresh_dealshield_scenarios_payload(
+        payload,
+        building_type=building_type,
+        subtype=subtype,
+        engine=unified_engine,
+    )
+
+
 @router.post("/scope/projects/{project_id}/dealshield/controls", response_model=ProjectResponse)
 async def update_dealshield_controls(
     project_id: str,
@@ -1047,6 +1071,7 @@ async def get_dealshield_view(
         )
 
     try:
+        payload = _refresh_dealshield_payload_for_project(project, payload)
         profile = get_dealshield_profile(profile_id)
     except Exception as exc:
         return ProjectResponse(
@@ -1422,6 +1447,7 @@ async def export_project_pdf(
         raise HTTPException(status_code=400, detail="DealShield not available for this project")
 
     try:
+        payload = _refresh_dealshield_payload_for_project(project, payload)
         profile = get_dealshield_profile(profile_id)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1475,6 +1501,7 @@ async def export_dealshield_pdf(
         raise HTTPException(status_code=400, detail="DealShield not available for this project")
 
     try:
+        payload = _refresh_dealshield_payload_for_project(project, payload)
         profile = get_dealshield_profile(profile_id)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

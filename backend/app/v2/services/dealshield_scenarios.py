@@ -5,7 +5,8 @@ import copy
 import math
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
-from app.v2.config.master_config import OwnershipType
+from app.core.building_taxonomy import validate_building_type
+from app.v2.config.master_config import OwnershipType, BuildingType, MASTER_CONFIG
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 
 
@@ -499,9 +500,7 @@ def build_dealshield_scenarios(
     base_snapshot = copy.deepcopy(base_payload)
     base_snapshot.pop("dealshield_scenarios", None)
 
-    scenarios: Dict[str, Dict[str, Any]] = {"base": base_snapshot}
     scenario_inputs: Dict[str, Any] = {}
-    _assert_tile_metrics(base_snapshot, tile_metric_refs, "base")
 
     if cost_anchor_used:
         totals = base_snapshot.get("totals") or {}
@@ -510,19 +509,22 @@ def build_dealshield_scenarios(
             raise DealShieldScenarioError("Missing totals.total_project_cost for base cost anchor")
         _apply_cost_delta(base_snapshot, float(cost_anchor_value) - float(base_total))
 
-        ownership_type = _select_ownership_type(building_config)
-        calculation_context = _build_calculation_context(base_snapshot, "base")
-        total_cost_value = (base_snapshot.get("totals") or {}).get("total_project_cost")
-        if not _is_number(total_cost_value):
-            raise DealShieldScenarioError("Base total_project_cost missing or invalid after cost anchor")
-        bundle = _build_ownership_bundle_without_trace_side_effects(
-            engine=engine,
-            building_config=building_config,
-            ownership_type=ownership_type,
-            total_project_cost=total_cost_value,
-            calculation_context=calculation_context,
-        )
-        _apply_financial_bundle(base_snapshot, bundle)
+    ownership_type = _select_ownership_type(building_config)
+    calculation_context = _build_calculation_context(base_snapshot, "base")
+    total_cost_value = (base_snapshot.get("totals") or {}).get("total_project_cost")
+    if not _is_number(total_cost_value):
+        raise DealShieldScenarioError("Base total_project_cost missing or invalid")
+    bundle = _build_ownership_bundle_without_trace_side_effects(
+        engine=engine,
+        building_config=building_config,
+        ownership_type=ownership_type,
+        total_project_cost=total_cost_value,
+        calculation_context=calculation_context,
+    )
+    _apply_financial_bundle(base_snapshot, bundle)
+
+    _assert_tile_metrics(base_snapshot, tile_metric_refs, "base")
+    scenarios: Dict[str, Dict[str, Any]] = {"base": base_snapshot}
 
     scenario_inputs["base"] = {
         "applied_tile_ids": [],
@@ -722,3 +724,36 @@ def build_dealshield_scenarios(
         "scenarios": scenarios,
         "provenance": provenance,
     }
+
+
+def refresh_dealshield_scenarios_payload(
+    payload: Dict[str, Any],
+    *,
+    building_type: Optional[str],
+    subtype: Optional[str],
+    engine: Any,
+) -> Dict[str, Any]:
+    profile_id = payload.get("dealshield_tile_profile")
+    if not isinstance(profile_id, str) or not profile_id.strip():
+        return payload
+
+    if not building_type or not subtype:
+        raise DealShieldScenarioError("Unable to resolve building type/subtype for DealShield scenario rebuild")
+
+    try:
+        canonical_type, canonical_subtype = validate_building_type(building_type, subtype)
+        subtype_key = canonical_subtype or subtype
+        building_type_enum = BuildingType(canonical_type)
+    except Exception as exc:
+        raise DealShieldScenarioError(
+            f"Unable to resolve building config for DealShield scenario rebuild ({building_type}/{subtype})"
+        ) from exc
+
+    building_config = MASTER_CONFIG.get(building_type_enum, {}).get(subtype_key)
+    if building_config is None:
+        raise DealShieldScenarioError(
+            f"Unable to resolve building config for DealShield scenario rebuild ({canonical_type}/{subtype_key})"
+        )
+
+    payload["dealshield_scenarios"] = build_dealshield_scenarios(payload, building_config, engine)
+    return payload

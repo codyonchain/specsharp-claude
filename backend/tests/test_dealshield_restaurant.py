@@ -1,5 +1,6 @@
 import pytest
 
+from app.v2.services import dealshield_scenarios as dealshield_scenarios_module
 from app.v2.config.master_config import BuildingType, ProjectClass, get_building_config
 from app.v2.config.type_profiles.dealshield_content import get_dealshield_content_profile
 from app.v2.config.type_profiles.decision_insurance_policy import DECISION_INSURANCE_POLICY_BY_PROFILE_ID
@@ -7,7 +8,10 @@ from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.v2.config.type_profiles.dealshield_tiles import restaurant as restaurant_tile_profiles
 from app.v2.config.type_profiles.scope_items import restaurant as restaurant_scope_profiles
 from app.v2.engines.unified_engine import unified_engine
-from app.v2.services.dealshield_scenarios import build_dealshield_scenarios
+from app.v2.services.dealshield_scenarios import (
+    build_dealshield_scenarios,
+    refresh_dealshield_scenarios_payload,
+)
 from app.v2.services.dealshield_service import build_dealshield_view_model
 from tests.dealshield_contract_assertions import assert_decision_insurance_truth_parity
 
@@ -551,6 +555,66 @@ def test_restaurant_scenario_controls_accept_allowed_stress_band_values(stress_b
     assert conservative["stress_band_pct"] == stress_band_pct
     assert conservative["cost_scalar"] == pytest.approx(1.0 + (stress_band_pct / 100.0))
     assert conservative["revenue_scalar"] == pytest.approx(1.0 - (stress_band_pct / 100.0))
+
+
+def test_restaurant_base_scenario_uses_recompute_helper_stack_before_commit(monkeypatch):
+    payload = unified_engine.calculate_project(
+        building_type=BuildingType.RESTAURANT,
+        subtype="full_service",
+        square_footage=8_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+    )
+
+    config = get_building_config(BuildingType.RESTAURANT, "full_service")
+    original_build_bundle = dealshield_scenarios_module._build_ownership_bundle_without_trace_side_effects
+    seen_scenarios = []
+
+    def tracking_build_bundle(*args, **kwargs):
+        calculation_context = kwargs.get("calculation_context") or {}
+        seen_scenarios.append(calculation_context.get("scenario"))
+        return original_build_bundle(*args, **kwargs)
+
+    monkeypatch.setattr(
+        dealshield_scenarios_module,
+        "_build_ownership_bundle_without_trace_side_effects",
+        tracking_build_bundle,
+    )
+
+    scenarios_bundle = build_dealshield_scenarios(
+        base_payload=payload,
+        building_config=config,
+        engine=unified_engine,
+    )
+
+    assert scenarios_bundle["scenarios"]["base"]
+    assert seen_scenarios
+    assert seen_scenarios[0] == "base"
+    assert "base" in seen_scenarios
+
+
+def test_restaurant_refresh_helper_replaces_stale_stored_scenarios():
+    payload = unified_engine.calculate_project(
+        building_type=BuildingType.RESTAURANT,
+        subtype="full_service",
+        square_footage=8_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+    )
+
+    stale_value = 999_999_999.0
+    payload["dealshield_scenarios"]["scenarios"]["base"]["totals"]["total_project_cost"] = stale_value
+
+    refreshed = refresh_dealshield_scenarios_payload(
+        payload,
+        building_type="restaurant",
+        subtype="full_service",
+        engine=unified_engine,
+    )
+
+    refreshed_value = refreshed["dealshield_scenarios"]["scenarios"]["base"]["totals"]["total_project_cost"]
+    assert refreshed_value != stale_value
+    assert refreshed_value == pytest.approx(payload["totals"]["total_project_cost"])
 
 
 def test_restaurant_scenario_controls_with_anchors_emit_expected_provenance_for_all_subtypes():
