@@ -22,6 +22,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 
 from app.utils.building_type_display import get_display_building_type
 from app.utils.formatting import format_currency, format_percentage
+from app.services.decision_packet_export import render_decision_packet_html
 from app.services.executive_summary_service import executive_summary_service
 from app.services.dealshield_export import render_dealshield_html
 from app.v2.presentation.client_text_sanitizer import sanitize_client_text
@@ -705,6 +706,11 @@ class ProfessionalPDFExportService:
     def generate_dealshield_pdf(self, view_model: Dict[str, Any]) -> io.BytesIO:
         """Generate DealShield PDF via Playwright-rendered HTML."""
         html = render_dealshield_html(view_model)
+        return self._render_html_to_pdf(html)
+
+    def generate_decision_packet_pdf(self, packet: Dict[str, Any]) -> io.BytesIO:
+        """Generate combined Decision Packet via Playwright-rendered HTML."""
+        html = render_decision_packet_html(packet)
         return self._render_html_to_pdf(html)
     
     def _create_cover_page(self, project_data: Dict, client_name: str) -> List:

@@ -36,6 +36,10 @@ from app.core.run_limits import assert_run_available, consume_run
 from app.db.models import Project, ProjectAccess
 from app.db.database import get_db
 from app.services.pdf_export_service import pdf_export_service
+from app.services.decision_packet_export import (
+    compose_decision_packet_input,
+    hydrate_project_payload_for_packet,
+)
 from app.config.regional_multipliers import _location_has_explicit_state
 import logging
 
@@ -1408,59 +1412,35 @@ async def export_project_pdf(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    project_payload = format_project_response(project)
-    calculation_data = project_payload.get('calculation_data') or {}
-
-    request_data = (
-        calculation_data.get('request_data') or
-        calculation_data.get('parsed_input') or
-        calculation_data.get('request_payload') or
-        {}
-    )
-    if not isinstance(request_data, dict):
-        request_data = {}
-
-    request_data.setdefault('square_footage', project_payload.get('square_footage') or project.square_footage or 0)
-    request_data.setdefault('location', project_payload.get('location') or project.location or 'Unknown')
-    request_data.setdefault('building_type', calculation_data.get('project_info', {}).get('building_type') or project_payload.get('building_type'))
-    request_data.setdefault(
-        'num_floors',
-        request_data.get('floors') or
-        calculation_data.get('project_info', {}).get('floors') or
-        project_payload.get('floors') or
-        1
-    )
-    project_payload['request_data'] = request_data
-
+    project_payload = hydrate_project_payload_for_packet(project, format_project_response(project))
     project_name = project_payload.get('project_name') or project_payload.get('name') or f"project_{project_id}"
     project_payload['project_name'] = project_name
 
-    canonical_dealshield_view_model = None
     payload = _resolve_project_payload(project)
     profile_id = payload.get("dealshield_tile_profile")
-    if isinstance(profile_id, str) and profile_id.strip():
-        try:
-            profile = get_dealshield_profile(profile_id)
-            canonical_dealshield_view_model = build_dealshield_view_model(project.project_id or project_id, payload, profile)
-        except DealShieldResolutionError as exc:
-            logger.warning(
-                "DealShield canonical decision unavailable during project PDF export for %s: %s",
-                project_id,
-                str(exc),
-            )
-        except Exception as exc:
-            logger.warning(
-                "DealShield view model build failed during project PDF export for %s: %s",
-                project_id,
-                str(exc),
-            )
+    if not isinstance(profile_id, str) or not profile_id.strip():
+        raise HTTPException(status_code=400, detail="DealShield not available for this project")
 
     try:
-        pdf_buffer = pdf_export_service.generate_professional_pdf(
-            project_payload,
-            client_name,
-            dealshield_view_model=canonical_dealshield_view_model,
-        )
+        profile = get_dealshield_profile(profile_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    try:
+        canonical_dealshield_view_model = build_dealshield_view_model(project.project_id or project_id, payload, profile)
+    except DealShieldResolutionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    packet = compose_decision_packet_input(
+        project=project,
+        project_payload=project_payload,
+        payload=payload,
+        dealshield_view_model=canonical_dealshield_view_model,
+        client_name=client_name,
+    )
+
+    try:
+        pdf_buffer = pdf_export_service.generate_decision_packet_pdf(packet)
     except Exception as exc:
         logger.error(f"Failed to generate PDF for project {project_id}: {exc}")
         raise HTTPException(status_code=500, detail="Failed to generate PDF report")
@@ -1488,6 +1468,7 @@ async def export_dealshield_pdf(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    project_payload = hydrate_project_payload_for_packet(project, format_project_response(project))
     payload = _resolve_project_payload(project)
     profile_id = payload.get("dealshield_tile_profile")
     if not isinstance(profile_id, str) or not profile_id.strip():
@@ -1500,9 +1481,18 @@ async def export_dealshield_pdf(
 
     try:
         view_model = build_dealshield_view_model(project.project_id or project_id, payload, profile)
-        pdf_buffer = pdf_export_service.generate_dealshield_pdf(view_model)
     except DealShieldResolutionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    packet = compose_decision_packet_input(
+        project=project,
+        project_payload=project_payload,
+        payload=payload,
+        dealshield_view_model=view_model,
+        client_name=None,
+    )
+    try:
+        pdf_buffer = pdf_export_service.generate_decision_packet_pdf(packet)
     except Exception as exc:
         logger.error(f"Failed to generate DealShield PDF for project {project_id}: {exc}")
         raise HTTPException(status_code=500, detail="Failed to generate DealShield PDF report") from exc
