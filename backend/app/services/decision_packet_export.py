@@ -98,6 +98,15 @@ def _format_months(value: Any) -> str:
     return f"{rounded} months"
 
 
+def _format_basis_points(value: Any) -> str:
+    parsed = _to_number(value)
+    if parsed is None:
+        return "—"
+    rounded = int(round(parsed))
+    prefix = "+" if rounded > 0 else ""
+    return f"{prefix}{rounded:,d} bps"
+
+
 def _format_sqft(value: Any) -> str:
     parsed = _to_number(value)
     if parsed is None:
@@ -110,6 +119,40 @@ def _format_money_per_sf(value: Any) -> str:
     if parsed is None:
         return "—"
     return f"{format_currency(parsed)}/SF"
+
+
+def _format_financing_summary_value(item: Dict[str, Any]) -> str:
+    format_kind = _sanitize_text(item.get("format"))
+    decimals_value = _to_number(item.get("decimals"))
+    decimals = int(decimals_value) if decimals_value is not None else None
+    value = item.get("value")
+
+    if format_kind == "currency":
+        return _format_money(value)
+    if format_kind == "percentage":
+        return _format_percent(value, digits=decimals if decimals is not None else 1)
+    if format_kind == "multiple":
+        parsed = _to_number(value)
+        if parsed is None:
+            return "—"
+        digits = decimals if decimals is not None else 2
+        return f"{parsed:,.{digits}f}×"
+    if format_kind == "basis_points":
+        return _format_basis_points(value)
+    return _format_number(value, digits=decimals if decimals is not None else 0)
+
+
+def _clean_packet_financing_disclosures(disclosures: Any, *, has_financing_summary: bool) -> List[str]:
+    cleaned: List[str] = []
+    for item in _as_list(disclosures):
+        text = _sanitize_text(item)
+        if not text:
+            continue
+        if has_financing_summary and text == "Not modeled: financing assumptions missing":
+            continue
+        if text not in cleaned:
+            cleaned.append(text)
+    return cleaned
 
 
 def _format_compact_currency(value: float) -> str:
@@ -381,6 +424,15 @@ def compose_decision_packet_input(
     if not isinstance(construction_schedule, dict):
         construction_schedule = {}
 
+    financing_summary = calculation_data.get("financing_summary") or {}
+    if not isinstance(financing_summary, dict):
+        financing_summary = {}
+    financing_summary_items = [
+        item
+        for item in _as_list(financing_summary.get("items"))
+        if isinstance(item, dict) and _sanitize_text(item.get("label")) and _to_number(item.get("value")) is not None
+    ]
+
     cover_square_footage = (
         _to_number(request_data.get("square_footage"))
         or _to_number(project_payload.get("square_footage"))
@@ -478,6 +530,10 @@ def compose_decision_packet_input(
     provenance = dealshield_view_model.get("provenance") or {}
     if not isinstance(provenance, dict):
         provenance = {}
+    packet_disclosures = _clean_packet_financing_disclosures(
+        dealshield_view_model.get("dealshield_disclosures"),
+        has_financing_summary=bool(financing_summary_items),
+    )
 
     trade_items: List[Dict[str, Any]] = []
     total_trade_cost = sum(amount for amount in (_to_number(value) for value in trade_breakdown.values()) if amount is not None)
@@ -568,8 +624,9 @@ def compose_decision_packet_input(
             }
         ),
         "assumptions_not_modeled": {
+            "financing_summary": financing_summary if financing_summary_items else {},
             "financing_assumptions": dealshield_view_model.get("financing_assumptions"),
-            "disclosures": dealshield_view_model.get("dealshield_disclosures"),
+            "disclosures": packet_disclosures,
             "decision_summary": decision_summary,
             "not_modeled_reason": decision_summary.get("not_modeled_reason"),
         },
@@ -876,10 +933,37 @@ def _render_decision_metrics_table(table_block: Dict[str, Any]) -> str:
 
 
 def _render_assumptions(section: Dict[str, Any]) -> str:
+    financing_summary = _as_dict(section.get("financing_summary"))
+    financing_summary_items = [
+        item for item in _as_list(financing_summary.get("items")) if isinstance(item, dict)
+    ]
     assumptions = _as_dict(section.get("financing_assumptions"))
     disclosures = [item for item in _as_list(section.get("disclosures")) if _sanitize_text(item)]
     summary = _as_dict(section.get("decision_summary"))
     not_modeled = _sanitize_text(section.get("not_modeled_reason") or summary.get("not_modeled_reason"))
+
+    financing_summary_html = ""
+    if financing_summary_items:
+        financing_summary_rows = []
+        for item in financing_summary_items:
+            label = _sanitize_text(item.get("label"))
+            value = _format_financing_summary_value(item)
+            if not label or value == "—":
+                continue
+            financing_summary_rows.append(
+                "<div class=\"info-item\">"
+                f"<span class=\"info-label\">{html_module.escape(label)}</span>"
+                f"<span class=\"info-value\">{html_module.escape(value)}</span>"
+                "</div>"
+            )
+        if financing_summary_rows:
+            financing_summary_html = (
+                "<div class=\"subsection\">"
+                "<h3>Current Modeled Financing Summary</h3>"
+                "<div class=\"info-grid\">"
+                + "".join(financing_summary_rows)
+                + "</div></div>"
+            )
 
     rows = [
         ("Debt %", _format_percent(assumptions.get("debt_pct") or assumptions.get("ltv"))),
@@ -890,19 +974,29 @@ def _render_assumptions(section: Dict[str, Any]) -> str:
     ]
     rows = [row for row in rows if row[1].strip() and row[1] != "—"]
 
-    assumptions_html = (
-        "<div class=\"info-grid\">"
-        + "".join(
-            "<div class=\"info-item\">"
-            f"<span class=\"info-label\">{html_module.escape(label)}</span>"
-            f"<span class=\"info-value\">{html_module.escape(value)}</span>"
-            "</div>"
-            for label, value in rows
+    if rows:
+        assumptions_html = (
+            "<div class=\"subsection\">"
+            "<h3>Structured Financing Assumptions</h3>"
+            "<div class=\"info-grid\">"
+            + "".join(
+                "<div class=\"info-item\">"
+                f"<span class=\"info-label\">{html_module.escape(label)}</span>"
+                f"<span class=\"info-value\">{html_module.escape(value)}</span>"
+                "</div>"
+                for label, value in rows
+            )
+            + "</div></div>"
         )
-        + "</div>"
-        if rows
-        else "<div class=\"empty-note\">No financing assumptions provided.</div>"
-    )
+    elif financing_summary_html:
+        assumptions_html = (
+            "<div class=\"note-block\">"
+            "<strong>Structured financing boundary:</strong> Current modeled debt and source-mix outputs are shown above. "
+            "Structured financing assumptions such as term, amortization, IO, and layered debt are not yet modeled."
+            "</div>"
+        )
+    else:
+        assumptions_html = "<div class=\"empty-note\">No financing assumptions provided.</div>"
 
     disclosures_html = ""
     if disclosures:
@@ -924,7 +1018,12 @@ def _render_assumptions(section: Dict[str, Any]) -> str:
 
     return (
         "<section>"
-        "<h2>Assumptions / What’s Not Modeled</h2>"
+        + (
+            "<h2>Financing Summary / What’s Not Modeled</h2>"
+            if financing_summary_html
+            else "<h2>Assumptions / What’s Not Modeled</h2>"
+        )
+        + financing_summary_html
         + assumptions_html
         + disclosures_html
         + not_modeled_html
