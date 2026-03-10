@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DealShieldViewModel, DecisionStatus, Project } from '../../types';
+import { DealShieldViewModel, DecisionStatus, FinancingSummaryItem, Project } from '../../types';
 import { formatters, safeGet } from '../../utils/displayFormatters';
 import { formatPerSf } from '@/v2/utils/formatters';
 import { BackendDataMapper } from '../../utils/backendDataMapper';
@@ -90,6 +90,25 @@ const toFiniteNumber = (value: unknown): number | null => {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+};
+
+const formatFinancingSummaryValue = (item: FinancingSummaryItem): string => {
+  const decimals = typeof item.decimals === 'number' ? item.decimals : undefined;
+
+  switch (item.format) {
+    case 'currency':
+      return formatters.currency(item.value);
+    case 'percentage':
+      return formatters.percentage(item.value, decimals);
+    case 'multiple':
+      return `${item.value.toFixed(decimals ?? 2)}×`;
+    case 'basis_points': {
+      const rounded = Math.round(item.value);
+      return `${rounded > 0 ? '+' : ''}${rounded} bps`;
+    }
+    default:
+      return String(item.value);
+  }
 };
 
 const normalizeBackendDecision = (value: unknown): DecisionStatus | undefined => {
@@ -1244,6 +1263,13 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const totalProjectCost = totals.total_project_cost || 0;
   const constructionTotal = totals.hard_costs || 0;
   const softCostsTotal = totals.soft_costs || 0;
+  const financingSummaryItems = Array.isArray(displayData.financingSummary?.items)
+    ? displayData.financingSummary.items.map((item) => ({
+        key: item.id,
+        label: item.label,
+        value: formatFinancingSummaryValue(item),
+      }))
+    : [];
   
   if (DEBUG_EXECUTIVE) {
     // TRACE CONSTRUCTION COST ISSUE
@@ -3646,51 +3672,27 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
           <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-4 py-4 sm:px-6">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <DollarSign className="h-5 w-5" />
-              Financing Structure
+              Financing Summary
             </h3>
           </div>
           <div className="p-4 sm:p-6">
-            <div className="space-y-4">
-              {[
-                { name: 'Senior Debt', percent: 0.65, color: 'blue' },
-                { name: 'Mezzanine', percent: 0.15, color: 'purple' },
-                { name: 'Equity', percent: 0.20, color: 'green' }
-              ].map((item, idx) => (
-                <div key={idx} className="bg-white rounded-lg p-3 shadow-sm">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-semibold text-gray-700">{item.name} ({formatters.percentage(item.percent)})</span>
-                    <span className="font-bold text-gray-900">{formatters.currency(totalProjectCost * item.percent)}</span>
+            {financingSummaryItems.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {financingSummaryItems.map((item) => (
+                  <div key={item.key} className="bg-white rounded-lg p-4 shadow-sm border border-green-100">
+                    <p className="text-sm font-semibold text-gray-600">{item.label}</p>
+                    <p className="mt-1 text-lg font-bold text-gray-900">{item.value}</p>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                    <div 
-                      className={`h-3 bg-gradient-to-r from-${item.color}-500 to-${item.color}-600 rounded-full`}
-                      style={{ width: `${item.percent * 100}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-            
-            <div className="mt-6 pt-6 border-t border-green-200 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Weighted Rate</span>
-                <span className="font-bold text-gray-900">6.8%</span>
+                ))}
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Annual Debt Service</span>
-                <span className="font-bold text-gray-900">{formatters.currency(totalProjectCost * 0.65 * 0.068)}</span>
+            ) : (
+              <div className="bg-white rounded-lg p-4 shadow-sm border border-green-100">
+                <p className="text-sm font-semibold text-gray-900">No modeled financing metrics available.</p>
+                <p className="mt-1 text-sm text-gray-600">
+                  This project does not currently expose debt and equity outputs from the underwriting engine.
+                </p>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Interest During Construction</span>
-                <span className="font-bold text-gray-900">{formatters.currency(totalProjectCost * 0.044)}</span>
-              </div>
-              <div className="bg-green-100 rounded-lg p-3 mt-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-green-700">DSCR Target</span>
-                  <span className="font-bold text-green-800">{dscrTargetDisplay}</span>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
         </div>
 

@@ -26,6 +26,7 @@ from app.v2.config.master_config import (
 )
 from app.v2.services.industrial_override_extractor import extract_industrial_overrides
 from app.v2.services.dealshield_service import build_dealshield_view_model, DealShieldResolutionError
+from app.v2.services.financing_summary_service import build_financing_summary
 from app.v2.presentation.client_text_sanitizer import sanitize_client_text
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.core.building_taxonomy import normalize_building_type, validate_building_type
@@ -51,6 +52,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["v2"])
 DEBUG_TRACE_ENABLED = os.getenv("SPECSHARP_DEBUG_TRACE", "0").lower() in {"1", "true", "yes", "on"}
+
+
+def _attach_financing_summary(
+    calculation_data: Dict[str, Any], parsed_input: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    if not isinstance(calculation_data, dict):
+        return calculation_data
+    calculation_data["financing_summary"] = build_financing_summary(
+        calculation_data,
+        parsed_input=parsed_input,
+    )
+    return calculation_data
 
 
 def _infer_revenue_driver(building_type: Optional[str]) -> str:
@@ -508,6 +521,7 @@ async def analyze_project(
                 "key_count": payload.key_count,
             },
         )
+        result = _attach_financing_summary(result, parsed_input=parsed)
         
         # Add building_subtype for frontend compatibility
         parsed_with_compat = parsed.copy()
@@ -585,6 +599,14 @@ async def calculate_project(
             parsed_input_overrides={
                 "unit_count": payload.unit_count,
                 "key_count": payload.key_count,
+            },
+        )
+        result = _attach_financing_summary(
+            result,
+            parsed_input={
+                "building_type": payload.building_type,
+                "subtype": payload.subtype,
+                "ownership_type": payload.ownership_type,
             },
         )
         
@@ -1788,6 +1810,7 @@ def format_project_response(project: Project) -> dict:
     request_data = calculation_data.get("request_data") or calculation_data.get("parsed_input") or {}
     if not isinstance(request_data, dict):
         request_data = {}
+    calculation_data = _attach_financing_summary(calculation_data, parsed_input=request_data)
 
     return {
         # IDs - both formats

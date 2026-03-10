@@ -3,6 +3,7 @@
  * Single source of truth for where data lives in backend response
  */
 
+import type { FinancingSummaryContract } from '../types';
 import { safeGet } from './displayFormatters';
 
 const DEBUG_MAPPER =
@@ -65,8 +66,7 @@ export interface DisplayData {
   capRateSpreadBps: number | null;
   targetYield?: number | null;
   targetDscr?: number | null;
-  operatingExpenses?: number;
-  camCharges?: number;
+  financingSummary?: FinancingSummaryContract | null;
   
   // Investment decision
   investmentDecision: 'GO' | 'NO-GO' | 'PENDING';
@@ -202,6 +202,9 @@ export class BackendDataMapper {
     }
     
     const calculations = analysis?.calculations || analysis?.calculation_data || {};
+    const financingSummary = this.normalizeFinancingSummary(
+      calculations?.financing_summary || analysis?.financing_summary
+    );
     const rawTimeline =
       calculations?.project_timeline ||
       analysis?.project_timeline ||
@@ -897,6 +900,7 @@ export class BackendDataMapper {
       capRateSpreadBps: typeof ownership?.cap_rate_spread_bps === 'number' ? ownership.cap_rate_spread_bps : null,
       targetYield: targetYieldValue,
       targetDscr: targetDscrValue,
+      financingSummary,
       investmentDecision,
       feasible,
       decisionReason: investmentAnalysis.summary || investmentAnalysis.reason || this.generateDecisionReason(roi, npv, dscr),
@@ -905,11 +909,11 @@ export class BackendDataMapper {
       failedCriteria: Array.isArray(investmentAnalysis.failed_criteria) ? investmentAnalysis.failed_criteria : [],
       metricsTable: Array.isArray(investmentAnalysis.metrics_table) ? investmentAnalysis.metrics_table : [],
       feasibilityScore: investmentAnalysis.feasibility_score,
-      unitCount,
-      unitLabel,
-      unitType,
-      revenuePerUnit,
-      costPerUnit,
+      unitCount: unitCount ?? 0,
+      unitLabel: unitLabel ?? 'Units',
+      unitType: unitType ?? 'units',
+      revenuePerUnit: revenuePerUnit ?? 0,
+      costPerUnit: costPerUnit ?? 0,
       units: typeof unitCount === 'number' && unitCount > 0 ? unitCount : undefined,
       annualRevenuePerUnit,
       monthlyRevenuePerUnit,
@@ -979,6 +983,54 @@ export class BackendDataMapper {
     };
   }
   
+  private static normalizeFinancingSummary(value: any): FinancingSummaryContract | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null;
+    }
+
+    const rawItems = Array.isArray(value.items) ? value.items : [];
+    const items = rawItems
+      .filter((item: any) => item && typeof item === 'object' && !Array.isArray(item))
+      .map((item: any) => {
+        if (
+          typeof item.id !== 'string' ||
+          typeof item.label !== 'string' ||
+          typeof item.format !== 'string' ||
+          typeof item.value !== 'number' ||
+          !Number.isFinite(item.value)
+        ) {
+          return null;
+        }
+
+        const normalizedItem = {
+          id: item.id,
+          label: item.label,
+          value: item.value,
+          format: item.format as FinancingSummaryContract['items'][number]['format'],
+          decimals:
+            typeof item.decimals === 'number' && Number.isFinite(item.decimals)
+              ? item.decimals
+              : undefined,
+        };
+        return normalizedItem;
+      })
+      .filter(
+        (
+          item: FinancingSummaryContract['items'][number] | null
+        ): item is FinancingSummaryContract['items'][number] => item !== null
+      );
+
+    if (typeof value.family_id !== 'string' || typeof value.family_label !== 'string') {
+      return null;
+    }
+
+    return {
+      family_id: value.family_id as FinancingSummaryContract['family_id'],
+      family_label: value.family_label,
+      items,
+    };
+  }
+
   private static getEmptyDisplayData(): DisplayData {
     return {
       roi: 0,
@@ -997,6 +1049,7 @@ export class BackendDataMapper {
       capRateSpreadBps: null,
       targetYield: undefined,
       targetDscr: undefined,
+      financingSummary: null,
       investmentDecision: 'PENDING',
       feasible: undefined,
       decisionReason: 'Awaiting analysis...',
@@ -1130,7 +1183,7 @@ export class BackendDataMapper {
     if (!Array.isArray(departments)) departments = [];
     
     // Ensure all departments have required fields
-    return departments.map(dept => ({
+    return departments.map((dept: any) => ({
       name: dept.name || 'Department',
       percent: dept.percent || 0,
       amount: dept.amount || 0,

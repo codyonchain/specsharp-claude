@@ -198,6 +198,26 @@ export interface OwnershipAnalysis {
   };
 }
 
+export interface FinancingSummaryItem {
+  id: string;
+  label: string;
+  value: number;
+  format: 'currency' | 'percentage' | 'multiple' | 'basis_points';
+  decimals?: number;
+}
+
+export interface FinancingSummaryContract {
+  family_id:
+    | 'lease_rent_market_rate'
+    | 'hospitality'
+    | 'operating_business_fit_out_heavy'
+    | 'mixed_use_blended'
+    | 'high_capex_parking_special_case'
+    | 'subsidized_public_institutional';
+  family_label: string;
+  items: FinancingSummaryItem[];
+}
+
 export interface CalculationResult {
   project_info: {
     building_type: string;
@@ -227,6 +247,7 @@ export interface CalculationResult {
   soft_costs: Record<string, number>;
   totals: ProjectTotals;
   ownership_analysis?: OwnershipAnalysis;
+  financing_summary?: FinancingSummaryContract;
   calculation_trace: TraceEntry[];
   timestamp: string;
 }

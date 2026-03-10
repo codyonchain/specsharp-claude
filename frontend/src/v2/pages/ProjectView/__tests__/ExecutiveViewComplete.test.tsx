@@ -848,6 +848,87 @@ describe("ExecutiveViewComplete", () => {
     expect(screen.getByRole("button", { name: "Scenario" })).toBeInTheDocument();
   });
 
+  it("renders financing summary from the backend financing contract instead of rebuilding capital stack assumptions in the UI", () => {
+    const project = buildRestaurantProject();
+    project.analysis.calculations.financing_summary = {
+      family_id: "operating_business_fit_out_heavy",
+      family_label: "Operating-Business / Fit-Out-Heavy",
+      items: [
+        { id: "debt_amount", label: "Debt Amount", value: 2400000, format: "currency" },
+        { id: "equity_amount", label: "Equity Amount", value: 1300000, format: "currency" },
+        { id: "annual_debt_service", label: "Annual Debt Service", value: 295000, format: "currency" },
+        { id: "calculated_dscr", label: "Calculated DSCR", value: 1.46, format: "multiple", decimals: 2 },
+        { id: "target_dscr", label: "Target DSCR", value: 1.3, format: "multiple", decimals: 2 },
+      ],
+    };
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={project}
+          dealShieldData={restaurantDealShieldViewModel as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Financing Summary")).toBeInTheDocument();
+    expect(screen.getByText("Debt Amount")).toBeInTheDocument();
+    expect(screen.getByText("Equity Amount")).toBeInTheDocument();
+    expect(screen.getByText("Annual Debt Service")).toBeInTheDocument();
+    expect(screen.getByText("Calculated DSCR")).toBeInTheDocument();
+    expect(screen.getByText("Target DSCR")).toBeInTheDocument();
+    expect(screen.queryByText("Debt Rate")).not.toBeInTheDocument();
+    expect(screen.queryByText("Debt Ratio")).not.toBeInTheDocument();
+
+    expect(screen.queryByText("Financing Structure")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Senior Debt/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Mezzanine")).not.toBeInTheDocument();
+    expect(screen.queryByText("Weighted Rate")).not.toBeInTheDocument();
+    expect(screen.queryByText("Interest During Construction")).not.toBeInTheDocument();
+  });
+
+  it("renders subsidized financing summary fields without DSCR or yield lenses when the backend family suppresses them", () => {
+    const project = buildCrossTypeProject(
+      "multifamily",
+      "affordable_housing",
+      "multifamily_affordable_housing_v1"
+    );
+    project.analysis.calculations.financing_summary = {
+      family_id: "subsidized_public_institutional",
+      family_label: "Subsidized / Public / Institutional",
+      items: [
+        { id: "debt_amount", label: "Debt Amount", value: 1250000, format: "currency" },
+        { id: "equity_amount", label: "Equity Amount", value: 900000, format: "currency" },
+        { id: "grants_amount", label: "Grants", value: 600000, format: "currency" },
+        { id: "philanthropy_amount", label: "Philanthropy", value: 350000, format: "currency" },
+        { id: "debt_ratio", label: "Debt Ratio", value: 0.4, format: "percentage", decimals: 1 },
+      ],
+    };
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={project}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "multifamily_affordable_housing_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Debt Amount")).toBeInTheDocument();
+    expect(screen.getByText("Equity Amount")).toBeInTheDocument();
+    expect(screen.getByText("Grants")).toBeInTheDocument();
+    expect(screen.getByText("Philanthropy")).toBeInTheDocument();
+    expect(screen.getByText("Debt Ratio")).toBeInTheDocument();
+    expect(screen.queryByText("Annual Debt Service")).not.toBeInTheDocument();
+    expect(screen.queryByText("Calculated DSCR")).not.toBeInTheDocument();
+    expect(screen.queryByText("Target DSCR")).not.toBeInTheDocument();
+    expect(screen.queryByText("Yield on Cost")).not.toBeInTheDocument();
+  });
+
   it("renders canonical hospitality decision contract fields for both hotel profiles", () => {
     const { rerender } = render(
       <MemoryRouter>
