@@ -25,6 +25,9 @@ def _expected_payment_metrics(assumptions):
     [
         (BuildingType.MULTIFAMILY, "market_rate_apartments", 120_000, 30, 10, 0),
         (BuildingType.HOSPITALITY, "limited_service_hotel", 80_000, 25, 10, 12),
+        (BuildingType.MIXED_USE, "retail_residential", 120_000, 30, 10, 0),
+        (BuildingType.MIXED_USE, "office_residential", 120_000, 30, 10, 0),
+        (BuildingType.MIXED_USE, "urban_mixed", 120_000, 30, 10, 0),
     ],
 )
 def test_rollout_subtypes_emit_structured_financing_assumptions_with_amortizing_debt_service(
