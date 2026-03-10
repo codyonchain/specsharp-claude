@@ -636,10 +636,17 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
           id: item.id,
           label: item.label,
           costPerSF: item.cost_per_sf,
+          configuredCostPerSF:
+            typeof item.configured_cost_per_sf === 'number' && Number.isFinite(item.configured_cost_per_sf)
+              ? item.configured_cost_per_sf
+              : item.cost_per_sf,
           totalCost: item.total_cost,
+          pricingStatus:
+            item.pricing_status === 'included_in_baseline' ? 'included_in_baseline' : 'incremental',
         }))
     : [];
   const hasSpecialFeaturesBreakdown = specialFeaturesBreakdown.length > 0;
+  const showSpecialFeaturesSection = hasSpecialFeaturesBreakdown || specialFeaturesTotal > 0;
 
   const equipmentTotal =
     typeof calculations.construction_costs?.equipment_total === 'number'
@@ -1912,7 +1919,7 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
               </div>
             </div>
             
-            {specialFeaturesTotal > 0 && (
+            {showSpecialFeaturesSection && (
               <>
                 <div className="flex items-center gap-2">
                   <span className="text-2xl text-gray-400 font-bold">+</span>
@@ -1922,29 +1929,45 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
                   <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl p-6 border border-orange-200">
                     <p className="text-sm text-orange-700 uppercase tracking-wider mb-3 font-medium">Special Features</p>
                     <p className="text-3xl font-bold text-orange-600">{formatCurrency(specialFeaturesTotal)}</p>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Backend aggregate (`special_features_total`) applied to hard costs.
-                    </p>
+                    <p className="mt-1 text-xs text-gray-500">Selected features and any applied premium are shown below.</p>
                     <div className="mt-3 space-y-2">
                       {hasSpecialFeaturesBreakdown ? (
-                        specialFeaturesBreakdown.map((feature) => (
-                          <div
-                            key={feature.id}
-                            className="rounded-lg border border-orange-100 bg-white/70 px-3 py-2"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-sm text-gray-800">{feature.label}</p>
-                              <p className="text-sm font-semibold text-gray-900">
-                                {formatCurrency(feature.totalCost)}
-                              </p>
+                        specialFeaturesBreakdown.map((feature) => {
+                          const isIncludedInBaseline = feature.pricingStatus === 'included_in_baseline';
+                          const statusLabel = isIncludedInBaseline
+                            ? 'Included in baseline'
+                            : 'Incremental premium applied';
+
+                          return (
+                            <div
+                              key={feature.id}
+                              className="rounded-lg border border-orange-100 bg-white/70 px-3 py-2"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm text-gray-800">{feature.label}</p>
+                                  <p
+                                    className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                                      isIncludedInBaseline
+                                        ? 'bg-emerald-50 text-emerald-700'
+                                        : 'bg-orange-100 text-orange-700'
+                                    }`}
+                                  >
+                                    {statusLabel}
+                                  </p>
+                                </div>
+                                <p className="text-sm font-semibold text-gray-900">
+                                  {formatCurrency(feature.totalCost)}
+                                </p>
+                              </div>
+                              {!isIncludedInBaseline && squareFootage > 0 && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {formatCurrency(feature.costPerSF)}/SF × {formatNumber(squareFootage)} SF
+                                </p>
+                              )}
                             </div>
-                            {squareFootage > 0 && (
-                              <p className="text-xs text-gray-500 mt-1">
-                                {formatCurrency(feature.costPerSF)}/SF × {formatNumber(squareFootage)} SF
-                              </p>
-                            )}
-                          </div>
-                        ))
+                          );
+                        })
                       ) : (
                         <p className="text-sm text-gray-700">
                           Selected feature IDs were not provided in project data; showing aggregate only.

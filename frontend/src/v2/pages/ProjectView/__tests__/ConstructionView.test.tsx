@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { ConstructionView } from "../ConstructionView";
 
 const HOSPITALITY_PROFILE_IDS = [
@@ -2264,6 +2264,65 @@ describe("ConstructionView", () => {
     expect(screen.getByText("Redundant Switchgear + UPS")).toBeInTheDocument();
     expect(screen.getByText("Nurse Call + Low Voltage Backbone")).toBeInTheDocument();
     expect(screen.getByText("Imaging + OR Power Conditioning")).toBeInTheDocument();
+  });
+
+  it("shows included-in-baseline and incremental special features with status-specific copy", () => {
+    const project = buildRestaurantProject("subtype");
+    project.analysis.calculations.construction_costs.special_features_total = 120000;
+    project.analysis.calculations.construction_costs.special_features_breakdown = [
+      {
+        id: "outdoor_seating",
+        label: "Outdoor Seating",
+        pricing_status: "included_in_baseline",
+        configured_cost_per_sf: 35,
+        cost_per_sf: 0,
+        total_cost: 0,
+      },
+      {
+        id: "wine_cellar",
+        label: "Wine Cellar",
+        pricing_status: "incremental",
+        configured_cost_per_sf: 15,
+        cost_per_sf: 15,
+        total_cost: 120000,
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+
+    const includedRow = screen.getByText("Outdoor Seating").closest(".rounded-lg");
+    expect(includedRow).not.toBeNull();
+    expect(within(includedRow as HTMLElement).getByText("Included in baseline")).toBeInTheDocument();
+    expect(within(includedRow as HTMLElement).getByText("$0")).toBeInTheDocument();
+
+    const incrementalRow = screen.getByText("Wine Cellar").closest(".rounded-lg");
+    expect(incrementalRow).not.toBeNull();
+    expect(within(incrementalRow as HTMLElement).getByText("Incremental premium applied")).toBeInTheDocument();
+    expect(within(incrementalRow as HTMLElement).getByText("$120,000")).toBeInTheDocument();
+    expect(within(incrementalRow as HTMLElement).getByText("$15/SF × 8,000 SF")).toBeInTheDocument();
+  });
+
+  it("keeps included-in-baseline special features visible when the applied aggregate is zero", () => {
+    const project = buildHospitalityProject("hospitality_full_service_hotel_v1", "subtype");
+    project.analysis.calculations.construction_costs.special_features_total = 0;
+    project.analysis.calculations.construction_costs.special_features_breakdown = [
+      {
+        id: "ballroom",
+        label: "Ballroom",
+        pricing_status: "included_in_baseline",
+        configured_cost_per_sf: 50,
+        cost_per_sf: 0,
+        total_cost: 0,
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+
+    expect(screen.getByText("Special Features")).toBeInTheDocument();
+    const ballroomRow = screen.getByText("Ballroom").closest(".rounded-lg");
+    expect(ballroomRow).not.toBeNull();
+    expect(within(ballroomRow as HTMLElement).getByText("Included in baseline")).toBeInTheDocument();
+    expect(within(ballroomRow as HTMLElement).getByText("$0")).toBeInTheDocument();
   });
 
   it("keeps per-feature special-feature breakdown visible for imaging, urgent care, and medical-office subtype fixtures", () => {

@@ -146,8 +146,10 @@ export interface ConstructionCosts {
   special_features_breakdown?: Array<{
     id: string;
     cost_per_sf: number;
+    configured_cost_per_sf?: number;
     total_cost: number;
     label: string;
+    pricing_status?: 'included_in_baseline' | 'incremental';
   }>;
 }
 
