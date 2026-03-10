@@ -28,6 +28,8 @@ def _expected_payment_metrics(assumptions):
         (BuildingType.MIXED_USE, "retail_residential", 120_000, 30, 10, 0),
         (BuildingType.MIXED_USE, "office_residential", 120_000, 30, 10, 0),
         (BuildingType.MIXED_USE, "urban_mixed", 120_000, 30, 10, 0),
+        (BuildingType.INDUSTRIAL, "manufacturing", 120_000, 25, 10, 0),
+        (BuildingType.INDUSTRIAL, "cold_storage", 120_000, 25, 10, 0),
     ],
 )
 def test_rollout_subtypes_emit_structured_financing_assumptions_with_amortizing_debt_service(

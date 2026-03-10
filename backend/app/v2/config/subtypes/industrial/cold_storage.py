@@ -46,6 +46,9 @@ CONFIG = (
                 equity_ratio=0.30,
                 target_dscr=1.35,
                 target_roi=0.12,
+                amort_years=25,
+                loan_term_years=10,
+                interest_only_months=0,
             )
         },
         nlp=NLPConfig(

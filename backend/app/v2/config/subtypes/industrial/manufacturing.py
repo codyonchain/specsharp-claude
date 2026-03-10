@@ -48,6 +48,9 @@ CONFIG = (
                 equity_ratio=0.30,
                 target_dscr=1.20,
                 target_roi=0.08,  # Market standard 8% for manufacturing
+                amort_years=25,
+                loan_term_years=10,
+                interest_only_months=0,
             )
         },
         nlp=NLPConfig(
