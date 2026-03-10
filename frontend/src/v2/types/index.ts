@@ -215,6 +215,8 @@ export interface FinancingSummaryContract {
     | 'high_capex_parking_special_case'
     | 'subsidized_public_institutional';
   family_label: string;
+  subtitle: string;
+  note?: string;
   items: FinancingSummaryItem[];
 }
 

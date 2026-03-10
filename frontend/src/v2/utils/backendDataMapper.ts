@@ -1020,13 +1020,19 @@ export class BackendDataMapper {
         ): item is FinancingSummaryContract['items'][number] => item !== null
       );
 
-    if (typeof value.family_id !== 'string' || typeof value.family_label !== 'string') {
+    if (
+      typeof value.family_id !== 'string' ||
+      typeof value.family_label !== 'string' ||
+      typeof value.subtitle !== 'string'
+    ) {
       return null;
     }
 
     return {
       family_id: value.family_id as FinancingSummaryContract['family_id'],
       family_label: value.family_label,
+      subtitle: value.subtitle,
+      note: typeof value.note === 'string' ? value.note : undefined,
       items,
     };
   }

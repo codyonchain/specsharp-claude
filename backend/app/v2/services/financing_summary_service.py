@@ -30,6 +30,22 @@ _FAMILY_LABELS = {
     SUBSIDIZED_PUBLIC_INSTITUTIONAL_FAMILY_ID: "Subsidized / Public / Institutional",
 }
 
+_FAMILY_SUBTITLES = {
+    LEASE_RENT_MARKET_RATE_FAMILY_ID: "Modeled source mix and stabilized debt coverage.",
+    HOSPITALITY_FAMILY_ID: "Modeled source mix and stabilized hotel debt coverage.",
+    OPERATING_BUSINESS_FIT_OUT_HEAVY_FAMILY_ID: "Modeled debt coverage against operator-driven NOI.",
+    MIXED_USE_BLENDED_FAMILY_ID: "Modeled blended source mix and blended debt coverage.",
+    HIGH_CAPEX_PARKING_SPECIAL_CASE_FAMILY_ID: "Modeled debt coverage with simplified high-capex assumptions.",
+    SUBSIDIZED_PUBLIC_INSTITUTIONAL_FAMILY_ID: "Modeled source mix only; financing depth remains intentionally limited.",
+}
+
+_FAMILY_NOTES = {
+    OPERATING_BUSINESS_FIT_OUT_HEAVY_FAMILY_ID: "Interpret as directional; coverage depends on operating assumptions.",
+    MIXED_USE_BLENDED_FAMILY_ID: "Coverage is blended across uses, not component-specific.",
+    HIGH_CAPEX_PARKING_SPECIAL_CASE_FAMILY_ID: "Specialized lender structures are not modeled.",
+    SUBSIDIZED_PUBLIC_INSTITUTIONAL_FAMILY_ID: "Coverage-style metrics stay intentionally constrained for this family.",
+}
+
 _ITEM_META = {
     "debt_amount": {"label": "Debt Amount", "format": "currency"},
     "equity_amount": {"label": "Equity Amount", "format": "currency"},
@@ -292,5 +308,7 @@ def build_financing_summary(
     return {
         "family_id": family_id,
         "family_label": _FAMILY_LABELS[family_id],
+        "subtitle": _FAMILY_SUBTITLES[family_id],
+        "note": _FAMILY_NOTES.get(family_id),
         "items": items,
     }

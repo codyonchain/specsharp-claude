@@ -853,6 +853,8 @@ describe("ExecutiveViewComplete", () => {
     project.analysis.calculations.financing_summary = {
       family_id: "operating_business_fit_out_heavy",
       family_label: "Operating-Business / Fit-Out-Heavy",
+      subtitle: "Modeled debt coverage against operator-driven NOI.",
+      note: "Interpret as directional; coverage depends on operating assumptions.",
       items: [
         { id: "debt_amount", label: "Debt Amount", value: 2400000, format: "currency" },
         { id: "equity_amount", label: "Equity Amount", value: 1300000, format: "currency" },
@@ -872,6 +874,8 @@ describe("ExecutiveViewComplete", () => {
     );
 
     expect(screen.getByText("Financing Summary")).toBeInTheDocument();
+    expect(screen.getByText("Modeled debt coverage against operator-driven NOI.")).toBeInTheDocument();
+    expect(screen.getByText("Interpret as directional; coverage depends on operating assumptions.")).toBeInTheDocument();
     expect(screen.getByText("Debt Amount")).toBeInTheDocument();
     expect(screen.getByText("Equity Amount")).toBeInTheDocument();
     expect(screen.getByText("Annual Debt Service")).toBeInTheDocument();
@@ -896,6 +900,8 @@ describe("ExecutiveViewComplete", () => {
     project.analysis.calculations.financing_summary = {
       family_id: "subsidized_public_institutional",
       family_label: "Subsidized / Public / Institutional",
+      subtitle: "Modeled source mix only; financing depth remains intentionally limited.",
+      note: "Coverage-style metrics stay intentionally constrained for this family.",
       items: [
         { id: "debt_amount", label: "Debt Amount", value: 1250000, format: "currency" },
         { id: "equity_amount", label: "Equity Amount", value: 900000, format: "currency" },
@@ -920,6 +926,8 @@ describe("ExecutiveViewComplete", () => {
 
     expect(screen.getByText("Debt Amount")).toBeInTheDocument();
     expect(screen.getByText("Equity Amount")).toBeInTheDocument();
+    expect(screen.getByText("Modeled source mix only; financing depth remains intentionally limited.")).toBeInTheDocument();
+    expect(screen.getByText("Coverage-style metrics stay intentionally constrained for this family.")).toBeInTheDocument();
     expect(screen.getByText("Grants")).toBeInTheDocument();
     expect(screen.getByText("Philanthropy")).toBeInTheDocument();
     expect(screen.getByText("Debt Ratio")).toBeInTheDocument();

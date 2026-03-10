@@ -3674,16 +3674,28 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
               <DollarSign className="h-5 w-5" />
               Financing Summary
             </h3>
+            {displayData.financingSummary?.subtitle ? (
+              <p className="mt-1 text-sm text-green-50/90">
+                {displayData.financingSummary.subtitle}
+              </p>
+            ) : null}
           </div>
           <div className="p-4 sm:p-6">
             {financingSummaryItems.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {financingSummaryItems.map((item) => (
-                  <div key={item.key} className="bg-white rounded-lg p-4 shadow-sm border border-green-100">
-                    <p className="text-sm font-semibold text-gray-600">{item.label}</p>
-                    <p className="mt-1 text-lg font-bold text-gray-900">{item.value}</p>
-                  </div>
-                ))}
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {financingSummaryItems.map((item) => (
+                    <div key={item.key} className="bg-white rounded-lg p-4 shadow-sm border border-green-100">
+                      <p className="text-sm font-semibold text-gray-600">{item.label}</p>
+                      <p className="mt-1 text-lg font-bold text-gray-900">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+                {displayData.financingSummary?.note ? (
+                  <p className="text-xs sm:text-sm text-gray-600 bg-white/80 rounded-lg border border-green-100 px-3 py-2">
+                    {displayData.financingSummary.note}
+                  </p>
+                ) : null}
               </div>
             ) : (
               <div className="bg-white rounded-lg p-4 shadow-sm border border-green-100">
