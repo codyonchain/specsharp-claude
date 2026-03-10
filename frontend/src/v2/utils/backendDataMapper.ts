@@ -203,7 +203,7 @@ export class BackendDataMapper {
     
     const calculations = analysis?.calculations || analysis?.calculation_data || {};
     const financingSummary = this.normalizeFinancingSummary(
-      calculations?.financing_summary || analysis?.financing_summary
+      calculations?.financing_summary
     );
     const rawTimeline =
       calculations?.project_timeline ||
