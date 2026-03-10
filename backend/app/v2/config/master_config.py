@@ -90,6 +90,9 @@ class FinancingTerms:
     grants_ratio: float = 0.0
     target_dscr: float = 1.25
     target_roi: float = 0.08
+    amort_years: Optional[int] = None
+    loan_term_years: Optional[int] = None
+    interest_only_months: int = 0
 
 @dataclass
 class NLPConfig:
@@ -1471,6 +1474,36 @@ def validate_config():
                 if abs(ratio_sum - 1.0) > 0.01:
                     errors.append(f"{building_type.value}/{subtype}/{ownership.value}: "
                                 f"Financing ratios sum to {ratio_sum:.2f}, not 1.0")
+
+                amort_years = terms.amort_years
+                loan_term_years = terms.loan_term_years
+                interest_only_months = terms.interest_only_months
+
+                if amort_years is not None and amort_years < 0:
+                    errors.append(
+                        f"{building_type.value}/{subtype}/{ownership.value}: amort_years must be non-negative"
+                    )
+                if loan_term_years is not None and loan_term_years < 0:
+                    errors.append(
+                        f"{building_type.value}/{subtype}/{ownership.value}: loan_term_years must be non-negative"
+                    )
+                if interest_only_months < 0:
+                    errors.append(
+                        f"{building_type.value}/{subtype}/{ownership.value}: interest_only_months must be non-negative"
+                    )
+
+                has_amort = amort_years is not None
+                has_loan_term = loan_term_years is not None
+                if has_amort != has_loan_term:
+                    errors.append(
+                        f"{building_type.value}/{subtype}/{ownership.value}: "
+                        "amort_years and loan_term_years must both be set together"
+                    )
+                if loan_term_years is not None and interest_only_months > loan_term_years * 12:
+                    errors.append(
+                        f"{building_type.value}/{subtype}/{ownership.value}: "
+                        "interest_only_months cannot exceed loan_term_years * 12"
+                    )
     
     return errors
 

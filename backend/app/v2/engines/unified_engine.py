@@ -1360,6 +1360,7 @@ class UnifiedEngine:
             },
         )
         ownership_analysis = ownership_bundle['ownership_analysis']
+        financing_assumptions = ownership_bundle['financing_assumptions']
         revenue_data = ownership_bundle['revenue_data']
         flex_revenue_per_sf = ownership_bundle['flex_revenue_per_sf']
         
@@ -1553,6 +1554,9 @@ class UnifiedEngine:
             'calculation_trace': self.calculation_trace,
             'timestamp': datetime.now().isoformat()
         }
+
+        if financing_assumptions:
+            result['financing_assumptions'] = financing_assumptions
 
         profile_id = getattr(building_config, "dealshield_tile_profile", None)
         if isinstance(profile_id, str) and profile_id.strip():
@@ -3248,10 +3252,12 @@ class UnifiedEngine:
         calculation_context: Dict[str, Any],
     ) -> Dict[str, Any]:
         ownership_analysis = None
+        financing_assumptions: Dict[str, Any] = {}
         revenue_data = None
         flex_revenue_per_sf = None
 
         if ownership_type in building_config.ownership_types:
+            financing_terms = building_config.ownership_types[ownership_type]
             revenue_data = self.calculate_ownership_analysis(calculation_context)
 
             revenue_analysis_for_financing = revenue_data.get('revenue_analysis') if revenue_data else None
@@ -3262,7 +3268,7 @@ class UnifiedEngine:
 
             ownership_analysis = self._calculate_ownership(
                 total_project_cost,
-                building_config.ownership_types[ownership_type],
+                financing_terms,
                 revenue_analysis=revenue_analysis_for_financing
             )
 
@@ -3306,11 +3312,87 @@ class UnifiedEngine:
                         'calculated_dscr': recalculated_dscr
                     })
 
+            financing_assumptions = self._build_financing_assumptions(
+                total_cost=total_project_cost,
+                financing_terms=financing_terms,
+                ownership_analysis=ownership_analysis,
+            )
+
         return {
             'ownership_analysis': ownership_analysis,
+            'financing_assumptions': financing_assumptions,
             'revenue_data': revenue_data,
             'flex_revenue_per_sf': flex_revenue_per_sf,
         }
+
+    def _calculate_structured_debt_service(
+        self,
+        debt_amount: float,
+        financing_terms: Any,
+    ) -> Tuple[float, float]:
+        debt_rate = float(getattr(financing_terms, 'debt_rate', 0) or 0)
+        amort_years = getattr(financing_terms, 'amort_years', None)
+        loan_term_years = getattr(financing_terms, 'loan_term_years', None)
+
+        if debt_amount <= 0:
+            return 0.0, 0.0
+
+        has_structured_terms = (
+            isinstance(amort_years, int)
+            and amort_years > 0
+            and isinstance(loan_term_years, int)
+            and loan_term_years > 0
+        )
+        if not has_structured_terms:
+            annual_debt_service = debt_amount * debt_rate
+            return annual_debt_service, annual_debt_service / 12 if annual_debt_service else 0.0
+
+        amort_months = amort_years * 12
+        monthly_rate = debt_rate / 12
+        if monthly_rate <= 0:
+            monthly_debt_service = debt_amount / amort_months
+        else:
+            monthly_debt_service = (
+                debt_amount
+                * monthly_rate
+                / (1 - math.pow(1 + monthly_rate, -amort_months))
+            )
+        return monthly_debt_service * 12, monthly_debt_service
+
+    def _build_financing_assumptions(
+        self,
+        total_cost: float,
+        financing_terms: Any,
+        ownership_analysis: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        amort_years = getattr(financing_terms, 'amort_years', None)
+        loan_term_years = getattr(financing_terms, 'loan_term_years', None)
+        if amort_years is None or loan_term_years is None:
+            return {}
+
+        financing_sources = ownership_analysis.get('financing_sources') if isinstance(ownership_analysis, dict) else {}
+        debt_metrics = ownership_analysis.get('debt_metrics') if isinstance(ownership_analysis, dict) else {}
+        debt_amount = financing_sources.get('debt_amount') if isinstance(financing_sources, dict) else None
+        equity_amount = financing_sources.get('equity_amount') if isinstance(financing_sources, dict) else None
+        debt_ratio = getattr(financing_terms, 'debt_ratio', None)
+        if debt_ratio is None and isinstance(debt_amount, (int, float)) and total_cost > 0:
+            debt_ratio = float(debt_amount) / total_cost
+
+        assumptions = {
+            'debt_amount': debt_amount,
+            'equity_amount': equity_amount,
+            'debt_ratio': debt_ratio,
+            'debt_pct': debt_ratio,
+            'interest_rate_pct': getattr(financing_terms, 'debt_rate', None),
+            'amort_years': amort_years,
+            'loan_term_years': loan_term_years,
+            'interest_only_months': getattr(financing_terms, 'interest_only_months', 0),
+            'annual_debt_service': debt_metrics.get('annual_debt_service') if isinstance(debt_metrics, dict) else None,
+            'monthly_debt_service': debt_metrics.get('monthly_debt_service') if isinstance(debt_metrics, dict) else None,
+            'target_dscr': debt_metrics.get('target_dscr') if isinstance(debt_metrics, dict) else getattr(financing_terms, 'target_dscr', None),
+            'calculated_dscr': debt_metrics.get('calculated_dscr') if isinstance(debt_metrics, dict) else None,
+        }
+        return {key: value for key, value in assumptions.items() if value is not None}
     
     def _calculate_ownership(
         self,
@@ -3327,8 +3409,10 @@ class UnifiedEngine:
         grants_amount = total_cost * financing_terms.grants_ratio
         
         # Calculate debt service
-        annual_debt_service = debt_amount * financing_terms.debt_rate
-        monthly_debt_service = annual_debt_service / 12
+        annual_debt_service, monthly_debt_service = self._calculate_structured_debt_service(
+            debt_amount,
+            financing_terms,
+        )
         
         # Prefer NOI from revenue analysis when available so DSCR matches frontend revenue panel
         noi_from_revenue = None

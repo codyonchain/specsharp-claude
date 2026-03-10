@@ -6,7 +6,7 @@ from app.services.decision_packet_export import (
 )
 
 
-def _build_project_payload(include_financing_summary: bool) -> dict:
+def _build_project_payload(include_financing_summary: bool, include_financing_assumptions: bool = False) -> dict:
     calculation_data = {
         "project_info": {
             "building_type": "multifamily",
@@ -42,6 +42,21 @@ def _build_project_payload(include_financing_summary: bool) -> dict:
                 {"id": "debt_ratio", "label": "Debt Ratio", "value": 0.649, "format": "percentage", "decimals": 1},
                 {"id": "calculated_dscr", "label": "Calculated DSCR", "value": 1.46, "format": "multiple", "decimals": 2},
             ],
+        }
+    if include_financing_assumptions:
+        calculation_data["financing_assumptions"] = {
+            "debt_amount": 2_400_000,
+            "equity_amount": 1_300_000,
+            "debt_ratio": 0.649,
+            "debt_pct": 0.649,
+            "interest_rate_pct": 0.058,
+            "amort_years": 30,
+            "loan_term_years": 10,
+            "interest_only_months": 0,
+            "annual_debt_service": 168_444.85,
+            "monthly_debt_service": 14_037.07,
+            "target_dscr": 1.20,
+            "calculated_dscr": 1.46,
         }
 
     return {
@@ -143,3 +158,45 @@ def test_packet_keeps_legacy_assumptions_fallback_without_financing_summary():
     assert "Assumptions / What" in html
     assert "Current Modeled Financing Summary" not in html
     assert "No financing assumptions provided." in html
+
+
+def test_packet_renders_structured_financing_assumptions_from_canonical_contract():
+    project = SimpleNamespace(
+        name="Sunset Residences",
+        location="Dallas, TX",
+        building_type="multifamily",
+        square_footage=12_000,
+        total_cost=3_700_000,
+        cost_per_sqft=308.33,
+        project_id="proj-3",
+    )
+    project_payload = _build_project_payload(
+        include_financing_summary=True,
+        include_financing_assumptions=True,
+    )
+    packet = compose_decision_packet_input(
+        project,
+        project_payload,
+        {"subtype": "market_rate_apartments"},
+        _build_dealshield_view_model(),
+        "SpecSharp Capital",
+    )
+
+    assumptions_section = packet["assumptions_not_modeled"]
+    assert assumptions_section["financing_assumptions"]["amort_years"] == 30
+    assert assumptions_section["financing_assumptions"]["loan_term_years"] == 10
+    assert assumptions_section["financing_assumptions"]["interest_only_months"] == 0
+    assert assumptions_section["financing_assumptions"]["annual_debt_service"] == 168_444.85
+    assert assumptions_section["financing_assumptions"]["calculated_dscr"] == 1.46
+
+    html = render_decision_packet_html(packet)
+    assert "Structured Financing Assumptions" in html
+    assert "Amortization" in html
+    assert "30 yrs" in html
+    assert "Loan Term" in html
+    assert "10 yrs" in html
+    assert "Annual Debt Service" in html
+    assert "$168,445" in html
+    assert "Calculated DSCR" in html
+    assert "1.46x" in html
+    assert "Structured financing assumptions such as term, amortization, IO, and layered debt are not yet modeled." not in html

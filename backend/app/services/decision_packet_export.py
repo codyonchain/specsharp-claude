@@ -432,6 +432,11 @@ def compose_decision_packet_input(
         for item in _as_list(financing_summary.get("items"))
         if isinstance(item, dict) and _sanitize_text(item.get("label")) and _to_number(item.get("value")) is not None
     ]
+    financing_assumptions = calculation_data.get("financing_assumptions")
+    if not isinstance(financing_assumptions, dict):
+        financing_assumptions = dealshield_view_model.get("financing_assumptions")
+    if not isinstance(financing_assumptions, dict):
+        financing_assumptions = {}
 
     cover_square_footage = (
         _to_number(request_data.get("square_footage"))
@@ -625,7 +630,7 @@ def compose_decision_packet_input(
         ),
         "assumptions_not_modeled": {
             "financing_summary": financing_summary if financing_summary_items else {},
-            "financing_assumptions": dealshield_view_model.get("financing_assumptions"),
+            "financing_assumptions": financing_assumptions,
             "disclosures": packet_disclosures,
             "decision_summary": decision_summary,
             "not_modeled_reason": decision_summary.get("not_modeled_reason"),
@@ -971,6 +976,10 @@ def _render_assumptions(section: Dict[str, Any]) -> str:
         ("Amortization", _sanitize_text(assumptions.get("amort_years")) + (" yrs" if assumptions.get("amort_years") is not None else "")),
         ("Loan Term", _sanitize_text(assumptions.get("loan_term_years")) + (" yrs" if assumptions.get("loan_term_years") is not None else "")),
         ("Interest-only", _sanitize_text(assumptions.get("interest_only_months")) + (" mo" if assumptions.get("interest_only_months") is not None else "")),
+        ("Annual Debt Service", _format_money(assumptions.get("annual_debt_service"))),
+        ("Monthly Debt Service", _format_money(assumptions.get("monthly_debt_service"))),
+        ("Target DSCR", _format_ratio(assumptions.get("target_dscr"))),
+        ("Calculated DSCR", _format_ratio(assumptions.get("calculated_dscr"))),
     ]
     rows = [row for row in rows if row[1].strip() and row[1] != "—"]
 

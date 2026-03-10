@@ -272,6 +272,10 @@ def _dealshield_render_assumptions(financing_assumptions: Any, disclosures: list
                 ("Rate", _dealshield_format_assumption_percent(financing_assumptions.get("interest_rate_pct"))),
                 ("Amortization", _dealshield_format_assumption_years(financing_assumptions.get("amort_years"))),
                 ("Loan term", _dealshield_format_assumption_years(financing_assumptions.get("loan_term_years"))),
+                ("Annual debt service", _dealshield_format_value(financing_assumptions.get("annual_debt_service"), "amount")),
+                ("Monthly debt service", _dealshield_format_value(financing_assumptions.get("monthly_debt_service"), "amount")),
+                ("Target DSCR", _dealshield_format_value(financing_assumptions.get("target_dscr"), "dscr")),
+                ("Calculated DSCR", _dealshield_format_value(financing_assumptions.get("calculated_dscr"), "dscr")),
             ]
         )
         io_value = financing_assumptions.get("interest_only_months")
