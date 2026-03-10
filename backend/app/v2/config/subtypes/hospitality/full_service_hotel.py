@@ -78,6 +78,13 @@ CONFIG = (
             "conference_center": 45,
             "rooftop_bar": 55,
         },
+        special_feature_pricing_statuses={
+            "ballroom": "included_in_baseline",
+            "restaurant": "included_in_baseline",
+            "spa": "incremental",
+            "conference_center": "included_in_baseline",
+            "rooftop_bar": "included_in_baseline",
+        },
         base_revenue_per_sf_annual=80,
         base_revenue_per_room_annual=120000,
         rooms_per_sf=0.002,

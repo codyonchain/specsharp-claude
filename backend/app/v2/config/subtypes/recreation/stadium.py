@@ -86,6 +86,13 @@ CONFIG = (
             "video_board": 100,
             "retractable_roof": 200,
         },
+        special_feature_pricing_statuses={
+            "luxury_boxes": "included_in_baseline",
+            "club_level": "included_in_baseline",
+            "press_box": "included_in_baseline",
+            "video_board": "included_in_baseline",
+            "retractable_roof": "incremental",
+        },
         base_revenue_per_sf_annual=250,
         base_revenue_per_seat_annual=500,
         seats_per_sf=0.05,

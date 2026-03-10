@@ -73,6 +73,13 @@ CONFIG = (
             "security_booth": 15,
             "ventilation_upgrade": 25,
         },
+        special_feature_pricing_statuses={
+            "waterproofing": "included_in_baseline",
+            "sump_pumps": "included_in_baseline",
+            "vehicle_lifts": "incremental",
+            "security_booth": "incremental",
+            "ventilation_upgrade": "incremental",
+        },
         base_revenue_per_sf_annual=60,
         base_revenue_per_space_monthly=200,
         spaces_per_sf=0.0035,

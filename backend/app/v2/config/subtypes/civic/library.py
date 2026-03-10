@@ -88,6 +88,13 @@ CONFIG = (
             "community_rooms": 20,
             "maker_space_mep": 40,
         },
+        special_feature_pricing_statuses={
+            "stacks_load_reinforcement": "included_in_baseline",
+            "acoustic_treatment": "included_in_baseline",
+            "daylighting_controls": "included_in_baseline",
+            "community_rooms": "incremental",
+            "maker_space_mep": "included_in_baseline",
+        },
         base_revenue_per_sf_annual=0,
         occupancy_rate_base=1.0,
         occupancy_rate_premium=1.0,

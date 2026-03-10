@@ -683,20 +683,98 @@ def test_restaurant_special_features_math_and_breakdown_reconcile_for_all_subtyp
         )
 
         config = get_building_config(BuildingType.RESTAURANT, subtype)
-        expected_delta = float(config.special_features[feature_key]) * square_footage
+        configured_cost_per_sf = float(config.special_features[feature_key])
+        expected_status = (config.special_feature_pricing_statuses or {}).get(feature_key, "incremental")
+        expected_delta = (
+            0.0
+            if expected_status == "included_in_baseline"
+            else configured_cost_per_sf * square_footage
+        )
 
         base_total = float(baseline["construction_costs"]["special_features_total"])
         feature_total = float(with_feature["construction_costs"]["special_features_total"])
         delta = feature_total - base_total
-        assert delta > 0
         assert delta == pytest.approx(expected_delta, rel=1e-3)
 
         breakdown = with_feature["construction_costs"]["special_features_breakdown"]
         assert isinstance(breakdown, list) and breakdown
-        breakdown_map = {entry.get("id"): float(entry.get("total_cost", 0.0) or 0.0) for entry in breakdown}
+        breakdown_map = {
+            entry.get("id"): entry
+            for entry in breakdown
+            if isinstance(entry, dict) and entry.get("id")
+        }
         assert feature_key in breakdown_map
-        assert breakdown_map[feature_key] == pytest.approx(expected_delta, rel=1e-3)
-        assert sum(breakdown_map.values()) == pytest.approx(feature_total, rel=1e-3)
+        feature_entry = breakdown_map[feature_key]
+        assert feature_entry.get("pricing_status") == expected_status
+        assert float(feature_entry.get("configured_cost_per_sf", 0.0) or 0.0) == pytest.approx(
+            configured_cost_per_sf,
+            rel=1e-3,
+        )
+        expected_applied_cost_per_sf = (
+            0.0 if expected_status == "included_in_baseline" else configured_cost_per_sf
+        )
+        assert float(feature_entry.get("cost_per_sf", 0.0) or 0.0) == pytest.approx(
+            expected_applied_cost_per_sf,
+            rel=1e-3,
+        )
+        assert float(feature_entry.get("total_cost", 0.0) or 0.0) == pytest.approx(expected_delta, rel=1e-3)
+        assert sum(
+            float(item.get("total_cost", 0.0) or 0.0)
+            for item in breakdown
+            if isinstance(item, dict)
+        ) == pytest.approx(feature_total, rel=1e-3)
+
+
+def test_full_service_restaurant_prices_only_incremental_features_and_preserves_selected_status():
+    square_footage = 8_000
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.RESTAURANT,
+        subtype="full_service",
+        square_footage=square_footage,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["outdoor_seating", "wine_cellar"],
+    )
+
+    config = get_building_config(BuildingType.RESTAURANT, "full_service")
+    assert config is not None
+    expected_incremental_total = float(config.special_features["wine_cellar"]) * square_footage
+
+    assert float(result["construction_costs"]["special_features_total"]) == pytest.approx(
+        expected_incremental_total,
+        rel=1e-3,
+    )
+
+    breakdown = result["construction_costs"]["special_features_breakdown"]
+    breakdown_by_id = {
+        item["id"]: item
+        for item in breakdown
+        if isinstance(item, dict) and item.get("id")
+    }
+
+    included_row = breakdown_by_id["outdoor_seating"]
+    assert included_row.get("pricing_status") == "included_in_baseline"
+    assert float(included_row.get("configured_cost_per_sf", 0.0) or 0.0) == pytest.approx(
+        float(config.special_features["outdoor_seating"]),
+        rel=1e-3,
+    )
+    assert float(included_row.get("cost_per_sf", 0.0) or 0.0) == 0.0
+    assert float(included_row.get("total_cost", 0.0) or 0.0) == 0.0
+
+    incremental_row = breakdown_by_id["wine_cellar"]
+    assert incremental_row.get("pricing_status") == "incremental"
+    assert float(incremental_row.get("configured_cost_per_sf", 0.0) or 0.0) == pytest.approx(
+        float(config.special_features["wine_cellar"]),
+        rel=1e-3,
+    )
+    assert float(incremental_row.get("cost_per_sf", 0.0) or 0.0) == pytest.approx(
+        float(config.special_features["wine_cellar"]),
+        rel=1e-3,
+    )
+    assert float(incremental_row.get("total_cost", 0.0) or 0.0) == pytest.approx(
+        expected_incremental_total,
+        rel=1e-3,
+    )
 
 
 def test_restaurant_margin_normalized_trace_emitted_once_for_all_subtypes():

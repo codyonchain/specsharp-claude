@@ -87,6 +87,12 @@ CONFIG = (
             "public_plaza": 25,
             "records_vault": 30,
         },
+        special_feature_pricing_statuses={
+            "council_chambers": "included_in_baseline",
+            "secure_area": "included_in_baseline",
+            "public_plaza": "incremental",
+            "records_vault": "included_in_baseline",
+        },
         base_revenue_per_sf_annual=0,
         occupancy_rate_base=1.0,
         occupancy_rate_premium=1.0,

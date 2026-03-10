@@ -85,6 +85,16 @@ CONFIG = (
             "hc_asc_pain_management_suite": 60,
             "hc_asc_hybrid_or_cath_lab": 125,
         },
+        special_feature_pricing_statuses={
+            "operating_room": "included_in_baseline",
+            "recovery_room": "included_in_baseline",
+            "pre_op": "included_in_baseline",
+            "sterile_processing": "included_in_baseline",
+            "hc_asc_expanded_pacu": "incremental",
+            "hc_asc_sterile_core_upgrade": "incremental",
+            "hc_asc_pain_management_suite": "incremental",
+            "hc_asc_hybrid_or_cath_lab": "incremental",
+        },
         financial_metrics={
             "primary_unit": "operating rooms",
             "units_per_sf": 1.0 / 950.0,

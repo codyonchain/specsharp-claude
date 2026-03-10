@@ -83,6 +83,13 @@ CONFIG = (
             "locker_complex": 30,
             "concessions": 20,
         },
+        special_feature_pricing_statuses={
+            "indoor_track": "incremental",
+            "multiple_courts": "included_in_baseline",
+            "weight_room": "incremental",
+            "locker_complex": "included_in_baseline",
+            "concessions": "included_in_baseline",
+        },
         base_revenue_per_sf_annual=40,
         occupancy_rate_base=0.70,
         occupancy_rate_premium=0.80,

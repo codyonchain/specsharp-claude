@@ -83,6 +83,12 @@ CONFIG = (
             "pedestrian_bridge": 45,
             "public_art": 15,
         },
+        special_feature_pricing_statuses={
+            "transit_plaza": "included_in_baseline",
+            "bike_facility": "incremental",
+            "pedestrian_bridge": "included_in_baseline",
+            "public_art": "incremental",
+        },
         base_revenue_per_sf_annual=35,
         occupancy_rate_base=0.90,
         occupancy_rate_premium=0.93,

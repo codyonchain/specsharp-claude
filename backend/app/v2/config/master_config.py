@@ -17,7 +17,7 @@ import re
 from collections import defaultdict
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple, Any, Callable
+from typing import Dict, List, Optional, Tuple, Any, Callable, Literal
 from app.config.regional_multipliers import resolve_location_context
 
 # ============================================================================
@@ -136,6 +136,7 @@ class BuildingConfig:
     
     # Special features that add cost
     special_features: Optional[Dict[str, float]] = None
+    special_feature_pricing_statuses: Optional[Dict[str, Literal["included_in_baseline", "incremental"]]] = None
     ti_allowance_per_sf: Optional[float] = None
     soft_costs_pct_of_hard: Optional[float] = None
     contingency_pct_of_hard: Optional[float] = None

@@ -90,6 +90,17 @@ CONFIG = (
             "ballistic_glazing_package": 30,
             "redundant_life_safety_power": 28,
         },
+        special_feature_pricing_statuses={
+            "courtroom": "included_in_baseline",
+            "jury_room": "included_in_baseline",
+            "holding_cells": "included_in_baseline",
+            "judges_chambers": "included_in_baseline",
+            "security_screening": "included_in_baseline",
+            "magnetometer_screening_lanes": "included_in_baseline",
+            "sallyport": "included_in_baseline",
+            "ballistic_glazing_package": "included_in_baseline",
+            "redundant_life_safety_power": "incremental",
+        },
         base_revenue_per_sf_annual=0,
         occupancy_rate_base=1.0,
         occupancy_rate_premium=1.0,
@@ -97,5 +108,3 @@ CONFIG = (
         operating_margin_premium=0,
     ),
 )
-
-# BuildingConfig does not yet declare this field, so we attach it explicitly.

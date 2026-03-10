@@ -78,6 +78,13 @@ CONFIG = (
             "emergency_generator": 35,
             "sally_port": 30,
         },
+        special_feature_pricing_statuses={
+            "apparatus_bay": "included_in_baseline",
+            "dispatch_center": "included_in_baseline",
+            "training_tower": "incremental",
+            "emergency_generator": "included_in_baseline",
+            "sally_port": "incremental",
+        },
         base_revenue_per_sf_annual=0,
         occupancy_rate_base=1.0,
         occupancy_rate_premium=1.0,
@@ -85,5 +92,3 @@ CONFIG = (
         operating_margin_premium=0,
     ),
 )
-
-# BuildingConfig does not yet declare this field, so we attach it explicitly.

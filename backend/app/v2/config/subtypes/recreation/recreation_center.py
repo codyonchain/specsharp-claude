@@ -86,6 +86,13 @@ CONFIG = (
             "dance_studio": 20,
             "outdoor_courts": 25,
         },
+        special_feature_pricing_statuses={
+            "gymnasium": "included_in_baseline",
+            "game_room": "included_in_baseline",
+            "craft_room": "included_in_baseline",
+            "dance_studio": "included_in_baseline",
+            "outdoor_courts": "incremental",
+        },
         base_revenue_per_sf_annual=35,
         occupancy_rate_base=0.70,
         occupancy_rate_premium=0.80,

@@ -83,6 +83,12 @@ CONFIG = (
             "crane_bays": 30,
             "compressed_air": 20,
         },
+        special_feature_pricing_statuses={
+            "clean_room": "incremental",
+            "heavy_power": "included_in_baseline",
+            "crane_bays": "included_in_baseline",
+            "compressed_air": "included_in_baseline",
+        },
         # Revenue metrics
         # Slight premium to DC, but not enough to offset added risk by default
         base_revenue_per_sf_annual=11,

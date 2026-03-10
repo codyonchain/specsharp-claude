@@ -75,6 +75,13 @@ CONFIG = (
             "lounge_area": 20,  # Comfortable seating area
             "meeting_room": 25,  # Small meeting space
         },
+        special_feature_pricing_statuses={
+            "outdoor_seating": "included_in_baseline",
+            "drive_thru": "incremental",
+            "bakery_display": "included_in_baseline",
+            "lounge_area": "included_in_baseline",
+            "meeting_room": "incremental",
+        },
         base_revenue_per_sf_annual=350,
         occupancy_rate_base=0.80,
         occupancy_rate_premium=0.85,

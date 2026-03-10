@@ -74,6 +74,12 @@ CONFIG = (
             "spa": 55,
             "retail_arcade": 30,
         },
+        special_feature_pricing_statuses={
+            "conference_center": "included_in_baseline",
+            "restaurant": "included_in_baseline",
+            "spa": "incremental",
+            "retail_arcade": "included_in_baseline",
+        },
         base_revenue_per_sf_annual=35,
         occupancy_rate_base=0.90,
         occupancy_rate_premium=0.93,

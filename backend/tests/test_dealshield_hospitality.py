@@ -456,12 +456,17 @@ def test_hospitality_special_features_math_and_breakdown_reconcile_for_both_subt
         )
 
         config = get_building_config(BuildingType.HOSPITALITY, subtype)
-        expected_delta = float(config.special_features[feature_key]) * square_footage
+        configured_cost_per_sf = float(config.special_features[feature_key])
+        expected_status = (config.special_feature_pricing_statuses or {}).get(feature_key, "incremental")
+        expected_delta = (
+            0.0
+            if expected_status == "included_in_baseline"
+            else configured_cost_per_sf * square_footage
+        )
 
         baseline_special_features_total = float(baseline["construction_costs"]["special_features_total"])
         feature_special_features_total = float(with_feature["construction_costs"]["special_features_total"])
         special_features_delta = feature_special_features_total - baseline_special_features_total
-        assert special_features_delta > 0
         assert special_features_delta == pytest.approx(expected_delta, rel=1e-3)
 
         baseline_total_project_cost = float(baseline["totals"]["total_project_cost"])
@@ -477,8 +482,20 @@ def test_hospitality_special_features_math_and_breakdown_reconcile_for_both_subt
             if isinstance(item, dict) and item.get("id")
         }
         assert feature_key in breakdown_map
-        assert float(breakdown_map[feature_key].get("cost_per_sf", 0.0)) == float(config.special_features[feature_key])
-        assert float(breakdown_map[feature_key].get("total_cost", 0.0)) == pytest.approx(expected_delta, rel=1e-3)
+        feature_entry = breakdown_map[feature_key]
+        assert feature_entry.get("pricing_status") == expected_status
+        assert float(feature_entry.get("configured_cost_per_sf", 0.0) or 0.0) == pytest.approx(
+            configured_cost_per_sf,
+            rel=1e-3,
+        )
+        expected_applied_cost_per_sf = (
+            0.0 if expected_status == "included_in_baseline" else configured_cost_per_sf
+        )
+        assert float(feature_entry.get("cost_per_sf", 0.0) or 0.0) == pytest.approx(
+            expected_applied_cost_per_sf,
+            rel=1e-3,
+        )
+        assert float(feature_entry.get("total_cost", 0.0) or 0.0) == pytest.approx(expected_delta, rel=1e-3)
 
         summed_breakdown_total = sum(
             float(item.get("total_cost", 0.0) or 0.0)
@@ -486,3 +503,34 @@ def test_hospitality_special_features_math_and_breakdown_reconcile_for_both_subt
             if isinstance(item, dict)
         )
         assert summed_breakdown_total == pytest.approx(feature_special_features_total, rel=1e-3)
+
+
+def test_full_service_hotel_included_features_price_to_zero_and_remain_visible():
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.HOSPITALITY,
+        subtype="full_service_hotel",
+        square_footage=85_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["ballroom", "rooftop_bar"],
+    )
+
+    config = get_building_config(BuildingType.HOSPITALITY, "full_service_hotel")
+    assert config is not None
+    assert float(result["construction_costs"]["special_features_total"]) == 0.0
+
+    breakdown = result["construction_costs"]["special_features_breakdown"]
+    breakdown_by_id = {
+        item["id"]: item
+        for item in breakdown
+        if isinstance(item, dict) and item.get("id")
+    }
+    for feature_id in ("ballroom", "rooftop_bar"):
+        row = breakdown_by_id[feature_id]
+        assert row.get("pricing_status") == "included_in_baseline"
+        assert float(row.get("configured_cost_per_sf", 0.0) or 0.0) == pytest.approx(
+            float(config.special_features[feature_id]),
+            rel=1e-3,
+        )
+        assert float(row.get("cost_per_sf", 0.0) or 0.0) == 0.0
+        assert float(row.get("total_cost", 0.0) or 0.0) == 0.0

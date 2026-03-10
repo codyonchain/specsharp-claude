@@ -8,6 +8,7 @@ from app.v2.engines.unified_engine import (
     unified_engine,
 )
 from app.v2.config.master_config import (
+    MASTER_CONFIG,
     BuildingType,
     OFFICE_UNDERWRITING_CONFIG,
     ProjectClass,
@@ -37,6 +38,7 @@ from app.v2.config.type_profiles.scope_items import mixed_use as mixed_use_scope
 from app.v2.config.type_profiles.scope_items import parking as parking_scope_profiles
 from app.v2.config.type_profiles.scope_items import recreation as recreation_scope_profiles
 from app.v2.services.dealshield_service import build_dealshield_view_model
+from app.v2.services.special_feature_pricing import VALID_SPECIAL_FEATURE_PRICING_STATUSES
 
 
 def _is_numeric(value):
@@ -560,7 +562,7 @@ def test_description_infers_finish_level():
 
 
 def test_special_features_unit_math():
-    """Special feature pricing should respect per-unit costs, not auto-scale by total square footage."""
+    """Special feature pricing should reflect the currently configured square-footage surcharge model."""
     base_result = unified_engine.calculate_project(
         building_type=BuildingType.HEALTHCARE,
         subtype="surgical_center",
@@ -575,17 +577,44 @@ def test_special_features_unit_math():
         square_footage=5_000,
         location="Nashville, TN",
         project_class=ProjectClass.GROUND_UP,
-        special_features=["operating_room"],
+        special_features=["hc_asc_hybrid_or_cath_lab"],
     )
 
     config = get_building_config(BuildingType.HEALTHCARE, "surgical_center")
-    expected_increment = config.special_features["operating_room"] * base_result["project_info"]["square_footage"]
+    expected_increment = (
+        config.special_features["hc_asc_hybrid_or_cath_lab"] * base_result["project_info"]["square_footage"]
+    )
 
     delta = feature_result["construction_costs"]["special_features_total"] - base_result["construction_costs"]["special_features_total"]
     assert delta == pytest.approx(
         expected_increment,
         rel=1e-3,
     ), "Special feature surcharge should scale with square footage as currently configured"
+
+
+def test_special_feature_pricing_status_maps_reference_known_features_and_valid_statuses():
+    for building_type, subtypes in MASTER_CONFIG.items():
+        for subtype, config in subtypes.items():
+            statuses = config.special_feature_pricing_statuses or {}
+            if not statuses:
+                continue
+
+            feature_costs = config.special_features or {}
+            missing_feature_ids = sorted(set(statuses) - set(feature_costs))
+            invalid_statuses = {
+                feature_id: status
+                for feature_id, status in statuses.items()
+                if status not in VALID_SPECIAL_FEATURE_PRICING_STATUSES
+            }
+
+            assert not missing_feature_ids, (
+                f"{building_type.value}/{subtype} defines pricing statuses for unknown features: "
+                f"{missing_feature_ids}"
+            )
+            assert not invalid_statuses, (
+                f"{building_type.value}/{subtype} defines invalid special feature pricing statuses: "
+                f"{invalid_statuses}"
+            )
 
 
 def test_restaurant_clamp_is_explicit_or_off():

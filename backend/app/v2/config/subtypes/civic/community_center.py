@@ -87,6 +87,13 @@ CONFIG = (
             "fitness_center": 20,
             "outdoor_pavilion": 15,
         },
+        special_feature_pricing_statuses={
+            "gymnasium": "included_in_baseline",
+            "kitchen": "included_in_baseline",
+            "multipurpose_room": "included_in_baseline",
+            "fitness_center": "incremental",
+            "outdoor_pavilion": "included_in_baseline",
+        },
         base_revenue_per_sf_annual=0,
         occupancy_rate_base=1.0,
         occupancy_rate_premium=1.0,
@@ -94,5 +101,3 @@ CONFIG = (
         operating_margin_premium=0,
     ),
 )
-
-# BuildingConfig does not yet declare this field, so we attach it explicitly.

@@ -80,6 +80,13 @@ CONFIG = (
             "under_slab_heating_protection": 18,
             "high_r_value_panel_upgrade": 12,
         },
+        special_feature_pricing_statuses={
+            "blast_freezer": "incremental",
+            "multiple_temp_zones": "incremental",
+            "automated_retrieval": "incremental",
+            "under_slab_heating_protection": "incremental",
+            "high_r_value_panel_upgrade": "incremental",
+        },
         # Revenue metrics
         base_revenue_per_sf_annual=18.5,
         occupancy_rate_base=0.90,

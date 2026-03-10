@@ -78,6 +78,13 @@ CONFIG = (
             "spa_area": 35,
             "juice_bar": 15,
         },
+        special_feature_pricing_statuses={
+            "pool": "incremental",
+            "basketball_court": "incremental",
+            "group_fitness": "included_in_baseline",
+            "spa_area": "incremental",
+            "juice_bar": "incremental",
+        },
         base_revenue_per_sf_annual=60,
         occupancy_rate_base=0.75,
         occupancy_rate_premium=0.85,

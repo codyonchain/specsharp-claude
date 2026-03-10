@@ -75,6 +75,12 @@ CONFIG = (
             "library": 20,
             "student_services": 15,
         },
+        special_feature_pricing_statuses={
+            "vocational_lab": "included_in_baseline",
+            "computer_lab": "incremental",
+            "library": "incremental",
+            "student_services": "included_in_baseline",
+        },
         base_revenue_per_sf_annual=150,
         base_revenue_per_student_annual=8000,
         students_per_sf=0.005,

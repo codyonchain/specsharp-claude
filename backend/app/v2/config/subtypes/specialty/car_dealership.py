@@ -74,6 +74,12 @@ CONFIG = (
             "automated_car_wash_tunnel": 18,
             "inventory_photo_bay": 8,
         },
+        special_feature_pricing_statuses={
+            "expanded_service_bays": "incremental",
+            "ev_fast_charging_hub": "incremental",
+            "automated_car_wash_tunnel": "incremental",
+            "inventory_photo_bay": "incremental",
+        },
         base_revenue_per_sf_annual=250,
         occupancy_rate_base=1.0,
         occupancy_rate_premium=1.0,

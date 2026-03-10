@@ -77,6 +77,15 @@ CONFIG = (
             "sommelier_station": 30,  # Wine service station
             "valet_parking": 25,  # Valet required
         },
+        special_feature_pricing_statuses={
+            "wine_cellar": "included_in_baseline",
+            "private_dining": "included_in_baseline",
+            "chef_table": "included_in_baseline",
+            "dry_aging_room": "incremental",
+            "pastry_kitchen": "included_in_baseline",
+            "sommelier_station": "included_in_baseline",
+            "valet_parking": "included_in_baseline",
+        },
         base_revenue_per_sf_annual=750,
         occupancy_rate_base=0.82,
         occupancy_rate_premium=0.85,

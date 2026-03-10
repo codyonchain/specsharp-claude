@@ -83,6 +83,16 @@ CONFIG = (
             "hc_dental_sterilization_upgrade": 25,
             "hc_dental_ortho_bay_expansion": 35,
         },
+        special_feature_pricing_statuses={
+            "operatory": "included_in_baseline",
+            "sterilization": "included_in_baseline",
+            "x_ray": "included_in_baseline",
+            "lab": "included_in_baseline",
+            "hc_dental_pano_ceph": "incremental",
+            "hc_dental_sedation_suite": "incremental",
+            "hc_dental_sterilization_upgrade": "incremental",
+            "hc_dental_ortho_bay_expansion": "incremental",
+        },
         financial_metrics={
             "primary_unit": "operatories",
             "units_per_sf": 1.0 / 350.0,

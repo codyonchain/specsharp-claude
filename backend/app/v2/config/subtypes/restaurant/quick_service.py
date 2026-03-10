@@ -74,6 +74,13 @@ CONFIG = (
             "double_drive_thru": 55,  # Dual drive-thru lanes
             "digital_menu_boards": 15,  # Digital ordering displays
         },
+        special_feature_pricing_statuses={
+            "drive_thru": "included_in_baseline",
+            "outdoor_seating": "incremental",
+            "play_area": "incremental",
+            "double_drive_thru": "incremental",
+            "digital_menu_boards": "incremental",
+        },
         base_revenue_per_sf_annual=525,
         occupancy_rate_base=0.88,
         occupancy_rate_premium=0.95,

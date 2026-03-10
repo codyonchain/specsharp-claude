@@ -73,6 +73,12 @@ CONFIG = (
             "valet_interface": 20,
             "ev_charging_integration": 15,
         },
+        special_feature_pricing_statuses={
+            "retrieval_speed": "incremental",
+            "redundant_systems": "included_in_baseline",
+            "valet_interface": "included_in_baseline",
+            "ev_charging_integration": "incremental",
+        },
         base_revenue_per_sf_annual=80,
         base_revenue_per_space_monthly=250,
         spaces_per_sf=0.005,

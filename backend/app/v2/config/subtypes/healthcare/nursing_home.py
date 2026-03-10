@@ -83,6 +83,12 @@ CONFIG = (
             "dining_hall": 15,
             "activity_room": 12,
         },
+        special_feature_pricing_statuses={
+            "memory_care": "incremental",
+            "therapy_room": "incremental",
+            "dining_hall": "included_in_baseline",
+            "activity_room": "included_in_baseline",
+        },
         financial_metrics={
             "primary_unit": "beds",
             "units_per_sf": 0.0015,

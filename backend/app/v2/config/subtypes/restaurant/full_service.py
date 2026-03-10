@@ -76,6 +76,15 @@ CONFIG = (
             "rooftop_dining": 50,  # Rooftop terrace dining
             "valet_parking": 20,  # Valet setup
         },
+        special_feature_pricing_statuses={
+            "outdoor_seating": "included_in_baseline",
+            "bar": "included_in_baseline",
+            "private_dining": "included_in_baseline",
+            "wine_cellar": "incremental",
+            "live_kitchen": "included_in_baseline",
+            "rooftop_dining": "incremental",
+            "valet_parking": "included_in_baseline",
+        },
         base_revenue_per_sf_annual=350,
         occupancy_rate_base=0.80,
         occupancy_rate_premium=0.90,

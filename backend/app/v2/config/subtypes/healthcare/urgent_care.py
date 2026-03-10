@@ -78,6 +78,15 @@ CONFIG = (
             "hc_urgent_imaging_suite": 75,
             "hc_urgent_observation_bays": 25,
         },
+        special_feature_pricing_statuses={
+            "trauma_room": "incremental",
+            "x_ray": "included_in_baseline",
+            "laboratory": "included_in_baseline",
+            "pharmacy": "included_in_baseline",
+            "hc_urgent_on_site_lab": "incremental",
+            "hc_urgent_imaging_suite": "incremental",
+            "hc_urgent_observation_bays": "incremental",
+        },
         financial_metrics={
             "primary_unit": "exam rooms",
             "units_per_sf": 1 / 450,

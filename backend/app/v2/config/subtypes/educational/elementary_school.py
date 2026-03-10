@@ -77,6 +77,13 @@ CONFIG = (
             "computer_lab": 25,
             "library": 25,
         },
+        special_feature_pricing_statuses={
+            "gymnasium": "included_in_baseline",
+            "cafeteria": "included_in_baseline",
+            "playground": "incremental",
+            "computer_lab": "incremental",
+            "library": "included_in_baseline",
+        },
         base_revenue_per_sf_annual=0,
         base_revenue_per_student_annual=12000,
         students_per_sf=0.00667,

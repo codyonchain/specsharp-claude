@@ -78,6 +78,13 @@ CONFIG = (
             "dual_fiber_meet_me_room": 45,
             "integrated_commissioning": 55,
         },
+        special_feature_pricing_statuses={
+            "utility_substation": "incremental",
+            "generator_plant": "included_in_baseline",
+            "chilled_water_plant": "included_in_baseline",
+            "dual_fiber_meet_me_room": "incremental",
+            "integrated_commissioning": "incremental",
+        },
         base_revenue_per_sf_annual=150,
         occupancy_rate_base=0.95,
         occupancy_rate_premium=0.98,

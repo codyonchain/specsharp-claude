@@ -91,6 +91,15 @@ CONFIG = (
             "hc_outpatient_imaging_pod": 60,
             "hc_outpatient_behavioral_suite": 25,
         },
+        special_feature_pricing_statuses={
+            "exam_rooms": "included_in_baseline",
+            "procedure_room": "incremental",
+            "laboratory": "included_in_baseline",
+            "pharmacy": "incremental",
+            "hc_outpatient_on_site_lab": "incremental",
+            "hc_outpatient_imaging_pod": "incremental",
+            "hc_outpatient_behavioral_suite": "incremental",
+        },
         financial_metrics={
             "primary_unit": "exam rooms",
             "units_per_sf": 1 / 650,

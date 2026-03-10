@@ -86,6 +86,13 @@ CONFIG = (
             "library": 40,
             "student_center": 35,
         },
+        special_feature_pricing_statuses={
+            "lecture_hall": "included_in_baseline",
+            "research_lab": "included_in_baseline",
+            "clean_room": "incremental",
+            "library": "included_in_baseline",
+            "student_center": "included_in_baseline",
+        },
         base_revenue_per_sf_annual=200,
         base_revenue_per_student_annual=25000,
         students_per_sf=0.004,

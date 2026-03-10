@@ -84,6 +84,13 @@ CONFIG = (
             "laboratory": 25,
             "specialty_clinic": 30,
         },
+        special_feature_pricing_statuses={
+            "emergency": "incremental",
+            "surgery": "incremental",
+            "imaging": "incremental",
+            "laboratory": "incremental",
+            "specialty_clinic": "included_in_baseline",
+        },
         financial_metrics={
             "primary_unit": "beds",
             "units_per_sf": 0.00070,

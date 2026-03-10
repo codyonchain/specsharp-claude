@@ -104,6 +104,15 @@ CONFIG = (
             "cathlab": 90,
             "pharmacy": 40,
         },
+        special_feature_pricing_statuses={
+            "emergency_department": "incremental",
+            "surgical_suite": "included_in_baseline",
+            "imaging_suite": "included_in_baseline",
+            "icu": "included_in_baseline",
+            "laboratory": "included_in_baseline",
+            "cathlab": "incremental",
+            "pharmacy": "included_in_baseline",
+        },
         financial_metrics={
             "primary_unit": "beds",
             "units_per_sf": 0.00075,  # This matches beds_per_sf below

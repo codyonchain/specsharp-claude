@@ -75,6 +75,14 @@ CONFIG = (
             "office_buildout": 18,
             "cold_storage": 40,
         },
+        special_feature_pricing_statuses={
+            "automated_sorting": "included_in_baseline",
+            "refrigerated_area": "incremental",
+            "loading_docks": "included_in_baseline",
+            "extra_loading_docks": "incremental",
+            "office_buildout": "included_in_baseline",
+            "cold_storage": "incremental",
+        },
         # Revenue metrics
         base_revenue_per_sf_annual=10,
         occupancy_rate_base=0.96,

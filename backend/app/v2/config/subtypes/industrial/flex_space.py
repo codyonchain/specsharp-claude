@@ -102,5 +102,14 @@ CONFIG = (
             "compressed_air": 10,
             "lab_buildout": 35,
         },
+        special_feature_pricing_statuses={
+            "enhanced_office_showroom_finish": "included_in_baseline",
+            "two_story_office_mezzanine": "included_in_baseline",
+            "heavy_power": "incremental",
+            "clean_room": "incremental",
+            "crane_bays": "incremental",
+            "compressed_air": "incremental",
+            "lab_buildout": "incremental",
+        },
     ),
 )

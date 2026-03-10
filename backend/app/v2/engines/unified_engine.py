@@ -27,6 +27,10 @@ from app.v2.config.construction_schedule import (
     build_construction_schedule as _build_construction_schedule,
 )
 from app.v2.config.type_profiles import scope_items
+from app.v2.services.special_feature_pricing import (
+    INCLUDED_IN_BASELINE,
+    resolve_special_feature_pricing,
+)
 from app.services.nlp_service import NLPService
 # from app.v2.services.financial_analyzer import FinancialAnalyzer  # TODO: Implement this
 from typing import Optional, Dict, Any, List, Tuple
@@ -1161,7 +1165,7 @@ class UnifiedEngine:
         # Add special features if any
         special_features_cost = 0
         special_features_breakdown: List[Dict[str, Any]] = []
-        special_features_breakdown_by_id: Dict[str, Dict[str, Any]] = {}
+        resolved_special_feature_ids: List[str] = []
         if special_features and building_config.special_features:
             healthcare_applied_feature_ids: set = set()
             available_feature_keys = list(building_config.special_features.keys())
@@ -1189,27 +1193,44 @@ class UnifiedEngine:
                         })
 
                 if canonical_feature_key in building_config.special_features:
-                    cost_per_sf = float(building_config.special_features[canonical_feature_key])
-                    feature_cost = cost_per_sf * square_footage
-                    special_features_cost += feature_cost
-                    row = special_features_breakdown_by_id.get(canonical_feature_key)
-                    if row is None:
-                        row = {
-                            'id': canonical_feature_key,
-                            'cost_per_sf': cost_per_sf,
-                            'total_cost': 0.0,
-                            'label': _humanize_special_feature_label(canonical_feature_key),
-                        }
-                        special_features_breakdown_by_id[canonical_feature_key] = row
-                        special_features_breakdown.append(row)
-                    row['total_cost'] = float(row['total_cost']) + feature_cost
-                    self._log_trace("special_feature_applied", {
-                        'feature': canonical_feature_key,
-                        'cost_per_sf': cost_per_sf,
-                        'total_cost': feature_cost
+                    resolved_special_feature_ids.append(canonical_feature_key)
+
+        special_feature_resolution = resolve_special_feature_pricing(
+            building_config=building_config,
+            selected_feature_ids=resolved_special_feature_ids,
+        )
+        if special_feature_resolution.selected_feature_ids:
+            for feature_id in special_feature_resolution.selected_feature_ids:
+                configured_cost_per_sf = float(building_config.special_features[feature_id])
+                pricing_status = special_feature_resolution.pricing_status_by_feature_id[feature_id]
+                applied_cost_per_sf = (
+                    0.0 if pricing_status == INCLUDED_IN_BASELINE else configured_cost_per_sf
+                )
+                feature_cost = applied_cost_per_sf * square_footage
+                special_features_breakdown.append({
+                    'id': feature_id,
+                    'pricing_status': pricing_status,
+                    'cost_per_sf': applied_cost_per_sf,
+                    'configured_cost_per_sf': configured_cost_per_sf,
+                    'total_cost': feature_cost,
+                    'label': _humanize_special_feature_label(feature_id),
+                })
+                if pricing_status == INCLUDED_IN_BASELINE:
+                    self._log_trace("special_feature_included_in_baseline", {
+                        'feature': feature_id,
+                        'configured_cost_per_sf': configured_cost_per_sf,
                     })
-        if special_features_breakdown:
-            special_features_cost = sum(float(item.get('total_cost', 0.0) or 0.0) for item in special_features_breakdown)
+                else:
+                    self._log_trace("special_feature_applied", {
+                        'feature': feature_id,
+                        'cost_per_sf': applied_cost_per_sf,
+                        'configured_cost_per_sf': configured_cost_per_sf,
+                        'total_cost': feature_cost,
+                    })
+            special_features_cost = sum(
+                float(item.get('total_cost', 0.0) or 0.0)
+                for item in special_features_breakdown
+            )
         
         # Calculate trade breakdown
         trades = self._calculate_trades(construction_cost, building_config.trades)
