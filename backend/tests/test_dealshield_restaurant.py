@@ -777,6 +777,54 @@ def test_full_service_restaurant_prices_only_incremental_features_and_preserves_
     )
 
 
+def test_full_service_restaurant_included_feature_does_not_inflate_total_project_cost():
+    square_footage = 6_500
+    baseline = unified_engine.calculate_project(
+        building_type=BuildingType.RESTAURANT,
+        subtype="full_service",
+        square_footage=square_footage,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=[],
+    )
+    included_only = unified_engine.calculate_project(
+        building_type=BuildingType.RESTAURANT,
+        subtype="full_service",
+        square_footage=square_footage,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["private_dining"],
+    )
+    mixed = unified_engine.calculate_project(
+        building_type=BuildingType.RESTAURANT,
+        subtype="full_service",
+        square_footage=square_footage,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["private_dining", "wine_cellar"],
+    )
+
+    config = get_building_config(BuildingType.RESTAURANT, "full_service")
+    assert config is not None
+    expected_incremental_total = float(config.special_features["wine_cellar"]) * square_footage
+
+    assert float(included_only["construction_costs"]["special_features_total"]) == 0.0
+    assert float(included_only["totals"]["total_project_cost"]) == pytest.approx(
+        float(baseline["totals"]["total_project_cost"]),
+        rel=1e-3,
+    )
+    assert float(mixed["construction_costs"]["special_features_total"]) == pytest.approx(
+        expected_incremental_total,
+        rel=1e-3,
+    )
+    assert float(mixed["totals"]["total_project_cost"]) - float(
+        baseline["totals"]["total_project_cost"]
+    ) == pytest.approx(
+        expected_incremental_total,
+        rel=1e-3,
+    )
+
+
 def test_restaurant_margin_normalized_trace_emitted_once_for_all_subtypes():
     for subtype in RESTAURANT_PROFILE_IDS:
         payload = unified_engine.calculate_project(
