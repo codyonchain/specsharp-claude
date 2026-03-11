@@ -474,6 +474,56 @@ class NLPService:
             return "class_b"
         return None
 
+    def _resolve_retail_subtype_from_intent(self, text_lower: str) -> Optional[str]:
+        """Resolve strong retail container intent before downstream program cues reroute the asset."""
+        if not isinstance(text_lower, str) or not text_lower.strip():
+            return None
+
+        shopping_center_patterns = (
+            r"\bshopping\s+center\b",
+            r"\bretail\s+center\b",
+            r"\bstrip\s+(?:center|mall)\b",
+            r"\bshopping\s+plaza\b",
+            r"\bretail\s+plaza\b",
+            r"\bneighborhood\s+center\b",
+            r"\binline\s+(?:retail|suites?)\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in shopping_center_patterns):
+            return "shopping_center"
+
+        bare_plaza_retail_context_patterns = (
+            r"\bplaza\b",
+            r"\bgrocery\s+anchor\b",
+            r"\banchor\s+tenant\b",
+            r"\btenant\s+mix\b",
+            r"\bstorefront\b",
+        )
+        if re.search(bare_plaza_retail_context_patterns[0], text_lower) and any(
+            re.search(pattern, text_lower) for pattern in bare_plaza_retail_context_patterns[1:]
+        ):
+            return "shopping_center"
+
+        return None
+
+    def _resolve_retail_drive_thru_collision(self, text_lower: str) -> Optional[str]:
+        """Treat drive-thru as a tenant/program cue when retail container intent is explicit."""
+        if not self._has_drive_thru(text_lower):
+            return None
+
+        retail_subtype = self._resolve_retail_subtype_from_intent(text_lower)
+        if retail_subtype != "shopping_center":
+            return None
+
+        explicit_qsr_asset_patterns = (
+            r"\bquick\s+service\s+restaurant\b",
+            r"\bqsr\b",
+            r"\bfast\s+food\s+restaurant\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in explicit_qsr_asset_patterns):
+            return None
+
+        return retail_subtype
+
     def _resolve_civic_subtype_from_intent(self, text_lower: str) -> Optional[str]:
         """Resolve high-confidence civic intents before generic pattern routing."""
         if not isinstance(text_lower, str) or not text_lower.strip():
@@ -1071,6 +1121,14 @@ class NLPService:
 
         if multifamily_subtype is not None:
             return 'multifamily', multifamily_subtype, classification
+
+        retail_collision_subtype = self._resolve_retail_drive_thru_collision(text_lower)
+        if retail_collision_subtype is not None:
+            self._last_detection_metadata = {
+                "detection_source": "nlp_service.retail_asset_conflict_guard",
+                "conflict_resolution": "retail_container_beats_qsr_drive_thru",
+            }
+            return "retail", retail_collision_subtype, classification
 
         # Priority order (check specific before general)
         PRIORITY_ORDER = [
