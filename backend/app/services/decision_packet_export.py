@@ -369,6 +369,29 @@ def _build_schedule_milestones(phases: List[Dict[str, Any]]) -> List[Dict[str, A
     return milestones
 
 
+def _normalize_special_feature_breakdown_rows(value: Any) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for item in _as_list(value):
+        if not isinstance(item, dict):
+            continue
+        feature_id = _sanitize_text(item.get("id"))
+        label = _sanitize_text(item.get("label")) or _titleize_label(feature_id) or "Special Feature"
+        pricing_status = _sanitize_text(item.get("pricing_status"))
+        if pricing_status not in {"included_in_baseline", "incremental"}:
+            pricing_status = ""
+        rows.append(
+            {
+                "id": feature_id,
+                "label": label,
+                "pricing_status": pricing_status,
+                "configured_cost_per_sf": _to_number(item.get("configured_cost_per_sf")),
+                "cost_per_sf": _to_number(item.get("cost_per_sf")),
+                "total_cost": _to_number(item.get("total_cost")),
+            }
+        )
+    return rows
+
+
 def compose_decision_packet_input(
     project: Any,
     project_payload: Dict[str, Any],
@@ -556,6 +579,9 @@ def compose_decision_packet_input(
     cost_build_up_items = construction_costs.get("cost_build_up")
     if not isinstance(cost_build_up_items, list):
         cost_build_up_items = []
+    special_feature_breakdown = _normalize_special_feature_breakdown_rows(
+        construction_costs.get("special_features_breakdown")
+    )
 
     phases = _normalize_schedule_phases(construction_schedule)
     milestones = _build_schedule_milestones(phases)
@@ -664,6 +690,7 @@ def compose_decision_packet_input(
             "total_project_cost": total_project_cost,
             "cost_per_sqft": cost_per_sqft,
             "special_features_total": _to_number(construction_costs.get("special_features_total")) or _to_number(totals.get("special_features_total")),
+            "special_features_breakdown": special_feature_breakdown,
         },
         "trade_distribution": {
             "items": trade_items[:8],
@@ -1099,11 +1126,49 @@ def _render_construction_summary(section: Dict[str, Any]) -> str:
     ]
     if _to_number(section.get("special_features_total")) is not None:
         metrics.append(_format_metric("Special Features", _format_money(section.get("special_features_total"))))
+    special_features_rows = [
+        item
+        for item in _as_list(section.get("special_features_breakdown"))
+        if isinstance(item, dict)
+    ]
+    special_features_html = ""
+    if special_features_rows:
+        rows: List[str] = []
+        for item in special_features_rows:
+            label = _sanitize_text(item.get("label")) or "Special Feature"
+            amount = _format_money(item.get("total_cost"))
+            pricing_status = _sanitize_text(item.get("pricing_status"))
+            if pricing_status == "included_in_baseline":
+                treatment = "Included in baseline"
+            elif pricing_status == "incremental":
+                treatment = "Incremental premium applied"
+            elif _to_number(item.get("total_cost")) not in (None, 0.0):
+                treatment = "Applied premium"
+            else:
+                treatment = "Selected feature"
+            rows.append(
+                "<tr>"
+                f"<td>{html_module.escape(label)}</td>"
+                f"<td>{html_module.escape(amount)}</td>"
+                f"<td>{html_module.escape(treatment)}</td>"
+                "</tr>"
+            )
+        special_features_html = (
+            "<div class=\"subsection\">"
+            "<h3>Selected Special Features</h3>"
+            "<table class=\"simple-table\">"
+            "<thead><tr><th>Feature</th><th>Applied Amount</th><th>Treatment</th></tr></thead>"
+            "<tbody>"
+            + "".join(rows)
+            + "</tbody></table>"
+            "</div>"
+        )
 
     return (
         "<section>"
         "<h2>Construction Cost Summary</h2>"
         + _render_metric_grid(metrics)
+        + special_features_html
         + "</section>"
     )
 
