@@ -253,6 +253,171 @@ const MIXED_USE_COMPONENT_LABELS: Record<MixedUseComponent, string> = {
   transit: 'Transit',
 };
 
+const SHARED_SPECIAL_FEATURE_BUILDING_TYPES = new Set([
+  'healthcare',
+  'educational',
+  'office',
+  'retail',
+  'industrial',
+  'restaurant',
+  'hospitality',
+  'specialty',
+  'civic',
+  'recreation',
+  'parking',
+  'mixed_use',
+  'multifamily',
+]);
+
+const LEGACY_SPECIAL_FEATURES_BY_BUILDING_TYPE: Record<string, SpecialFeatureOption[]> = {
+  residential: [
+    { id: 'parking_garage', name: 'Parking Garage', cost: 5000000, description: 'Structured parking facility' },
+    { id: 'pool', name: 'Pool & Amenity Deck', cost: 2000000, description: 'Swimming pool and deck area' },
+    { id: 'fitness', name: 'Fitness Center', cost: 500000, description: 'Gym and workout facilities' },
+    { id: 'clubhouse', name: 'Clubhouse', cost: 1000000, description: 'Community gathering space' },
+    { id: 'rooftop', name: 'Rooftop Terrace', cost: 1500000, description: 'Rooftop amenity space' }
+  ],
+  commercial: [
+    { id: 'data_center', name: 'Data Center', cost: 5000000, description: 'Server room with redundant systems' },
+    { id: 'cafeteria', name: 'Cafeteria', cost: 1000000, description: 'Employee dining facility' },
+    { id: 'fitness', name: 'Fitness Center', cost: 750000, description: 'Employee gym' },
+    { id: 'conference', name: 'Conference Center', cost: 2000000, description: 'Large meeting spaces' },
+    { id: 'parking_deck', name: 'Parking Deck', cost: 4000000, description: 'Multi-level parking' }
+  ],
+};
+
+export const getNewProjectAvailableFeatures = (
+  buildingType: string,
+  subtype?: string
+): SpecialFeatureOption[] => {
+  if (SHARED_SPECIAL_FEATURE_BUILDING_TYPES.has(buildingType)) {
+    return getAvailableSpecialFeatures(buildingType, subtype);
+  }
+
+  return filterSpecialFeaturesBySubtype(LEGACY_SPECIAL_FEATURES_BY_BUILDING_TYPE[buildingType] || [], subtype);
+};
+
+const parseNewProjectDescription = (desc: string, buildingTypeHint?: string) => {
+  const lower = desc.toLowerCase();
+  const isMultifamilyProject = buildingTypeHint === 'multifamily';
+
+  const detectedFeatures = new Set<string>();
+  if (lower.includes('gymnasium') || lower.includes('gym')) detectedFeatures.add('gymnasium');
+  if (!isMultifamilyProject && (lower.includes('parking garage') || lower.includes('garage'))) {
+    detectedFeatures.add('parking_garage');
+  }
+  if (!isMultifamilyProject && lower.includes('pool')) detectedFeatures.add('pool');
+  if (lower.includes('cafeteria')) detectedFeatures.add('cafeteria');
+  for (const featureId of detectHealthcareFeatureIdsFromDescription(desc)) {
+    detectedFeatures.add(featureId);
+  }
+  for (const featureId of detectRestaurantFeatureIdsFromDescription(desc)) {
+    detectedFeatures.add(featureId);
+  }
+  for (const featureId of detectHospitalityFeatureIdsFromDescription(desc)) {
+    detectedFeatures.add(featureId);
+  }
+  for (const featureId of detectRetailFeatureIdsFromDescription(desc)) {
+    detectedFeatures.add(featureId);
+  }
+  for (const featureId of detectOfficeFeatureIdsFromDescription(desc)) {
+    detectedFeatures.add(featureId);
+  }
+  for (const featureId of detectSpecialtyFeatureIdsFromDescription(desc)) {
+    detectedFeatures.add(featureId);
+  }
+  for (const featureId of detectEducationalFeatureIdsFromDescription(desc)) {
+    detectedFeatures.add(featureId);
+  }
+  for (const featureId of detectCivicFeatureIdsFromDescription(desc)) {
+    detectedFeatures.add(featureId);
+  }
+  for (const featureId of detectRecreationFeatureIdsFromDescription(desc)) {
+    detectedFeatures.add(featureId);
+  }
+  for (const featureId of detectIndustrialFeatureIdsFromDescription(desc)) {
+    detectedFeatures.add(featureId);
+  }
+  for (const featureId of detectMixedUseFeatureIdsFromDescription(desc)) {
+    detectedFeatures.add(featureId);
+  }
+  for (const featureId of detectMultifamilyFeatureIdsFromDescription(desc)) {
+    detectedFeatures.add(featureId);
+  }
+  for (const featureId of detectParkingFeatureIdsFromDescription(desc)) {
+    detectedFeatures.add(featureId);
+  }
+
+  let detectedFinish: 'standard' | 'premium' = 'standard';
+  if (
+    lower.includes('luxury') ||
+    lower.includes('high-end') ||
+    lower.includes('premium') ||
+    lower.includes('class a')
+  ) {
+    detectedFinish = 'premium';
+  }
+
+  let detectedComplexity: 'ground_up' | 'renovation' | 'addition' = 'ground_up';
+  if (lower.includes('renovation') || lower.includes('renovate') || lower.includes('remodel')) detectedComplexity = 'renovation';
+  else if (lower.includes('addition') || lower.includes('expansion') || lower.includes('expand')) detectedComplexity = 'addition';
+
+  return {
+    specialFeatures: Array.from(detectedFeatures),
+    finishLevel: detectedFinish,
+    projectComplexity: detectedComplexity
+  };
+};
+
+export const resolveNewProjectAutoDetection = ({
+  description,
+  parsedBuildingType,
+  parsedSubtype,
+}: {
+  description: string;
+  parsedBuildingType?: string;
+  parsedSubtype?: string;
+}) => {
+  const parsed = parseNewProjectDescription(description, parsedBuildingType);
+  const parkingIntent = resolveParkingIntentFromDescription(description);
+  const effectiveBuildingType =
+    parsedBuildingType || (parkingIntent.shouldRouteToParking ? 'parking' : undefined);
+  const subtypeFromDescription =
+    parsedBuildingType === 'mixed_use' && !parsedSubtype
+      ? normalizeMixedUseSubtypeAlias(detectMixedUseSubtypeFromDescription(description).subtype)
+    : parsedBuildingType === 'educational' && !parsedSubtype
+      ? detectEducationalSubtypeFromDescription(description)
+    : parsedBuildingType === 'civic' && !parsedSubtype
+      ? detectCivicSubtypeFromDescription(description)
+    : parsedBuildingType === 'recreation' && !parsedSubtype
+      ? detectRecreationSubtypeFromDescription(description)
+    : parsedBuildingType === 'parking' && !parsedSubtype
+      ? parkingIntent.subtype
+    : undefined;
+  const resolvedSubtype =
+    effectiveBuildingType === 'mixed_use'
+      ? normalizeMixedUseSubtypeAlias(parsedSubtype || subtypeFromDescription)
+      : parsedSubtype || subtypeFromDescription;
+  const allowedFeatureIds = getNewProjectAvailableFeatures(
+    effectiveBuildingType || '',
+    resolvedSubtype
+  ).map((feature) => feature.id);
+  const allowedFeatureIdSet = new Set(allowedFeatureIds);
+  const filteredFeatureIds = parsed.specialFeatures.filter((featureId) =>
+    allowedFeatureIdSet.has(featureId)
+  );
+
+  return {
+    rawDetectedFeatureIds: parsed.specialFeatures,
+    allowedFeatureIds,
+    filteredFeatureIds,
+    effectiveBuildingType,
+    resolvedSubtype,
+    finishLevel: parsed.finishLevel,
+    projectComplexity: parsed.projectComplexity,
+  };
+};
+
 
 
 export const NewProject: React.FC = () => {
@@ -481,126 +646,6 @@ export const NewProject: React.FC = () => {
     }
   ];
   
-  // Special features by building type
-  const getAvailableFeatures = (
-    buildingType: string,
-    subtype?: string
-  ): SpecialFeatureOption[] => {
-    if (
-      buildingType === 'healthcare' ||
-      buildingType === 'educational' ||
-      buildingType === 'office' ||
-      buildingType === 'retail' ||
-      buildingType === 'industrial' ||
-      buildingType === 'restaurant' ||
-      buildingType === 'hospitality' ||
-      buildingType === 'specialty' ||
-      buildingType === 'civic' ||
-      buildingType === 'recreation' ||
-      buildingType === 'parking' ||
-      buildingType === 'mixed_use' ||
-      buildingType === 'multifamily'
-    ) {
-      return getAvailableSpecialFeatures(buildingType, subtype);
-    }
-
-    const features: Record<string, SpecialFeatureOption[]> = {
-      residential: [
-        { id: 'parking_garage', name: 'Parking Garage', cost: 5000000, description: 'Structured parking facility' },
-        { id: 'pool', name: 'Pool & Amenity Deck', cost: 2000000, description: 'Swimming pool and deck area' },
-        { id: 'fitness', name: 'Fitness Center', cost: 500000, description: 'Gym and workout facilities' },
-        { id: 'clubhouse', name: 'Clubhouse', cost: 1000000, description: 'Community gathering space' },
-        { id: 'rooftop', name: 'Rooftop Terrace', cost: 1500000, description: 'Rooftop amenity space' }
-      ],
-      commercial: [
-        { id: 'data_center', name: 'Data Center', cost: 5000000, description: 'Server room with redundant systems' },
-        { id: 'cafeteria', name: 'Cafeteria', cost: 1000000, description: 'Employee dining facility' },
-        { id: 'fitness', name: 'Fitness Center', cost: 750000, description: 'Employee gym' },
-        { id: 'conference', name: 'Conference Center', cost: 2000000, description: 'Large meeting spaces' },
-        { id: 'parking_deck', name: 'Parking Deck', cost: 4000000, description: 'Multi-level parking' }
-      ],
-    };
-
-    return filterSpecialFeaturesBySubtype(features[buildingType] || [], subtype);
-  };
-  
-  // Parse description to detect features automatically
-  const parseDescription = (desc: string, buildingTypeHint?: string) => {
-    const lower = desc.toLowerCase();
-    const isMultifamilyProject = buildingTypeHint === 'multifamily';
-    
-    // Detect special features in description
-    const detectedFeatures = new Set<string>();
-    if (lower.includes('gymnasium') || lower.includes('gym')) detectedFeatures.add('gymnasium');
-    if (!isMultifamilyProject && (lower.includes('parking garage') || lower.includes('garage'))) {
-      detectedFeatures.add('parking_garage');
-    }
-    if (!isMultifamilyProject && lower.includes('pool')) detectedFeatures.add('pool');
-    if (lower.includes('cafeteria')) detectedFeatures.add('cafeteria');
-    if (lower.includes('food court')) detectedFeatures.add('food_court');
-    for (const featureId of detectHealthcareFeatureIdsFromDescription(desc)) {
-      detectedFeatures.add(featureId);
-    }
-    for (const featureId of detectRestaurantFeatureIdsFromDescription(desc)) {
-      detectedFeatures.add(featureId);
-    }
-    for (const featureId of detectHospitalityFeatureIdsFromDescription(desc)) {
-      detectedFeatures.add(featureId);
-    }
-    for (const featureId of detectRetailFeatureIdsFromDescription(desc)) {
-      detectedFeatures.add(featureId);
-    }
-    for (const featureId of detectOfficeFeatureIdsFromDescription(desc)) {
-      detectedFeatures.add(featureId);
-    }
-    for (const featureId of detectSpecialtyFeatureIdsFromDescription(desc)) {
-      detectedFeatures.add(featureId);
-    }
-    for (const featureId of detectEducationalFeatureIdsFromDescription(desc)) {
-      detectedFeatures.add(featureId);
-    }
-    for (const featureId of detectCivicFeatureIdsFromDescription(desc)) {
-      detectedFeatures.add(featureId);
-    }
-    for (const featureId of detectRecreationFeatureIdsFromDescription(desc)) {
-      detectedFeatures.add(featureId);
-    }
-    for (const featureId of detectIndustrialFeatureIdsFromDescription(desc)) {
-      detectedFeatures.add(featureId);
-    }
-    for (const featureId of detectMixedUseFeatureIdsFromDescription(desc)) {
-      detectedFeatures.add(featureId);
-    }
-    for (const featureId of detectMultifamilyFeatureIdsFromDescription(desc)) {
-      detectedFeatures.add(featureId);
-    }
-    for (const featureId of detectParkingFeatureIdsFromDescription(desc)) {
-      detectedFeatures.add(featureId);
-    }
-    
-    // Detect finish level (luxury/high-end terms map into premium)
-    let detectedFinish: 'standard' | 'premium' = 'standard';
-    if (
-      lower.includes('luxury') ||
-      lower.includes('high-end') ||
-      lower.includes('premium') ||
-      lower.includes('class a')
-    ) {
-      detectedFinish = 'premium';
-    }
-    
-    // Detect project complexity
-    let detectedComplexity: 'ground_up' | 'renovation' | 'addition' = 'ground_up';
-    if (lower.includes('renovation') || lower.includes('renovate') || lower.includes('remodel')) detectedComplexity = 'renovation';
-    else if (lower.includes('addition') || lower.includes('expansion') || lower.includes('expand')) detectedComplexity = 'addition';
-    
-    return {
-      specialFeatures: Array.from(detectedFeatures),
-      finishLevel: detectedFinish,
-      projectComplexity: detectedComplexity
-    };
-  };
-
   const parseSquareFootageValue = (value: string): number | undefined => {
     if (!value) return undefined;
     const cleaned = value.replace(/,/g, '').trim().toLowerCase();
@@ -733,7 +778,7 @@ export const NewProject: React.FC = () => {
       ? normalizeMixedUseSubtypeAlias(currentSubtype) || mixedUseSubtypeFromDescription
       : mixedUseSubtypeFromDescription;
   const availableSpecialFeatures = parsedInput
-    ? getAvailableFeatures(effectiveBuildingType || '', currentSubtype)
+    ? getNewProjectAvailableFeatures(effectiveBuildingType || '', currentSubtype)
     : [];
   const applicableSpecialFeatures = availableSpecialFeatures;
   const effectiveMixedUseSplitContract = useMemo(() => {
@@ -958,35 +1003,14 @@ export const NewProject: React.FC = () => {
     if (analysis) {
       const parsedBuildingType = analysis.parsed_input?.building_type;
       const parsedSubtype = analysis.parsed_input?.subtype || analysis.parsed_input?.building_subtype;
-      // Auto-detect features from description
-      const parsed = parseDescription(description, parsedBuildingType);
-      const parkingIntent = resolveParkingIntentFromDescription(description);
-      const effectiveBuildingType =
-        parsedBuildingType || (parkingIntent.shouldRouteToParking ? 'parking' : undefined);
-      const subtypeFromDescription =
-        parsedBuildingType === 'mixed_use' && !parsedSubtype
-          ? normalizeMixedUseSubtypeAlias(detectMixedUseSubtypeFromDescription(description).subtype)
-        : parsedBuildingType === 'educational' && !parsedSubtype
-          ? detectEducationalSubtypeFromDescription(description)
-          : parsedBuildingType === 'civic' && !parsedSubtype
-            ? detectCivicSubtypeFromDescription(description)
-          : parsedBuildingType === 'recreation' && !parsedSubtype
-            ? detectRecreationSubtypeFromDescription(description)
-          : parsedBuildingType === 'parking' && !parsedSubtype
-            ? parkingIntent.subtype
-          : undefined;
-      const resolvedSubtype =
-        effectiveBuildingType === 'mixed_use'
-          ? normalizeMixedUseSubtypeAlias(parsedSubtype || subtypeFromDescription)
-          : parsedSubtype || subtypeFromDescription;
-      const allowedFeatureIds = new Set(
-        getAvailableFeatures(effectiveBuildingType || '', resolvedSubtype).map((feature) => feature.id)
-      );
-      const parsedSpecialFeatures = parsed.specialFeatures.filter((featureId) =>
-        allowedFeatureIds.has(featureId)
-      );
-      if (specialFeatures.length === 0 && parsedSpecialFeatures.length > 0) {
-        setSpecialFeatures(parsedSpecialFeatures);
+      const autoDetected = resolveNewProjectAutoDetection({
+        description,
+        parsedBuildingType,
+        parsedSubtype,
+      });
+
+      if (specialFeatures.length === 0 && autoDetected.filteredFeatureIds.length > 0) {
+        setSpecialFeatures(autoDetected.filteredFeatureIds);
       }
       if (!finishLevelLocked) {
         const engineFinish = analysis.calculations?.project_info?.finish_level;
@@ -1000,12 +1024,12 @@ export const NewProject: React.FC = () => {
               : undefined;
         if (sanitizedEngineFinish) {
           setFinishLevel(sanitizedEngineFinish);
-        } else if (parsed.finishLevel) {
-          setFinishLevel(parsed.finishLevel);
+        } else if (autoDetected.finishLevel) {
+          setFinishLevel(autoDetected.finishLevel);
         }
       }
-      if (!projectClassLocked && parsed.projectComplexity) {
-        setProjectComplexity(parsed.projectComplexity);
+      if (!projectClassLocked && autoDetected.projectComplexity) {
+        setProjectComplexity(autoDetected.projectComplexity);
       }
       if (analysis.parsed_input?.square_footage) {
         setSquareFootageInput(formatNumber(analysis.parsed_input.square_footage));
