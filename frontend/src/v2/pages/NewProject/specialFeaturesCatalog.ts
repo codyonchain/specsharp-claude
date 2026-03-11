@@ -2647,7 +2647,15 @@ const EDUCATIONAL_KEYWORD_DETECTION: Array<{
   featureId: string;
   patterns: RegExp[];
 }> = [
-  { featureId: "gymnasium", patterns: [/\bgymnasium\b/i, /\bschool gym\b/i] },
+  {
+    featureId: "gymnasium",
+    patterns: [
+      /\bgymnasium\b/i,
+      /\bschool gym\b/i,
+      /\bschool\b.*\bgym\b/i,
+      /\b(?:elementary|middle|high)\s+school\b.*\bgym\b/i,
+    ],
+  },
   { featureId: "cafeteria", patterns: [/\bcafeteria\b/i, /\bschool dining\b/i] },
   { featureId: "playground", patterns: [/\bplayground\b/i] },
   { featureId: "computer_lab", patterns: [/\bcomputer lab\b/i] },
@@ -2798,7 +2806,12 @@ const CIVIC_KEYWORD_DETECTION: Array<{
   },
   {
     featureId: "gymnasium",
-    patterns: [/\bgymnasium\b/i, /\bcommunity gym\b/i],
+    patterns: [
+      /\bgymnasium\b/i,
+      /\bcommunity gym\b/i,
+      /\bcommunity center\b.*\bgym\b/i,
+      /\bcivic center\b.*\bgym\b/i,
+    ],
   },
   {
     featureId: "kitchen",
@@ -2942,7 +2955,15 @@ const RECREATION_KEYWORD_DETECTION: Array<{
   { featureId: "lazy_river", patterns: [/\blazy river\b/i] },
   { featureId: "water_slides", patterns: [/\bwater slides?\b/i] },
   { featureId: "therapy_pool", patterns: [/\btherapy pool\b/i, /\bhydrotherapy pool\b/i] },
-  { featureId: "gymnasium", patterns: [/\bgymnasium\b/i, /\brecreation gym\b/i] },
+  {
+    featureId: "gymnasium",
+    patterns: [
+      /\bgymnasium\b/i,
+      /\brecreation gym\b/i,
+      /\brecreation center\b.*\bgym\b/i,
+      /\brec center\b.*\bgym\b/i,
+    ],
+  },
   { featureId: "game_room", patterns: [/\bgame rooms?\b/i] },
   { featureId: "craft_room", patterns: [/\bcraft rooms?\b/i, /\bmakers? room\b/i] },
   { featureId: "dance_studio", patterns: [/\bdance studio\b/i] },

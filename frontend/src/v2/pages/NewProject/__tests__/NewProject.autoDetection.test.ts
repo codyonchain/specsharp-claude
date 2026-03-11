@@ -63,6 +63,36 @@ describe('NewProject auto-detection path', () => {
       expectedRaw: ['cafeteria'],
       expectedFiltered: ['cafeteria'],
     },
+    {
+      name: 'civic gymnasium detection now flows through shared civic detector coverage',
+      description: 'New 38000 sf community center with gym in Nashville, TN',
+      parsedBuildingType: 'civic',
+      parsedSubtype: 'community_center',
+      expectedAllowed: [
+        'fitness_center',
+        'gymnasium',
+        'kitchen',
+        'multipurpose_room',
+        'outdoor_pavilion',
+      ],
+      expectedRaw: ['gymnasium'],
+      expectedFiltered: ['gymnasium'],
+    },
+    {
+      name: 'recreation gymnasium detection now flows through shared recreation detector coverage',
+      description: 'Renovate a 60000 sf recreation center with gym in Nashville, TN',
+      parsedBuildingType: 'recreation',
+      parsedSubtype: 'recreation_center',
+      expectedAllowed: [
+        'craft_room',
+        'dance_studio',
+        'game_room',
+        'gymnasium',
+        'outdoor_courts',
+      ],
+      expectedRaw: ['gymnasium'],
+      expectedFiltered: ['gymnasium'],
+    },
   ])(
     'resolves raw, allowed, and filtered ids for $name',
     ({

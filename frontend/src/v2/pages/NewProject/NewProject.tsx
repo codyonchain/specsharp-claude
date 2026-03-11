@@ -297,17 +297,10 @@ export const getNewProjectAvailableFeatures = (
   return filterSpecialFeaturesBySubtype(LEGACY_SPECIAL_FEATURES_BY_BUILDING_TYPE[buildingType] || [], subtype);
 };
 
-const parseNewProjectDescription = (desc: string, buildingTypeHint?: string) => {
+const parseNewProjectDescription = (desc: string) => {
   const lower = desc.toLowerCase();
-  const isMultifamilyProject = buildingTypeHint === 'multifamily';
 
   const detectedFeatures = new Set<string>();
-  if (lower.includes('gymnasium') || lower.includes('gym')) detectedFeatures.add('gymnasium');
-  if (!isMultifamilyProject && (lower.includes('parking garage') || lower.includes('garage'))) {
-    detectedFeatures.add('parking_garage');
-  }
-  if (!isMultifamilyProject && lower.includes('pool')) detectedFeatures.add('pool');
-  if (lower.includes('cafeteria')) detectedFeatures.add('cafeteria');
   for (const featureId of detectHealthcareFeatureIdsFromDescription(desc)) {
     detectedFeatures.add(featureId);
   }
@@ -378,7 +371,7 @@ export const resolveNewProjectAutoDetection = ({
   parsedBuildingType?: string;
   parsedSubtype?: string;
 }) => {
-  const parsed = parseNewProjectDescription(description, parsedBuildingType);
+  const parsed = parseNewProjectDescription(description);
   const parkingIntent = resolveParkingIntentFromDescription(description);
   const effectiveBuildingType =
     parsedBuildingType || (parkingIntent.shouldRouteToParking ? 'parking' : undefined);
