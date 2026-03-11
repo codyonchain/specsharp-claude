@@ -544,6 +544,39 @@ export const MIXED_USE_FEATURE_COSTS_BY_SUBTYPE: Record<
   },
 };
 
+export const MULTIFAMILY_SUBTYPES = [
+  "market_rate_apartments",
+  "luxury_apartments",
+  "affordable_housing",
+] as const;
+
+export type MultifamilySubtype = (typeof MULTIFAMILY_SUBTYPES)[number];
+
+export const MULTIFAMILY_FEATURE_COSTS_BY_SUBTYPE: Record<
+  MultifamilySubtype,
+  Record<string, number>
+> = {
+  market_rate_apartments: {
+    parking_garage: 32,
+    pool: 18,
+    fitness_center: 14,
+    rooftop_amenity: 24,
+  },
+  luxury_apartments: {
+    parking_garage: 45,
+    pool: 25,
+    fitness_center: 20,
+    rooftop_amenity: 35,
+    concierge: 15,
+  },
+  affordable_housing: {
+    parking_garage: 26,
+    pool: 12,
+    fitness_center: 10,
+    rooftop_amenity: 18,
+  },
+};
+
 const RESTAURANT_FEATURE_METADATA: Record<
   string,
   { name: string; description: string }
@@ -1646,6 +1679,32 @@ const PARKING_FEATURE_METADATA: Record<
   },
 };
 
+const MULTIFAMILY_FEATURE_METADATA: Record<
+  string,
+  { name: string; description: string }
+> = {
+  parking_garage: {
+    name: "Parking Garage",
+    description: "Structured resident and guest parking.",
+  },
+  pool: {
+    name: "Pool",
+    description: "Outdoor pool with code-compliant deck and support spaces.",
+  },
+  fitness_center: {
+    name: "Fitness Center",
+    description: "Resident fitness room with specialty flooring and MEP upgrades.",
+  },
+  rooftop_amenity: {
+    name: "Rooftop Amenity",
+    description: "Rooftop gathering area with shade structures and utility tie-ins.",
+  },
+  concierge: {
+    name: "Concierge Lobby",
+    description: "Enhanced staffed lobby and service desk buildout.",
+  },
+};
+
 export const filterSpecialFeaturesBySubtype = (
   features: SpecialFeatureOption[],
   subtype?: string
@@ -2122,6 +2181,48 @@ export const MIXED_USE_SPECIAL_FEATURES = createMixedUseSpecialFeatures();
 
 export const getMixedUseSpecialFeatures = (): SpecialFeatureOption[] =>
   MIXED_USE_SPECIAL_FEATURES;
+
+const createMultifamilySpecialFeatures = (): SpecialFeatureOption[] => {
+  const byFeatureId: Record<
+    string,
+    { costPerSFBySubtype: Record<string, number>; allowedSubtypes: string[] }
+  > = {};
+
+  for (const subtype of MULTIFAMILY_SUBTYPES) {
+    const entries = MULTIFAMILY_FEATURE_COSTS_BY_SUBTYPE[subtype];
+    for (const [featureId, costPerSF] of Object.entries(entries)) {
+      if (!byFeatureId[featureId]) {
+        byFeatureId[featureId] = {
+          costPerSFBySubtype: {},
+          allowedSubtypes: [],
+        };
+      }
+      byFeatureId[featureId].costPerSFBySubtype[subtype] = costPerSF;
+      byFeatureId[featureId].allowedSubtypes.push(subtype);
+    }
+  }
+
+  return Object.entries(byFeatureId)
+    .sort(([featureA], [featureB]) => featureA.localeCompare(featureB))
+    .map(([featureId, featureData]) => {
+      const metadata = MULTIFAMILY_FEATURE_METADATA[featureId];
+      return {
+        id: featureId,
+        name: metadata?.name ?? featureId.replace(/_/g, " "),
+        description:
+          metadata?.description ?? "Multifamily subtype specific special feature.",
+        costPerSFBySubtype: featureData.costPerSFBySubtype,
+        allowedSubtypes: MULTIFAMILY_SUBTYPES.filter((subtype) =>
+          featureData.allowedSubtypes.includes(subtype)
+        ),
+      };
+    });
+};
+
+export const MULTIFAMILY_SPECIAL_FEATURES = createMultifamilySpecialFeatures();
+
+export const getMultifamilySpecialFeatures = (): SpecialFeatureOption[] =>
+  MULTIFAMILY_SPECIAL_FEATURES;
 
 const RESTAURANT_KEYWORD_DETECTION: Array<{
   featureId: string;
@@ -2888,6 +2989,56 @@ export const detectMixedUseFeatureIdsFromDescription = (
   return Array.from(detectedFeatureIds);
 };
 
+const MULTIFAMILY_KEYWORD_DETECTION: Array<{
+  featureId: string;
+  patterns: RegExp[];
+}> = [
+  {
+    featureId: "parking_garage",
+    patterns: [/\bparking garage\b/i, /\bgarage parking\b/i],
+  },
+  {
+    featureId: "pool",
+    patterns: [/\bpool\b/i],
+  },
+  {
+    featureId: "fitness_center",
+    patterns: [
+      /\bfitness center\b/i,
+      /\bresident gym\b/i,
+      /\bamenity gym\b/i,
+      /\bresident fitness\b/i,
+      /\bresident fitness room\b/i,
+    ],
+  },
+  {
+    featureId: "rooftop_amenity",
+    patterns: [
+      /\brooftop amenit(?:y|ies)\b/i,
+      /\brooftop deck\b/i,
+      /\broof deck\b/i,
+      /\brooftop terrace\b/i,
+      /\broof terrace\b/i,
+    ],
+  },
+  {
+    featureId: "concierge",
+    patterns: [/\bconcierge lobby\b/i, /\bconcierge\b/i],
+  },
+];
+
+export const detectMultifamilyFeatureIdsFromDescription = (
+  description: string
+): string[] => {
+  const detectedFeatureIds = new Set<string>();
+  for (const { featureId, patterns } of MULTIFAMILY_KEYWORD_DETECTION) {
+    if (patterns.some((pattern) => pattern.test(description))) {
+      detectedFeatureIds.add(featureId);
+    }
+  }
+  return Array.from(detectedFeatureIds);
+};
+
 const PARKING_KEYWORD_DETECTION: Array<{
   featureId: string;
   patterns: RegExp[];
@@ -3282,6 +3433,7 @@ const SPECIAL_FEATURES_BY_BUILDING_TYPE: Record<string, SpecialFeatureOption[]> 
   recreation: RECREATION_SPECIAL_FEATURES,
   parking: PARKING_SPECIAL_FEATURES,
   mixed_use: MIXED_USE_SPECIAL_FEATURES,
+  multifamily: MULTIFAMILY_SPECIAL_FEATURES,
 };
 
 const VALID_SUBTYPES_BY_BUILDING_TYPE: Record<string, readonly string[]> = {
@@ -3296,6 +3448,7 @@ const VALID_SUBTYPES_BY_BUILDING_TYPE: Record<string, readonly string[]> = {
   recreation: RECREATION_SUBTYPES,
   parking: PARKING_SUBTYPES,
   mixed_use: MIXED_USE_SUBTYPES,
+  multifamily: MULTIFAMILY_SUBTYPES,
 };
 
 export const getAvailableSpecialFeatures = (
@@ -3387,3 +3540,6 @@ export const mixedUseSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
     MIXED_USE_SPECIAL_FEATURES,
     normalizeMixedUseSubtypeAlias(subtype)
   ).length > 0;
+
+export const multifamilySubtypeHasSpecialFeatures = (subtype?: string): boolean =>
+  filterSpecialFeaturesBySubtype(MULTIFAMILY_SPECIAL_FEATURES, subtype).length > 0;

@@ -7,6 +7,8 @@ import {
   HEALTHCARE_SUBTYPES,
   HOSPITALITY_FEATURE_COSTS_BY_SUBTYPE,
   HOSPITALITY_SUBTYPES,
+  MULTIFAMILY_FEATURE_COSTS_BY_SUBTYPE,
+  MULTIFAMILY_SUBTYPES,
   MIXED_USE_FEATURE_COSTS_BY_SUBTYPE,
   MIXED_USE_SUBTYPES,
   OFFICE_FEATURE_COSTS_BY_SUBTYPE,
@@ -26,11 +28,13 @@ import {
   detectEducationalSubtypeFromDescription,
   detectHealthcareFeatureIdsFromDescription,
   detectHospitalityFeatureIdsFromDescription,
+  detectMultifamilyFeatureIdsFromDescription,
   detectMixedUseFeatureIdsFromDescription,
   detectOfficeFeatureIdsFromDescription,
   detectParkingFeatureIdsFromDescription,
   detectRecreationFeatureIdsFromDescription,
   detectRecreationSubtypeFromDescription,
+  detectRestaurantFeatureIdsFromDescription,
   detectRetailFeatureIdsFromDescription,
   detectSpecialtyFeatureIdsFromDescription,
   educationalSubtypeHasSpecialFeatures,
@@ -40,6 +44,7 @@ import {
   getEducationalSpecialFeatures,
   getHealthcareSpecialFeatures,
   getHospitalitySpecialFeatures,
+  getMultifamilySpecialFeatures,
   getMixedUseSpecialFeatures,
   getOfficeSpecialFeatures,
   getParkingSpecialFeatures,
@@ -50,6 +55,7 @@ import {
   getSpecialtySpecialFeatures,
   healthcareSubtypeHasSpecialFeatures,
   hospitalitySubtypeHasSpecialFeatures,
+  multifamilySubtypeHasSpecialFeatures,
   mixedUseSubtypeHasSpecialFeatures,
   officeSubtypeHasSpecialFeatures,
   parkingSubtypeHasSpecialFeatures,
@@ -57,6 +63,28 @@ import {
   retailSubtypeHasSpecialFeatures,
   restaurantSubtypeHasSpecialFeatures,
 } from "../specialFeaturesCatalog";
+
+const REQUIRED_MULTIFAMILY_MAPPING = {
+  market_rate_apartments: {
+    parking_garage: 32,
+    pool: 18,
+    fitness_center: 14,
+    rooftop_amenity: 24,
+  },
+  luxury_apartments: {
+    parking_garage: 45,
+    pool: 25,
+    fitness_center: 20,
+    rooftop_amenity: 35,
+    concierge: 15,
+  },
+  affordable_housing: {
+    parking_garage: 26,
+    pool: 12,
+    fitness_center: 10,
+    rooftop_amenity: 18,
+  },
+} as const;
 
 const REQUIRED_RESTAURANT_MAPPING = {
   quick_service: {
@@ -445,6 +473,71 @@ const resolveFeatureCostPerSF = (
   }
   return 0;
 };
+
+describe("multifamily special features catalog", () => {
+  it("is non-empty and matches the shared multifamily subtype mapping", () => {
+    const multifamilyFeatures = getMultifamilySpecialFeatures();
+    expect(multifamilyFeatures.length).toBeGreaterThan(0);
+    expect(MULTIFAMILY_FEATURE_COSTS_BY_SUBTYPE).toEqual(REQUIRED_MULTIFAMILY_MAPPING);
+  });
+
+  it("resolves expected multifamily feature IDs for each subtype with no duplicates", () => {
+    const multifamilyFeatures = getMultifamilySpecialFeatures();
+
+    for (const subtype of MULTIFAMILY_SUBTYPES) {
+      const expectedIds = Object.keys(REQUIRED_MULTIFAMILY_MAPPING[subtype]).sort();
+      const resolvedIds = filterSpecialFeaturesBySubtype(multifamilyFeatures, subtype).map(
+        (feature) => feature.id
+      );
+      const uniqueResolvedIds = Array.from(new Set(resolvedIds));
+
+      expect(uniqueResolvedIds.length).toBe(resolvedIds.length);
+      expect(uniqueResolvedIds.sort()).toEqual(expectedIds);
+    }
+  });
+
+  it("detects multifamily feature IDs from centralized amenity language", () => {
+    expect(
+      detectMultifamilyFeatureIdsFromDescription(
+        "Market-rate apartments with rooftop amenity, roof deck, roof terrace, pool, parking garage, and resident gym."
+      ).sort()
+    ).toEqual(["fitness_center", "parking_garage", "pool", "rooftop_amenity"]);
+
+    expect(
+      detectMultifamilyFeatureIdsFromDescription(
+        "Luxury apartments with concierge lobby and amenity gym."
+      ).sort()
+    ).toEqual(["concierge", "fitness_center"]);
+  });
+
+  it("filters rooftop collisions back to the multifamily feature set in the real shared path", () => {
+    const description =
+      "200-unit market-rate apartment tower with rooftop amenity and roof terrace in Dallas, TX.";
+    const detectedIds = new Set([
+      ...detectMultifamilyFeatureIdsFromDescription(description),
+      ...detectRestaurantFeatureIdsFromDescription(description),
+      ...detectHospitalityFeatureIdsFromDescription(description),
+      ...detectMixedUseFeatureIdsFromDescription(description),
+    ]);
+    const allowedIds = new Set(
+      getAvailableSpecialFeatures("multifamily", "market_rate_apartments").map(
+        (feature) => feature.id
+      )
+    );
+
+    expect(
+      Array.from(detectedIds)
+        .filter((featureId) => allowedIds.has(featureId))
+        .sort()
+    ).toEqual(["rooftop_amenity"]);
+  });
+
+  it("multifamily subtype helper returns true for all canonical multifamily subtypes", () => {
+    for (const subtype of MULTIFAMILY_SUBTYPES) {
+      expect(multifamilySubtypeHasSpecialFeatures(subtype)).toBe(true);
+    }
+  });
+});
 
 describe("restaurant special features catalog", () => {
   it("is non-empty and matches required subtype mapping keys/values", () => {

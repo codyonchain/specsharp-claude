@@ -12,6 +12,7 @@ import {
   detectEducationalSubtypeFromDescription,
   detectHealthcareFeatureIdsFromDescription,
   detectHospitalityFeatureIdsFromDescription,
+  detectMultifamilyFeatureIdsFromDescription,
   detectMixedUseFeatureIdsFromDescription,
   detectOfficeFeatureIdsFromDescription,
   detectParkingFeatureIdsFromDescription,
@@ -495,7 +496,8 @@ export const NewProject: React.FC = () => {
       buildingType === 'civic' ||
       buildingType === 'recreation' ||
       buildingType === 'parking' ||
-      buildingType === 'mixed_use'
+      buildingType === 'mixed_use' ||
+      buildingType === 'multifamily'
     ) {
       return getAvailableSpecialFeatures(buildingType, subtype);
     }
@@ -507,61 +509,6 @@ export const NewProject: React.FC = () => {
         { id: 'fitness', name: 'Fitness Center', cost: 500000, description: 'Gym and workout facilities' },
         { id: 'clubhouse', name: 'Clubhouse', cost: 1000000, description: 'Community gathering space' },
         { id: 'rooftop', name: 'Rooftop Terrace', cost: 1500000, description: 'Rooftop amenity space' }
-      ],
-      multifamily: [
-        {
-          id: 'parking_garage',
-          name: 'Parking Garage',
-          costPerSFBySubtype: {
-            luxury_apartments: 45,
-            market_rate_apartments: 32,
-            affordable_housing: 26,
-          },
-          description: 'Structured resident and guest parking',
-          allowedSubtypes: ['market_rate_apartments', 'luxury_apartments', 'affordable_housing']
-        },
-        {
-          id: 'pool',
-          name: 'Pool',
-          costPerSFBySubtype: {
-            luxury_apartments: 25,
-            market_rate_apartments: 18,
-            affordable_housing: 12,
-          },
-          description: 'Outdoor pool with code-compliant deck and support spaces',
-          allowedSubtypes: ['market_rate_apartments', 'luxury_apartments', 'affordable_housing']
-        },
-        {
-          id: 'fitness_center',
-          name: 'Fitness Center',
-          costPerSFBySubtype: {
-            luxury_apartments: 20,
-            market_rate_apartments: 14,
-            affordable_housing: 10,
-          },
-          description: 'Resident fitness room with specialty flooring and MEP upgrades',
-          allowedSubtypes: ['market_rate_apartments', 'luxury_apartments', 'affordable_housing']
-        },
-        {
-          id: 'rooftop_amenity',
-          name: 'Rooftop Amenity',
-          costPerSFBySubtype: {
-            luxury_apartments: 35,
-            market_rate_apartments: 24,
-            affordable_housing: 18,
-          },
-          description: 'Rooftop gathering area with shade structures and utility tie-ins',
-          allowedSubtypes: ['market_rate_apartments', 'luxury_apartments', 'affordable_housing']
-        },
-        {
-          id: 'concierge',
-          name: 'Concierge Lobby',
-          costPerSFBySubtype: {
-            luxury_apartments: 15,
-          },
-          description: 'Enhanced staffed lobby and service desk buildout',
-          allowedSubtypes: ['luxury_apartments']
-        }
       ],
       commercial: [
         { id: 'data_center', name: 'Data Center', cost: 5000000, description: 'Server room with redundant systems' },
@@ -582,14 +529,17 @@ export const NewProject: React.FC = () => {
   };
   
   // Parse description to detect features automatically
-  const parseDescription = (desc: string) => {
+  const parseDescription = (desc: string, buildingTypeHint?: string) => {
     const lower = desc.toLowerCase();
+    const isMultifamilyProject = buildingTypeHint === 'multifamily';
     
     // Detect special features in description
     const detectedFeatures = new Set<string>();
     if (lower.includes('gymnasium') || lower.includes('gym')) detectedFeatures.add('gymnasium');
-    if (lower.includes('parking garage') || lower.includes('garage')) detectedFeatures.add('parking_garage');
-    if (lower.includes('pool')) detectedFeatures.add('pool');
+    if (!isMultifamilyProject && (lower.includes('parking garage') || lower.includes('garage'))) {
+      detectedFeatures.add('parking_garage');
+    }
+    if (!isMultifamilyProject && lower.includes('pool')) detectedFeatures.add('pool');
     if (lower.includes('cafeteria')) detectedFeatures.add('cafeteria');
     if (lower.includes('loading dock')) detectedFeatures.add('loading_docks');
     if (lower.includes('cold storage')) detectedFeatures.add('cold_storage');
@@ -622,6 +572,9 @@ export const NewProject: React.FC = () => {
       detectedFeatures.add(featureId);
     }
     for (const featureId of detectMixedUseFeatureIdsFromDescription(desc)) {
+      detectedFeatures.add(featureId);
+    }
+    for (const featureId of detectMultifamilyFeatureIdsFromDescription(desc)) {
       detectedFeatures.add(featureId);
     }
     for (const featureId of detectParkingFeatureIdsFromDescription(desc)) {
@@ -1006,10 +959,10 @@ export const NewProject: React.FC = () => {
     });
     
     if (analysis) {
-      // Auto-detect features from description
-      const parsed = parseDescription(description);
       const parsedBuildingType = analysis.parsed_input?.building_type;
       const parsedSubtype = analysis.parsed_input?.subtype || analysis.parsed_input?.building_subtype;
+      // Auto-detect features from description
+      const parsed = parseDescription(description, parsedBuildingType);
       const parkingIntent = resolveParkingIntentFromDescription(description);
       const effectiveBuildingType =
         parsedBuildingType || (parkingIntent.shouldRouteToParking ? 'parking' : undefined);
