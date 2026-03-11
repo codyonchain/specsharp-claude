@@ -524,6 +524,29 @@ class NLPService:
 
         return retail_subtype
 
+    def _resolve_restaurant_cafe_collision(self, text_lower: str) -> Optional[str]:
+        """Keep explicit cafe assets on the cafe subtype even when drive-thru is present."""
+        if not isinstance(text_lower, str) or not text_lower.strip():
+            return None
+
+        explicit_cafe_patterns = (
+            r"\bcafe\b",
+            r"\bcoffee\s+shop\b",
+        )
+        if not any(re.search(pattern, text_lower) for pattern in explicit_cafe_patterns):
+            return None
+
+        explicit_qsr_asset_patterns = (
+            r"\bquick\s+service\s+restaurant\b",
+            r"\bquick\s+service\b",
+            r"\bqsr\b",
+            r"\bfast\s+food(?:\s+restaurant)?\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in explicit_qsr_asset_patterns):
+            return None
+
+        return "cafe"
+
     def _resolve_civic_subtype_from_intent(self, text_lower: str) -> Optional[str]:
         """Resolve high-confidence civic intents before generic pattern routing."""
         if not isinstance(text_lower, str) or not text_lower.strip():
@@ -1129,6 +1152,14 @@ class NLPService:
                 "conflict_resolution": "retail_container_beats_qsr_drive_thru",
             }
             return "retail", retail_collision_subtype, classification
+
+        restaurant_collision_subtype = self._resolve_restaurant_cafe_collision(text_lower)
+        if restaurant_collision_subtype is not None:
+            self._last_detection_metadata = {
+                "detection_source": "nlp_service.restaurant_subtype_conflict_guard",
+                "conflict_resolution": "explicit_cafe_beats_drive_thru_qsr_cue",
+            }
+            return "restaurant", restaurant_collision_subtype, classification
 
         # Priority order (check specific before general)
         PRIORITY_ORDER = [

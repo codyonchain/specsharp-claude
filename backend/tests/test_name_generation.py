@@ -408,6 +408,16 @@ class TestProjectNameGeneration:
                 "Quick Service in Nashville",
             ),
             (
+                "New 3200 sf cafe in Nashville, TN",
+                "cafe",
+                "Cafe in Nashville",
+            ),
+            (
+                "New 3200 sf cafe with drive thru in Nashville, TN",
+                "cafe",
+                "Cafe in Nashville",
+            ),
+            (
                 "New 4800 sf full service restaurant with table service in Nashville, TN",
                 "full_service",
                 "Full Service in Nashville",
