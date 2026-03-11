@@ -438,6 +438,34 @@ class NLPService:
         )
         return any(re.search(pattern, text_lower) for pattern in strong_office_patterns)
 
+    def _resolve_multifamily_subtype_from_intent(self, text_lower: str) -> Optional[str]:
+        """Resolve strong multifamily intent before amenity language can reroute to other families."""
+        if not isinstance(text_lower, str) or not text_lower.strip():
+            return None
+
+        multifamily_patterns = self.building_patterns.get('multifamily', {})
+        subtype_patterns = multifamily_patterns.get('subtypes', {})
+        subtype_priority = (
+            'luxury_apartments',
+            'affordable_housing',
+            'market_rate_apartments',
+        )
+        for subtype_key in subtype_priority:
+            for keyword in sorted(subtype_patterns.get(subtype_key, []), key=len, reverse=True):
+                if keyword in text_lower:
+                    return subtype_key
+
+        strong_multifamily_patterns = (
+            r"\bapartment\s+(?:building|complex|development|tower)\b",
+            r"\bmulti[-\s]?family\b",
+            r"\bresidential\s+(?:tower|complex|development)\b",
+            r"\b\d+\s*[-]?\s*unit\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in strong_multifamily_patterns):
+            return self._get_default_subtype('multifamily')
+
+        return None
+
     def _resolve_office_subtype_from_intent(self, text_lower: str) -> Optional[str]:
         """Resolve explicit office class signals when present; otherwise keep subtype unknown."""
         if re.search(r"\bclass\s*a\b", text_lower) or re.search(r"\bgrade\s*a\b", text_lower):
@@ -928,6 +956,7 @@ class NLPService:
             return 'healthcare', 'medical_office_building', classification
 
         recreation_subtype = self._resolve_recreation_subtype_from_intent(text_lower)
+        multifamily_subtype = self._resolve_multifamily_subtype_from_intent(text_lower)
         civic_subtype = self._resolve_civic_subtype_from_intent(text_lower)
         if civic_subtype is not None:
             return 'civic', civic_subtype, classification
@@ -1015,12 +1044,15 @@ class NLPService:
         if re.search(r'\btier[\s-]?(3|iii|4|iv)\b', text_lower):
             return 'specialty', 'data_center', classification
 
-        if recreation_subtype is not None:
+        if recreation_subtype is not None and multifamily_subtype is None:
             return 'recreation', recreation_subtype, classification
         if (
-            re.search(r"\brecreation\b", text_lower)
-            or re.search(r"\bathletic\s+facility\b", text_lower)
-            or re.search(r"\bparks?\s+and\s+recreation\b", text_lower)
+            multifamily_subtype is None
+            and (
+                re.search(r"\brecreation\b", text_lower)
+                or re.search(r"\bathletic\s+facility\b", text_lower)
+                or re.search(r"\bparks?\s+and\s+recreation\b", text_lower)
+            )
         ):
             return 'recreation', None, classification
 
@@ -1036,6 +1068,9 @@ class NLPService:
                 "detection_source": "nlp_service.parking_conflict_router",
                 "conflict_resolution": parking_outcome,
             }
+
+        if multifamily_subtype is not None:
+            return 'multifamily', multifamily_subtype, classification
 
         # Priority order (check specific before general)
         PRIORITY_ORDER = [
