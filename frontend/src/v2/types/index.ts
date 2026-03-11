@@ -143,12 +143,79 @@ export interface ConstructionCosts {
   construction_total: number;
   equipment_total: number;
   special_features_total: number;
-  special_features_breakdown?: Array<{
-    id: string;
-    cost_per_sf: number;
-    total_cost: number;
-    label: string;
-  }>;
+  special_features_breakdown?: SpecialFeatureBreakdownRow[];
+}
+
+export type SpecialFeaturePricingStatus = 'included_in_baseline' | 'incremental';
+
+export type SpecialFeaturePricingBasis =
+  | 'WHOLE_PROJECT_SF'
+  | 'COUNT_BASED'
+  | 'AREA_SHARE_GSF'
+  | 'FIXED_LUMP_SUM'
+  | 'TIERED_INTENSITY';
+
+export type SpecialFeatureCountPricingMode =
+  | 'all_units'
+  | 'overage_above_default';
+
+export interface SpecialFeaturePricingCountBand {
+  label?: string;
+  max_square_footage?: number;
+  count: number;
+}
+
+export interface SpecialFeatureBreakdownRow {
+  id: string;
+  label: string;
+  total_cost: number;
+  pricing_status?: SpecialFeaturePricingStatus;
+  pricing_basis?: SpecialFeaturePricingBasis;
+  count_pricing_mode?: SpecialFeatureCountPricingMode;
+  configured_value?: number;
+  configured_cost_per_feature_area_sf?: number;
+  applied_value?: number;
+  applied_quantity?: number;
+  quantity_source?: string;
+  configured_cost_per_sf?: number;
+  cost_per_sf?: number;
+  configured_cost_per_count?: number;
+  cost_per_count?: number;
+  configured_area_share_of_gsf?: number;
+  configured_count?: number;
+  configured_count_bands?: SpecialFeaturePricingCountBand[];
+  unit_label?: string;
+  resolved_size_band?: string;
+  requested_quantity?: number;
+  requested_quantity_source?: string;
+  included_baseline_quantity?: number;
+  included_baseline_quantity_source?: string;
+  billed_quantity?: number;
+  billed_quantity_source?: string;
+}
+
+export interface AvailableSpecialFeaturePricing {
+  id: string;
+  label: string;
+  pricing_status: SpecialFeaturePricingStatus;
+  pricing_basis?: SpecialFeaturePricingBasis;
+  count_pricing_mode?: SpecialFeatureCountPricingMode;
+  configured_value?: number;
+  configured_cost_per_sf?: number;
+  configured_cost_per_feature_area_sf?: number;
+  configured_cost_per_count?: number;
+  configured_area_share_of_gsf?: number;
+  configured_count?: number;
+  configured_count_bands?: SpecialFeaturePricingCountBand[];
+  count_override_keys?: string[];
+  unit_label?: string;
+  resolved_size_band?: string;
+  requested_quantity?: number;
+  requested_quantity_source?: string;
+  included_baseline_quantity?: number;
+  included_baseline_quantity_source?: string;
+  billed_quantity?: number;
+  billed_quantity_source?: string;
 }
 
 export interface RegionalContext {
@@ -198,6 +265,28 @@ export interface OwnershipAnalysis {
   };
 }
 
+export interface FinancingSummaryItem {
+  id: string;
+  label: string;
+  value: number;
+  format: 'currency' | 'percentage' | 'multiple' | 'basis_points';
+  decimals?: number;
+}
+
+export interface FinancingSummaryContract {
+  family_id:
+    | 'lease_rent_market_rate'
+    | 'hospitality'
+    | 'operating_business_fit_out_heavy'
+    | 'mixed_use_blended'
+    | 'high_capex_parking_special_case'
+    | 'subsidized_public_institutional';
+  family_label: string;
+  subtitle: string;
+  note?: string;
+  items: FinancingSummaryItem[];
+}
+
 export interface CalculationResult {
   project_info: {
     building_type: string;
@@ -208,6 +297,10 @@ export interface CalculationResult {
     location: string;
     floors: number;
     typical_floors: number;
+    finish_level?: string;
+    finish_level_source?: string;
+    available_special_features?: string[];
+    available_special_feature_pricing?: AvailableSpecialFeaturePricing[];
   };
   regional?: RegionalContext;
   regional_applied?: boolean;
@@ -227,6 +320,7 @@ export interface CalculationResult {
   soft_costs: Record<string, number>;
   totals: ProjectTotals;
   ownership_analysis?: OwnershipAnalysis;
+  financing_summary?: FinancingSummaryContract;
   calculation_trace: TraceEntry[];
   timestamp: string;
 }

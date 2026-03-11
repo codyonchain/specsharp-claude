@@ -70,11 +70,36 @@ CONFIG = (
         special_features={
             "outdoor_seating": 25,  # Patio/sidewalk dining
             "bar": 35,  # Full bar setup
-            "private_dining": 30,  # Private dining rooms
-            "wine_cellar": 45,  # Temperature-controlled wine storage
-            "live_kitchen": 25,  # Open/exhibition kitchen
-            "rooftop_dining": 50,  # Rooftop terrace dining
+            "private_dining": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 30,
+                "area_share_of_gsf": 0.08,
+            },  # Private dining rooms
+            "wine_cellar": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 45,
+                "area_share_of_gsf": 0.015,
+            },  # Temperature-controlled wine storage
+            "live_kitchen": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.12,
+            },  # Open/exhibition kitchen
+            "rooftop_dining": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 50,
+                "area_share_of_gsf": 0.15,
+            },  # Rooftop terrace dining
             "valet_parking": 20,  # Valet setup
+        },
+        special_feature_pricing_statuses={
+            "outdoor_seating": "included_in_baseline",
+            "bar": "included_in_baseline",
+            "private_dining": "included_in_baseline",
+            "wine_cellar": "incremental",
+            "live_kitchen": "included_in_baseline",
+            "rooftop_dining": "incremental",
+            "valet_parking": "included_in_baseline",
         },
         base_revenue_per_sf_annual=350,
         occupancy_rate_base=0.80,

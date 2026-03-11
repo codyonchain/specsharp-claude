@@ -500,6 +500,53 @@ export const PARKING_FEATURE_COSTS_BY_SUBTYPE: Record<
   },
 };
 
+export const INDUSTRIAL_SUBTYPES = [
+  "warehouse",
+  "distribution_center",
+  "cold_storage",
+  "manufacturing",
+  "flex_space",
+] as const;
+
+export type IndustrialSubtype = (typeof INDUSTRIAL_SUBTYPES)[number];
+
+export const INDUSTRIAL_FEATURE_COSTS_BY_SUBTYPE: Record<
+  IndustrialSubtype,
+  Record<string, number>
+> = {
+  warehouse: {},
+  distribution_center: {
+    automated_sorting: 25,
+    refrigerated_area: 35,
+    loading_docks: 15,
+    extra_loading_docks: 20,
+    office_buildout: 18,
+    cold_storage: 40,
+  },
+  cold_storage: {
+    blast_freezer: 50,
+    multiple_temp_zones: 30,
+    automated_retrieval: 40,
+    under_slab_heating_protection: 18,
+    high_r_value_panel_upgrade: 12,
+  },
+  manufacturing: {
+    clean_room: 75,
+    heavy_power: 40,
+    crane_bays: 30,
+    compressed_air: 20,
+  },
+  flex_space: {
+    enhanced_office_showroom_finish: 18,
+    two_story_office_mezzanine: 12,
+    heavy_power: 20,
+    clean_room: 60,
+    crane_bays: 28,
+    compressed_air: 10,
+    lab_buildout: 35,
+  },
+};
+
 export const MIXED_USE_SUBTYPES = [
   "office_residential",
   "retail_residential",
@@ -541,6 +588,39 @@ export const MIXED_USE_FEATURE_COSTS_BY_SUBTYPE: Record<
     green_roof: 35,
     parking_structure: 45,
     transit_connection: 30,
+  },
+};
+
+export const MULTIFAMILY_SUBTYPES = [
+  "market_rate_apartments",
+  "luxury_apartments",
+  "affordable_housing",
+] as const;
+
+export type MultifamilySubtype = (typeof MULTIFAMILY_SUBTYPES)[number];
+
+export const MULTIFAMILY_FEATURE_COSTS_BY_SUBTYPE: Record<
+  MultifamilySubtype,
+  Record<string, number>
+> = {
+  market_rate_apartments: {
+    parking_garage: 32,
+    pool: 18,
+    fitness_center: 14,
+    rooftop_amenity: 24,
+  },
+  luxury_apartments: {
+    parking_garage: 45,
+    pool: 25,
+    fitness_center: 20,
+    rooftop_amenity: 35,
+    concierge: 15,
+  },
+  affordable_housing: {
+    parking_garage: 26,
+    pool: 12,
+    fitness_center: 10,
+    rooftop_amenity: 18,
   },
 };
 
@@ -1646,6 +1726,110 @@ const PARKING_FEATURE_METADATA: Record<
   },
 };
 
+const MULTIFAMILY_FEATURE_METADATA: Record<
+  string,
+  { name: string; description: string }
+> = {
+  parking_garage: {
+    name: "Parking Garage",
+    description: "Structured resident and guest parking.",
+  },
+  pool: {
+    name: "Pool",
+    description: "Outdoor pool with code-compliant deck and support spaces.",
+  },
+  fitness_center: {
+    name: "Fitness Center",
+    description: "Resident fitness room with specialty flooring and MEP upgrades.",
+  },
+  rooftop_amenity: {
+    name: "Rooftop Amenity",
+    description: "Rooftop gathering area with shade structures and utility tie-ins.",
+  },
+  concierge: {
+    name: "Concierge Lobby",
+    description: "Enhanced staffed lobby and service desk buildout.",
+  },
+};
+
+const INDUSTRIAL_FEATURE_METADATA: Record<
+  string,
+  { name: string; description: string }
+> = {
+  automated_sorting: {
+    name: "Automated Sorting",
+    description: "Sortation conveyors and control systems for high-throughput distribution operations.",
+  },
+  refrigerated_area: {
+    name: "Refrigerated Area",
+    description: "Temperature-controlled warehouse zone with insulated envelope and cooling systems.",
+  },
+  loading_docks: {
+    name: "Loading Docks",
+    description: "Dedicated dock door and truck-bay package beyond the base warehouse shell.",
+  },
+  extra_loading_docks: {
+    name: "Extra Loading Docks",
+    description: "Additional dock capacity and apron improvements for higher trailer throughput.",
+  },
+  office_buildout: {
+    name: "Office Buildout",
+    description: "Administrative office area with partitions, finishes, and upgraded MEP support.",
+  },
+  cold_storage: {
+    name: "Cold Storage",
+    description: "Full cold-storage buildout with insulated systems and specialized refrigeration scope.",
+  },
+  blast_freezer: {
+    name: "Blast Freezer",
+    description: "High-capacity blast-freezing room with specialized refrigeration infrastructure.",
+  },
+  multiple_temp_zones: {
+    name: "Multiple Temp Zones",
+    description: "Separate refrigerated zones for multiple operating temperature bands.",
+  },
+  automated_retrieval: {
+    name: "Automated Retrieval",
+    description: "Automated storage and retrieval system integration for palletized inventory handling.",
+  },
+  under_slab_heating_protection: {
+    name: "Under-Slab Heating Protection",
+    description: "Heated slab protection package to mitigate frost heave in freezer environments.",
+  },
+  high_r_value_panel_upgrade: {
+    name: "High R-Value Panel Upgrade",
+    description: "Higher-performance insulated panel package for freezer and cooler enclosures.",
+  },
+  clean_room: {
+    name: "Clean Room",
+    description: "Clean-room suite with controlled finishes, filtration, and pressure-management upgrades.",
+  },
+  heavy_power: {
+    name: "Heavy Power",
+    description: "High-capacity electrical distribution for industrial production equipment loads.",
+  },
+  crane_bays: {
+    name: "Crane Bays",
+    description: "Overhead crane bay structure and support systems for heavy manufacturing operations.",
+  },
+  compressed_air: {
+    name: "Compressed Air",
+    description: "Compressed-air distribution package for equipment and production-line utility service.",
+  },
+  enhanced_office_showroom_finish: {
+    name: "Enhanced Office / Showroom Finish",
+    description: "Upgraded office and showroom finish package for flex industrial tenant frontage.",
+  },
+  two_story_office_mezzanine: {
+    name: "Two-Story Office Mezzanine",
+    description: "Two-level office mezzanine buildout within a flex industrial shell.",
+  },
+  lab_buildout: {
+    name: "Lab Buildout",
+    description: "Dedicated lab fit-out with upgraded utilities and specialized interior systems.",
+  },
+};
+
 export const filterSpecialFeaturesBySubtype = (
   features: SpecialFeatureOption[],
   subtype?: string
@@ -2081,6 +2265,48 @@ export const PARKING_SPECIAL_FEATURES = createParkingSpecialFeatures();
 export const getParkingSpecialFeatures = (): SpecialFeatureOption[] =>
   PARKING_SPECIAL_FEATURES;
 
+const createIndustrialSpecialFeatures = (): SpecialFeatureOption[] => {
+  const byFeatureId: Record<
+    string,
+    { costPerSFBySubtype: Record<string, number>; allowedSubtypes: string[] }
+  > = {};
+
+  for (const subtype of INDUSTRIAL_SUBTYPES) {
+    const entries = INDUSTRIAL_FEATURE_COSTS_BY_SUBTYPE[subtype];
+    for (const [featureId, costPerSF] of Object.entries(entries)) {
+      if (!byFeatureId[featureId]) {
+        byFeatureId[featureId] = {
+          costPerSFBySubtype: {},
+          allowedSubtypes: [],
+        };
+      }
+      byFeatureId[featureId].costPerSFBySubtype[subtype] = costPerSF;
+      byFeatureId[featureId].allowedSubtypes.push(subtype);
+    }
+  }
+
+  return Object.entries(byFeatureId)
+    .sort(([featureA], [featureB]) => featureA.localeCompare(featureB))
+    .map(([featureId, featureData]) => {
+      const metadata = INDUSTRIAL_FEATURE_METADATA[featureId];
+      return {
+        id: featureId,
+        name: metadata?.name ?? featureId.replace(/_/g, " "),
+        description:
+          metadata?.description ?? "Industrial subtype specific special feature.",
+        costPerSFBySubtype: featureData.costPerSFBySubtype,
+        allowedSubtypes: INDUSTRIAL_SUBTYPES.filter((subtype) =>
+          featureData.allowedSubtypes.includes(subtype)
+        ),
+      };
+    });
+};
+
+export const INDUSTRIAL_SPECIAL_FEATURES = createIndustrialSpecialFeatures();
+
+export const getIndustrialSpecialFeatures = (): SpecialFeatureOption[] =>
+  INDUSTRIAL_SPECIAL_FEATURES;
+
 const createMixedUseSpecialFeatures = (): SpecialFeatureOption[] => {
   const byFeatureId: Record<
     string,
@@ -2123,10 +2349,60 @@ export const MIXED_USE_SPECIAL_FEATURES = createMixedUseSpecialFeatures();
 export const getMixedUseSpecialFeatures = (): SpecialFeatureOption[] =>
   MIXED_USE_SPECIAL_FEATURES;
 
+const createMultifamilySpecialFeatures = (): SpecialFeatureOption[] => {
+  const byFeatureId: Record<
+    string,
+    { costPerSFBySubtype: Record<string, number>; allowedSubtypes: string[] }
+  > = {};
+
+  for (const subtype of MULTIFAMILY_SUBTYPES) {
+    const entries = MULTIFAMILY_FEATURE_COSTS_BY_SUBTYPE[subtype];
+    for (const [featureId, costPerSF] of Object.entries(entries)) {
+      if (!byFeatureId[featureId]) {
+        byFeatureId[featureId] = {
+          costPerSFBySubtype: {},
+          allowedSubtypes: [],
+        };
+      }
+      byFeatureId[featureId].costPerSFBySubtype[subtype] = costPerSF;
+      byFeatureId[featureId].allowedSubtypes.push(subtype);
+    }
+  }
+
+  return Object.entries(byFeatureId)
+    .sort(([featureA], [featureB]) => featureA.localeCompare(featureB))
+    .map(([featureId, featureData]) => {
+      const metadata = MULTIFAMILY_FEATURE_METADATA[featureId];
+      return {
+        id: featureId,
+        name: metadata?.name ?? featureId.replace(/_/g, " "),
+        description:
+          metadata?.description ?? "Multifamily subtype specific special feature.",
+        costPerSFBySubtype: featureData.costPerSFBySubtype,
+        allowedSubtypes: MULTIFAMILY_SUBTYPES.filter((subtype) =>
+          featureData.allowedSubtypes.includes(subtype)
+        ),
+      };
+    });
+};
+
+export const MULTIFAMILY_SPECIAL_FEATURES = createMultifamilySpecialFeatures();
+
+export const getMultifamilySpecialFeatures = (): SpecialFeatureOption[] =>
+  MULTIFAMILY_SPECIAL_FEATURES;
+
 const RESTAURANT_KEYWORD_DETECTION: Array<{
   featureId: string;
   patterns: RegExp[];
 }> = [
+  {
+    featureId: "double_drive_thru",
+    patterns: [
+      /\bdouble drive[\s-]?(?:thru|through)\b/i,
+      /\bdual drive[\s-]?(?:thru|through)\b/i,
+      /\btwo[-\s]lane drive[\s-]?(?:thru|through)\b/i,
+    ],
+  },
   {
     featureId: "drive_thru",
     patterns: [/drive[\s-]?thru/i, /drive[\s-]?through/i],
@@ -2142,6 +2418,10 @@ const RESTAURANT_KEYWORD_DETECTION: Array<{
   {
     featureId: "wine_cellar",
     patterns: [/\bwine cellar\b/i],
+  },
+  {
+    featureId: "live_kitchen",
+    patterns: [/\blive kitchen\b/i, /\bopen kitchen\b/i, /\bexhibition kitchen\b/i],
   },
   {
     featureId: "chef_table",
@@ -2168,6 +2448,14 @@ const RESTAURANT_KEYWORD_DETECTION: Array<{
     patterns: [/\bprivate dining\b/i],
   },
   {
+    featureId: "dry_aging_room",
+    patterns: [/\bdry[-\s]?aging(?:\s+room)?\b/i],
+  },
+  {
+    featureId: "pastry_kitchen",
+    patterns: [/\b(?:separate\s+|dedicated\s+)?pastry kitchen\b/i],
+  },
+  {
     featureId: "private_party_room",
     patterns: [/\bprivate party room\b/i, /\bparty room\b/i],
   },
@@ -2181,6 +2469,9 @@ export const detectRestaurantFeatureIdsFromDescription = (
     if (patterns.some((pattern) => pattern.test(description))) {
       detectedFeatureIds.add(featureId);
     }
+  }
+  if (detectedFeatureIds.has("double_drive_thru")) {
+    detectedFeatureIds.delete("drive_thru");
   }
   return Array.from(detectedFeatureIds);
 };
@@ -2302,6 +2593,12 @@ export const detectRetailFeatureIdsFromDescription = (
       detectedFeatureIds.add(featureId);
     }
   }
+  if (
+    /\b(?:double|dual)\s+drive[\s-]?(?:thru|through)\b/i.test(description) ||
+    /\btwo[-\s]lane drive[\s-]?(?:thru|through)\b/i.test(description)
+  ) {
+    detectedFeatureIds.delete("drive_thru");
+  }
   return Array.from(detectedFeatureIds);
 };
 
@@ -2379,7 +2676,15 @@ const EDUCATIONAL_KEYWORD_DETECTION: Array<{
   featureId: string;
   patterns: RegExp[];
 }> = [
-  { featureId: "gymnasium", patterns: [/\bgymnasium\b/i, /\bschool gym\b/i] },
+  {
+    featureId: "gymnasium",
+    patterns: [
+      /\bgymnasium\b/i,
+      /\bschool gym\b/i,
+      /\bschool\b.*\bgym\b/i,
+      /\b(?:elementary|middle|high)\s+school\b.*\bgym\b/i,
+    ],
+  },
   { featureId: "cafeteria", patterns: [/\bcafeteria\b/i, /\bschool dining\b/i] },
   { featureId: "playground", patterns: [/\bplayground\b/i] },
   { featureId: "computer_lab", patterns: [/\bcomputer lab\b/i] },
@@ -2530,7 +2835,12 @@ const CIVIC_KEYWORD_DETECTION: Array<{
   },
   {
     featureId: "gymnasium",
-    patterns: [/\bgymnasium\b/i, /\bcommunity gym\b/i],
+    patterns: [
+      /\bgymnasium\b/i,
+      /\bcommunity gym\b/i,
+      /\bcommunity center\b.*\bgym\b/i,
+      /\bcivic center\b.*\bgym\b/i,
+    ],
   },
   {
     featureId: "kitchen",
@@ -2674,7 +2984,15 @@ const RECREATION_KEYWORD_DETECTION: Array<{
   { featureId: "lazy_river", patterns: [/\blazy river\b/i] },
   { featureId: "water_slides", patterns: [/\bwater slides?\b/i] },
   { featureId: "therapy_pool", patterns: [/\btherapy pool\b/i, /\bhydrotherapy pool\b/i] },
-  { featureId: "gymnasium", patterns: [/\bgymnasium\b/i, /\brecreation gym\b/i] },
+  {
+    featureId: "gymnasium",
+    patterns: [
+      /\bgymnasium\b/i,
+      /\brecreation gym\b/i,
+      /\brecreation center\b.*\bgym\b/i,
+      /\brec center\b.*\bgym\b/i,
+    ],
+  },
   { featureId: "game_room", patterns: [/\bgame rooms?\b/i] },
   { featureId: "craft_room", patterns: [/\bcraft rooms?\b/i, /\bmakers? room\b/i] },
   { featureId: "dance_studio", patterns: [/\bdance studio\b/i] },
@@ -2888,6 +3206,158 @@ export const detectMixedUseFeatureIdsFromDescription = (
   return Array.from(detectedFeatureIds);
 };
 
+const MULTIFAMILY_KEYWORD_DETECTION: Array<{
+  featureId: string;
+  patterns: RegExp[];
+}> = [
+  {
+    featureId: "parking_garage",
+    patterns: [/\bparking garage\b/i, /\bgarage parking\b/i],
+  },
+  {
+    featureId: "pool",
+    patterns: [/\bpool\b/i],
+  },
+  {
+    featureId: "fitness_center",
+    patterns: [
+      /\bfitness center\b/i,
+      /\bresident gym\b/i,
+      /\bamenity gym\b/i,
+      /\bresident fitness\b/i,
+      /\bresident fitness room\b/i,
+    ],
+  },
+  {
+    featureId: "rooftop_amenity",
+    patterns: [
+      /\brooftop amenit(?:y|ies)\b/i,
+      /\brooftop deck\b/i,
+      /\broof deck\b/i,
+      /\brooftop terrace\b/i,
+      /\broof terrace\b/i,
+    ],
+  },
+  {
+    featureId: "concierge",
+    patterns: [/\bconcierge lobby\b/i, /\bconcierge\b/i],
+  },
+];
+
+export const detectMultifamilyFeatureIdsFromDescription = (
+  description: string
+): string[] => {
+  const detectedFeatureIds = new Set<string>();
+  for (const { featureId, patterns } of MULTIFAMILY_KEYWORD_DETECTION) {
+    if (patterns.some((pattern) => pattern.test(description))) {
+      detectedFeatureIds.add(featureId);
+    }
+  }
+  return Array.from(detectedFeatureIds);
+};
+
+const INDUSTRIAL_KEYWORD_DETECTION: Array<{
+  featureId: string;
+  patterns: RegExp[];
+}> = [
+  {
+    featureId: "automated_sorting",
+    patterns: [/\bautomated sorting\b/i, /\bsortation\b/i],
+  },
+  {
+    featureId: "refrigerated_area",
+    patterns: [/\brefrigerated area\b/i, /\btemperature-controlled area\b/i, /\brefrigerated zone\b/i],
+  },
+  {
+    featureId: "loading_docks",
+    patterns: [/\bloading docks?\b/i, /\bdock doors?\b/i],
+  },
+  {
+    featureId: "extra_loading_docks",
+    patterns: [
+      /\bextra loading docks?\b/i,
+      /\badditional loading docks?\b/i,
+      /\bextra dock doors?\b/i,
+      /\badditional dock doors?\b/i,
+      /\b\d{1,3}\s+loading docks?\b/i,
+      /\b\d{1,3}\s+dock doors?\b/i,
+    ],
+  },
+  {
+    featureId: "office_buildout",
+    patterns: [/\boffice build(?:out)?\b/i, /\badministrative build(?:out)?\b/i],
+  },
+  {
+    featureId: "cold_storage",
+    patterns: [/\bcold storage\b/i],
+  },
+  {
+    featureId: "blast_freezer",
+    patterns: [/\bblast freezer\b/i, /\bblast freezing\b/i],
+  },
+  {
+    featureId: "multiple_temp_zones",
+    patterns: [/\bmultiple temp(?:erature)? zones?\b/i, /\bmulti[-\s]?temp(?:erature)?\b/i],
+  },
+  {
+    featureId: "automated_retrieval",
+    patterns: [/\bautomated retrieval\b/i, /\bas\/?rs\b/i],
+  },
+  {
+    featureId: "under_slab_heating_protection",
+    patterns: [/\bunder[-\s]?slab heating\b/i, /\bsub[-\s]?slab heating\b/i],
+  },
+  {
+    featureId: "high_r_value_panel_upgrade",
+    patterns: [/\bhigh[-\s]?r(?:[-\s]?value)? panels?\b/i, /\binsulated panel upgrade\b/i],
+  },
+  {
+    featureId: "clean_room",
+    patterns: [/\bclean[-\s]?room\b/i],
+  },
+  {
+    featureId: "heavy_power",
+    patterns: [/\bheavy power\b/i, /\bhigh-power electrical\b/i, /\bheavy electrical service\b/i],
+  },
+  {
+    featureId: "crane_bays",
+    patterns: [/\bcrane bays?\b/i, /\boverhead crane bays?\b/i],
+  },
+  {
+    featureId: "compressed_air",
+    patterns: [/\bcompressed air\b/i],
+  },
+  {
+    featureId: "enhanced_office_showroom_finish",
+    patterns: [/\boffice showroom finish\b/i, /\benhanced showroom finish\b/i],
+  },
+  {
+    featureId: "two_story_office_mezzanine",
+    patterns: [/\btwo[-\s]?story office mezzanine\b/i, /\boffice mezzanine\b/i],
+  },
+  {
+    featureId: "lab_buildout",
+    patterns: [/\blab build(?:out)?\b/i, /\br&d lab\b/i, /\blaboratory build(?:out)?\b/i],
+  },
+];
+
+export const detectIndustrialFeatureIdsFromDescription = (
+  description: string
+): string[] => {
+  const detectedFeatureIds = new Set<string>();
+  for (const { featureId, patterns } of INDUSTRIAL_KEYWORD_DETECTION) {
+    if (patterns.some((pattern) => pattern.test(description))) {
+      detectedFeatureIds.add(featureId);
+    }
+  }
+
+  if (detectedFeatureIds.has("extra_loading_docks")) {
+    detectedFeatureIds.delete("loading_docks");
+  }
+
+  return Array.from(detectedFeatureIds);
+};
+
 const PARKING_KEYWORD_DETECTION: Array<{
   featureId: string;
   patterns: RegExp[];
@@ -3090,7 +3560,7 @@ const HEALTHCARE_KEYWORD_DETECTION: Array<{
   },
   {
     featureId: "operating_room",
-    patterns: [/\boperating room\b/i, /\bOR room\b/i],
+    patterns: [/\boperating rooms?\b/i, /\bOR rooms?\b/i],
   },
   {
     featureId: "pre_op",
@@ -3106,7 +3576,7 @@ const HEALTHCARE_KEYWORD_DETECTION: Array<{
   },
   {
     featureId: "mri_suite",
-    patterns: [/\bmri suite\b/i],
+    patterns: [/\bmri suites?\b/i],
   },
   {
     featureId: "ct_suite",
@@ -3154,7 +3624,7 @@ const HEALTHCARE_KEYWORD_DETECTION: Array<{
   },
   {
     featureId: "operatory",
-    patterns: [/\bdental operator(?:y|ies)\b/i, /\boperatory\b/i],
+    patterns: [/\b(?:dental\s+)?operator(?:y|ies)\b/i],
   },
   {
     featureId: "sterilization",
@@ -3274,6 +3744,7 @@ const SPECIAL_FEATURES_BY_BUILDING_TYPE: Record<string, SpecialFeatureOption[]> 
   restaurant: RESTAURANT_SPECIAL_FEATURES,
   hospitality: HOSPITALITY_SPECIAL_FEATURES,
   retail: RETAIL_SPECIAL_FEATURES,
+  industrial: INDUSTRIAL_SPECIAL_FEATURES,
   office: OFFICE_SPECIAL_FEATURES,
   specialty: SPECIALTY_SPECIAL_FEATURES,
   healthcare: HEALTHCARE_SPECIAL_FEATURES,
@@ -3282,12 +3753,14 @@ const SPECIAL_FEATURES_BY_BUILDING_TYPE: Record<string, SpecialFeatureOption[]> 
   recreation: RECREATION_SPECIAL_FEATURES,
   parking: PARKING_SPECIAL_FEATURES,
   mixed_use: MIXED_USE_SPECIAL_FEATURES,
+  multifamily: MULTIFAMILY_SPECIAL_FEATURES,
 };
 
 const VALID_SUBTYPES_BY_BUILDING_TYPE: Record<string, readonly string[]> = {
   restaurant: RESTAURANT_SUBTYPES,
   hospitality: HOSPITALITY_SUBTYPES,
   retail: RETAIL_SUBTYPES,
+  industrial: INDUSTRIAL_SUBTYPES,
   office: OFFICE_SUBTYPES,
   specialty: SPECIALTY_SUBTYPES,
   healthcare: HEALTHCARE_SUBTYPES,
@@ -3296,6 +3769,7 @@ const VALID_SUBTYPES_BY_BUILDING_TYPE: Record<string, readonly string[]> = {
   recreation: RECREATION_SUBTYPES,
   parking: PARKING_SUBTYPES,
   mixed_use: MIXED_USE_SUBTYPES,
+  multifamily: MULTIFAMILY_SUBTYPES,
 };
 
 export const getAvailableSpecialFeatures = (
@@ -3382,8 +3856,14 @@ export const recreationSubtypeHasSpecialFeatures = (subtype?: string): boolean =
 export const parkingSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
   filterSpecialFeaturesBySubtype(PARKING_SPECIAL_FEATURES, subtype).length > 0;
 
+export const industrialSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
+  filterSpecialFeaturesBySubtype(INDUSTRIAL_SPECIAL_FEATURES, subtype).length > 0;
+
 export const mixedUseSubtypeHasSpecialFeatures = (subtype?: string): boolean =>
   filterSpecialFeaturesBySubtype(
     MIXED_USE_SPECIAL_FEATURES,
     normalizeMixedUseSubtypeAlias(subtype)
   ).length > 0;
+
+export const multifamilySubtypeHasSpecialFeatures = (subtype?: string): boolean =>
+  filterSpecialFeaturesBySubtype(MULTIFAMILY_SPECIAL_FEATURES, subtype).length > 0;

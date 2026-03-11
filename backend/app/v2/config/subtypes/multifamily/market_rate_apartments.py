@@ -45,6 +45,9 @@ CONFIG = (
                 equity_ratio=0.25,
                 target_dscr=1.20,
                 target_roi=0.10,
+                amort_years=30,
+                loan_term_years=10,
+                interest_only_months=0,
             )
         },
         nlp=NLPConfig(
@@ -68,10 +71,28 @@ CONFIG = (
             "San Francisco": 1.45,
         },
         special_features={
-            "rooftop_amenity": 24,
-            "pool": 18,
-            "fitness_center": 14,
+            "rooftop_amenity": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 24,
+                "area_share_of_gsf": 0.03,
+            },
+            "pool": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 18,
+                "area_share_of_gsf": 0.02,
+            },
+            "fitness_center": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 14,
+                "area_share_of_gsf": 0.012,
+            },
             "parking_garage": 32,
+        },
+        special_feature_pricing_statuses={
+            "rooftop_amenity": "incremental",
+            "pool": "incremental",
+            "fitness_center": "incremental",
+            "parking_garage": "incremental",
         },
         base_revenue_per_sf_annual=28.5,
         base_revenue_per_unit_monthly=2000,

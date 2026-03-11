@@ -27,6 +27,14 @@ from app.v2.config.construction_schedule import (
     build_construction_schedule as _build_construction_schedule,
 )
 from app.v2.config.type_profiles import scope_items
+from app.v2.services.special_feature_pricing import (
+    INCLUDED_IN_BASELINE,
+    apply_special_feature_pricing_rule,
+    resolve_special_feature_pricing,
+    resolve_normalized_special_feature_pricing_rules,
+    serialize_applied_special_feature_pricing,
+    serialize_resolved_special_feature_pricing_rule_preview,
+)
 from app.services.nlp_service import NLPService
 # from app.v2.services.financial_analyzer import FinancialAnalyzer  # TODO: Implement this
 from typing import Optional, Dict, Any, List, Tuple
@@ -1157,11 +1165,19 @@ class UnifiedEngine:
         # Calculate equipment cost with finish/regional adjustments
         equipment_multiplier = modifiers.get('finish_cost_factor', 1.0)
         equipment_cost = building_config.equipment_cost_per_sf * equipment_multiplier * square_footage
+
+        scope_context = self._resolve_scope_context(special_features)
+        pricing_override_sources: List[Dict[str, Any]] = []
+        if isinstance(parsed_input_overrides, dict):
+            pricing_override_sources.append(parsed_input_overrides)
+        if isinstance(scope_context, dict):
+            pricing_override_sources.extend(self._collect_scope_override_sources(scope_context))
         
         # Add special features if any
         special_features_cost = 0
         special_features_breakdown: List[Dict[str, Any]] = []
-        special_features_breakdown_by_id: Dict[str, Dict[str, Any]] = {}
+        resolved_special_feature_ids: List[str] = []
+        available_special_feature_pricing: List[Dict[str, Any]] = []
         if special_features and building_config.special_features:
             healthcare_applied_feature_ids: set = set()
             available_feature_keys = list(building_config.special_features.keys())
@@ -1189,34 +1205,102 @@ class UnifiedEngine:
                         })
 
                 if canonical_feature_key in building_config.special_features:
-                    cost_per_sf = float(building_config.special_features[canonical_feature_key])
-                    feature_cost = cost_per_sf * square_footage
-                    special_features_cost += feature_cost
-                    row = special_features_breakdown_by_id.get(canonical_feature_key)
-                    if row is None:
-                        row = {
-                            'id': canonical_feature_key,
-                            'cost_per_sf': cost_per_sf,
-                            'total_cost': 0.0,
-                            'label': _humanize_special_feature_label(canonical_feature_key),
-                        }
-                        special_features_breakdown_by_id[canonical_feature_key] = row
-                        special_features_breakdown.append(row)
-                    row['total_cost'] = float(row['total_cost']) + feature_cost
-                    self._log_trace("special_feature_applied", {
-                        'feature': canonical_feature_key,
-                        'cost_per_sf': cost_per_sf,
-                        'total_cost': feature_cost
-                    })
-        if special_features_breakdown:
-            special_features_cost = sum(float(item.get('total_cost', 0.0) or 0.0) for item in special_features_breakdown)
+                    resolved_special_feature_ids.append(canonical_feature_key)
+
+        available_feature_ids = list(building_config.special_features.keys()) if building_config.special_features else []
+        available_special_feature_resolution = resolve_special_feature_pricing(
+            building_config=building_config,
+            selected_feature_ids=available_feature_ids,
+        )
+        if available_special_feature_resolution.selected_feature_ids:
+            available_special_feature_rules = resolve_normalized_special_feature_pricing_rules(
+                building_config=building_config,
+                selected_feature_ids=available_special_feature_resolution.selected_feature_ids,
+            )
+            for normalized_rule in available_special_feature_rules:
+                pricing_status = available_special_feature_resolution.pricing_status_by_feature_id[
+                    normalized_rule.feature_id
+                ]
+                preview_row = serialize_resolved_special_feature_pricing_rule_preview(
+                    normalized_rule,
+                    square_footage=square_footage,
+                    pricing_override_sources=pricing_override_sources,
+                    pricing_status=pricing_status,
+                )
+                preview_row['label'] = _humanize_special_feature_label(normalized_rule.feature_id)
+                available_special_feature_pricing.append(preview_row)
+
+        special_feature_resolution = resolve_special_feature_pricing(
+            building_config=building_config,
+            selected_feature_ids=resolved_special_feature_ids,
+        )
+        if special_feature_resolution.selected_feature_ids:
+            normalized_special_feature_rules = resolve_normalized_special_feature_pricing_rules(
+                building_config=building_config,
+                selected_feature_ids=special_feature_resolution.selected_feature_ids,
+            )
+            for normalized_rule in normalized_special_feature_rules:
+                pricing_status = special_feature_resolution.pricing_status_by_feature_id[
+                    normalized_rule.feature_id
+                ]
+                applied_pricing = apply_special_feature_pricing_rule(
+                    rule=normalized_rule,
+                    square_footage=square_footage,
+                    pricing_status=pricing_status,
+                    pricing_override_sources=pricing_override_sources,
+                )
+                breakdown_row = serialize_applied_special_feature_pricing(applied_pricing)
+                breakdown_row['label'] = _humanize_special_feature_label(normalized_rule.feature_id)
+                special_features_breakdown.append(breakdown_row)
+
+                trace_payload = {
+                    'feature': normalized_rule.feature_id,
+                    'pricing_basis': normalized_rule.basis.value,
+                    'configured_value': normalized_rule.configured_value,
+                    'applied_quantity': applied_pricing.applied_quantity,
+                    'quantity_source': applied_pricing.quantity_source,
+                    'assumption_source': normalized_rule.assumption_source,
+                }
+                configured_cost_per_sf = breakdown_row.get('configured_cost_per_sf')
+                if configured_cost_per_sf is not None:
+                    trace_payload['configured_cost_per_sf'] = configured_cost_per_sf
+                configured_cost_per_count = breakdown_row.get('configured_cost_per_count')
+                if configured_cost_per_count is not None:
+                    trace_payload['configured_cost_per_count'] = configured_cost_per_count
+                configured_area_share_of_gsf = breakdown_row.get('configured_area_share_of_gsf')
+                if configured_area_share_of_gsf is not None:
+                    trace_payload['configured_area_share_of_gsf'] = configured_area_share_of_gsf
+                unit_label = breakdown_row.get('unit_label')
+                if unit_label is not None:
+                    trace_payload['unit_label'] = unit_label
+                resolved_size_band = breakdown_row.get('resolved_size_band')
+                if resolved_size_band is not None:
+                    trace_payload['resolved_size_band'] = resolved_size_band
+                if pricing_status == INCLUDED_IN_BASELINE:
+                    self._log_trace("special_feature_included_in_baseline", trace_payload)
+                else:
+                    applied_trace_payload = {
+                        **trace_payload,
+                        'applied_value': applied_pricing.applied_value,
+                        'total_cost': applied_pricing.total_cost,
+                    }
+                    applied_cost_per_sf = breakdown_row.get('cost_per_sf')
+                    if applied_cost_per_sf is not None:
+                        applied_trace_payload['cost_per_sf'] = applied_cost_per_sf
+                    applied_cost_per_count = breakdown_row.get('cost_per_count')
+                    if applied_cost_per_count is not None:
+                        applied_trace_payload['cost_per_count'] = applied_cost_per_count
+                    self._log_trace("special_feature_applied", applied_trace_payload)
+            special_features_cost = sum(
+                float(item.get('total_cost', 0.0) or 0.0)
+                for item in special_features_breakdown
+            )
         
         # Calculate trade breakdown
         trades = self._calculate_trades(construction_cost, building_config.trades)
         
         # Scope items are config-driven via scope_items_profile; engine applies
         # generic allocation rules with deterministic fallbacks.
-        scope_context = self._resolve_scope_context(special_features)
         def _extract_scenario_key(source: Optional[Dict[str, Any]]) -> Optional[str]:
             if not isinstance(source, dict):
                 return None
@@ -1360,6 +1444,7 @@ class UnifiedEngine:
             },
         )
         ownership_analysis = ownership_bundle['ownership_analysis']
+        financing_assumptions = ownership_bundle['financing_assumptions']
         revenue_data = ownership_bundle['revenue_data']
         flex_revenue_per_sf = ownership_bundle['flex_revenue_per_sf']
         
@@ -1499,6 +1584,7 @@ class UnifiedEngine:
                 'finish_level': normalized_finish_level or 'standard',
                 'finish_level_source': finish_source,
                 'available_special_features': list(building_config.special_features.keys()) if building_config.special_features else [],
+                'available_special_feature_pricing': available_special_feature_pricing,
                 'mixed_use_split': mixed_use_split_contract,
             },
             'profile': {
@@ -1553,6 +1639,9 @@ class UnifiedEngine:
             'calculation_trace': self.calculation_trace,
             'timestamp': datetime.now().isoformat()
         }
+
+        if financing_assumptions:
+            result['financing_assumptions'] = financing_assumptions
 
         profile_id = getattr(building_config, "dealshield_tile_profile", None)
         if isinstance(profile_id, str) and profile_id.strip():
@@ -3248,10 +3337,12 @@ class UnifiedEngine:
         calculation_context: Dict[str, Any],
     ) -> Dict[str, Any]:
         ownership_analysis = None
+        financing_assumptions: Dict[str, Any] = {}
         revenue_data = None
         flex_revenue_per_sf = None
 
         if ownership_type in building_config.ownership_types:
+            financing_terms = building_config.ownership_types[ownership_type]
             revenue_data = self.calculate_ownership_analysis(calculation_context)
 
             revenue_analysis_for_financing = revenue_data.get('revenue_analysis') if revenue_data else None
@@ -3262,7 +3353,7 @@ class UnifiedEngine:
 
             ownership_analysis = self._calculate_ownership(
                 total_project_cost,
-                building_config.ownership_types[ownership_type],
+                financing_terms,
                 revenue_analysis=revenue_analysis_for_financing
             )
 
@@ -3306,11 +3397,87 @@ class UnifiedEngine:
                         'calculated_dscr': recalculated_dscr
                     })
 
+            financing_assumptions = self._build_financing_assumptions(
+                total_cost=total_project_cost,
+                financing_terms=financing_terms,
+                ownership_analysis=ownership_analysis,
+            )
+
         return {
             'ownership_analysis': ownership_analysis,
+            'financing_assumptions': financing_assumptions,
             'revenue_data': revenue_data,
             'flex_revenue_per_sf': flex_revenue_per_sf,
         }
+
+    def _calculate_structured_debt_service(
+        self,
+        debt_amount: float,
+        financing_terms: Any,
+    ) -> Tuple[float, float]:
+        debt_rate = float(getattr(financing_terms, 'debt_rate', 0) or 0)
+        amort_years = getattr(financing_terms, 'amort_years', None)
+        loan_term_years = getattr(financing_terms, 'loan_term_years', None)
+
+        if debt_amount <= 0:
+            return 0.0, 0.0
+
+        has_structured_terms = (
+            isinstance(amort_years, int)
+            and amort_years > 0
+            and isinstance(loan_term_years, int)
+            and loan_term_years > 0
+        )
+        if not has_structured_terms:
+            annual_debt_service = debt_amount * debt_rate
+            return annual_debt_service, annual_debt_service / 12 if annual_debt_service else 0.0
+
+        amort_months = amort_years * 12
+        monthly_rate = debt_rate / 12
+        if monthly_rate <= 0:
+            monthly_debt_service = debt_amount / amort_months
+        else:
+            monthly_debt_service = (
+                debt_amount
+                * monthly_rate
+                / (1 - math.pow(1 + monthly_rate, -amort_months))
+            )
+        return monthly_debt_service * 12, monthly_debt_service
+
+    def _build_financing_assumptions(
+        self,
+        total_cost: float,
+        financing_terms: Any,
+        ownership_analysis: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        amort_years = getattr(financing_terms, 'amort_years', None)
+        loan_term_years = getattr(financing_terms, 'loan_term_years', None)
+        if amort_years is None or loan_term_years is None:
+            return {}
+
+        financing_sources = ownership_analysis.get('financing_sources') if isinstance(ownership_analysis, dict) else {}
+        debt_metrics = ownership_analysis.get('debt_metrics') if isinstance(ownership_analysis, dict) else {}
+        debt_amount = financing_sources.get('debt_amount') if isinstance(financing_sources, dict) else None
+        equity_amount = financing_sources.get('equity_amount') if isinstance(financing_sources, dict) else None
+        debt_ratio = getattr(financing_terms, 'debt_ratio', None)
+        if debt_ratio is None and isinstance(debt_amount, (int, float)) and total_cost > 0:
+            debt_ratio = float(debt_amount) / total_cost
+
+        assumptions = {
+            'debt_amount': debt_amount,
+            'equity_amount': equity_amount,
+            'debt_ratio': debt_ratio,
+            'debt_pct': debt_ratio,
+            'interest_rate_pct': getattr(financing_terms, 'debt_rate', None),
+            'amort_years': amort_years,
+            'loan_term_years': loan_term_years,
+            'interest_only_months': getattr(financing_terms, 'interest_only_months', 0),
+            'annual_debt_service': debt_metrics.get('annual_debt_service') if isinstance(debt_metrics, dict) else None,
+            'monthly_debt_service': debt_metrics.get('monthly_debt_service') if isinstance(debt_metrics, dict) else None,
+            'target_dscr': debt_metrics.get('target_dscr') if isinstance(debt_metrics, dict) else getattr(financing_terms, 'target_dscr', None),
+            'calculated_dscr': debt_metrics.get('calculated_dscr') if isinstance(debt_metrics, dict) else None,
+        }
+        return {key: value for key, value in assumptions.items() if value is not None}
     
     def _calculate_ownership(
         self,
@@ -3327,8 +3494,10 @@ class UnifiedEngine:
         grants_amount = total_cost * financing_terms.grants_ratio
         
         # Calculate debt service
-        annual_debt_service = debt_amount * financing_terms.debt_rate
-        monthly_debt_service = annual_debt_service / 12
+        annual_debt_service, monthly_debt_service = self._calculate_structured_debt_service(
+            debt_amount,
+            financing_terms,
+        )
         
         # Prefer NOI from revenue analysis when available so DSCR matches frontend revenue panel
         noi_from_revenue = None

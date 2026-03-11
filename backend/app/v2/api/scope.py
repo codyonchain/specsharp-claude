@@ -26,6 +26,7 @@ from app.v2.config.master_config import (
 )
 from app.v2.services.industrial_override_extractor import extract_industrial_overrides
 from app.v2.services.dealshield_service import build_dealshield_view_model, DealShieldResolutionError
+from app.v2.services.financing_summary_service import build_financing_summary
 from app.v2.presentation.client_text_sanitizer import sanitize_client_text
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.core.building_taxonomy import normalize_building_type, validate_building_type
@@ -40,6 +41,10 @@ from app.services.decision_packet_export import (
     compose_decision_packet_input,
     hydrate_project_payload_for_packet,
 )
+from app.v2.services.dealshield_scenarios import (
+    DealShieldScenarioError,
+    refresh_dealshield_scenarios_payload,
+)
 from app.config.regional_multipliers import _location_has_explicit_state
 import logging
 
@@ -47,6 +52,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["v2"])
 DEBUG_TRACE_ENABLED = os.getenv("SPECSHARP_DEBUG_TRACE", "0").lower() in {"1", "true", "yes", "on"}
+
+
+def _attach_financing_summary(
+    calculation_data: Dict[str, Any], parsed_input: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    if not isinstance(calculation_data, dict):
+        return calculation_data
+    calculation_data["financing_summary"] = build_financing_summary(
+        calculation_data,
+        parsed_input=parsed_input,
+    )
+    return calculation_data
 
 
 def _infer_revenue_driver(building_type: Optional[str]) -> str:
@@ -379,6 +396,10 @@ async def analyze_project(
             parsed.update(overrides)
         override_keys = [
             "dock_doors", "dock_count",
+            "operating_room_count", "operatory_count",
+            "mri_suite_count", "ct_suite_count", "pet_scan_count",
+            "loading_dock_count", "dock_door_count",
+            "service_bay_count", "crane_bay_count", "drive_thru_lane_count",
             "office_sf", "office_percent", "office_pct",
             "mezzanine_sf", "mezzanine_percent",
             "clear_height", "clear_height_ft",
@@ -504,6 +525,7 @@ async def analyze_project(
                 "key_count": payload.key_count,
             },
         )
+        result = _attach_financing_summary(result, parsed_input=parsed)
         
         # Add building_subtype for frontend compatibility
         parsed_with_compat = parsed.copy()
@@ -581,6 +603,14 @@ async def calculate_project(
             parsed_input_overrides={
                 "unit_count": payload.unit_count,
                 "key_count": payload.key_count,
+            },
+        )
+        result = _attach_financing_summary(
+            result,
+            parsed_input={
+                "building_type": payload.building_type,
+                "subtype": payload.subtype,
+                "ownership_type": payload.ownership_type,
             },
         )
         
@@ -942,6 +972,26 @@ def _resolve_dealshield_building_context(
     return building_type, subtype
 
 
+def _refresh_dealshield_payload_for_project(
+    project: Project,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    profile_id = payload.get("dealshield_tile_profile")
+    if not isinstance(profile_id, str) or not profile_id.strip():
+        return payload
+
+    building_type, subtype = _resolve_dealshield_building_context(project, payload)
+    if not building_type or not subtype:
+        raise DealShieldScenarioError("Unable to resolve building type/subtype for DealShield scenario rebuild")
+
+    return refresh_dealshield_scenarios_payload(
+        payload,
+        building_type=building_type,
+        subtype=subtype,
+        engine=unified_engine,
+    )
+
+
 @router.post("/scope/projects/{project_id}/dealshield/controls", response_model=ProjectResponse)
 async def update_dealshield_controls(
     project_id: str,
@@ -1047,6 +1097,7 @@ async def get_dealshield_view(
         )
 
     try:
+        payload = _refresh_dealshield_payload_for_project(project, payload)
         profile = get_dealshield_profile(profile_id)
     except Exception as exc:
         return ProjectResponse(
@@ -1120,6 +1171,10 @@ async def generate_scope(
             sf_list = list(sf_list) if sf_list else []
         override_keys = [
             "dock_doors", "dock_count",
+            "operating_room_count", "operatory_count",
+            "mri_suite_count", "ct_suite_count", "pet_scan_count",
+            "loading_dock_count", "dock_door_count",
+            "service_bay_count", "crane_bay_count", "drive_thru_lane_count",
             "office_sf", "office_percent", "office_pct",
             "mezzanine_sf", "mezzanine_percent",
             "finish_level", "finish_level_source",
@@ -1422,6 +1477,7 @@ async def export_project_pdf(
         raise HTTPException(status_code=400, detail="DealShield not available for this project")
 
     try:
+        payload = _refresh_dealshield_payload_for_project(project, payload)
         profile = get_dealshield_profile(profile_id)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1475,6 +1531,7 @@ async def export_dealshield_pdf(
         raise HTTPException(status_code=400, detail="DealShield not available for this project")
 
     try:
+        payload = _refresh_dealshield_payload_for_project(project, payload)
         profile = get_dealshield_profile(profile_id)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1761,6 +1818,7 @@ def format_project_response(project: Project) -> dict:
     request_data = calculation_data.get("request_data") or calculation_data.get("parsed_input") or {}
     if not isinstance(request_data, dict):
         request_data = {}
+    calculation_data = _attach_financing_summary(calculation_data, parsed_input=request_data)
 
     return {
         # IDs - both formats

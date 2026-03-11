@@ -484,16 +484,25 @@ def _apply_display_guards(
     financing_assumptions = {
         key: financing_raw.get(key)
         for key in (
+            "debt_amount",
+            "equity_amount",
+            "debt_ratio",
             "debt_pct",
             "ltv",
             "interest_rate_pct",
             "amort_years",
             "loan_term_years",
             "interest_only_months",
+            "annual_debt_service",
+            "monthly_debt_service",
+            "target_dscr",
+            "calculated_dscr",
         )
         if key in financing_raw
     }
     debt_pct = financing_assumptions.get("debt_pct")
+    if not _is_number(debt_pct):
+        debt_pct = financing_assumptions.get("debt_ratio")
     if not _is_number(debt_pct):
         debt_pct = financing_assumptions.get("ltv")
     has_financing_assumptions = (

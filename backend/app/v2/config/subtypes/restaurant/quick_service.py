@@ -68,11 +68,35 @@ CONFIG = (
             "San Francisco": 1.40,
         },
         special_features={
-            "drive_thru": 40,  # Drive-thru lane and window
+            "drive_thru": {
+                "basis": "COUNT_BASED",
+                "value": 85000,
+                "count": 1,
+                "count_override_keys": ["drive_thru_lane_count", "drive_thru_count", "lane_count"],
+                "unit_label": "lane",
+            },  # Drive-thru lane and window
             "outdoor_seating": 20,  # Patio seating area
             "play_area": 35,  # Children's playground
-            "double_drive_thru": 55,  # Dual drive-thru lanes
+            "double_drive_thru": {
+                "basis": "COUNT_BASED",
+                "value": 80000,
+                "count": 2,
+                "count_override_keys": [
+                    "double_drive_thru_lane_count",
+                    "drive_thru_lane_count",
+                    "drive_thru_count",
+                    "lane_count",
+                ],
+                "unit_label": "lane",
+            },  # Dual drive-thru lanes
             "digital_menu_boards": 15,  # Digital ordering displays
+        },
+        special_feature_pricing_statuses={
+            "drive_thru": "included_in_baseline",
+            "outdoor_seating": "incremental",
+            "play_area": "incremental",
+            "double_drive_thru": "incremental",
+            "digital_menu_boards": "incremental",
         },
         base_revenue_per_sf_annual=525,
         occupancy_rate_base=0.88,

@@ -17,7 +17,7 @@ import re
 from collections import defaultdict
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple, Any, Callable
+from typing import Dict, List, Optional, Tuple, Any, Callable, Literal, TypedDict, Union
 from app.config.regional_multipliers import resolve_location_context
 
 # ============================================================================
@@ -55,6 +55,65 @@ class OwnershipType(Enum):
     GOVERNMENT = "government"
     PPP = "public_private_partnership"
 
+
+class SpecialFeaturePricingBasis(str, Enum):
+    """Supported pricing bases for special-feature realism."""
+    WHOLE_PROJECT_SF = "WHOLE_PROJECT_SF"
+    COUNT_BASED = "COUNT_BASED"
+    AREA_SHARE_GSF = "AREA_SHARE_GSF"
+    FIXED_LUMP_SUM = "FIXED_LUMP_SUM"
+    TIERED_INTENSITY = "TIERED_INTENSITY"
+
+
+class SpecialFeatureCountPricingMode(str, Enum):
+    """How count-based rules should treat resolved quantities."""
+    ALL_UNITS = "all_units"
+    OVERAGE_ABOVE_DEFAULT = "overage_above_default"
+
+
+SpecialFeaturePricingBasisLiteral = Literal[
+    "WHOLE_PROJECT_SF",
+    "COUNT_BASED",
+    "AREA_SHARE_GSF",
+    "FIXED_LUMP_SUM",
+    "TIERED_INTENSITY",
+]
+SpecialFeaturePricingBasisConfig = Union[
+    SpecialFeaturePricingBasis,
+    SpecialFeaturePricingBasisLiteral,
+]
+SpecialFeatureCountPricingModeLiteral = Literal[
+    "all_units",
+    "overage_above_default",
+]
+SpecialFeatureCountPricingModeConfig = Union[
+    SpecialFeatureCountPricingMode,
+    SpecialFeatureCountPricingModeLiteral,
+]
+
+
+class SpecialFeaturePricingRule(TypedDict, total=False):
+    """Structured rule shape for future multi-basis feature pricing."""
+    basis: SpecialFeaturePricingBasisConfig
+    value: float
+    count: float
+    count_pricing_mode: SpecialFeatureCountPricingModeConfig
+    count_override_keys: List[str]
+    unit_label: str
+    default_count_bands: List["SpecialFeaturePricingCountBand"]
+    area_share_of_gsf: float
+    size_band: str
+
+
+class SpecialFeaturePricingCountBand(TypedDict, total=False):
+    """Square-footage band defaults for count-based feature pricing."""
+    label: str
+    max_square_footage: float
+    count: float
+
+
+SpecialFeaturePricingConfigValue = Union[float, SpecialFeaturePricingRule]
+
 # ============================================================================
 # DATA CLASSES
 # ============================================================================
@@ -90,6 +149,9 @@ class FinancingTerms:
     grants_ratio: float = 0.0
     target_dscr: float = 1.25
     target_roi: float = 0.08
+    amort_years: Optional[int] = None
+    loan_term_years: Optional[int] = None
+    interest_only_months: int = 0
 
 @dataclass
 class NLPConfig:
@@ -129,9 +191,11 @@ class BuildingConfig:
     # DealShield tiles are config-driven via tile_profile + overrides
     dealshield_tile_profile: Optional[str] = None
     dealshield_tile_overrides: Optional[dict] = None
+    financing_presentation_family: Optional[str] = None
     
     # Special features that add cost
-    special_features: Optional[Dict[str, float]] = None
+    special_features: Optional[Dict[str, SpecialFeaturePricingConfigValue]] = None
+    special_feature_pricing_statuses: Optional[Dict[str, Literal["included_in_baseline", "incremental"]]] = None
     ti_allowance_per_sf: Optional[float] = None
     soft_costs_pct_of_hard: Optional[float] = None
     contingency_pct_of_hard: Optional[float] = None
@@ -616,6 +680,134 @@ MASTER_CONFIG: Dict[BuildingType, Dict[str, BuildingConfig]] = {
     }
 }
 
+_VALID_FINANCING_PRESENTATION_FAMILIES = {
+    "lease_rent_market_rate",
+    "hospitality",
+    "operating_business_fit_out_heavy",
+    "mixed_use_blended",
+    "high_capex_parking_special_case",
+    "subsidized_public_institutional",
+}
+
+_FINANCING_PRESENTATION_FAMILY_BY_SUBTYPE: Dict[BuildingType, Dict[str, str]] = {
+    BuildingType.HEALTHCARE: {
+        "dental_office": "operating_business_fit_out_heavy",
+        "hospital": "subsidized_public_institutional",
+        "imaging_center": "operating_business_fit_out_heavy",
+        "medical_center": "subsidized_public_institutional",
+        "medical_office_building": "operating_business_fit_out_heavy",
+        "nursing_home": "operating_business_fit_out_heavy",
+        "outpatient_clinic": "operating_business_fit_out_heavy",
+        "rehabilitation": "operating_business_fit_out_heavy",
+        "surgical_center": "operating_business_fit_out_heavy",
+        "urgent_care": "operating_business_fit_out_heavy",
+    },
+    BuildingType.MULTIFAMILY: {
+        "affordable_housing": "subsidized_public_institutional",
+        "luxury_apartments": "lease_rent_market_rate",
+        "market_rate_apartments": "lease_rent_market_rate",
+    },
+    BuildingType.OFFICE: {
+        "class_a": "lease_rent_market_rate",
+        "class_b": "lease_rent_market_rate",
+    },
+    BuildingType.RETAIL: {
+        "shopping_center": "lease_rent_market_rate",
+        "big_box": "lease_rent_market_rate",
+    },
+    BuildingType.RESTAURANT: {
+        "quick_service": "operating_business_fit_out_heavy",
+        "full_service": "operating_business_fit_out_heavy",
+        "fine_dining": "operating_business_fit_out_heavy",
+        "bar_tavern": "operating_business_fit_out_heavy",
+        "cafe": "operating_business_fit_out_heavy",
+    },
+    BuildingType.INDUSTRIAL: {
+        "warehouse": "lease_rent_market_rate",
+        "distribution_center": "lease_rent_market_rate",
+        "manufacturing": "high_capex_parking_special_case",
+        "flex_space": "lease_rent_market_rate",
+        "cold_storage": "high_capex_parking_special_case",
+    },
+    BuildingType.HOSPITALITY: {
+        "full_service_hotel": "hospitality",
+        "limited_service_hotel": "hospitality",
+    },
+    BuildingType.EDUCATIONAL: {
+        "elementary_school": "subsidized_public_institutional",
+        "middle_school": "subsidized_public_institutional",
+        "high_school": "subsidized_public_institutional",
+        "university": "subsidized_public_institutional",
+        "community_college": "subsidized_public_institutional",
+    },
+    BuildingType.MIXED_USE: {
+        "retail_residential": "mixed_use_blended",
+        "office_residential": "mixed_use_blended",
+        "hotel_retail": "mixed_use_blended",
+        "urban_mixed": "mixed_use_blended",
+        "transit_oriented": "mixed_use_blended",
+    },
+    BuildingType.SPECIALTY: {
+        "broadcast_facility": "high_capex_parking_special_case",
+        "car_dealership": "operating_business_fit_out_heavy",
+        "data_center": "high_capex_parking_special_case",
+        "laboratory": "high_capex_parking_special_case",
+        "self_storage": "lease_rent_market_rate",
+    },
+    BuildingType.CIVIC: {
+        "community_center": "subsidized_public_institutional",
+        "courthouse": "subsidized_public_institutional",
+        "government_building": "subsidized_public_institutional",
+        "library": "subsidized_public_institutional",
+        "public_safety": "subsidized_public_institutional",
+    },
+    BuildingType.RECREATION: {
+        "aquatic_center": "subsidized_public_institutional",
+        "recreation_center": "subsidized_public_institutional",
+        "fitness_center": "subsidized_public_institutional",
+        "sports_complex": "subsidized_public_institutional",
+        "stadium": "subsidized_public_institutional",
+    },
+    BuildingType.PARKING: {
+        "surface_parking": "high_capex_parking_special_case",
+        "parking_garage": "high_capex_parking_special_case",
+        "underground_parking": "high_capex_parking_special_case",
+        "automated_parking": "high_capex_parking_special_case",
+    },
+}
+
+
+def _apply_financing_presentation_families() -> None:
+    missing_mappings: List[str] = []
+    stale_mappings: List[str] = []
+
+    for building_type, subtypes in MASTER_CONFIG.items():
+        family_map = _FINANCING_PRESENTATION_FAMILY_BY_SUBTYPE.get(building_type, {})
+        for subtype, config in subtypes.items():
+            family_id = family_map.get(subtype)
+            if family_id is None:
+                missing_mappings.append(f"{building_type.value}/{subtype}")
+                continue
+            if family_id not in _VALID_FINANCING_PRESENTATION_FAMILIES:
+                raise ValueError(
+                    f"Invalid financing presentation family '{family_id}' for {building_type.value}/{subtype}"
+                )
+            config.financing_presentation_family = family_id
+
+        stale_keys = sorted(set(family_map.keys()) - set(subtypes.keys()))
+        stale_mappings.extend(f"{building_type.value}/{subtype}" for subtype in stale_keys)
+
+    if missing_mappings or stale_mappings:
+        problems: List[str] = []
+        if missing_mappings:
+            problems.append("missing subtype mappings: " + ", ".join(sorted(missing_mappings)))
+        if stale_mappings:
+            problems.append("stale subtype mappings: " + ", ".join(sorted(stale_mappings)))
+        raise ValueError("Financing presentation family config is incomplete: " + " | ".join(problems))
+
+
+_apply_financing_presentation_families()
+
 # ============================================================================
 # REGIONAL OVERRIDES
 # ============================================================================
@@ -951,7 +1143,13 @@ def get_special_feature_cost(building_type: BuildingType, subtype: str, feature:
     """Get additional cost for special features"""
     config = get_building_config(building_type, subtype)
     if config and config.special_features:
-        return config.special_features.get(feature, 0.0)
+        raw_value = config.special_features.get(feature, 0.0)
+        if isinstance(raw_value, (int, float)):
+            return float(raw_value)
+        if isinstance(raw_value, dict):
+            structured_value = raw_value.get("value", 0.0)
+            if isinstance(structured_value, (int, float)):
+                return float(structured_value)
     return 0.0
 
 def get_financing_terms(building_type: BuildingType, subtype: str, 
@@ -1326,6 +1524,14 @@ def validate_config():
             # Check at least one ownership type exists
             if not config.ownership_types:
                 errors.append(f"{building_type.value}/{subtype}: No ownership types defined")
+
+            if not config.financing_presentation_family:
+                errors.append(f"{building_type.value}/{subtype}: No financing presentation family defined")
+            elif config.financing_presentation_family not in _VALID_FINANCING_PRESENTATION_FAMILIES:
+                errors.append(
+                    f"{building_type.value}/{subtype}: Invalid financing presentation family "
+                    f"{config.financing_presentation_family}"
+                )
             
             # Check financing ratios sum correctly
             for ownership, terms in config.ownership_types.items():
@@ -1334,6 +1540,36 @@ def validate_config():
                 if abs(ratio_sum - 1.0) > 0.01:
                     errors.append(f"{building_type.value}/{subtype}/{ownership.value}: "
                                 f"Financing ratios sum to {ratio_sum:.2f}, not 1.0")
+
+                amort_years = terms.amort_years
+                loan_term_years = terms.loan_term_years
+                interest_only_months = terms.interest_only_months
+
+                if amort_years is not None and amort_years < 0:
+                    errors.append(
+                        f"{building_type.value}/{subtype}/{ownership.value}: amort_years must be non-negative"
+                    )
+                if loan_term_years is not None and loan_term_years < 0:
+                    errors.append(
+                        f"{building_type.value}/{subtype}/{ownership.value}: loan_term_years must be non-negative"
+                    )
+                if interest_only_months < 0:
+                    errors.append(
+                        f"{building_type.value}/{subtype}/{ownership.value}: interest_only_months must be non-negative"
+                    )
+
+                has_amort = amort_years is not None
+                has_loan_term = loan_term_years is not None
+                if has_amort != has_loan_term:
+                    errors.append(
+                        f"{building_type.value}/{subtype}/{ownership.value}: "
+                        "amort_years and loan_term_years must both be set together"
+                    )
+                if loan_term_years is not None and interest_only_months > loan_term_years * 12:
+                    errors.append(
+                        f"{building_type.value}/{subtype}/{ownership.value}: "
+                        "interest_only_months cannot exceed loan_term_years * 12"
+                    )
     
     return errors
 

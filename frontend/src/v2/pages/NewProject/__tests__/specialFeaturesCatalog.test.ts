@@ -7,6 +7,10 @@ import {
   HEALTHCARE_SUBTYPES,
   HOSPITALITY_FEATURE_COSTS_BY_SUBTYPE,
   HOSPITALITY_SUBTYPES,
+  INDUSTRIAL_FEATURE_COSTS_BY_SUBTYPE,
+  INDUSTRIAL_SUBTYPES,
+  MULTIFAMILY_FEATURE_COSTS_BY_SUBTYPE,
+  MULTIFAMILY_SUBTYPES,
   MIXED_USE_FEATURE_COSTS_BY_SUBTYPE,
   MIXED_USE_SUBTYPES,
   OFFICE_FEATURE_COSTS_BY_SUBTYPE,
@@ -26,11 +30,14 @@ import {
   detectEducationalSubtypeFromDescription,
   detectHealthcareFeatureIdsFromDescription,
   detectHospitalityFeatureIdsFromDescription,
+  detectIndustrialFeatureIdsFromDescription,
+  detectMultifamilyFeatureIdsFromDescription,
   detectMixedUseFeatureIdsFromDescription,
   detectOfficeFeatureIdsFromDescription,
   detectParkingFeatureIdsFromDescription,
   detectRecreationFeatureIdsFromDescription,
   detectRecreationSubtypeFromDescription,
+  detectRestaurantFeatureIdsFromDescription,
   detectRetailFeatureIdsFromDescription,
   detectSpecialtyFeatureIdsFromDescription,
   educationalSubtypeHasSpecialFeatures,
@@ -40,6 +47,8 @@ import {
   getEducationalSpecialFeatures,
   getHealthcareSpecialFeatures,
   getHospitalitySpecialFeatures,
+  getIndustrialSpecialFeatures,
+  getMultifamilySpecialFeatures,
   getMixedUseSpecialFeatures,
   getOfficeSpecialFeatures,
   getParkingSpecialFeatures,
@@ -50,6 +59,8 @@ import {
   getSpecialtySpecialFeatures,
   healthcareSubtypeHasSpecialFeatures,
   hospitalitySubtypeHasSpecialFeatures,
+  industrialSubtypeHasSpecialFeatures,
+  multifamilySubtypeHasSpecialFeatures,
   mixedUseSubtypeHasSpecialFeatures,
   officeSubtypeHasSpecialFeatures,
   parkingSubtypeHasSpecialFeatures,
@@ -57,6 +68,62 @@ import {
   retailSubtypeHasSpecialFeatures,
   restaurantSubtypeHasSpecialFeatures,
 } from "../specialFeaturesCatalog";
+
+const REQUIRED_INDUSTRIAL_MAPPING = {
+  warehouse: {},
+  distribution_center: {
+    automated_sorting: 25,
+    refrigerated_area: 35,
+    loading_docks: 15,
+    extra_loading_docks: 20,
+    office_buildout: 18,
+    cold_storage: 40,
+  },
+  cold_storage: {
+    blast_freezer: 50,
+    multiple_temp_zones: 30,
+    automated_retrieval: 40,
+    under_slab_heating_protection: 18,
+    high_r_value_panel_upgrade: 12,
+  },
+  manufacturing: {
+    clean_room: 75,
+    heavy_power: 40,
+    crane_bays: 30,
+    compressed_air: 20,
+  },
+  flex_space: {
+    enhanced_office_showroom_finish: 18,
+    two_story_office_mezzanine: 12,
+    heavy_power: 20,
+    clean_room: 60,
+    crane_bays: 28,
+    compressed_air: 10,
+    lab_buildout: 35,
+  },
+} as const;
+
+const REQUIRED_MULTIFAMILY_MAPPING = {
+  market_rate_apartments: {
+    parking_garage: 32,
+    pool: 18,
+    fitness_center: 14,
+    rooftop_amenity: 24,
+  },
+  luxury_apartments: {
+    parking_garage: 45,
+    pool: 25,
+    fitness_center: 20,
+    rooftop_amenity: 35,
+    concierge: 15,
+  },
+  affordable_housing: {
+    parking_garage: 26,
+    pool: 12,
+    fitness_center: 10,
+    rooftop_amenity: 18,
+  },
+} as const;
 
 const REQUIRED_RESTAURANT_MAPPING = {
   quick_service: {
@@ -446,6 +513,206 @@ const resolveFeatureCostPerSF = (
   return 0;
 };
 
+describe("industrial special features catalog", () => {
+  it("matches the backend-parity industrial subtype mapping", () => {
+    const industrialFeatures = getIndustrialSpecialFeatures();
+
+    expect(industrialFeatures.length).toBeGreaterThan(0);
+    expect(INDUSTRIAL_FEATURE_COSTS_BY_SUBTYPE).toEqual(REQUIRED_INDUSTRIAL_MAPPING);
+  });
+
+  it("resolves exact industrial feature IDs per subtype, including the empty warehouse path", () => {
+    const industrialFeatures = getIndustrialSpecialFeatures();
+
+    for (const subtype of INDUSTRIAL_SUBTYPES) {
+      const expectedIds = Object.keys(REQUIRED_INDUSTRIAL_MAPPING[subtype]).sort();
+      const resolvedIds = filterSpecialFeaturesBySubtype(industrialFeatures, subtype).map(
+        (feature) => feature.id
+      );
+      const uniqueResolvedIds = Array.from(new Set(resolvedIds));
+
+      expect(uniqueResolvedIds.length).toBe(resolvedIds.length);
+      expect(uniqueResolvedIds.sort()).toEqual(expectedIds);
+      expect(
+        getAvailableSpecialFeatures("industrial", subtype).map((feature) => feature.id).sort()
+      ).toEqual(expectedIds);
+    }
+  });
+
+  it("detects backend-parity industrial feature IDs from major subtype phrases", () => {
+    expect(
+      detectIndustrialFeatureIdsFromDescription(
+        "Distribution center with automated sortation, refrigerated area, extra loading docks, office buildout, and cold storage."
+      ).sort()
+    ).toEqual([
+      "automated_sorting",
+      "cold_storage",
+      "extra_loading_docks",
+      "office_buildout",
+      "refrigerated_area",
+    ]);
+
+    expect(
+      detectIndustrialFeatureIdsFromDescription(
+        "Cold storage facility with blast freezer, multi-temp zones, automated retrieval, under slab heating, and high-R panels."
+      ).sort()
+    ).toEqual([
+      "automated_retrieval",
+      "blast_freezer",
+      "cold_storage",
+      "high_r_value_panel_upgrade",
+      "multiple_temp_zones",
+      "under_slab_heating_protection",
+    ]);
+
+    expect(
+      detectIndustrialFeatureIdsFromDescription(
+        "Manufacturing plant with clean room, heavy power, crane bays, and compressed air."
+      ).sort()
+    ).toEqual(["clean_room", "compressed_air", "crane_bays", "heavy_power"]);
+
+    expect(
+      detectIndustrialFeatureIdsFromDescription(
+        "Flex industrial project with office showroom finish, office mezzanine, lab buildout, clean room, crane bays, and compressed air."
+      ).sort()
+    ).toEqual([
+      "clean_room",
+      "compressed_air",
+      "crane_bays",
+      "enhanced_office_showroom_finish",
+      "lab_buildout",
+      "two_story_office_mezzanine",
+    ]);
+
+    const countedDockFeatures = detectIndustrialFeatureIdsFromDescription(
+      "New 220,000 SF distribution center with 10 loading docks and refrigerated area in Nashville, TN"
+    );
+    expect(countedDockFeatures).toContain("extra_loading_docks");
+    expect(countedDockFeatures).not.toContain("loading_docks");
+  });
+
+  it("filters raw industrial detector hits back to the intended subtype inventory", () => {
+    const flexDescription =
+      "New flex industrial project with office showroom finish, office mezzanine, lab buildout, clean room, crane bays, and compressed air.";
+    const flexDetectedIds = new Set(detectIndustrialFeatureIdsFromDescription(flexDescription));
+    const flexAllowedIds = new Set(
+      getAvailableSpecialFeatures("industrial", "flex_space").map((feature) => feature.id)
+    );
+
+    expect(
+      Array.from(flexDetectedIds)
+        .filter((featureId) => flexAllowedIds.has(featureId))
+        .sort()
+    ).toEqual([
+      "clean_room",
+      "compressed_air",
+      "crane_bays",
+      "enhanced_office_showroom_finish",
+      "lab_buildout",
+      "two_story_office_mezzanine",
+    ]);
+
+    const coldStorageDescription =
+      "Cold storage facility with blast freezer, multi-temp zones, automated retrieval, under slab heating, and high-R panels.";
+    const coldStorageDetectedIds = new Set(
+      detectIndustrialFeatureIdsFromDescription(coldStorageDescription)
+    );
+    const coldStorageAllowedIds = new Set(
+      getAvailableSpecialFeatures("industrial", "cold_storage").map((feature) => feature.id)
+    );
+
+    expect(
+      Array.from(coldStorageDetectedIds)
+        .filter((featureId) => coldStorageAllowedIds.has(featureId))
+        .sort()
+    ).toEqual([
+      "automated_retrieval",
+      "blast_freezer",
+      "high_r_value_panel_upgrade",
+      "multiple_temp_zones",
+      "under_slab_heating_protection",
+    ]);
+  });
+
+  it("guards against stale local industrial IDs and subtype leakage", () => {
+    expect(getAvailableSpecialFeatures("industrial", "warehouse")).toEqual([]);
+    expect(industrialSubtypeHasSpecialFeatures("warehouse")).toBe(false);
+    expect(industrialSubtypeHasSpecialFeatures("distribution_center")).toBe(true);
+    expect(getSpecialFeatureCost("industrial", "cranes", "manufacturing")).toBeUndefined();
+    expect(
+      getAvailableSpecialFeatures("industrial", "manufacturing").map((feature) => feature.id)
+    ).not.toContain("cranes");
+    expect(
+      getAvailableSpecialFeatures("industrial", "distribution_center").map((feature) => feature.id)
+    ).not.toContain("clean_room");
+  });
+});
+
+describe("multifamily special features catalog", () => {
+  it("is non-empty and matches the shared multifamily subtype mapping", () => {
+    const multifamilyFeatures = getMultifamilySpecialFeatures();
+    expect(multifamilyFeatures.length).toBeGreaterThan(0);
+    expect(MULTIFAMILY_FEATURE_COSTS_BY_SUBTYPE).toEqual(REQUIRED_MULTIFAMILY_MAPPING);
+  });
+
+  it("resolves expected multifamily feature IDs for each subtype with no duplicates", () => {
+    const multifamilyFeatures = getMultifamilySpecialFeatures();
+
+    for (const subtype of MULTIFAMILY_SUBTYPES) {
+      const expectedIds = Object.keys(REQUIRED_MULTIFAMILY_MAPPING[subtype]).sort();
+      const resolvedIds = filterSpecialFeaturesBySubtype(multifamilyFeatures, subtype).map(
+        (feature) => feature.id
+      );
+      const uniqueResolvedIds = Array.from(new Set(resolvedIds));
+
+      expect(uniqueResolvedIds.length).toBe(resolvedIds.length);
+      expect(uniqueResolvedIds.sort()).toEqual(expectedIds);
+    }
+  });
+
+  it("detects multifamily feature IDs from centralized amenity language", () => {
+    expect(
+      detectMultifamilyFeatureIdsFromDescription(
+        "Market-rate apartments with rooftop amenity, roof deck, roof terrace, pool, parking garage, and resident gym."
+      ).sort()
+    ).toEqual(["fitness_center", "parking_garage", "pool", "rooftop_amenity"]);
+
+    expect(
+      detectMultifamilyFeatureIdsFromDescription(
+        "Luxury apartments with concierge lobby and amenity gym."
+      ).sort()
+    ).toEqual(["concierge", "fitness_center"]);
+  });
+
+  it("filters rooftop collisions back to the multifamily feature set in the real shared path", () => {
+    const description =
+      "200-unit market-rate apartment tower with rooftop amenity and roof terrace in Dallas, TX.";
+    const detectedIds = new Set([
+      ...detectMultifamilyFeatureIdsFromDescription(description),
+      ...detectRestaurantFeatureIdsFromDescription(description),
+      ...detectHospitalityFeatureIdsFromDescription(description),
+      ...detectMixedUseFeatureIdsFromDescription(description),
+    ]);
+    const allowedIds = new Set(
+      getAvailableSpecialFeatures("multifamily", "market_rate_apartments").map(
+        (feature) => feature.id
+      )
+    );
+
+    expect(
+      Array.from(detectedIds)
+        .filter((featureId) => allowedIds.has(featureId))
+        .sort()
+    ).toEqual(["rooftop_amenity"]);
+  });
+
+  it("multifamily subtype helper returns true for all canonical multifamily subtypes", () => {
+    for (const subtype of MULTIFAMILY_SUBTYPES) {
+      expect(multifamilySubtypeHasSpecialFeatures(subtype)).toBe(true);
+    }
+  });
+});
+
 describe("restaurant special features catalog", () => {
   it("is non-empty and matches required subtype mapping keys/values", () => {
     const restaurantFeatures = getRestaurantSpecialFeatures();
@@ -494,6 +761,46 @@ describe("restaurant special features catalog", () => {
       expect(restaurantSubtypeHasSpecialFeatures(subtype)).toBe(true);
       expect(filterSpecialFeaturesBySubtype(restaurantFeatures, subtype).length).toBeGreaterThan(0);
     }
+  });
+
+  it("detects first-wave restaurant drive-thru feature ids from prompt language", () => {
+    expect(
+      detectRestaurantFeatureIdsFromDescription(
+        "New 6,500 SF quick service restaurant with drive thru in Nashville, TN"
+      )
+    ).toContain("drive_thru");
+
+    expect(
+      detectRestaurantFeatureIdsFromDescription(
+        "New 6,500 SF quick service restaurant with double drive thru in Nashville, TN"
+      )
+    ).toEqual(["double_drive_thru"]);
+  });
+
+  it("detects remaining Stage 2C restaurant area-share feature ids from prompt language", () => {
+    expect(
+      detectRestaurantFeatureIdsFromDescription(
+        "New 6,500 SF full service restaurant with live kitchen in Nashville, TN"
+      )
+    ).toContain("live_kitchen");
+
+    expect(
+      detectRestaurantFeatureIdsFromDescription(
+        "New 6,500 SF fine dining restaurant with dry aging room in Nashville, TN"
+      )
+    ).toContain("dry_aging_room");
+
+    expect(
+      detectRestaurantFeatureIdsFromDescription(
+        "New 6,500 SF fine dining restaurant with separate pastry kitchen in Nashville, TN"
+      )
+    ).toContain("pastry_kitchen");
+
+    expect(
+      detectRestaurantFeatureIdsFromDescription(
+        "New 6,500 SF fine dining restaurant with dry aging room and pastry kitchen in Nashville, TN"
+      )
+    ).toEqual(expect.arrayContaining(["dry_aging_room", "pastry_kitchen"]));
   });
 });
 
@@ -1433,6 +1740,39 @@ describe("healthcare special features catalog", () => {
         "imaging_suite",
         "laboratory",
         "icu",
+      ])
+    );
+  });
+
+  it("detects first-wave healthcare count-based feature ids from plural prompt language", () => {
+    expect(
+      detectHealthcareFeatureIdsFromDescription(
+        "New 24,000 SF ambulatory surgery center with 6 operating rooms in Nashville, TN"
+      )
+    ).toContain("operating_room");
+
+    expect(
+      detectHealthcareFeatureIdsFromDescription(
+        "New 4,500 SF dental office with 9 operatories in Nashville, TN"
+      )
+    ).toContain("operatory");
+
+    expect(
+      detectHealthcareFeatureIdsFromDescription(
+        "New 12,000 SF imaging center with 2 MRI suites and 1 CT suite in Nashville, TN"
+      )
+    ).toEqual(expect.arrayContaining(["mri_suite", "ct_suite"]));
+
+    expect(
+      detectHealthcareFeatureIdsFromDescription(
+        "New 12,000 SF imaging center with PET scan, second MRI, interventional radiology, and cath lab in Nashville, TN"
+      )
+    ).toEqual(
+      expect.arrayContaining([
+        "pet_scan",
+        "hc_imaging_second_mri",
+        "hc_imaging_interventional_rad",
+        "hc_asc_hybrid_or_cath_lab",
       ])
     );
   });

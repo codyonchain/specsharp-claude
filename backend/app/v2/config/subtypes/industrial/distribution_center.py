@@ -46,6 +46,9 @@ CONFIG = (
                 equity_ratio=0.25,
                 target_dscr=1.25,
                 target_roi=0.11,
+                amort_years=25,
+                loan_term_years=10,
+                interest_only_months=0,
             )
         },
         nlp=NLPConfig(
@@ -66,11 +69,49 @@ CONFIG = (
         regional_multipliers={},
         special_features={
             "automated_sorting": 25,
-            "refrigerated_area": 35,
+            "refrigerated_area": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.12,
+            },
             "loading_docks": 15,
-            "extra_loading_docks": 20,
-            "office_buildout": 18,
-            "cold_storage": 40,
+            "extra_loading_docks": {
+                "basis": "COUNT_BASED",
+                "value": 65000,
+                "count_pricing_mode": "overage_above_default",
+                "count_override_keys": [
+                    "extra_loading_dock_count",
+                    "extra_dock_count",
+                    "loading_dock_count",
+                    "dock_door_count",
+                    "dock_count",
+                ],
+                "default_count_bands": [
+                    {"label": "mid_box", "max_square_footage": 150000, "count": 4},
+                    {"label": "regional", "max_square_footage": 300000, "count": 8},
+                    {"label": "large_box", "max_square_footage": 600000, "count": 12},
+                    {"label": "mega_box", "count": 16},
+                ],
+                "unit_label": "dock",
+            },
+            "office_buildout": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 18,
+                "area_share_of_gsf": 0.05,
+            },
+            "cold_storage": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.18,
+            },
+        },
+        special_feature_pricing_statuses={
+            "automated_sorting": "included_in_baseline",
+            "refrigerated_area": "incremental",
+            "loading_docks": "included_in_baseline",
+            "extra_loading_docks": "incremental",
+            "office_buildout": "included_in_baseline",
+            "cold_storage": "incremental",
         },
         # Revenue metrics
         base_revenue_per_sf_annual=10,

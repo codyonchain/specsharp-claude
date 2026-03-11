@@ -1,5 +1,6 @@
 import pytest
 
+from app.v2.services import dealshield_scenarios as dealshield_scenarios_module
 from app.v2.config.master_config import BuildingType, ProjectClass, get_building_config
 from app.v2.config.type_profiles.dealshield_content import get_dealshield_content_profile
 from app.v2.config.type_profiles.decision_insurance_policy import DECISION_INSURANCE_POLICY_BY_PROFILE_ID
@@ -7,7 +8,10 @@ from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.v2.config.type_profiles.dealshield_tiles import restaurant as restaurant_tile_profiles
 from app.v2.config.type_profiles.scope_items import restaurant as restaurant_scope_profiles
 from app.v2.engines.unified_engine import unified_engine
-from app.v2.services.dealshield_scenarios import build_dealshield_scenarios
+from app.v2.services.dealshield_scenarios import (
+    build_dealshield_scenarios,
+    refresh_dealshield_scenarios_payload,
+)
 from app.v2.services.dealshield_service import build_dealshield_view_model
 from tests.dealshield_contract_assertions import assert_decision_insurance_truth_parity
 
@@ -29,12 +33,26 @@ RESTAURANT_SCOPE_PROFILE_IDS = {
 }
 
 RESTAURANT_SPECIAL_FEATURE_CASES = {
-    "quick_service": "drive_thru",
+    "quick_service": "digital_menu_boards",
     "full_service": "private_dining",
     "fine_dining": "chef_table",
     "cafe": "bakery_display",
     "bar_tavern": "live_music_stage",
 }
+
+
+def _expected_special_feature_total(configured_feature, square_footage: float, pricing_status: str) -> float:
+    if pricing_status == "included_in_baseline":
+        return 0.0
+    if isinstance(configured_feature, dict):
+        if configured_feature.get("basis") == "AREA_SHARE_GSF":
+            return (
+                float(configured_feature["value"])
+                * float(configured_feature["area_share_of_gsf"])
+                * square_footage
+            )
+        raise AssertionError(f"Unsupported structured restaurant feature config: {configured_feature}")
+    return float(configured_feature) * square_footage
 
 
 def _profile_item_keys(profile_id: str):
@@ -553,6 +571,66 @@ def test_restaurant_scenario_controls_accept_allowed_stress_band_values(stress_b
     assert conservative["revenue_scalar"] == pytest.approx(1.0 - (stress_band_pct / 100.0))
 
 
+def test_restaurant_base_scenario_uses_recompute_helper_stack_before_commit(monkeypatch):
+    payload = unified_engine.calculate_project(
+        building_type=BuildingType.RESTAURANT,
+        subtype="full_service",
+        square_footage=8_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+    )
+
+    config = get_building_config(BuildingType.RESTAURANT, "full_service")
+    original_build_bundle = dealshield_scenarios_module._build_ownership_bundle_without_trace_side_effects
+    seen_scenarios = []
+
+    def tracking_build_bundle(*args, **kwargs):
+        calculation_context = kwargs.get("calculation_context") or {}
+        seen_scenarios.append(calculation_context.get("scenario"))
+        return original_build_bundle(*args, **kwargs)
+
+    monkeypatch.setattr(
+        dealshield_scenarios_module,
+        "_build_ownership_bundle_without_trace_side_effects",
+        tracking_build_bundle,
+    )
+
+    scenarios_bundle = build_dealshield_scenarios(
+        base_payload=payload,
+        building_config=config,
+        engine=unified_engine,
+    )
+
+    assert scenarios_bundle["scenarios"]["base"]
+    assert seen_scenarios
+    assert seen_scenarios[0] == "base"
+    assert "base" in seen_scenarios
+
+
+def test_restaurant_refresh_helper_replaces_stale_stored_scenarios():
+    payload = unified_engine.calculate_project(
+        building_type=BuildingType.RESTAURANT,
+        subtype="full_service",
+        square_footage=8_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+    )
+
+    stale_value = 999_999_999.0
+    payload["dealshield_scenarios"]["scenarios"]["base"]["totals"]["total_project_cost"] = stale_value
+
+    refreshed = refresh_dealshield_scenarios_payload(
+        payload,
+        building_type="restaurant",
+        subtype="full_service",
+        engine=unified_engine,
+    )
+
+    refreshed_value = refreshed["dealshield_scenarios"]["scenarios"]["base"]["totals"]["total_project_cost"]
+    assert refreshed_value != stale_value
+    assert refreshed_value == pytest.approx(payload["totals"]["total_project_cost"])
+
+
 def test_restaurant_scenario_controls_with_anchors_emit_expected_provenance_for_all_subtypes():
     for subtype, expected_profile_id in RESTAURANT_PROFILE_IDS.items():
         payload = unified_engine.calculate_project(
@@ -619,20 +697,182 @@ def test_restaurant_special_features_math_and_breakdown_reconcile_for_all_subtyp
         )
 
         config = get_building_config(BuildingType.RESTAURANT, subtype)
-        expected_delta = float(config.special_features[feature_key]) * square_footage
+        configured_feature = config.special_features[feature_key]
+        expected_status = (config.special_feature_pricing_statuses or {}).get(feature_key, "incremental")
+        expected_delta = _expected_special_feature_total(
+            configured_feature,
+            square_footage,
+            expected_status,
+        )
 
         base_total = float(baseline["construction_costs"]["special_features_total"])
         feature_total = float(with_feature["construction_costs"]["special_features_total"])
         delta = feature_total - base_total
-        assert delta > 0
         assert delta == pytest.approx(expected_delta, rel=1e-3)
 
         breakdown = with_feature["construction_costs"]["special_features_breakdown"]
         assert isinstance(breakdown, list) and breakdown
-        breakdown_map = {entry.get("id"): float(entry.get("total_cost", 0.0) or 0.0) for entry in breakdown}
+        breakdown_map = {
+            entry.get("id"): entry
+            for entry in breakdown
+            if isinstance(entry, dict) and entry.get("id")
+        }
         assert feature_key in breakdown_map
-        assert breakdown_map[feature_key] == pytest.approx(expected_delta, rel=1e-3)
-        assert sum(breakdown_map.values()) == pytest.approx(feature_total, rel=1e-3)
+        feature_entry = breakdown_map[feature_key]
+        assert feature_entry.get("pricing_status") == expected_status
+        if isinstance(configured_feature, dict):
+            assert feature_entry.get("pricing_basis") == "AREA_SHARE_GSF"
+            assert float(feature_entry.get("configured_value", 0.0) or 0.0) == pytest.approx(
+                float(configured_feature["value"]),
+                rel=1e-3,
+            )
+            assert float(feature_entry.get("configured_area_share_of_gsf", 0.0) or 0.0) == pytest.approx(
+                float(configured_feature["area_share_of_gsf"]),
+                rel=1e-3,
+            )
+        else:
+            assert float(feature_entry.get("configured_cost_per_sf", 0.0) or 0.0) == pytest.approx(
+                float(configured_feature),
+                rel=1e-3,
+            )
+            expected_applied_cost_per_sf = (
+                0.0 if expected_status == "included_in_baseline" else float(configured_feature)
+            )
+            assert float(feature_entry.get("cost_per_sf", 0.0) or 0.0) == pytest.approx(
+                expected_applied_cost_per_sf,
+                rel=1e-3,
+            )
+        if isinstance(configured_feature, dict):
+            expected_applied_value = (
+                0.0 if expected_status == "included_in_baseline" else float(configured_feature["value"])
+            )
+            assert float(feature_entry.get("applied_value", 0.0) or 0.0) == pytest.approx(
+                expected_applied_value,
+                rel=1e-3,
+            )
+        assert float(feature_entry.get("total_cost", 0.0) or 0.0) == pytest.approx(expected_delta, rel=1e-3)
+        assert sum(
+            float(item.get("total_cost", 0.0) or 0.0)
+            for item in breakdown
+            if isinstance(item, dict)
+        ) == pytest.approx(feature_total, rel=1e-3)
+
+
+def test_full_service_restaurant_prices_only_incremental_features_and_preserves_selected_status():
+    square_footage = 8_000
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.RESTAURANT,
+        subtype="full_service",
+        square_footage=square_footage,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["outdoor_seating", "wine_cellar"],
+    )
+
+    config = get_building_config(BuildingType.RESTAURANT, "full_service")
+    assert config is not None
+    wine_cellar_rule = config.special_features["wine_cellar"]
+    outdoor_seating_rule = config.special_features["outdoor_seating"]
+    assert isinstance(wine_cellar_rule, dict)
+    assert isinstance(outdoor_seating_rule, (int, float))
+    expected_incremental_total = (
+        float(wine_cellar_rule["value"])
+        * (float(wine_cellar_rule["area_share_of_gsf"]) * square_footage)
+    )
+
+    assert float(result["construction_costs"]["special_features_total"]) == pytest.approx(
+        expected_incremental_total,
+        rel=1e-3,
+    )
+
+    breakdown = result["construction_costs"]["special_features_breakdown"]
+    breakdown_by_id = {
+        item["id"]: item
+        for item in breakdown
+        if isinstance(item, dict) and item.get("id")
+    }
+
+    included_row = breakdown_by_id["outdoor_seating"]
+    assert included_row.get("pricing_status") == "included_in_baseline"
+    assert float(included_row.get("configured_cost_per_sf", 0.0) or 0.0) == pytest.approx(
+        float(outdoor_seating_rule),
+        rel=1e-3,
+    )
+    assert float(included_row.get("cost_per_sf", 0.0) or 0.0) == 0.0
+    assert float(included_row.get("total_cost", 0.0) or 0.0) == 0.0
+
+    incremental_row = breakdown_by_id["wine_cellar"]
+    assert incremental_row.get("pricing_status") == "incremental"
+    assert incremental_row.get("pricing_basis") == "AREA_SHARE_GSF"
+    assert float(incremental_row.get("configured_value", 0.0) or 0.0) == pytest.approx(
+        float(wine_cellar_rule["value"]),
+        rel=1e-3,
+    )
+    assert float(incremental_row.get("configured_area_share_of_gsf", 0.0) or 0.0) == pytest.approx(
+        float(wine_cellar_rule["area_share_of_gsf"]),
+        rel=1e-3,
+    )
+    assert float(incremental_row.get("applied_value", 0.0) or 0.0) == pytest.approx(
+        float(wine_cellar_rule["value"]),
+        rel=1e-3,
+    )
+    assert float(incremental_row.get("total_cost", 0.0) or 0.0) == pytest.approx(
+        expected_incremental_total,
+        rel=1e-3,
+    )
+
+
+def test_full_service_restaurant_included_feature_does_not_inflate_total_project_cost():
+    square_footage = 6_500
+    baseline = unified_engine.calculate_project(
+        building_type=BuildingType.RESTAURANT,
+        subtype="full_service",
+        square_footage=square_footage,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=[],
+    )
+    included_only = unified_engine.calculate_project(
+        building_type=BuildingType.RESTAURANT,
+        subtype="full_service",
+        square_footage=square_footage,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["private_dining"],
+    )
+    mixed = unified_engine.calculate_project(
+        building_type=BuildingType.RESTAURANT,
+        subtype="full_service",
+        square_footage=square_footage,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["private_dining", "wine_cellar"],
+    )
+
+    config = get_building_config(BuildingType.RESTAURANT, "full_service")
+    assert config is not None
+    wine_cellar_rule = config.special_features["wine_cellar"]
+    assert isinstance(wine_cellar_rule, dict)
+    expected_incremental_total = (
+        float(wine_cellar_rule["value"])
+        * (float(wine_cellar_rule["area_share_of_gsf"]) * square_footage)
+    )
+
+    assert float(included_only["construction_costs"]["special_features_total"]) == 0.0
+    assert float(included_only["totals"]["total_project_cost"]) == pytest.approx(
+        float(baseline["totals"]["total_project_cost"]),
+        rel=1e-3,
+    )
+    assert float(mixed["construction_costs"]["special_features_total"]) == pytest.approx(
+        expected_incremental_total,
+        rel=1e-3,
+    )
+    assert float(mixed["totals"]["total_project_cost"]) - float(
+        baseline["totals"]["total_project_cost"]
+    ) == pytest.approx(
+        expected_incremental_total,
+        rel=1e-3,
+    )
 
 
 def test_restaurant_margin_normalized_trace_emitted_once_for_all_subtypes():

@@ -43,6 +43,9 @@ CONFIG = (
                 equity_ratio=0.30,
                 target_dscr=1.25,
                 target_roi=0.10,
+                amort_years=30,
+                loan_term_years=10,
+                interest_only_months=0,
             )
         },
         nlp=NLPConfig(
@@ -72,6 +75,11 @@ CONFIG = (
             "amenity_deck": 35,
             "business_center": 20,
             "conference_facility": 30,
+        },
+        special_feature_pricing_statuses={
+            "amenity_deck": "included_in_baseline",
+            "business_center": "incremental",
+            "conference_facility": "incremental",
         },
         base_revenue_per_sf_annual=35,
         occupancy_rate_base=0.90,

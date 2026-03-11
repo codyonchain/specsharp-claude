@@ -85,6 +85,12 @@ CONFIG = (
             "process_gas_distribution": 65,
             "redundancy_exhaust_stack": 50,
         },
+        special_feature_pricing_statuses={
+            "cleanroom_suite": "incremental",
+            "vivarium_support": "included_in_baseline",
+            "process_gas_distribution": "included_in_baseline",
+            "redundancy_exhaust_stack": "incremental",
+        },
         base_revenue_per_sf_annual=75,
         occupancy_rate_base=0.88,
         occupancy_rate_premium=0.94,

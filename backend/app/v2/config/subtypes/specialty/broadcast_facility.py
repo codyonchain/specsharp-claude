@@ -75,6 +75,12 @@ CONFIG = (
             "acoustic_shell_upgrade": 30,
             "satellite_uplink_pad": 16,
         },
+        special_feature_pricing_statuses={
+            "floating_studio_floors": "incremental",
+            "control_room_signal_core": "included_in_baseline",
+            "acoustic_shell_upgrade": "incremental",
+            "satellite_uplink_pad": "incremental",
+        },
         base_revenue_per_sf_annual=100,
         occupancy_rate_base=0.95,
         occupancy_rate_premium=0.98,

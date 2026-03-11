@@ -46,6 +46,9 @@ CONFIG = (
                 equity_ratio=0.25,
                 target_dscr=1.25,
                 target_roi=0.07,  # Market standard 7% for warehouse
+                amort_years=25,
+                loan_term_years=10,
+                interest_only_months=0,
             )
         },
         nlp=NLPConfig(

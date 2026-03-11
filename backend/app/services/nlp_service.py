@@ -438,6 +438,34 @@ class NLPService:
         )
         return any(re.search(pattern, text_lower) for pattern in strong_office_patterns)
 
+    def _resolve_multifamily_subtype_from_intent(self, text_lower: str) -> Optional[str]:
+        """Resolve strong multifamily intent before amenity language can reroute to other families."""
+        if not isinstance(text_lower, str) or not text_lower.strip():
+            return None
+
+        multifamily_patterns = self.building_patterns.get('multifamily', {})
+        subtype_patterns = multifamily_patterns.get('subtypes', {})
+        subtype_priority = (
+            'luxury_apartments',
+            'affordable_housing',
+            'market_rate_apartments',
+        )
+        for subtype_key in subtype_priority:
+            for keyword in sorted(subtype_patterns.get(subtype_key, []), key=len, reverse=True):
+                if keyword in text_lower:
+                    return subtype_key
+
+        strong_multifamily_patterns = (
+            r"\bapartment\s+(?:building|complex|development|tower)\b",
+            r"\bmulti[-\s]?family\b",
+            r"\bresidential\s+(?:tower|complex|development)\b",
+            r"\b\d+\s*[-]?\s*unit\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in strong_multifamily_patterns):
+            return self._get_default_subtype('multifamily')
+
+        return None
+
     def _resolve_office_subtype_from_intent(self, text_lower: str) -> Optional[str]:
         """Resolve explicit office class signals when present; otherwise keep subtype unknown."""
         if re.search(r"\bclass\s*a\b", text_lower) or re.search(r"\bgrade\s*a\b", text_lower):
@@ -445,6 +473,79 @@ class NLPService:
         if re.search(r"\bclass\s*b\b", text_lower) or re.search(r"\bgrade\s*b\b", text_lower):
             return "class_b"
         return None
+
+    def _resolve_retail_subtype_from_intent(self, text_lower: str) -> Optional[str]:
+        """Resolve strong retail container intent before downstream program cues reroute the asset."""
+        if not isinstance(text_lower, str) or not text_lower.strip():
+            return None
+
+        shopping_center_patterns = (
+            r"\bshopping\s+center\b",
+            r"\bretail\s+center\b",
+            r"\bstrip\s+(?:center|mall)\b",
+            r"\bshopping\s+plaza\b",
+            r"\bretail\s+plaza\b",
+            r"\bneighborhood\s+center\b",
+            r"\binline\s+(?:retail|suites?)\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in shopping_center_patterns):
+            return "shopping_center"
+
+        bare_plaza_retail_context_patterns = (
+            r"\bplaza\b",
+            r"\bgrocery\s+anchor\b",
+            r"\banchor\s+tenant\b",
+            r"\btenant\s+mix\b",
+            r"\bstorefront\b",
+        )
+        if re.search(bare_plaza_retail_context_patterns[0], text_lower) and any(
+            re.search(pattern, text_lower) for pattern in bare_plaza_retail_context_patterns[1:]
+        ):
+            return "shopping_center"
+
+        return None
+
+    def _resolve_retail_drive_thru_collision(self, text_lower: str) -> Optional[str]:
+        """Treat drive-thru as a tenant/program cue when retail container intent is explicit."""
+        if not self._has_drive_thru(text_lower):
+            return None
+
+        retail_subtype = self._resolve_retail_subtype_from_intent(text_lower)
+        if retail_subtype != "shopping_center":
+            return None
+
+        explicit_qsr_asset_patterns = (
+            r"\bquick\s+service\s+restaurant\b",
+            r"\bqsr\b",
+            r"\bfast\s+food\s+restaurant\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in explicit_qsr_asset_patterns):
+            return None
+
+        return retail_subtype
+
+    def _resolve_restaurant_cafe_collision(self, text_lower: str) -> Optional[str]:
+        """Keep explicit cafe assets on the cafe subtype even when drive-thru is present."""
+        if not isinstance(text_lower, str) or not text_lower.strip():
+            return None
+
+        explicit_cafe_patterns = (
+            r"\bcafe\b",
+            r"\bcoffee\s+shop\b",
+        )
+        if not any(re.search(pattern, text_lower) for pattern in explicit_cafe_patterns):
+            return None
+
+        explicit_qsr_asset_patterns = (
+            r"\bquick\s+service\s+restaurant\b",
+            r"\bquick\s+service\b",
+            r"\bqsr\b",
+            r"\bfast\s+food(?:\s+restaurant)?\b",
+        )
+        if any(re.search(pattern, text_lower) for pattern in explicit_qsr_asset_patterns):
+            return None
+
+        return "cafe"
 
     def _resolve_civic_subtype_from_intent(self, text_lower: str) -> Optional[str]:
         """Resolve high-confidence civic intents before generic pattern routing."""
@@ -928,6 +1029,7 @@ class NLPService:
             return 'healthcare', 'medical_office_building', classification
 
         recreation_subtype = self._resolve_recreation_subtype_from_intent(text_lower)
+        multifamily_subtype = self._resolve_multifamily_subtype_from_intent(text_lower)
         civic_subtype = self._resolve_civic_subtype_from_intent(text_lower)
         if civic_subtype is not None:
             return 'civic', civic_subtype, classification
@@ -1015,12 +1117,15 @@ class NLPService:
         if re.search(r'\btier[\s-]?(3|iii|4|iv)\b', text_lower):
             return 'specialty', 'data_center', classification
 
-        if recreation_subtype is not None:
+        if recreation_subtype is not None and multifamily_subtype is None:
             return 'recreation', recreation_subtype, classification
         if (
-            re.search(r"\brecreation\b", text_lower)
-            or re.search(r"\bathletic\s+facility\b", text_lower)
-            or re.search(r"\bparks?\s+and\s+recreation\b", text_lower)
+            multifamily_subtype is None
+            and (
+                re.search(r"\brecreation\b", text_lower)
+                or re.search(r"\bathletic\s+facility\b", text_lower)
+                or re.search(r"\bparks?\s+and\s+recreation\b", text_lower)
+            )
         ):
             return 'recreation', None, classification
 
@@ -1036,6 +1141,25 @@ class NLPService:
                 "detection_source": "nlp_service.parking_conflict_router",
                 "conflict_resolution": parking_outcome,
             }
+
+        if multifamily_subtype is not None:
+            return 'multifamily', multifamily_subtype, classification
+
+        retail_collision_subtype = self._resolve_retail_drive_thru_collision(text_lower)
+        if retail_collision_subtype is not None:
+            self._last_detection_metadata = {
+                "detection_source": "nlp_service.retail_asset_conflict_guard",
+                "conflict_resolution": "retail_container_beats_qsr_drive_thru",
+            }
+            return "retail", retail_collision_subtype, classification
+
+        restaurant_collision_subtype = self._resolve_restaurant_cafe_collision(text_lower)
+        if restaurant_collision_subtype is not None:
+            self._last_detection_metadata = {
+                "detection_source": "nlp_service.restaurant_subtype_conflict_guard",
+                "conflict_resolution": "explicit_cafe_beats_drive_thru_qsr_cue",
+            }
+            return "restaurant", restaurant_collision_subtype, classification
 
         # Priority order (check specific before general)
         PRIORITY_ORDER = [
@@ -1136,6 +1260,96 @@ class NLPService:
         # Default to ground_up if uncertain
         return 'ground_up'
 
+    def _extract_first_numeric_override(
+        self,
+        text_lower: str,
+        patterns: List[str],
+        *,
+        max_value: int = 300,
+    ) -> Optional[int]:
+        for pattern in patterns:
+            match = re.search(pattern, text_lower, re.IGNORECASE)
+            if not match:
+                continue
+            try:
+                value = int(match.group(1))
+            except (TypeError, ValueError):
+                continue
+            return max(0, min(max_value, value))
+        return None
+
+    def _extract_special_feature_count_overrides(self, text_lower: str) -> Dict[str, int]:
+        feature_patterns: List[Tuple[str, List[str], int]] = [
+            (
+                "operating_room_count",
+                [
+                    r'\b(\d{1,3})\s*operating\s+rooms?\b',
+                    r'\b(\d{1,2})\s*o\.?r\.?s?\b',
+                ],
+                50,
+            ),
+            (
+                "operatory_count",
+                [r'\b(\d{1,3})\s*(?:dental\s+)?operator(?:y|ies)\b'],
+                100,
+            ),
+            (
+                "mri_suite_count",
+                [r'\b(\d{1,2})\s*mri\s+suites?\b'],
+                20,
+            ),
+            (
+                "ct_suite_count",
+                [r'\b(\d{1,2})\s*ct\s+suites?\b'],
+                20,
+            ),
+            (
+                "pet_scan_count",
+                [r'\b(\d{1,2})\s*pet(?:\s+|[-/])?scans?\b'],
+                20,
+            ),
+            (
+                "loading_dock_count",
+                [
+                    r'\b(\d{1,3})\s*(?:loading\s+docks?|dock\s+doors?)\b',
+                    r'\b(?:loading\s+docks?|dock\s+doors?)\s*[:=]?\s*(\d{1,3})\b',
+                ],
+                300,
+            ),
+            (
+                "service_bay_count",
+                [r'\b(\d{1,3})\s*(?:expanded\s+)?service\s+bays?\b'],
+                100,
+            ),
+            (
+                "crane_bay_count",
+                [r'\b(\d{1,3})\s*crane\s+bays?\b'],
+                100,
+            ),
+            (
+                "drive_thru_lane_count",
+                [r'\b(\d{1,2})\s*drive[\s-]?(?:thru|through)\s+lanes?\b'],
+                20,
+            ),
+        ]
+
+        overrides: Dict[str, int] = {}
+        for key, patterns, max_value in feature_patterns:
+            value = self._extract_first_numeric_override(
+                text_lower,
+                patterns,
+                max_value=max_value,
+            )
+            if value is not None:
+                overrides[key] = value
+
+        loading_dock_count = overrides.get("loading_dock_count")
+        if loading_dock_count is not None:
+            overrides.setdefault("dock_door_count", loading_dock_count)
+            overrides.setdefault("dock_count", loading_dock_count)
+
+        return overrides
+
     def extract_project_details(self, text: str) -> Dict[str, Any]:
         """Main parsing function that returns all extracted information"""
         # Detect building type and subtype
@@ -1176,6 +1390,10 @@ class NLPService:
                 extracted["key_count"] = int(key_match.group(1))
             except Exception:
                 pass
+
+        special_feature_count_overrides = self._extract_special_feature_count_overrides(text_lower)
+        if special_feature_count_overrides:
+            extracted.update(special_feature_count_overrides)
 
         detection_metadata = self._last_detection_metadata if isinstance(self._last_detection_metadata, dict) else {}
         alias_mapping = detection_metadata.get("alias_mapping")

@@ -45,6 +45,9 @@ CONFIG = (
                 equity_ratio=0.25,
                 target_dscr=1.25,
                 target_roi=0.06,  # Market standard 6% for luxury apartments
+                amort_years=30,
+                loan_term_years=10,
+                interest_only_months=0,
             )
         },
         nlp=NLPConfig(
@@ -69,11 +72,30 @@ CONFIG = (
             "Miami": 1.20,
         },
         special_features={
-            "rooftop_amenity": 35,
-            "pool": 25,
-            "fitness_center": 20,
+            "rooftop_amenity": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.05,
+            },
+            "pool": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.025,
+            },
+            "fitness_center": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.015,
+            },
             "parking_garage": 45,
             "concierge": 15,
+        },
+        special_feature_pricing_statuses={
+            "rooftop_amenity": "incremental",
+            "pool": "incremental",
+            "fitness_center": "incremental",
+            "parking_garage": "incremental",
+            "concierge": "incremental",
         },
         base_revenue_per_sf_annual=36.0,
         base_revenue_per_unit_monthly=3500,  # Nashville luxury market rate

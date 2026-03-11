@@ -47,6 +47,9 @@ CONFIG = (
                 equity_ratio=0.28,
                 target_dscr=1.22,
                 target_roi=0.10,
+                amort_years=25,
+                loan_term_years=10,
+                interest_only_months=0,
             )
         },
         nlp=NLPConfig(
@@ -94,10 +97,33 @@ CONFIG = (
             "enhanced_office_showroom_finish": 18,
             "two_story_office_mezzanine": 12,
             "heavy_power": 20,
-            "clean_room": 60,
-            "crane_bays": 28,
+            "clean_room": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 60,
+                "area_share_of_gsf": 0.08,
+            },
+            "crane_bays": {
+                "basis": "COUNT_BASED",
+                "value": 250000,
+                "count_override_keys": ["crane_bay_count", "crane_count"],
+                "default_count_bands": [
+                    {"label": "small_flex", "max_square_footage": 50000, "count": 1},
+                    {"label": "mid_flex", "max_square_footage": 125000, "count": 2},
+                    {"label": "large_flex", "count": 3},
+                ],
+                "unit_label": "bay",
+            },
             "compressed_air": 10,
             "lab_buildout": 35,
+        },
+        special_feature_pricing_statuses={
+            "enhanced_office_showroom_finish": "included_in_baseline",
+            "two_story_office_mezzanine": "included_in_baseline",
+            "heavy_power": "incremental",
+            "clean_room": "incremental",
+            "crane_bays": "incremental",
+            "compressed_air": "incremental",
+            "lab_buildout": "incremental",
         },
     ),
 )

@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { ConstructionView } from "../ConstructionView";
 
 const HOSPITALITY_PROFILE_IDS = [
@@ -2264,6 +2264,267 @@ describe("ConstructionView", () => {
     expect(screen.getByText("Redundant Switchgear + UPS")).toBeInTheDocument();
     expect(screen.getByText("Nurse Call + Low Voltage Backbone")).toBeInTheDocument();
     expect(screen.getByText("Imaging + OR Power Conditioning")).toBeInTheDocument();
+  });
+
+  it("shows included-in-baseline and incremental special features with status-specific copy", () => {
+    const project = buildRestaurantProject("subtype");
+    project.analysis.calculations.construction_costs.special_features_total = 120000;
+    project.analysis.calculations.construction_costs.special_features_breakdown = [
+      {
+        id: "outdoor_seating",
+        label: "Outdoor Seating",
+        pricing_status: "included_in_baseline",
+        configured_cost_per_sf: 35,
+        cost_per_sf: 0,
+        total_cost: 0,
+      },
+      {
+        id: "bar",
+        label: "Bar",
+        pricing_status: "incremental",
+        configured_cost_per_sf: 35,
+        cost_per_sf: 35,
+        total_cost: 280000,
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+
+    const includedRow = screen.getByText("Outdoor Seating").closest(".rounded-lg");
+    expect(includedRow).not.toBeNull();
+    expect(within(includedRow as HTMLElement).getByText("Included in baseline")).toBeInTheDocument();
+    expect(within(includedRow as HTMLElement).getByText("$0")).toBeInTheDocument();
+
+    const incrementalRow = screen.getByText("Bar").closest(".rounded-lg");
+    expect(incrementalRow).not.toBeNull();
+    expect(within(incrementalRow as HTMLElement).getByText("Incremental premium applied")).toBeInTheDocument();
+    expect(within(incrementalRow as HTMLElement).getByText("$280,000")).toBeInTheDocument();
+    expect(within(incrementalRow as HTMLElement).getByText("$35/SF × 8,000 SF")).toBeInTheDocument();
+  });
+
+  it("keeps included-in-baseline special features visible when the applied aggregate is zero", () => {
+    const project = buildHospitalityProject("hospitality_full_service_hotel_v1", "subtype");
+    project.analysis.calculations.construction_costs.special_features_total = 0;
+    project.analysis.calculations.construction_costs.special_features_breakdown = [
+      {
+        id: "ballroom",
+        label: "Ballroom",
+        pricing_basis: "AREA_SHARE_GSF",
+        pricing_status: "included_in_baseline",
+        configured_value: 50,
+        configured_area_share_of_gsf: 0.08,
+        applied_value: 0,
+        applied_quantity: 6800,
+        total_cost: 0,
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+
+    expect(screen.getByText("Special Features")).toBeInTheDocument();
+    const ballroomRow = screen.getByText("Ballroom").closest(".rounded-lg");
+    expect(ballroomRow).not.toBeNull();
+    expect(within(ballroomRow as HTMLElement).getByText("Included in baseline")).toBeInTheDocument();
+    expect(within(ballroomRow as HTMLElement).getByText("$0")).toBeInTheDocument();
+    expect(
+      within(ballroomRow as HTMLElement).getByText("Assumed feature area = 8% of project GSF")
+    ).toBeInTheDocument();
+  });
+
+  it("renders area-share special features with feature-area copy and keeps included rows visible", () => {
+    const project = buildHospitalityProject("hospitality_full_service_hotel_v1", "subtype");
+    project.analysis.calculations.construction_costs.special_features_total = 204000;
+    project.analysis.calculations.construction_costs.special_features_breakdown = [
+      {
+        id: "ballroom",
+        label: "Ballroom",
+        pricing_basis: "AREA_SHARE_GSF",
+        pricing_status: "included_in_baseline",
+        configured_value: 50,
+        configured_area_share_of_gsf: 0.08,
+        applied_value: 0,
+        applied_quantity: 6800,
+        total_cost: 0,
+      },
+      {
+        id: "spa",
+        label: "Spa",
+        pricing_basis: "AREA_SHARE_GSF",
+        pricing_status: "incremental",
+        configured_value: 60,
+        configured_area_share_of_gsf: 0.04,
+        applied_value: 60,
+        applied_quantity: 3400,
+        total_cost: 204000,
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+
+    const includedRow = screen.getByText("Ballroom").closest(".rounded-lg");
+    expect(includedRow).not.toBeNull();
+    expect(within(includedRow as HTMLElement).getByText("Included in baseline")).toBeInTheDocument();
+    expect(within(includedRow as HTMLElement).getByText("$0")).toBeInTheDocument();
+    expect(
+      within(includedRow as HTMLElement).getByText("Assumed feature area = 8% of project GSF")
+    ).toBeInTheDocument();
+    expect(within(includedRow as HTMLElement).queryByText(/\/SF ×/)).not.toBeInTheDocument();
+
+    const incrementalRow = screen.getByText("Spa").closest(".rounded-lg");
+    expect(incrementalRow).not.toBeNull();
+    expect(within(incrementalRow as HTMLElement).getByText("Incremental premium applied")).toBeInTheDocument();
+    expect(within(incrementalRow as HTMLElement).getByText("$204,000")).toBeInTheDocument();
+    expect(
+      within(incrementalRow as HTMLElement).getByText(
+        "$60 per feature-area SF × 3,400 SF assumed feature area"
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(incrementalRow as HTMLElement).getByText("Assumed feature area = 4% of project GSF")
+    ).toBeInTheDocument();
+    expect(within(incrementalRow as HTMLElement).queryByText(/\/SF × 8,000 SF/)).not.toBeInTheDocument();
+  });
+
+  it("renders count-based special features with unit pricing copy and keeps included rows visible", () => {
+    const project = buildHealthcareScheduleProject("surgical_center", "subtype");
+    project.analysis.calculations.construction_costs.special_features_total = 950000;
+    project.analysis.calculations.construction_costs.special_features_breakdown = [
+      {
+        id: "operating_room",
+        label: "Operating Room",
+        pricing_basis: "COUNT_BASED",
+        pricing_status: "included_in_baseline",
+        configured_cost_per_count: 450000,
+        cost_per_count: 0,
+        applied_quantity: 4,
+        unit_label: "room",
+        total_cost: 0,
+      },
+      {
+        id: "hc_asc_hybrid_or_cath_lab",
+        label: "Hybrid OR / Cath Lab",
+        pricing_basis: "COUNT_BASED",
+        pricing_status: "incremental",
+        configured_cost_per_count: 950000,
+        cost_per_count: 950000,
+        applied_quantity: 1,
+        unit_label: "lab",
+        total_cost: 950000,
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+
+    const includedRow = screen.getByText("Operating Room").closest(".rounded-lg");
+    expect(includedRow).not.toBeNull();
+    expect(within(includedRow as HTMLElement).getByText("Included in baseline")).toBeInTheDocument();
+    expect(within(includedRow as HTMLElement).getByText("$0")).toBeInTheDocument();
+    expect(within(includedRow as HTMLElement).queryByText(/\/SF/)).not.toBeInTheDocument();
+
+    const incrementalRow = screen.getByText("Hybrid OR / Cath Lab").closest(".rounded-lg");
+    expect(incrementalRow).not.toBeNull();
+    expect(within(incrementalRow as HTMLElement).getByText("Incremental premium applied")).toBeInTheDocument();
+    expect(within(incrementalRow as HTMLElement).getByText("$950,000")).toBeInTheDocument();
+    expect(
+      within(incrementalRow as HTMLElement).getByText("$950,000 per lab × 1 lab")
+    ).toBeInTheDocument();
+    expect(within(incrementalRow as HTMLElement).queryByText(/\/SF/)).not.toBeInTheDocument();
+    expect(within(incrementalRow as HTMLElement).queryByText(/Baseline includes/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps count-based included special features visible when the aggregate is zero", () => {
+    const project = buildHealthcareScheduleProject("imaging_center", "subtype");
+    project.analysis.calculations.construction_costs.special_features_total = 0;
+    project.analysis.calculations.construction_costs.special_features_breakdown = [
+      {
+        id: "mri_suite",
+        label: "MRI Suite",
+        pricing_basis: "COUNT_BASED",
+        pricing_status: "included_in_baseline",
+        configured_cost_per_count: 850000,
+        cost_per_count: 0,
+        applied_quantity: 1,
+        unit_label: "suite",
+        total_cost: 0,
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+
+    expect(screen.getByText("Special Features")).toBeInTheDocument();
+    const mriSuiteRow = screen.getByText("MRI Suite").closest(".rounded-lg");
+    expect(mriSuiteRow).not.toBeNull();
+    expect(within(mriSuiteRow as HTMLElement).getByText("Included in baseline")).toBeInTheDocument();
+    expect(within(mriSuiteRow as HTMLElement).getByText("$0")).toBeInTheDocument();
+  });
+
+  it("explains baseline, requested, and billed overage for overage-mode special features", () => {
+    const project = buildHealthcareScheduleProject("surgical_center", "subtype");
+    project.analysis.calculations.construction_costs.special_features_total = 900000;
+    project.analysis.calculations.construction_costs.special_features_breakdown = [
+      {
+        id: "operating_room",
+        label: "Operating Room",
+        pricing_basis: "COUNT_BASED",
+        pricing_status: "included_in_baseline",
+        count_pricing_mode: "overage_above_default",
+        configured_cost_per_count: 450000,
+        cost_per_count: 450000,
+        applied_quantity: 2,
+        requested_quantity: 6,
+        requested_quantity_source: "explicit_override:operating_room_count",
+        included_baseline_quantity: 4,
+        billed_quantity: 2,
+        unit_label: "room",
+        total_cost: 900000,
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+
+    const row = screen.getByText("Operating Room").closest(".rounded-lg");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByText("Incremental premium applied")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("$900,000")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("$450,000 per room × 2 rooms")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("Baseline includes 4 rooms")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("You specified 6 rooms")).toBeInTheDocument();
+    expect(
+      within(row as HTMLElement).getByText("Pricing includes 2 additional rooms")
+    ).toBeInTheDocument();
+  });
+
+  it("explains no-overage cases without hiding the selected baseline-capacity feature", () => {
+    const project = buildHealthcareScheduleProject("imaging_center", "subtype");
+    project.analysis.calculations.construction_costs.special_features_total = 0;
+    project.analysis.calculations.construction_costs.special_features_breakdown = [
+      {
+        id: "mri_suite",
+        label: "MRI Suite",
+        pricing_basis: "COUNT_BASED",
+        pricing_status: "included_in_baseline",
+        count_pricing_mode: "overage_above_default",
+        configured_cost_per_count: 850000,
+        cost_per_count: 0,
+        applied_quantity: 0,
+        requested_quantity: 1,
+        requested_quantity_source: "explicit_override:mri_suite_count",
+        included_baseline_quantity: 1,
+        billed_quantity: 0,
+        unit_label: "suite",
+        total_cost: 0,
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+
+    const row = screen.getByText("MRI Suite").closest(".rounded-lg");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByText("Included in baseline")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("$0")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("Baseline includes 1 suite")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("You specified 1 suite")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("No additional suites priced")).toBeInTheDocument();
   });
 
   it("keeps per-feature special-feature breakdown visible for imaging, urgent care, and medical-office subtype fixtures", () => {

@@ -48,6 +48,9 @@ CONFIG = (
                 equity_ratio=0.30,
                 target_dscr=1.20,
                 target_roi=0.08,  # Market standard 8% for manufacturing
+                amort_years=25,
+                loan_term_years=10,
+                interest_only_months=0,
             )
         },
         nlp=NLPConfig(
@@ -75,10 +78,31 @@ CONFIG = (
         },
         special_features={
             # Specialized manufacturing features (opt-in only)
-            "clean_room": 75,
+            "clean_room": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 75,
+                "area_share_of_gsf": 0.15,
+            },
             "heavy_power": 40,
-            "crane_bays": 30,
+            "crane_bays": {
+                "basis": "COUNT_BASED",
+                "value": 300000,
+                "count_pricing_mode": "overage_above_default",
+                "count_override_keys": ["crane_bay_count", "crane_count"],
+                "default_count_bands": [
+                    {"label": "light_lift", "max_square_footage": 75000, "count": 1},
+                    {"label": "standard_lift", "max_square_footage": 175000, "count": 2},
+                    {"label": "heavy_lift", "count": 4},
+                ],
+                "unit_label": "bay",
+            },
             "compressed_air": 20,
+        },
+        special_feature_pricing_statuses={
+            "clean_room": "incremental",
+            "heavy_power": "included_in_baseline",
+            "crane_bays": "included_in_baseline",
+            "compressed_air": "included_in_baseline",
         },
         # Revenue metrics
         # Slight premium to DC, but not enough to offset added risk by default

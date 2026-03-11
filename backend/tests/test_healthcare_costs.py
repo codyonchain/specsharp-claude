@@ -130,10 +130,10 @@ def test_special_features_increase_hard_costs_for_hospital():
     with_features = _calculate_healthcare(
         subtype="hospital",
         square_footage=square_footage,
-        special_features=["emergency_department", "icu"],
+        special_features=["emergency_department", "cathlab"],
     )
 
-    expected_feature_cost = square_footage * (50 + 60)
+    expected_feature_cost = square_footage * (50 + 90)
 
     assert with_features["construction_costs"]["special_features_total"] == pytest.approx(
         expected_feature_cost, rel=0, abs=1e-6
@@ -175,10 +175,17 @@ def test_healthcare_legacy_alias_ids_match_canonical_totals_by_subtype():
             alias_total = with_alias["construction_costs"]["special_features_total"]
             canonical_total = with_canonical["construction_costs"]["special_features_total"]
             assert alias_total == pytest.approx(canonical_total, rel=0, abs=1e-6)
-            assert alias_total > 0
 
             alias_breakdown = with_alias["construction_costs"]["special_features_breakdown"]
-            assert any(item.get("id") == canonical_id for item in alias_breakdown)
+            canonical_breakdown = with_canonical["construction_costs"]["special_features_breakdown"]
+            alias_row = next(item for item in alias_breakdown if item.get("id") == canonical_id)
+            canonical_row = next(item for item in canonical_breakdown if item.get("id") == canonical_id)
+            assert alias_row.get("pricing_status") == canonical_row.get("pricing_status")
+            assert float(alias_row.get("total_cost", 0.0) or 0.0) == pytest.approx(
+                float(canonical_row.get("total_cost", 0.0) or 0.0),
+                rel=0,
+                abs=1e-6,
+            )
 
 
 def test_unknown_healthcare_feature_ids_are_ignored_without_crash():
@@ -201,20 +208,68 @@ def test_unknown_healthcare_feature_ids_are_ignored_without_crash():
     assert with_unknown["construction_costs"]["special_features_breakdown"] == []
 
 
-def test_hospital_or_surgical_alias_prices_and_breaks_down_in_canonical_line_item():
+def test_hospital_incremental_alias_prices_and_breaks_down_in_canonical_line_item():
     result = _calculate_healthcare(
         subtype="hospital",
         square_footage=240000,
-        special_features=["surgery"],
+        special_features=["hospital_central_plant_redundancy"],
     )
 
     special_features_total = result["construction_costs"]["special_features_total"]
     breakdown = result["construction_costs"]["special_features_breakdown"]
 
     assert special_features_total > 0
-    surgical_rows = [row for row in breakdown if row.get("id") == "surgical_suite"]
-    assert surgical_rows, "Expected canonical surgical_suite line item in breakdown"
-    assert "Surgical Suite" in surgical_rows[0].get("label", "")
+    cathlab_rows = [row for row in breakdown if row.get("id") == "cathlab"]
+    assert cathlab_rows, "Expected canonical cathlab line item in breakdown"
+    assert cathlab_rows[0].get("pricing_status") == "incremental"
+
+
+def test_surgical_center_preserves_selected_feature_statuses_and_prices_only_incremental_features():
+    square_footage = 24_000
+    result = _calculate_healthcare(
+        subtype="surgical_center",
+        square_footage=square_footage,
+        special_features=["operating_room", "hc_asc_hybrid_or_cath_lab"],
+    )
+
+    config = get_building_config(BuildingType.HEALTHCARE, "surgical_center")
+    assert config is not None
+    expected_incremental_total = 950000.0
+
+    assert float(result["construction_costs"]["special_features_total"]) == pytest.approx(
+        expected_incremental_total,
+        rel=0,
+        abs=1e-6,
+    )
+
+    breakdown = result["construction_costs"]["special_features_breakdown"]
+    breakdown_by_id = {
+        item["id"]: item
+        for item in breakdown
+        if isinstance(item, dict) and item.get("id")
+    }
+
+    operating_room_row = breakdown_by_id["operating_room"]
+    assert operating_room_row.get("pricing_status") == "included_in_baseline"
+    assert operating_room_row.get("pricing_basis") == "COUNT_BASED"
+    assert float(operating_room_row.get("configured_cost_per_count", 0.0) or 0.0) == pytest.approx(450000.0)
+    assert float(operating_room_row.get("cost_per_count", 0.0) or 0.0) == 0.0
+    assert float(operating_room_row.get("applied_quantity", 0.0) or 0.0) == pytest.approx(6.0)
+    assert operating_room_row.get("quantity_source") == "size_band_default"
+    assert float(operating_room_row.get("total_cost", 0.0) or 0.0) == 0.0
+
+    hybrid_row = breakdown_by_id["hc_asc_hybrid_or_cath_lab"]
+    assert hybrid_row.get("pricing_status") == "incremental"
+    assert hybrid_row.get("pricing_basis") == "COUNT_BASED"
+    assert float(hybrid_row.get("configured_cost_per_count", 0.0) or 0.0) == pytest.approx(950000.0)
+    assert float(hybrid_row.get("cost_per_count", 0.0) or 0.0) == pytest.approx(950000.0)
+    assert float(hybrid_row.get("applied_quantity", 0.0) or 0.0) == pytest.approx(1.0)
+    assert hybrid_row.get("quantity_source") == "configured_default_count"
+    assert float(hybrid_row.get("total_cost", 0.0) or 0.0) == pytest.approx(
+        expected_incremental_total,
+        rel=0,
+        abs=1e-6,
+    )
 
 
 @pytest.mark.parametrize("subtype", ["urgent_care", "outpatient_clinic"])

@@ -43,6 +43,9 @@ CONFIG = (
                 equity_ratio=0.25,
                 target_dscr=1.25,
                 target_roi=0.08,
+                amort_years=25,
+                loan_term_years=10,
+                interest_only_months=0,
             )
         },
         nlp=NLPConfig(
@@ -75,6 +78,17 @@ CONFIG = (
             "executive_floor": 45,
             "data_center": 55,
             "concierge": 20,
+        },
+        special_feature_pricing_statuses={
+            "fitness_center": "incremental",
+            "cafeteria": "incremental",
+            "conference_center": "incremental",
+            "structured_parking": "incremental",
+            "green_roof": "incremental",
+            "outdoor_terrace": "incremental",
+            "executive_floor": "incremental",
+            "data_center": "incremental",
+            "concierge": "incremental",
         },
         base_revenue_per_sf_annual=41.0,
         occupancy_rate_base=0.92,

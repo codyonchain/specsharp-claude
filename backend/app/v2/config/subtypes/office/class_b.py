@@ -43,6 +43,9 @@ CONFIG = (
                 equity_ratio=0.28,
                 target_dscr=1.20,
                 target_roi=0.09,
+                amort_years=25,
+                loan_term_years=10,
+                interest_only_months=0,
             )
         },
         nlp=NLPConfig(
@@ -71,6 +74,14 @@ CONFIG = (
             "surface_parking": 15,
             "storage_space": 10,
             "security_desk": 15,
+        },
+        special_feature_pricing_statuses={
+            "fitness_center": "incremental",
+            "cafeteria": "incremental",
+            "conference_room": "incremental",
+            "surface_parking": "incremental",
+            "storage_space": "incremental",
+            "security_desk": "incremental",
         },
         base_revenue_per_sf_annual=28,
         occupancy_rate_base=0.85,

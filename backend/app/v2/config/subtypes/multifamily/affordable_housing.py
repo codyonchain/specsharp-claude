@@ -70,10 +70,28 @@ CONFIG = (
             "San Francisco": 1.40,
         },
         special_features={
-            "rooftop_amenity": 18,
-            "pool": 12,
-            "fitness_center": 10,
+            "rooftop_amenity": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 18,
+                "area_share_of_gsf": 0.02,
+            },
+            "pool": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 12,
+                "area_share_of_gsf": 0.01,
+            },
+            "fitness_center": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 10,
+                "area_share_of_gsf": 0.008,
+            },
             "parking_garage": 26,
+        },
+        special_feature_pricing_statuses={
+            "rooftop_amenity": "incremental",
+            "pool": "incremental",
+            "fitness_center": "incremental",
+            "parking_garage": "incremental",
         },
         base_revenue_per_sf_annual=20.0,
         base_revenue_per_unit_monthly=1200,

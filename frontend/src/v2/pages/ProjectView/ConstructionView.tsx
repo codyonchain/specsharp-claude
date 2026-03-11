@@ -1,5 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Project } from '../../types';
+import {
+  Project,
+  type SpecialFeatureBreakdownRow,
+  type SpecialFeatureCountPricingMode,
+  type SpecialFeaturePricingBasis,
+  type SpecialFeaturePricingStatus,
+} from '../../types';
 import { formatCurrency, formatNumber, formatPercent } from '../../utils/formatters';
 import { pdfService } from '@/services/api';
 import { generateExportFilename } from '@/utils/filenameGenerator';
@@ -21,6 +27,27 @@ type TradeCostSplit = {
 
 type AnyRecord = Record<string, any>;
 type MixedUseComponent = 'office' | 'residential' | 'retail' | 'hotel' | 'transit';
+type NormalizedSpecialFeatureBreakdownRow = {
+  id: string;
+  label: string;
+  totalCost: number;
+  pricingStatus: SpecialFeaturePricingStatus;
+  pricingBasis: SpecialFeaturePricingBasis;
+  countPricingMode?: SpecialFeatureCountPricingMode;
+  configuredValue?: number;
+  appliedValue?: number;
+  costPerSF?: number;
+  configuredCostPerSF?: number;
+  costPerCount?: number;
+  configuredCostPerCount?: number;
+  configuredAreaShareOfGsf?: number;
+  appliedQuantity?: number;
+  unitLabel?: string;
+  requestedQuantity?: number;
+  requestedQuantitySource?: string;
+  includedBaselineQuantity?: number;
+  billedQuantity?: number;
+};
 
 const toRecord = (value: unknown): AnyRecord =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -47,6 +74,121 @@ const toFiniteNumber = (value: unknown): number | null => {
     }
   }
   return null;
+};
+
+const resolveSpecialFeaturePricingBasis = (
+  item: SpecialFeatureBreakdownRow | AnyRecord,
+  hasCountPricing: boolean,
+  hasAreaSharePricing: boolean,
+): SpecialFeaturePricingBasis => {
+  if (item.pricing_basis === 'COUNT_BASED') {
+    return 'COUNT_BASED';
+  }
+  if (item.pricing_basis === 'AREA_SHARE_GSF') {
+    return 'AREA_SHARE_GSF';
+  }
+  if (item.pricing_basis === 'WHOLE_PROJECT_SF') {
+    return 'WHOLE_PROJECT_SF';
+  }
+  if (hasCountPricing) {
+    return 'COUNT_BASED';
+  }
+  return hasAreaSharePricing ? 'AREA_SHARE_GSF' : 'WHOLE_PROJECT_SF';
+};
+
+const pluralizeUnitLabel = (unitLabel: string, quantity: number): string => {
+  if (quantity === 1) {
+    return unitLabel;
+  }
+  if (/[^aeiou]y$/i.test(unitLabel)) {
+    return `${unitLabel.slice(0, -1)}ies`;
+  }
+  if (/(s|x|z|ch|sh)$/i.test(unitLabel)) {
+    return `${unitLabel}es`;
+  }
+  return `${unitLabel}s`;
+};
+
+const formatCountBasedDetail = (
+  costPerCount: number,
+  appliedQuantity: number,
+  unitLabel?: string,
+): string => {
+  const normalizedUnitLabel = unitLabel || 'item';
+  return `${formatCurrency(costPerCount)} per ${normalizedUnitLabel} × ${formatNumber(appliedQuantity)} ${pluralizeUnitLabel(normalizedUnitLabel, appliedQuantity)}`;
+};
+
+const formatAreaShareDetail = (
+  configuredValue: number,
+  appliedQuantity: number,
+): string => (
+  `${formatCurrency(configuredValue)} per feature-area SF × ${formatNumber(appliedQuantity)} SF assumed feature area`
+);
+
+const formatAreaSharePercent = (value: number): string => {
+  const pct = value * 100;
+  return `${pct.toFixed(Number.isInteger(pct) ? 0 : 1)}%`;
+};
+
+const formatAdditionalQuantityWithUnit = (
+  quantity: number,
+  unitLabel?: string,
+): string => {
+  const normalizedUnitLabel = unitLabel || 'item';
+  return `${formatNumber(quantity)} additional ${pluralizeUnitLabel(normalizedUnitLabel, quantity)}`;
+};
+
+const resolveOverageExplanationLines = (
+  feature: NormalizedSpecialFeatureBreakdownRow,
+): string[] => {
+  if (
+    feature.countPricingMode !== 'overage_above_default' ||
+    typeof feature.requestedQuantitySource !== 'string' ||
+    !feature.requestedQuantitySource.startsWith('explicit_override:') ||
+    typeof feature.requestedQuantity !== 'number' ||
+    typeof feature.includedBaselineQuantity !== 'number' ||
+    typeof feature.billedQuantity !== 'number'
+  ) {
+    return [];
+  }
+
+  const unitLabel = feature.unitLabel || 'item';
+  return [
+    `Baseline includes ${formatNumber(feature.includedBaselineQuantity)} ${pluralizeUnitLabel(unitLabel, feature.includedBaselineQuantity)}`,
+    `You specified ${formatNumber(feature.requestedQuantity)} ${pluralizeUnitLabel(unitLabel, feature.requestedQuantity)}`,
+    feature.billedQuantity > 0
+      ? `Pricing includes ${formatAdditionalQuantityWithUnit(feature.billedQuantity, unitLabel)}`
+      : `No additional ${pluralizeUnitLabel(unitLabel, 2)} priced`,
+  ];
+};
+
+const resolveAreaShareExplanationLines = (
+  feature: NormalizedSpecialFeatureBreakdownRow,
+): string[] => {
+  if (
+    feature.pricingBasis !== 'AREA_SHARE_GSF' ||
+    typeof feature.configuredAreaShareOfGsf !== 'number'
+  ) {
+    return [];
+  }
+  return [
+    `Assumed feature area = ${formatAreaSharePercent(feature.configuredAreaShareOfGsf)} of project GSF`,
+  ];
+};
+
+const resolveSpecialFeatureStatusLabel = (
+  feature: NormalizedSpecialFeatureBreakdownRow,
+): string => {
+  if (feature.countPricingMode === 'overage_above_default') {
+    return typeof feature.billedQuantity === 'number' && feature.billedQuantity > 0
+      ? 'Incremental premium applied'
+      : feature.pricingStatus === 'included_in_baseline'
+        ? 'Included in baseline'
+        : 'No additional premium';
+  }
+  return feature.pricingStatus === 'included_in_baseline'
+    ? 'Included in baseline'
+    : 'Incremental premium applied';
 };
 
 const MIXED_USE_COMPONENT_ORDER: MixedUseComponent[] = [
@@ -622,24 +764,70 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
   const specialFeaturesBreakdownRaw = calculations.construction_costs?.special_features_breakdown;
   const specialFeaturesBreakdown = Array.isArray(specialFeaturesBreakdownRaw)
     ? specialFeaturesBreakdownRaw
-        .filter(
-          (item: any) =>
-            item &&
-            typeof item.id === 'string' &&
-            typeof item.label === 'string' &&
-            typeof item.cost_per_sf === 'number' &&
-            Number.isFinite(item.cost_per_sf) &&
-            typeof item.total_cost === 'number' &&
-            Number.isFinite(item.total_cost)
-        )
-        .map((item: any) => ({
-          id: item.id,
-          label: item.label,
-          costPerSF: item.cost_per_sf,
-          totalCost: item.total_cost,
-        }))
+        .map((item: SpecialFeatureBreakdownRow | AnyRecord): NormalizedSpecialFeatureBreakdownRow | null => {
+          if (!item || typeof item.id !== 'string' || typeof item.label !== 'string') {
+            return null;
+          }
+
+          const totalCost = toFiniteNumber(item.total_cost);
+          if (totalCost === null) {
+            return null;
+          }
+
+          const costPerSF = toFiniteNumber(item.cost_per_sf);
+          const configuredCostPerSF = toFiniteNumber(item.configured_cost_per_sf);
+          const costPerCount = toFiniteNumber(item.cost_per_count);
+          const configuredCostPerCount = toFiniteNumber(item.configured_cost_per_count);
+          const configuredValue = toFiniteNumber(item.configured_value);
+          const appliedValue = toFiniteNumber(item.applied_value);
+          const configuredAreaShareOfGsf = toFiniteNumber(item.configured_area_share_of_gsf);
+          const hasCountPricing = costPerCount !== null || configuredCostPerCount !== null;
+          const hasAreaSharePricing =
+            item.pricing_basis === 'AREA_SHARE_GSF' || configuredAreaShareOfGsf !== null;
+          const hasSfPricing = costPerSF !== null || configuredCostPerSF !== null;
+
+          if (!hasCountPricing && !hasSfPricing && !hasAreaSharePricing) {
+            return null;
+          }
+
+          return {
+            id: item.id,
+            label: item.label,
+            totalCost,
+            pricingStatus:
+              item.pricing_status === 'included_in_baseline' ? 'included_in_baseline' : 'incremental',
+            pricingBasis: resolveSpecialFeaturePricingBasis(item, hasCountPricing, hasAreaSharePricing),
+            countPricingMode:
+              item.count_pricing_mode === 'overage_above_default'
+                ? 'overage_above_default'
+                : item.count_pricing_mode === 'all_units'
+                  ? 'all_units'
+                  : undefined,
+            configuredValue: configuredValue ?? undefined,
+            appliedValue: appliedValue ?? undefined,
+            costPerSF: costPerSF ?? undefined,
+            configuredCostPerSF: configuredCostPerSF ?? costPerSF ?? undefined,
+            costPerCount: costPerCount ?? undefined,
+            configuredCostPerCount: configuredCostPerCount ?? costPerCount ?? undefined,
+            configuredAreaShareOfGsf: configuredAreaShareOfGsf ?? undefined,
+            appliedQuantity: toFiniteNumber(item.applied_quantity) ?? undefined,
+            requestedQuantity: toFiniteNumber(item.requested_quantity) ?? undefined,
+            requestedQuantitySource:
+              typeof item.requested_quantity_source === 'string' && item.requested_quantity_source.trim()
+                ? item.requested_quantity_source.trim()
+                : undefined,
+            includedBaselineQuantity: toFiniteNumber(item.included_baseline_quantity) ?? undefined,
+            billedQuantity: toFiniteNumber(item.billed_quantity) ?? undefined,
+            unitLabel:
+              typeof item.unit_label === 'string' && item.unit_label.trim()
+                ? item.unit_label.trim()
+                : undefined,
+          };
+        })
+        .filter((item): item is NormalizedSpecialFeatureBreakdownRow => item !== null)
     : [];
   const hasSpecialFeaturesBreakdown = specialFeaturesBreakdown.length > 0;
+  const showSpecialFeaturesSection = hasSpecialFeaturesBreakdown || specialFeaturesTotal > 0;
 
   const equipmentTotal =
     typeof calculations.construction_costs?.equipment_total === 'number'
@@ -1912,7 +2100,7 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
               </div>
             </div>
             
-            {specialFeaturesTotal > 0 && (
+            {showSpecialFeaturesSection && (
               <>
                 <div className="flex items-center gap-2">
                   <span className="text-2xl text-gray-400 font-bold">+</span>
@@ -1922,35 +2110,95 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
                   <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl p-6 border border-orange-200">
                     <p className="text-sm text-orange-700 uppercase tracking-wider mb-3 font-medium">Special Features</p>
                     <p className="text-3xl font-bold text-orange-600">{formatCurrency(specialFeaturesTotal)}</p>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Backend aggregate (`special_features_total`) applied to hard costs.
-                    </p>
-                    <div className="mt-3 space-y-2">
-                      {hasSpecialFeaturesBreakdown ? (
-                        specialFeaturesBreakdown.map((feature) => (
-                          <div
-                            key={feature.id}
-                            className="rounded-lg border border-orange-100 bg-white/70 px-3 py-2"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-sm text-gray-800">{feature.label}</p>
-                              <p className="text-sm font-semibold text-gray-900">
-                                {formatCurrency(feature.totalCost)}
-                              </p>
-                            </div>
-                            {squareFootage > 0 && (
-                              <p className="text-xs text-gray-500 mt-1">
-                                {formatCurrency(feature.costPerSF)}/SF × {formatNumber(squareFootage)} SF
-                              </p>
-                            )}
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-sm text-gray-700">
-                          Selected feature IDs were not provided in project data; showing aggregate only.
-                        </p>
-                      )}
-                    </div>
+	                    <p className="mt-1 text-xs text-gray-500">Selected features and any applied premium are shown below.</p>
+	                    <div className="mt-3 space-y-2">
+	                      {hasSpecialFeaturesBreakdown ? (
+	                        specialFeaturesBreakdown.map((feature) => {
+	                          const isIncludedInBaseline =
+                              feature.pricingStatus === 'included_in_baseline' &&
+                              !(feature.countPricingMode === 'overage_above_default' && typeof feature.billedQuantity === 'number' && feature.billedQuantity > 0);
+	                          const statusLabel = resolveSpecialFeatureStatusLabel(feature);
+                          const detailLabel =
+                            feature.pricingBasis === 'COUNT_BASED'
+                              ? typeof feature.costPerCount === 'number' &&
+                                typeof feature.appliedQuantity === 'number'
+                                && feature.appliedQuantity > 0
+                                ? formatCountBasedDetail(
+                                    feature.costPerCount,
+                                    feature.appliedQuantity,
+                                    feature.unitLabel,
+                                  )
+                                : undefined
+                              : feature.pricingBasis === 'AREA_SHARE_GSF'
+                                ? !isIncludedInBaseline &&
+                                  typeof feature.configuredValue === 'number' &&
+                                  typeof feature.appliedQuantity === 'number' &&
+                                  feature.appliedQuantity > 0
+                                  ? formatAreaShareDetail(
+                                      feature.configuredValue,
+                                      feature.appliedQuantity,
+                                    )
+                                  : undefined
+                              : !isIncludedInBaseline && squareFootage > 0 && typeof feature.costPerSF === 'number'
+                                ? `${formatCurrency(feature.costPerSF)}/SF × ${formatNumber(squareFootage)} SF`
+                                : undefined;
+                          const overageExplanationLines = resolveOverageExplanationLines(feature);
+                          const areaShareExplanationLines = resolveAreaShareExplanationLines(feature);
+
+	                          return (
+	                            <div
+	                              key={feature.id}
+	                              className="rounded-lg border border-orange-100 bg-white/70 px-3 py-2"
+	                            >
+	                              <div className="flex items-start justify-between gap-3">
+	                                <div>
+	                                  <p className="text-sm text-gray-800">{feature.label}</p>
+	                                  <p
+	                                    className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
+	                                      isIncludedInBaseline
+	                                        ? 'bg-emerald-50 text-emerald-700'
+	                                        : 'bg-orange-100 text-orange-700'
+	                                    }`}
+	                                  >
+	                                    {statusLabel}
+	                                  </p>
+	                                </div>
+	                                <p className="text-sm font-semibold text-gray-900">
+	                                  {formatCurrency(feature.totalCost)}
+	                                </p>
+	                              </div>
+                              {detailLabel && (
+	                                <p className="text-xs text-gray-500 mt-1">
+	                                  {detailLabel}
+	                                </p>
+	                              )}
+                              {overageExplanationLines.length > 0 && (
+                                <div className="mt-1 space-y-1">
+                                  {overageExplanationLines.map((line) => (
+                                    <p key={line} className="text-xs text-gray-500">
+                                      {line}
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
+                              {areaShareExplanationLines.length > 0 && (
+                                <div className="mt-1 space-y-1">
+                                  {areaShareExplanationLines.map((line) => (
+                                    <p key={line} className="text-xs text-gray-500">
+                                      {line}
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
+	                            </div>
+	                          );
+	                        })
+	                      ) : (
+	                        <p className="text-sm text-gray-700">
+	                          Selected feature IDs were not provided in project data; showing aggregate only.
+	                        </p>
+	                      )}
+	                    </div>
                     {!hasSpecialFeaturesBreakdown && (
                       <p className="mt-2 text-xs text-gray-500">
                         Per-feature breakdown is unavailable for this project version; showing aggregate total only.

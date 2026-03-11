@@ -82,6 +82,12 @@ CONFIG = (
             "treatment_rooms": 20,
             "assessment_suite": 25,
         },
+        special_feature_pricing_statuses={
+            "therapy_gym": "included_in_baseline",
+            "hydrotherapy": "included_in_baseline",
+            "treatment_rooms": "included_in_baseline",
+            "assessment_suite": "included_in_baseline",
+        },
         financial_metrics={
             "primary_unit": "beds",
             "units_per_sf": 0.001,

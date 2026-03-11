@@ -43,6 +43,9 @@ CONFIG = (
                 equity_ratio=0.28,
                 target_dscr=1.25,
                 target_roi=0.11,
+                amort_years=30,
+                loan_term_years=10,
+                interest_only_months=0,
             )
         },
         nlp=NLPConfig(
@@ -72,6 +75,11 @@ CONFIG = (
             "rooftop_deck": 30,
             "parking_podium": 40,
             "retail_plaza": 25,
+        },
+        special_feature_pricing_statuses={
+            "rooftop_deck": "included_in_baseline",
+            "parking_podium": "incremental",
+            "retail_plaza": "included_in_baseline",
         },
         base_revenue_per_sf_annual=35,
         occupancy_rate_base=0.90,

@@ -77,6 +77,14 @@ CONFIG = (
             "private_party_room": 30,  # Private event space
             "craft_beer_system": 35,  # Specialized tap system
         },
+        special_feature_pricing_statuses={
+            "outdoor_seating": "included_in_baseline",
+            "live_music_stage": "included_in_baseline",
+            "game_room": "incremental",
+            "rooftop_bar": "included_in_baseline",
+            "private_party_room": "incremental",
+            "craft_beer_system": "included_in_baseline",
+        },
         base_revenue_per_sf_annual=450,
         occupancy_rate_base=0.80,
         occupancy_rate_premium=0.88,

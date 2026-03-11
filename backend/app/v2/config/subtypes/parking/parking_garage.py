@@ -80,6 +80,13 @@ CONFIG = (
             "retail_space": 30,
             "green_roof": 20,
         },
+        special_feature_pricing_statuses={
+            "automated_system": "incremental",
+            "ev_charging": "incremental",
+            "car_wash": "incremental",
+            "retail_space": "incremental",
+            "green_roof": "incremental",
+        },
         base_revenue_per_sf_annual=50,
         base_revenue_per_space_monthly=150,
         spaces_per_sf=0.0033,

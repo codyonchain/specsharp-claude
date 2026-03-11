@@ -46,6 +46,9 @@ CONFIG = (
                 equity_ratio=0.30,
                 target_dscr=1.35,
                 target_roi=0.12,
+                amort_years=25,
+                loan_term_years=10,
+                interest_only_months=0,
             )
         },
         nlp=NLPConfig(
@@ -76,6 +79,13 @@ CONFIG = (
             "automated_retrieval": 40,
             "under_slab_heating_protection": 18,
             "high_r_value_panel_upgrade": 12,
+        },
+        special_feature_pricing_statuses={
+            "blast_freezer": "incremental",
+            "multiple_temp_zones": "incremental",
+            "automated_retrieval": "incremental",
+            "under_slab_heating_protection": "incremental",
+            "high_r_value_panel_upgrade": "incremental",
         },
         # Revenue metrics
         base_revenue_per_sf_annual=18.5,

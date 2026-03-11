@@ -74,7 +74,19 @@ CONFIG = (
             "Miami": 1.05,
         },
         special_features={
-            "operatory": 15,  # Per dental chair
+            "operatory": {
+                "basis": "COUNT_BASED",
+                "value": 45000,
+                "count_pricing_mode": "overage_above_default",
+                "count_override_keys": ["operatory_count", "dental_operatory_count", "chair_count"],
+                "default_count_bands": [
+                    {"label": "compact_practice", "max_square_footage": 2500, "count": 4},
+                    {"label": "standard_practice", "max_square_footage": 4000, "count": 6},
+                    {"label": "large_practice", "max_square_footage": 6000, "count": 8},
+                    {"label": "expanded_practice", "count": 10},
+                ],
+                "unit_label": "operatory",
+            },  # Per dental chair
             "sterilization": 10,
             "x_ray": 12,
             "lab": 15,
@@ -82,6 +94,16 @@ CONFIG = (
             "hc_dental_sedation_suite": 60,
             "hc_dental_sterilization_upgrade": 25,
             "hc_dental_ortho_bay_expansion": 35,
+        },
+        special_feature_pricing_statuses={
+            "operatory": "included_in_baseline",
+            "sterilization": "included_in_baseline",
+            "x_ray": "included_in_baseline",
+            "lab": "included_in_baseline",
+            "hc_dental_pano_ceph": "incremental",
+            "hc_dental_sedation_suite": "incremental",
+            "hc_dental_sterilization_upgrade": "incremental",
+            "hc_dental_ortho_bay_expansion": "incremental",
         },
         financial_metrics={
             "primary_unit": "operatories",

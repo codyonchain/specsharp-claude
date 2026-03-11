@@ -155,6 +155,16 @@ class TestProjectNameGeneration:
                 "Shopping Center in Nashville",
             ),
             (
+                "New 48,000 SF shopping center with covered walkway and drive thru in Nashville, TN",
+                "shopping_center",
+                "Shopping Center in Nashville",
+            ),
+            (
+                "New 52,000 sf strip center with drive thru in Nashville, TN",
+                "shopping_center",
+                "Shopping Center in Nashville",
+            ),
+            (
                 "New 180,000 sf big box retail store with loading docks and garden center in Nashville, TN",
                 "big_box",
                 "Big Box in Nashville",
@@ -391,6 +401,21 @@ class TestProjectNameGeneration:
                 "New 3200 sf quick service restaurant with drive thru in Nashville, TN",
                 "quick_service",
                 "Quick Service in Nashville",
+            ),
+            (
+                "New 6,500 SF quick service restaurant with drive thru in Nashville, TN",
+                "quick_service",
+                "Quick Service in Nashville",
+            ),
+            (
+                "New 3200 sf cafe in Nashville, TN",
+                "cafe",
+                "Cafe in Nashville",
+            ),
+            (
+                "New 3200 sf cafe with drive thru in Nashville, TN",
+                "cafe",
+                "Cafe in Nashville",
             ),
             (
                 "New 4800 sf full service restaurant with table service in Nashville, TN",

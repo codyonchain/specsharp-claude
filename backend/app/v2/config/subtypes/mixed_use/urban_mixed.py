@@ -43,6 +43,9 @@ CONFIG = (
                 equity_ratio=0.30,
                 target_dscr=1.25,
                 target_roi=0.11,
+                amort_years=30,
+                loan_term_years=10,
+                interest_only_months=0,
             )
         },
         nlp=NLPConfig(
@@ -73,6 +76,12 @@ CONFIG = (
             "green_roof": 35,
             "parking_structure": 45,
             "transit_connection": 30,
+        },
+        special_feature_pricing_statuses={
+            "public_plaza": "included_in_baseline",
+            "green_roof": "incremental",
+            "parking_structure": "included_in_baseline",
+            "transit_connection": "incremental",
         },
         base_revenue_per_sf_annual=35,
         occupancy_rate_base=0.90,

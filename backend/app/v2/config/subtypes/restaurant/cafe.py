@@ -70,10 +70,23 @@ CONFIG = (
         },
         special_features={
             "outdoor_seating": 20,  # Sidewalk/patio seating
-            "drive_thru": 35,  # Coffee drive-thru
+            "drive_thru": {
+                "basis": "COUNT_BASED",
+                "value": 75000,
+                "count": 1,
+                "count_override_keys": ["drive_thru_lane_count", "drive_thru_count", "lane_count"],
+                "unit_label": "lane",
+            },  # Coffee drive-thru
             "bakery_display": 15,  # Display cases
             "lounge_area": 20,  # Comfortable seating area
             "meeting_room": 25,  # Small meeting space
+        },
+        special_feature_pricing_statuses={
+            "outdoor_seating": "included_in_baseline",
+            "drive_thru": "incremental",
+            "bakery_display": "included_in_baseline",
+            "lounge_area": "included_in_baseline",
+            "meeting_room": "incremental",
         },
         base_revenue_per_sf_annual=350,
         occupancy_rate_base=0.80,
