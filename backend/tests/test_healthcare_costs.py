@@ -234,7 +234,7 @@ def test_surgical_center_preserves_selected_feature_statuses_and_prices_only_inc
 
     config = get_building_config(BuildingType.HEALTHCARE, "surgical_center")
     assert config is not None
-    expected_incremental_total = float(config.special_features["hc_asc_hybrid_or_cath_lab"]) * square_footage
+    expected_incremental_total = 950000.0
 
     assert float(result["construction_costs"]["special_features_total"]) == pytest.approx(
         expected_incremental_total,
@@ -251,23 +251,20 @@ def test_surgical_center_preserves_selected_feature_statuses_and_prices_only_inc
 
     operating_room_row = breakdown_by_id["operating_room"]
     assert operating_room_row.get("pricing_status") == "included_in_baseline"
-    assert float(operating_room_row.get("configured_cost_per_sf", 0.0) or 0.0) == pytest.approx(
-        float(config.special_features["operating_room"]),
-        rel=1e-3,
-    )
-    assert float(operating_room_row.get("cost_per_sf", 0.0) or 0.0) == 0.0
+    assert operating_room_row.get("pricing_basis") == "COUNT_BASED"
+    assert float(operating_room_row.get("configured_cost_per_count", 0.0) or 0.0) == pytest.approx(450000.0)
+    assert float(operating_room_row.get("cost_per_count", 0.0) or 0.0) == 0.0
+    assert float(operating_room_row.get("applied_quantity", 0.0) or 0.0) == pytest.approx(6.0)
+    assert operating_room_row.get("quantity_source") == "size_band_default"
     assert float(operating_room_row.get("total_cost", 0.0) or 0.0) == 0.0
 
     hybrid_row = breakdown_by_id["hc_asc_hybrid_or_cath_lab"]
     assert hybrid_row.get("pricing_status") == "incremental"
-    assert float(hybrid_row.get("configured_cost_per_sf", 0.0) or 0.0) == pytest.approx(
-        float(config.special_features["hc_asc_hybrid_or_cath_lab"]),
-        rel=1e-3,
-    )
-    assert float(hybrid_row.get("cost_per_sf", 0.0) or 0.0) == pytest.approx(
-        float(config.special_features["hc_asc_hybrid_or_cath_lab"]),
-        rel=1e-3,
-    )
+    assert hybrid_row.get("pricing_basis") == "COUNT_BASED"
+    assert float(hybrid_row.get("configured_cost_per_count", 0.0) or 0.0) == pytest.approx(950000.0)
+    assert float(hybrid_row.get("cost_per_count", 0.0) or 0.0) == pytest.approx(950000.0)
+    assert float(hybrid_row.get("applied_quantity", 0.0) or 0.0) == pytest.approx(1.0)
+    assert hybrid_row.get("quantity_source") == "configured_default_count"
     assert float(hybrid_row.get("total_cost", 0.0) or 0.0) == pytest.approx(
         expected_incremental_total,
         rel=0,

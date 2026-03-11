@@ -69,7 +69,21 @@ CONFIG = (
         dealshield_tile_profile="specialty_car_dealership_v1",
         scope_items_profile="specialty_car_dealership_structural_v1",
         special_features={
-            "expanded_service_bays": 28,
+            "expanded_service_bays": {
+                "basis": "COUNT_BASED",
+                "value": 95000,
+                "count_override_keys": [
+                    "expanded_service_bay_count",
+                    "service_bay_count",
+                    "bay_count",
+                ],
+                "default_count_bands": [
+                    {"label": "small_service_lane", "max_square_footage": 25000, "count": 4},
+                    {"label": "standard_service_lane", "max_square_footage": 50000, "count": 8},
+                    {"label": "large_service_lane", "count": 12},
+                ],
+                "unit_label": "bay",
+            },
             "ev_fast_charging_hub": 22,
             "automated_car_wash_tunnel": 18,
             "inventory_photo_bay": 8,

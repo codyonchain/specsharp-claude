@@ -80,7 +80,17 @@ CONFIG = (
             # Specialized manufacturing features (opt-in only)
             "clean_room": 75,
             "heavy_power": 40,
-            "crane_bays": 30,
+            "crane_bays": {
+                "basis": "COUNT_BASED",
+                "value": 300000,
+                "count_override_keys": ["crane_bay_count", "crane_count"],
+                "default_count_bands": [
+                    {"label": "light_lift", "max_square_footage": 75000, "count": 1},
+                    {"label": "standard_lift", "max_square_footage": 175000, "count": 2},
+                    {"label": "heavy_lift", "count": 4},
+                ],
+                "unit_label": "bay",
+            },
             "compressed_air": 20,
         },
         special_feature_pricing_statuses={

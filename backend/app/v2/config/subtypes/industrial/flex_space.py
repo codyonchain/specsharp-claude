@@ -98,7 +98,17 @@ CONFIG = (
             "two_story_office_mezzanine": 12,
             "heavy_power": 20,
             "clean_room": 60,
-            "crane_bays": 28,
+            "crane_bays": {
+                "basis": "COUNT_BASED",
+                "value": 250000,
+                "count_override_keys": ["crane_bay_count", "crane_count"],
+                "default_count_bands": [
+                    {"label": "small_flex", "max_square_footage": 50000, "count": 1},
+                    {"label": "mid_flex", "max_square_footage": 125000, "count": 2},
+                    {"label": "large_flex", "count": 3},
+                ],
+                "unit_label": "bay",
+            },
             "compressed_air": 10,
             "lab_buildout": 35,
         },

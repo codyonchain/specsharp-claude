@@ -1165,6 +1165,13 @@ class UnifiedEngine:
         # Calculate equipment cost with finish/regional adjustments
         equipment_multiplier = modifiers.get('finish_cost_factor', 1.0)
         equipment_cost = building_config.equipment_cost_per_sf * equipment_multiplier * square_footage
+
+        scope_context = self._resolve_scope_context(special_features)
+        pricing_override_sources: List[Dict[str, Any]] = []
+        if isinstance(parsed_input_overrides, dict):
+            pricing_override_sources.append(parsed_input_overrides)
+        if isinstance(scope_context, dict):
+            pricing_override_sources.extend(self._collect_scope_override_sources(scope_context))
         
         # Add special features if any
         special_features_cost = 0
@@ -1238,6 +1245,7 @@ class UnifiedEngine:
                     rule=normalized_rule,
                     square_footage=square_footage,
                     pricing_status=pricing_status,
+                    pricing_override_sources=pricing_override_sources,
                 )
                 breakdown_row = serialize_applied_special_feature_pricing(applied_pricing)
                 breakdown_row['label'] = _humanize_special_feature_label(normalized_rule.feature_id)
@@ -1248,11 +1256,21 @@ class UnifiedEngine:
                     'pricing_basis': normalized_rule.basis.value,
                     'configured_value': normalized_rule.configured_value,
                     'applied_quantity': applied_pricing.applied_quantity,
+                    'quantity_source': applied_pricing.quantity_source,
                     'assumption_source': normalized_rule.assumption_source,
                 }
                 configured_cost_per_sf = breakdown_row.get('configured_cost_per_sf')
                 if configured_cost_per_sf is not None:
                     trace_payload['configured_cost_per_sf'] = configured_cost_per_sf
+                configured_cost_per_count = breakdown_row.get('configured_cost_per_count')
+                if configured_cost_per_count is not None:
+                    trace_payload['configured_cost_per_count'] = configured_cost_per_count
+                unit_label = breakdown_row.get('unit_label')
+                if unit_label is not None:
+                    trace_payload['unit_label'] = unit_label
+                resolved_size_band = breakdown_row.get('resolved_size_band')
+                if resolved_size_band is not None:
+                    trace_payload['resolved_size_band'] = resolved_size_band
                 if pricing_status == INCLUDED_IN_BASELINE:
                     self._log_trace("special_feature_included_in_baseline", trace_payload)
                 else:
@@ -1264,6 +1282,9 @@ class UnifiedEngine:
                     applied_cost_per_sf = breakdown_row.get('cost_per_sf')
                     if applied_cost_per_sf is not None:
                         applied_trace_payload['cost_per_sf'] = applied_cost_per_sf
+                    applied_cost_per_count = breakdown_row.get('cost_per_count')
+                    if applied_cost_per_count is not None:
+                        applied_trace_payload['cost_per_count'] = applied_cost_per_count
                     self._log_trace("special_feature_applied", applied_trace_payload)
             special_features_cost = sum(
                 float(item.get('total_cost', 0.0) or 0.0)
@@ -1275,7 +1296,6 @@ class UnifiedEngine:
         
         # Scope items are config-driven via scope_items_profile; engine applies
         # generic allocation rules with deterministic fallbacks.
-        scope_context = self._resolve_scope_context(special_features)
         def _extract_scenario_key(source: Optional[Dict[str, Any]]) -> Optional[str]:
             if not isinstance(source, dict):
                 return None

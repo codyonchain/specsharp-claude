@@ -33,7 +33,7 @@ RESTAURANT_SCOPE_PROFILE_IDS = {
 }
 
 RESTAURANT_SPECIAL_FEATURE_CASES = {
-    "quick_service": "drive_thru",
+    "quick_service": "digital_menu_boards",
     "full_service": "private_dining",
     "fine_dining": "chef_table",
     "cafe": "bakery_display",

@@ -562,7 +562,7 @@ def test_description_infers_finish_level():
 
 
 def test_special_features_unit_math():
-    """Special feature pricing should reflect the currently configured square-footage surcharge model."""
+    """Unmigrated special features should still reflect the legacy square-footage surcharge model."""
     base_result = unified_engine.calculate_project(
         building_type=BuildingType.HEALTHCARE,
         subtype="surgical_center",
@@ -577,19 +577,19 @@ def test_special_features_unit_math():
         square_footage=5_000,
         location="Nashville, TN",
         project_class=ProjectClass.GROUND_UP,
-        special_features=["hc_asc_hybrid_or_cath_lab"],
+        special_features=["hc_asc_pain_management_suite"],
     )
 
     config = get_building_config(BuildingType.HEALTHCARE, "surgical_center")
     expected_increment = (
-        config.special_features["hc_asc_hybrid_or_cath_lab"] * base_result["project_info"]["square_footage"]
+        config.special_features["hc_asc_pain_management_suite"] * base_result["project_info"]["square_footage"]
     )
 
     delta = feature_result["construction_costs"]["special_features_total"] - base_result["construction_costs"]["special_features_total"]
     assert delta == pytest.approx(
         expected_increment,
         rel=1e-3,
-    ), "Special feature surcharge should scale with square footage as currently configured"
+    ), "Unmigrated special feature surcharge should still scale with square footage"
 
 
 def test_special_feature_pricing_status_maps_reference_known_features_and_valid_statuses():

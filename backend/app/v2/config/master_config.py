@@ -83,8 +83,18 @@ class SpecialFeaturePricingRule(TypedDict, total=False):
     basis: SpecialFeaturePricingBasisConfig
     value: float
     count: float
+    count_override_keys: List[str]
+    unit_label: str
+    default_count_bands: List["SpecialFeaturePricingCountBand"]
     area_share_of_gsf: float
     size_band: str
+
+
+class SpecialFeaturePricingCountBand(TypedDict, total=False):
+    """Square-footage band defaults for count-based feature pricing."""
+    label: str
+    max_square_footage: float
+    count: float
 
 
 SpecialFeaturePricingConfigValue = Union[float, SpecialFeaturePricingRule]

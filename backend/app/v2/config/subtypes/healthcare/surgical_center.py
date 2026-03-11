@@ -76,14 +76,34 @@ CONFIG = (
             "Miami": 1.12,
         },
         special_features={
-            "operating_room": 100,  # Per OR
+            "operating_room": {
+                "basis": "COUNT_BASED",
+                "value": 450000,
+                "count_override_keys": ["operating_room_count", "or_count"],
+                "default_count_bands": [
+                    {"label": "small_asc", "max_square_footage": 12000, "count": 2},
+                    {"label": "mid_asc", "max_square_footage": 20000, "count": 4},
+                    {"label": "large_asc", "count": 6},
+                ],
+                "unit_label": "room",
+            },  # Per OR
             "recovery_room": 40,
             "pre_op": 35,
             "sterile_processing": 60,
             "hc_asc_expanded_pacu": 75,
             "hc_asc_sterile_core_upgrade": 50,
             "hc_asc_pain_management_suite": 60,
-            "hc_asc_hybrid_or_cath_lab": 125,
+            "hc_asc_hybrid_or_cath_lab": {
+                "basis": "COUNT_BASED",
+                "value": 950000,
+                "count": 1,
+                "count_override_keys": [
+                    "hybrid_or_count",
+                    "hybrid_or_cath_lab_count",
+                    "cath_lab_count",
+                ],
+                "unit_label": "lab",
+            },
         },
         special_feature_pricing_statuses={
             "operating_room": "included_in_baseline",

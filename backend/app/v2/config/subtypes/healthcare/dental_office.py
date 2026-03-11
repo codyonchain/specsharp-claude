@@ -74,7 +74,18 @@ CONFIG = (
             "Miami": 1.05,
         },
         special_features={
-            "operatory": 15,  # Per dental chair
+            "operatory": {
+                "basis": "COUNT_BASED",
+                "value": 45000,
+                "count_override_keys": ["operatory_count", "dental_operatory_count", "chair_count"],
+                "default_count_bands": [
+                    {"label": "compact_practice", "max_square_footage": 2500, "count": 4},
+                    {"label": "standard_practice", "max_square_footage": 4000, "count": 6},
+                    {"label": "large_practice", "max_square_footage": 6000, "count": 8},
+                    {"label": "expanded_practice", "count": 10},
+                ],
+                "unit_label": "operatory",
+            },  # Per dental chair
             "sterilization": 10,
             "x_ray": 12,
             "lab": 15,
