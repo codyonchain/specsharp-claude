@@ -143,21 +143,56 @@ export interface ConstructionCosts {
   construction_total: number;
   equipment_total: number;
   special_features_total: number;
-  special_features_breakdown?: Array<{
-    id: string;
-    cost_per_sf: number;
-    configured_cost_per_sf?: number;
-    total_cost: number;
-    label: string;
-    pricing_status?: 'included_in_baseline' | 'incremental';
-  }>;
+  special_features_breakdown?: SpecialFeatureBreakdownRow[];
+}
+
+export type SpecialFeaturePricingStatus = 'included_in_baseline' | 'incremental';
+
+export type SpecialFeaturePricingBasis =
+  | 'WHOLE_PROJECT_SF'
+  | 'COUNT_BASED'
+  | 'AREA_SHARE_GSF'
+  | 'FIXED_LUMP_SUM'
+  | 'TIERED_INTENSITY';
+
+export interface SpecialFeaturePricingCountBand {
+  label?: string;
+  max_square_footage?: number;
+  count: number;
+}
+
+export interface SpecialFeatureBreakdownRow {
+  id: string;
+  label: string;
+  total_cost: number;
+  pricing_status?: SpecialFeaturePricingStatus;
+  pricing_basis?: SpecialFeaturePricingBasis;
+  configured_value?: number;
+  applied_value?: number;
+  applied_quantity?: number;
+  quantity_source?: string;
+  configured_cost_per_sf?: number;
+  cost_per_sf?: number;
+  configured_cost_per_count?: number;
+  cost_per_count?: number;
+  configured_count?: number;
+  configured_count_bands?: SpecialFeaturePricingCountBand[];
+  unit_label?: string;
+  resolved_size_band?: string;
 }
 
 export interface AvailableSpecialFeaturePricing {
   id: string;
   label: string;
-  configured_cost_per_sf: number;
-  pricing_status: 'included_in_baseline' | 'incremental';
+  pricing_status: SpecialFeaturePricingStatus;
+  pricing_basis?: SpecialFeaturePricingBasis;
+  configured_value?: number;
+  configured_cost_per_sf?: number;
+  configured_cost_per_count?: number;
+  configured_count?: number;
+  configured_count_bands?: SpecialFeaturePricingCountBand[];
+  count_override_keys?: string[];
+  unit_label?: string;
 }
 
 export interface RegionalContext {

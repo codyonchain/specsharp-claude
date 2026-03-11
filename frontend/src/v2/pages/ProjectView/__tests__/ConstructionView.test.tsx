@@ -2325,6 +2325,78 @@ describe("ConstructionView", () => {
     expect(within(ballroomRow as HTMLElement).getByText("$0")).toBeInTheDocument();
   });
 
+  it("renders count-based special features with unit pricing copy and keeps included rows visible", () => {
+    const project = buildHealthcareScheduleProject("surgical_center", "subtype");
+    project.analysis.calculations.construction_costs.special_features_total = 950000;
+    project.analysis.calculations.construction_costs.special_features_breakdown = [
+      {
+        id: "operating_room",
+        label: "Operating Room",
+        pricing_basis: "COUNT_BASED",
+        pricing_status: "included_in_baseline",
+        configured_cost_per_count: 450000,
+        cost_per_count: 0,
+        applied_quantity: 4,
+        unit_label: "room",
+        total_cost: 0,
+      },
+      {
+        id: "hc_asc_hybrid_or_cath_lab",
+        label: "Hybrid OR / Cath Lab",
+        pricing_basis: "COUNT_BASED",
+        pricing_status: "incremental",
+        configured_cost_per_count: 950000,
+        cost_per_count: 950000,
+        applied_quantity: 1,
+        unit_label: "lab",
+        total_cost: 950000,
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+
+    const includedRow = screen.getByText("Operating Room").closest(".rounded-lg");
+    expect(includedRow).not.toBeNull();
+    expect(within(includedRow as HTMLElement).getByText("Included in baseline")).toBeInTheDocument();
+    expect(within(includedRow as HTMLElement).getByText("$0")).toBeInTheDocument();
+    expect(within(includedRow as HTMLElement).queryByText(/\/SF/)).not.toBeInTheDocument();
+
+    const incrementalRow = screen.getByText("Hybrid OR / Cath Lab").closest(".rounded-lg");
+    expect(incrementalRow).not.toBeNull();
+    expect(within(incrementalRow as HTMLElement).getByText("Incremental premium applied")).toBeInTheDocument();
+    expect(within(incrementalRow as HTMLElement).getByText("$950,000")).toBeInTheDocument();
+    expect(
+      within(incrementalRow as HTMLElement).getByText("$950,000 per lab × 1 lab")
+    ).toBeInTheDocument();
+    expect(within(incrementalRow as HTMLElement).queryByText(/\/SF/)).not.toBeInTheDocument();
+  });
+
+  it("keeps count-based included special features visible when the aggregate is zero", () => {
+    const project = buildHealthcareScheduleProject("imaging_center", "subtype");
+    project.analysis.calculations.construction_costs.special_features_total = 0;
+    project.analysis.calculations.construction_costs.special_features_breakdown = [
+      {
+        id: "mri_suite",
+        label: "MRI Suite",
+        pricing_basis: "COUNT_BASED",
+        pricing_status: "included_in_baseline",
+        configured_cost_per_count: 850000,
+        cost_per_count: 0,
+        applied_quantity: 1,
+        unit_label: "suite",
+        total_cost: 0,
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+
+    expect(screen.getByText("Special Features")).toBeInTheDocument();
+    const mriSuiteRow = screen.getByText("MRI Suite").closest(".rounded-lg");
+    expect(mriSuiteRow).not.toBeNull();
+    expect(within(mriSuiteRow as HTMLElement).getByText("Included in baseline")).toBeInTheDocument();
+    expect(within(mriSuiteRow as HTMLElement).getByText("$0")).toBeInTheDocument();
+  });
+
   it("keeps per-feature special-feature breakdown visible for imaging, urgent care, and medical-office subtype fixtures", () => {
     const cases = [
       {

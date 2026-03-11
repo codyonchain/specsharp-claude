@@ -78,6 +78,77 @@ const analysisResult = {
   confidence: 1,
 } as any;
 
+const countBasedAnalysisResult = {
+  parsed_input: {
+    building_type: 'healthcare',
+    subtype: 'surgical_center',
+    square_footage: 18000,
+    location: 'Nashville, TN',
+    project_class: 'ground_up',
+    floors: 1,
+    confidence: 1,
+  },
+  calculations: {
+    project_info: {
+      building_type: 'healthcare',
+      subtype: 'surgical_center',
+      display_name: 'Surgical Center',
+      project_class: 'ground_up',
+      square_footage: 18000,
+      location: 'Nashville, TN',
+      floors: 1,
+      typical_floors: 1,
+      available_special_feature_pricing: [
+        {
+          id: 'operating_room',
+          label: 'Operating Room',
+          pricing_status: 'included_in_baseline',
+          pricing_basis: 'COUNT_BASED',
+          configured_value: 450000,
+          configured_cost_per_count: 450000,
+          configured_count_bands: [
+            { label: 'small_asc', max_square_footage: 12000, count: 2 },
+            { label: 'mid_asc', max_square_footage: 20000, count: 4 },
+            { label: 'large_asc', count: 6 },
+          ],
+          unit_label: 'room',
+        },
+        {
+          id: 'hc_asc_hybrid_or_cath_lab',
+          label: 'Hybrid OR / Cath Lab',
+          pricing_status: 'incremental',
+          pricing_basis: 'COUNT_BASED',
+          configured_value: 950000,
+          configured_cost_per_count: 950000,
+          configured_count: 1,
+          unit_label: 'lab',
+        },
+      ],
+    },
+    construction_costs: {
+      base_cost_per_sf: 610,
+      class_multiplier: 1,
+      regional_multiplier: 1.03,
+      final_cost_per_sf: 628.3,
+      construction_total: 11309400,
+      equipment_total: 450000,
+      special_features_total: 0,
+      special_features_breakdown: [],
+    },
+    trade_breakdown: {},
+    soft_costs: {},
+    totals: {
+      hard_costs: 11759400,
+      soft_costs: 1763910,
+      total_project_cost: 13523310,
+      cost_per_sf: 751.3,
+    },
+    calculation_trace: [],
+    timestamp: '2026-03-10T12:00:00Z',
+  },
+  confidence: 1,
+} as any;
+
 describe('NewProject special feature pricing parity', () => {
   beforeEach(() => {
     mockUseProjectAnalysis.mockReturnValue({
@@ -136,6 +207,57 @@ describe('NewProject special feature pricing parity', () => {
     ).toBeInTheDocument();
     expect(
       within(selectedImpactSummary as HTMLElement).queryByText('No incremental premium')
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders count-based backend pricing truth for selected included and incremental features', () => {
+    mockUseProjectAnalysis.mockReturnValue({
+      analyzing: false,
+      calculating: false,
+      result: countBasedAnalysisResult,
+      error: null,
+      analyzeDescription: vi.fn(),
+      calculateDirect: vi.fn(),
+      reset: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <NewProject />
+      </MemoryRouter>
+    );
+
+    const operatingRoomCheckbox = screen.getByRole('checkbox', { name: /operating room/i });
+    const hybridLabCheckbox = screen.getByRole('checkbox', { name: /hybrid or \/ cath lab/i });
+
+    fireEvent.click(operatingRoomCheckbox);
+    fireEvent.click(hybridLabCheckbox);
+
+    const operatingRoomRow = operatingRoomCheckbox.closest('label');
+    expect(operatingRoomRow).not.toBeNull();
+    expect(within(operatingRoomRow as HTMLElement).getByText('Included in baseline')).toBeInTheDocument();
+    expect(
+      within(operatingRoomRow as HTMLElement).getByText('No additional premium for this subtype')
+    ).toBeInTheDocument();
+    expect(within(operatingRoomRow as HTMLElement).queryByText(/\/SF/)).not.toBeInTheDocument();
+
+    const hybridLabRow = hybridLabCheckbox.closest('label');
+    expect(hybridLabRow).not.toBeNull();
+    expect(within(hybridLabRow as HTMLElement).getByText('Incremental premium')).toBeInTheDocument();
+    expect(within(hybridLabRow as HTMLElement).getByText('+$950,000')).toBeInTheDocument();
+    expect(
+      within(hybridLabRow as HTMLElement).getByText('$950,000 per lab × 1 lab')
+    ).toBeInTheDocument();
+    expect(within(hybridLabRow as HTMLElement).queryByText(/\/SF/)).not.toBeInTheDocument();
+
+    const selectedImpactSummary = screen.getByText('Selected Feature Impact').parentElement;
+    expect(selectedImpactSummary).not.toBeNull();
+    expect(within(selectedImpactSummary as HTMLElement).getByText('+$950,000')).toBeInTheDocument();
+    expect(
+      within(selectedImpactSummary as HTMLElement).getByText('1 selected feature is included in baseline.')
+    ).toBeInTheDocument();
+    expect(
+      within(selectedImpactSummary as HTMLElement).queryByText(/combined impact/i)
     ).not.toBeInTheDocument();
   });
 });

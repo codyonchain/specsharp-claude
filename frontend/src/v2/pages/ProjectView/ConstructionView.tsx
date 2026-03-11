@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Project } from '../../types';
+import { Project, type SpecialFeatureBreakdownRow, type SpecialFeaturePricingBasis, type SpecialFeaturePricingStatus } from '../../types';
 import { formatCurrency, formatNumber, formatPercent } from '../../utils/formatters';
 import { pdfService } from '@/services/api';
 import { generateExportFilename } from '@/utils/filenameGenerator';
@@ -21,6 +21,19 @@ type TradeCostSplit = {
 
 type AnyRecord = Record<string, any>;
 type MixedUseComponent = 'office' | 'residential' | 'retail' | 'hotel' | 'transit';
+type NormalizedSpecialFeatureBreakdownRow = {
+  id: string;
+  label: string;
+  totalCost: number;
+  pricingStatus: SpecialFeaturePricingStatus;
+  pricingBasis: SpecialFeaturePricingBasis;
+  costPerSF?: number;
+  configuredCostPerSF?: number;
+  costPerCount?: number;
+  configuredCostPerCount?: number;
+  appliedQuantity?: number;
+  unitLabel?: string;
+};
 
 const toRecord = (value: unknown): AnyRecord =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -47,6 +60,41 @@ const toFiniteNumber = (value: unknown): number | null => {
     }
   }
   return null;
+};
+
+const resolveSpecialFeaturePricingBasis = (
+  item: SpecialFeatureBreakdownRow | AnyRecord,
+  hasCountPricing: boolean,
+): SpecialFeaturePricingBasis => {
+  if (item.pricing_basis === 'COUNT_BASED') {
+    return 'COUNT_BASED';
+  }
+  if (item.pricing_basis === 'WHOLE_PROJECT_SF') {
+    return 'WHOLE_PROJECT_SF';
+  }
+  return hasCountPricing ? 'COUNT_BASED' : 'WHOLE_PROJECT_SF';
+};
+
+const pluralizeUnitLabel = (unitLabel: string, quantity: number): string => {
+  if (quantity === 1) {
+    return unitLabel;
+  }
+  if (/[^aeiou]y$/i.test(unitLabel)) {
+    return `${unitLabel.slice(0, -1)}ies`;
+  }
+  if (/(s|x|z|ch|sh)$/i.test(unitLabel)) {
+    return `${unitLabel}es`;
+  }
+  return `${unitLabel}s`;
+};
+
+const formatCountBasedDetail = (
+  costPerCount: number,
+  appliedQuantity: number,
+  unitLabel?: string,
+): string => {
+  const normalizedUnitLabel = unitLabel || 'item';
+  return `${formatCurrency(costPerCount)} per ${normalizedUnitLabel} × ${formatNumber(appliedQuantity)} ${pluralizeUnitLabel(normalizedUnitLabel, appliedQuantity)}`;
 };
 
 const MIXED_USE_COMPONENT_ORDER: MixedUseComponent[] = [
@@ -622,28 +670,46 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
   const specialFeaturesBreakdownRaw = calculations.construction_costs?.special_features_breakdown;
   const specialFeaturesBreakdown = Array.isArray(specialFeaturesBreakdownRaw)
     ? specialFeaturesBreakdownRaw
-        .filter(
-          (item: any) =>
-            item &&
-            typeof item.id === 'string' &&
-            typeof item.label === 'string' &&
-            typeof item.cost_per_sf === 'number' &&
-            Number.isFinite(item.cost_per_sf) &&
-            typeof item.total_cost === 'number' &&
-            Number.isFinite(item.total_cost)
-        )
-        .map((item: any) => ({
-          id: item.id,
-          label: item.label,
-          costPerSF: item.cost_per_sf,
-          configuredCostPerSF:
-            typeof item.configured_cost_per_sf === 'number' && Number.isFinite(item.configured_cost_per_sf)
-              ? item.configured_cost_per_sf
-              : item.cost_per_sf,
-          totalCost: item.total_cost,
-          pricingStatus:
-            item.pricing_status === 'included_in_baseline' ? 'included_in_baseline' : 'incremental',
-        }))
+        .map((item: SpecialFeatureBreakdownRow | AnyRecord): NormalizedSpecialFeatureBreakdownRow | null => {
+          if (!item || typeof item.id !== 'string' || typeof item.label !== 'string') {
+            return null;
+          }
+
+          const totalCost = toFiniteNumber(item.total_cost);
+          if (totalCost === null) {
+            return null;
+          }
+
+          const costPerSF = toFiniteNumber(item.cost_per_sf);
+          const configuredCostPerSF = toFiniteNumber(item.configured_cost_per_sf);
+          const costPerCount = toFiniteNumber(item.cost_per_count);
+          const configuredCostPerCount = toFiniteNumber(item.configured_cost_per_count);
+          const hasCountPricing = costPerCount !== null || configuredCostPerCount !== null;
+          const hasSfPricing = costPerSF !== null || configuredCostPerSF !== null;
+
+          if (!hasCountPricing && !hasSfPricing) {
+            return null;
+          }
+
+          return {
+            id: item.id,
+            label: item.label,
+            totalCost,
+            pricingStatus:
+              item.pricing_status === 'included_in_baseline' ? 'included_in_baseline' : 'incremental',
+            pricingBasis: resolveSpecialFeaturePricingBasis(item, hasCountPricing),
+            costPerSF: costPerSF ?? undefined,
+            configuredCostPerSF: configuredCostPerSF ?? costPerSF ?? undefined,
+            costPerCount: costPerCount ?? undefined,
+            configuredCostPerCount: configuredCostPerCount ?? costPerCount ?? undefined,
+            appliedQuantity: toFiniteNumber(item.applied_quantity) ?? undefined,
+            unitLabel:
+              typeof item.unit_label === 'string' && item.unit_label.trim()
+                ? item.unit_label.trim()
+                : undefined,
+          };
+        })
+        .filter((item): item is NormalizedSpecialFeatureBreakdownRow => item !== null)
     : [];
   const hasSpecialFeaturesBreakdown = specialFeaturesBreakdown.length > 0;
   const showSpecialFeaturesSection = hasSpecialFeaturesBreakdown || specialFeaturesTotal > 0;
@@ -1929,51 +1995,64 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
                   <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl p-6 border border-orange-200">
                     <p className="text-sm text-orange-700 uppercase tracking-wider mb-3 font-medium">Special Features</p>
                     <p className="text-3xl font-bold text-orange-600">{formatCurrency(specialFeaturesTotal)}</p>
-                    <p className="mt-1 text-xs text-gray-500">Selected features and any applied premium are shown below.</p>
-                    <div className="mt-3 space-y-2">
-                      {hasSpecialFeaturesBreakdown ? (
-                        specialFeaturesBreakdown.map((feature) => {
-                          const isIncludedInBaseline = feature.pricingStatus === 'included_in_baseline';
-                          const statusLabel = isIncludedInBaseline
-                            ? 'Included in baseline'
-                            : 'Incremental premium applied';
+	                    <p className="mt-1 text-xs text-gray-500">Selected features and any applied premium are shown below.</p>
+	                    <div className="mt-3 space-y-2">
+	                      {hasSpecialFeaturesBreakdown ? (
+	                        specialFeaturesBreakdown.map((feature) => {
+	                          const isIncludedInBaseline = feature.pricingStatus === 'included_in_baseline';
+	                          const statusLabel = isIncludedInBaseline
+	                            ? 'Included in baseline'
+	                            : 'Incremental premium applied';
+                          const detailLabel =
+                            !isIncludedInBaseline && feature.pricingBasis === 'COUNT_BASED'
+                              ? typeof feature.costPerCount === 'number' &&
+                                typeof feature.appliedQuantity === 'number'
+                                ? formatCountBasedDetail(
+                                    feature.costPerCount,
+                                    feature.appliedQuantity,
+                                    feature.unitLabel,
+                                  )
+                                : undefined
+                              : !isIncludedInBaseline && squareFootage > 0 && typeof feature.costPerSF === 'number'
+                                ? `${formatCurrency(feature.costPerSF)}/SF × ${formatNumber(squareFootage)} SF`
+                                : undefined;
 
-                          return (
-                            <div
-                              key={feature.id}
-                              className="rounded-lg border border-orange-100 bg-white/70 px-3 py-2"
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="text-sm text-gray-800">{feature.label}</p>
-                                  <p
-                                    className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                                      isIncludedInBaseline
-                                        ? 'bg-emerald-50 text-emerald-700'
-                                        : 'bg-orange-100 text-orange-700'
-                                    }`}
-                                  >
-                                    {statusLabel}
-                                  </p>
-                                </div>
-                                <p className="text-sm font-semibold text-gray-900">
-                                  {formatCurrency(feature.totalCost)}
-                                </p>
-                              </div>
-                              {!isIncludedInBaseline && squareFootage > 0 && (
-                                <p className="text-xs text-gray-500 mt-1">
-                                  {formatCurrency(feature.costPerSF)}/SF × {formatNumber(squareFootage)} SF
-                                </p>
-                              )}
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <p className="text-sm text-gray-700">
-                          Selected feature IDs were not provided in project data; showing aggregate only.
-                        </p>
-                      )}
-                    </div>
+	                          return (
+	                            <div
+	                              key={feature.id}
+	                              className="rounded-lg border border-orange-100 bg-white/70 px-3 py-2"
+	                            >
+	                              <div className="flex items-start justify-between gap-3">
+	                                <div>
+	                                  <p className="text-sm text-gray-800">{feature.label}</p>
+	                                  <p
+	                                    className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
+	                                      isIncludedInBaseline
+	                                        ? 'bg-emerald-50 text-emerald-700'
+	                                        : 'bg-orange-100 text-orange-700'
+	                                    }`}
+	                                  >
+	                                    {statusLabel}
+	                                  </p>
+	                                </div>
+	                                <p className="text-sm font-semibold text-gray-900">
+	                                  {formatCurrency(feature.totalCost)}
+	                                </p>
+	                              </div>
+                              {detailLabel && (
+	                                <p className="text-xs text-gray-500 mt-1">
+	                                  {detailLabel}
+	                                </p>
+	                              )}
+	                            </div>
+	                          );
+	                        })
+	                      ) : (
+	                        <p className="text-sm text-gray-700">
+	                          Selected feature IDs were not provided in project data; showing aggregate only.
+	                        </p>
+	                      )}
+	                    </div>
                     {!hasSpecialFeaturesBreakdown && (
                       <p className="mt-2 text-xs text-gray-500">
                         Per-feature breakdown is unavailable for this project version; showing aggregate total only.

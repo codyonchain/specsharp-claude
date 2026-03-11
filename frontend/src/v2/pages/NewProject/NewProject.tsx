@@ -1270,6 +1270,9 @@ export const NewProject: React.FC = () => {
   const selectedFeatureHasEstimate = selectedFeatureDetails.some(
     (item) => item.pricing.isEstimate
   );
+  const selectedFeatureHasCountBasedPricing = selectedFeatureDetails.some(
+    (item) => item.pricing.pricingBasis === 'COUNT_BASED'
+  );
   const hasStaticFeaturePlaceholders = applicableSpecialFeatures.some(
     (feature) => getFeatureDisplayPricing(feature).isPlaceholder
   );
@@ -1832,7 +1835,7 @@ export const NewProject: React.FC = () => {
                     </p>
                     {usesSubtypeCostPerSF && !hasFeatureSquareFootage && (
                       <p className="mt-1 text-[11px] text-blue-700">
-                        Incremental premium values below are estimates until square footage is provided.
+                        Incremental premium values below are estimates until project size or quantity assumptions are provided.
                       </p>
                     )}
                     {hasStaticFeaturePlaceholders && (
@@ -1911,11 +1914,14 @@ export const NewProject: React.FC = () => {
                         {selectedIncludedCount} selected {selectedIncludedCount === 1 ? 'feature is' : 'features are'} included in baseline.
                       </p>
                     )}
-                    {!selectedFeatureHasUnknownTotal && hasFeatureSquareFootage && selectedFeatureKnownTotal > 0 && (
+                    {!selectedFeatureHasUnknownTotal &&
+                      !selectedFeatureHasCountBasedPricing &&
+                      hasFeatureSquareFootage &&
+                      selectedFeatureKnownTotal > 0 && (
                       <p className="text-[11px] text-gray-500">
                         {formatCurrency(selectedFeatureKnownTotal / squareFootageSummary!)} / SF combined impact
                       </p>
-                    )}
+                      )}
                   </div>
                 </div>
               </div>
