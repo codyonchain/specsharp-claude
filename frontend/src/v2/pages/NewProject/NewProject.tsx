@@ -12,6 +12,7 @@ import {
   detectEducationalSubtypeFromDescription,
   detectHealthcareFeatureIdsFromDescription,
   detectHospitalityFeatureIdsFromDescription,
+  detectIndustrialFeatureIdsFromDescription,
   detectMultifamilyFeatureIdsFromDescription,
   detectMixedUseFeatureIdsFromDescription,
   detectOfficeFeatureIdsFromDescription,
@@ -490,6 +491,7 @@ export const NewProject: React.FC = () => {
       buildingType === 'educational' ||
       buildingType === 'office' ||
       buildingType === 'retail' ||
+      buildingType === 'industrial' ||
       buildingType === 'restaurant' ||
       buildingType === 'hospitality' ||
       buildingType === 'specialty' ||
@@ -517,12 +519,6 @@ export const NewProject: React.FC = () => {
         { id: 'conference', name: 'Conference Center', cost: 2000000, description: 'Large meeting spaces' },
         { id: 'parking_deck', name: 'Parking Deck', cost: 4000000, description: 'Multi-level parking' }
       ],
-      industrial: [
-        { id: 'loading_docks', name: 'Extra Loading Docks', cost: 500000, description: 'Additional truck bays' },
-        { id: 'cold_storage', name: 'Cold Storage', cost: 3000000, description: 'Refrigerated warehouse space' },
-        { id: 'office_buildout', name: 'Office Build-out', cost: 1000000, description: 'Administrative space' },
-        { id: 'cranes', name: 'Overhead Cranes', cost: 2000000, description: 'Heavy lifting equipment' }
-      ],
     };
 
     return filterSpecialFeaturesBySubtype(features[buildingType] || [], subtype);
@@ -541,8 +537,6 @@ export const NewProject: React.FC = () => {
     }
     if (!isMultifamilyProject && lower.includes('pool')) detectedFeatures.add('pool');
     if (lower.includes('cafeteria')) detectedFeatures.add('cafeteria');
-    if (lower.includes('loading dock')) detectedFeatures.add('loading_docks');
-    if (lower.includes('cold storage')) detectedFeatures.add('cold_storage');
     if (lower.includes('food court')) detectedFeatures.add('food_court');
     for (const featureId of detectHealthcareFeatureIdsFromDescription(desc)) {
       detectedFeatures.add(featureId);
@@ -569,6 +563,9 @@ export const NewProject: React.FC = () => {
       detectedFeatures.add(featureId);
     }
     for (const featureId of detectRecreationFeatureIdsFromDescription(desc)) {
+      detectedFeatures.add(featureId);
+    }
+    for (const featureId of detectIndustrialFeatureIdsFromDescription(desc)) {
       detectedFeatures.add(featureId);
     }
     for (const featureId of detectMixedUseFeatureIdsFromDescription(desc)) {

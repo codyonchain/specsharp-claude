@@ -7,6 +7,8 @@ import {
   HEALTHCARE_SUBTYPES,
   HOSPITALITY_FEATURE_COSTS_BY_SUBTYPE,
   HOSPITALITY_SUBTYPES,
+  INDUSTRIAL_FEATURE_COSTS_BY_SUBTYPE,
+  INDUSTRIAL_SUBTYPES,
   MULTIFAMILY_FEATURE_COSTS_BY_SUBTYPE,
   MULTIFAMILY_SUBTYPES,
   MIXED_USE_FEATURE_COSTS_BY_SUBTYPE,
@@ -28,6 +30,7 @@ import {
   detectEducationalSubtypeFromDescription,
   detectHealthcareFeatureIdsFromDescription,
   detectHospitalityFeatureIdsFromDescription,
+  detectIndustrialFeatureIdsFromDescription,
   detectMultifamilyFeatureIdsFromDescription,
   detectMixedUseFeatureIdsFromDescription,
   detectOfficeFeatureIdsFromDescription,
@@ -44,6 +47,7 @@ import {
   getEducationalSpecialFeatures,
   getHealthcareSpecialFeatures,
   getHospitalitySpecialFeatures,
+  getIndustrialSpecialFeatures,
   getMultifamilySpecialFeatures,
   getMixedUseSpecialFeatures,
   getOfficeSpecialFeatures,
@@ -55,6 +59,7 @@ import {
   getSpecialtySpecialFeatures,
   healthcareSubtypeHasSpecialFeatures,
   hospitalitySubtypeHasSpecialFeatures,
+  industrialSubtypeHasSpecialFeatures,
   multifamilySubtypeHasSpecialFeatures,
   mixedUseSubtypeHasSpecialFeatures,
   officeSubtypeHasSpecialFeatures,
@@ -63,6 +68,40 @@ import {
   retailSubtypeHasSpecialFeatures,
   restaurantSubtypeHasSpecialFeatures,
 } from "../specialFeaturesCatalog";
+
+const REQUIRED_INDUSTRIAL_MAPPING = {
+  warehouse: {},
+  distribution_center: {
+    automated_sorting: 25,
+    refrigerated_area: 35,
+    loading_docks: 15,
+    extra_loading_docks: 20,
+    office_buildout: 18,
+    cold_storage: 40,
+  },
+  cold_storage: {
+    blast_freezer: 50,
+    multiple_temp_zones: 30,
+    automated_retrieval: 40,
+    under_slab_heating_protection: 18,
+    high_r_value_panel_upgrade: 12,
+  },
+  manufacturing: {
+    clean_room: 75,
+    heavy_power: 40,
+    crane_bays: 30,
+    compressed_air: 20,
+  },
+  flex_space: {
+    enhanced_office_showroom_finish: 18,
+    two_story_office_mezzanine: 12,
+    heavy_power: 20,
+    clean_room: 60,
+    crane_bays: 28,
+    compressed_air: 10,
+    lab_buildout: 35,
+  },
+} as const;
 
 const REQUIRED_MULTIFAMILY_MAPPING = {
   market_rate_apartments: {
@@ -473,6 +512,135 @@ const resolveFeatureCostPerSF = (
   }
   return 0;
 };
+
+describe("industrial special features catalog", () => {
+  it("matches the backend-parity industrial subtype mapping", () => {
+    const industrialFeatures = getIndustrialSpecialFeatures();
+
+    expect(industrialFeatures.length).toBeGreaterThan(0);
+    expect(INDUSTRIAL_FEATURE_COSTS_BY_SUBTYPE).toEqual(REQUIRED_INDUSTRIAL_MAPPING);
+  });
+
+  it("resolves exact industrial feature IDs per subtype, including the empty warehouse path", () => {
+    const industrialFeatures = getIndustrialSpecialFeatures();
+
+    for (const subtype of INDUSTRIAL_SUBTYPES) {
+      const expectedIds = Object.keys(REQUIRED_INDUSTRIAL_MAPPING[subtype]).sort();
+      const resolvedIds = filterSpecialFeaturesBySubtype(industrialFeatures, subtype).map(
+        (feature) => feature.id
+      );
+      const uniqueResolvedIds = Array.from(new Set(resolvedIds));
+
+      expect(uniqueResolvedIds.length).toBe(resolvedIds.length);
+      expect(uniqueResolvedIds.sort()).toEqual(expectedIds);
+      expect(
+        getAvailableSpecialFeatures("industrial", subtype).map((feature) => feature.id).sort()
+      ).toEqual(expectedIds);
+    }
+  });
+
+  it("detects backend-parity industrial feature IDs from major subtype phrases", () => {
+    expect(
+      detectIndustrialFeatureIdsFromDescription(
+        "Distribution center with automated sortation, refrigerated area, extra loading docks, office buildout, and cold storage."
+      ).sort()
+    ).toEqual([
+      "automated_sorting",
+      "cold_storage",
+      "extra_loading_docks",
+      "office_buildout",
+      "refrigerated_area",
+    ]);
+
+    expect(
+      detectIndustrialFeatureIdsFromDescription(
+        "Cold storage facility with blast freezer, multi-temp zones, automated retrieval, under slab heating, and high-R panels."
+      ).sort()
+    ).toEqual([
+      "automated_retrieval",
+      "blast_freezer",
+      "cold_storage",
+      "high_r_value_panel_upgrade",
+      "multiple_temp_zones",
+      "under_slab_heating_protection",
+    ]);
+
+    expect(
+      detectIndustrialFeatureIdsFromDescription(
+        "Manufacturing plant with clean room, heavy power, crane bays, and compressed air."
+      ).sort()
+    ).toEqual(["clean_room", "compressed_air", "crane_bays", "heavy_power"]);
+
+    expect(
+      detectIndustrialFeatureIdsFromDescription(
+        "Flex industrial project with office showroom finish, office mezzanine, lab buildout, clean room, crane bays, and compressed air."
+      ).sort()
+    ).toEqual([
+      "clean_room",
+      "compressed_air",
+      "crane_bays",
+      "enhanced_office_showroom_finish",
+      "lab_buildout",
+      "two_story_office_mezzanine",
+    ]);
+  });
+
+  it("filters raw industrial detector hits back to the intended subtype inventory", () => {
+    const flexDescription =
+      "New flex industrial project with office showroom finish, office mezzanine, lab buildout, clean room, crane bays, and compressed air.";
+    const flexDetectedIds = new Set(detectIndustrialFeatureIdsFromDescription(flexDescription));
+    const flexAllowedIds = new Set(
+      getAvailableSpecialFeatures("industrial", "flex_space").map((feature) => feature.id)
+    );
+
+    expect(
+      Array.from(flexDetectedIds)
+        .filter((featureId) => flexAllowedIds.has(featureId))
+        .sort()
+    ).toEqual([
+      "clean_room",
+      "compressed_air",
+      "crane_bays",
+      "enhanced_office_showroom_finish",
+      "lab_buildout",
+      "two_story_office_mezzanine",
+    ]);
+
+    const coldStorageDescription =
+      "Cold storage facility with blast freezer, multi-temp zones, automated retrieval, under slab heating, and high-R panels.";
+    const coldStorageDetectedIds = new Set(
+      detectIndustrialFeatureIdsFromDescription(coldStorageDescription)
+    );
+    const coldStorageAllowedIds = new Set(
+      getAvailableSpecialFeatures("industrial", "cold_storage").map((feature) => feature.id)
+    );
+
+    expect(
+      Array.from(coldStorageDetectedIds)
+        .filter((featureId) => coldStorageAllowedIds.has(featureId))
+        .sort()
+    ).toEqual([
+      "automated_retrieval",
+      "blast_freezer",
+      "high_r_value_panel_upgrade",
+      "multiple_temp_zones",
+      "under_slab_heating_protection",
+    ]);
+  });
+
+  it("guards against stale local industrial IDs and subtype leakage", () => {
+    expect(getAvailableSpecialFeatures("industrial", "warehouse")).toEqual([]);
+    expect(industrialSubtypeHasSpecialFeatures("warehouse")).toBe(false);
+    expect(industrialSubtypeHasSpecialFeatures("distribution_center")).toBe(true);
+    expect(getSpecialFeatureCost("industrial", "cranes", "manufacturing")).toBeUndefined();
+    expect(
+      getAvailableSpecialFeatures("industrial", "manufacturing").map((feature) => feature.id)
+    ).not.toContain("cranes");
+    expect(
+      getAvailableSpecialFeatures("industrial", "distribution_center").map((feature) => feature.id)
+    ).not.toContain("clean_room");
+  });
+});
 
 describe("multifamily special features catalog", () => {
   it("is non-empty and matches the shared multifamily subtype mapping", () => {
