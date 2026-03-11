@@ -2420,6 +2420,10 @@ const RESTAURANT_KEYWORD_DETECTION: Array<{
     patterns: [/\bwine cellar\b/i],
   },
   {
+    featureId: "live_kitchen",
+    patterns: [/\blive kitchen\b/i, /\bopen kitchen\b/i, /\bexhibition kitchen\b/i],
+  },
+  {
     featureId: "chef_table",
     patterns: [/\bchef'?s table\b/i, /\bchef table\b/i],
   },
@@ -2442,6 +2446,14 @@ const RESTAURANT_KEYWORD_DETECTION: Array<{
   {
     featureId: "private_dining",
     patterns: [/\bprivate dining\b/i],
+  },
+  {
+    featureId: "dry_aging_room",
+    patterns: [/\bdry[-\s]?aging(?:\s+room)?\b/i],
+  },
+  {
+    featureId: "pastry_kitchen",
+    patterns: [/\b(?:separate\s+|dedicated\s+)?pastry kitchen\b/i],
   },
   {
     featureId: "private_party_room",

@@ -776,6 +776,32 @@ describe("restaurant special features catalog", () => {
       )
     ).toEqual(["double_drive_thru"]);
   });
+
+  it("detects remaining Stage 2C restaurant area-share feature ids from prompt language", () => {
+    expect(
+      detectRestaurantFeatureIdsFromDescription(
+        "New 6,500 SF full service restaurant with live kitchen in Nashville, TN"
+      )
+    ).toContain("live_kitchen");
+
+    expect(
+      detectRestaurantFeatureIdsFromDescription(
+        "New 6,500 SF fine dining restaurant with dry aging room in Nashville, TN"
+      )
+    ).toContain("dry_aging_room");
+
+    expect(
+      detectRestaurantFeatureIdsFromDescription(
+        "New 6,500 SF fine dining restaurant with separate pastry kitchen in Nashville, TN"
+      )
+    ).toContain("pastry_kitchen");
+
+    expect(
+      detectRestaurantFeatureIdsFromDescription(
+        "New 6,500 SF fine dining restaurant with dry aging room and pastry kitchen in Nashville, TN"
+      )
+    ).toEqual(expect.arrayContaining(["dry_aging_room", "pastry_kitchen"]));
+  });
 });
 
 describe("hospitality special features catalog", () => {

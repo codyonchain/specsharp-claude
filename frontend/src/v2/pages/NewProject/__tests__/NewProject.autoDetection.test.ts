@@ -155,8 +155,29 @@ describe('NewProject auto-detection path', () => {
       expectedFeatureId: 'extra_loading_docks',
       unexpectedFilteredId: 'loading_docks',
     },
+    {
+      name: 'full service live kitchen exact id',
+      description: 'New 6,500 SF full service restaurant with live kitchen in Nashville, TN',
+      parsedBuildingType: 'restaurant',
+      parsedSubtype: 'full_service',
+      expectedFeatureId: 'live_kitchen',
+    },
+    {
+      name: 'fine dining dry aging room exact id',
+      description: 'New 6,500 SF fine dining restaurant with dry aging room in Nashville, TN',
+      parsedBuildingType: 'restaurant',
+      parsedSubtype: 'fine_dining',
+      expectedFeatureId: 'dry_aging_room',
+    },
+    {
+      name: 'fine dining pastry kitchen exact id',
+      description: 'New 6,500 SF fine dining restaurant with pastry kitchen in Nashville, TN',
+      parsedBuildingType: 'restaurant',
+      parsedSubtype: 'fine_dining',
+      expectedFeatureId: 'pastry_kitchen',
+    },
   ])(
-    'keeps first-wave count-based exact ids through filtering for $name',
+    'keeps first-wave migrated exact ids through filtering for $name',
     ({
       description,
       parsedBuildingType,
