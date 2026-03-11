@@ -17,7 +17,7 @@ import re
 from collections import defaultdict
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple, Any, Callable, Literal
+from typing import Dict, List, Optional, Tuple, Any, Callable, Literal, TypedDict, Union
 from app.config.regional_multipliers import resolve_location_context
 
 # ============================================================================
@@ -54,6 +54,40 @@ class OwnershipType(Enum):
     NON_PROFIT = "non_profit"
     GOVERNMENT = "government"
     PPP = "public_private_partnership"
+
+
+class SpecialFeaturePricingBasis(str, Enum):
+    """Supported pricing bases for special-feature realism."""
+    WHOLE_PROJECT_SF = "WHOLE_PROJECT_SF"
+    COUNT_BASED = "COUNT_BASED"
+    AREA_SHARE_GSF = "AREA_SHARE_GSF"
+    FIXED_LUMP_SUM = "FIXED_LUMP_SUM"
+    TIERED_INTENSITY = "TIERED_INTENSITY"
+
+
+SpecialFeaturePricingBasisLiteral = Literal[
+    "WHOLE_PROJECT_SF",
+    "COUNT_BASED",
+    "AREA_SHARE_GSF",
+    "FIXED_LUMP_SUM",
+    "TIERED_INTENSITY",
+]
+SpecialFeaturePricingBasisConfig = Union[
+    SpecialFeaturePricingBasis,
+    SpecialFeaturePricingBasisLiteral,
+]
+
+
+class SpecialFeaturePricingRule(TypedDict, total=False):
+    """Structured rule shape for future multi-basis feature pricing."""
+    basis: SpecialFeaturePricingBasisConfig
+    value: float
+    count: float
+    area_share_of_gsf: float
+    size_band: str
+
+
+SpecialFeaturePricingConfigValue = Union[float, SpecialFeaturePricingRule]
 
 # ============================================================================
 # DATA CLASSES
@@ -135,7 +169,7 @@ class BuildingConfig:
     financing_presentation_family: Optional[str] = None
     
     # Special features that add cost
-    special_features: Optional[Dict[str, float]] = None
+    special_features: Optional[Dict[str, SpecialFeaturePricingConfigValue]] = None
     special_feature_pricing_statuses: Optional[Dict[str, Literal["included_in_baseline", "incremental"]]] = None
     ti_allowance_per_sf: Optional[float] = None
     soft_costs_pct_of_hard: Optional[float] = None
@@ -1084,7 +1118,13 @@ def get_special_feature_cost(building_type: BuildingType, subtype: str, feature:
     """Get additional cost for special features"""
     config = get_building_config(building_type, subtype)
     if config and config.special_features:
-        return config.special_features.get(feature, 0.0)
+        raw_value = config.special_features.get(feature, 0.0)
+        if isinstance(raw_value, (int, float)):
+            return float(raw_value)
+        if isinstance(raw_value, dict):
+            structured_value = raw_value.get("value", 0.0)
+            if isinstance(structured_value, (int, float)):
+                return float(structured_value)
     return 0.0
 
 def get_financing_terms(building_type: BuildingType, subtype: str, 

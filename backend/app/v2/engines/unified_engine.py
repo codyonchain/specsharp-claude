@@ -29,7 +29,11 @@ from app.v2.config.construction_schedule import (
 from app.v2.config.type_profiles import scope_items
 from app.v2.services.special_feature_pricing import (
     INCLUDED_IN_BASELINE,
+    apply_special_feature_pricing_rule,
     resolve_special_feature_pricing,
+    resolve_normalized_special_feature_pricing_rules,
+    serialize_applied_special_feature_pricing,
+    serialize_special_feature_pricing_rule_preview,
 )
 from app.services.nlp_service import NLPService
 # from app.v2.services.financial_analyzer import FinancialAnalyzer  # TODO: Implement this
@@ -1202,48 +1206,65 @@ class UnifiedEngine:
             selected_feature_ids=available_feature_ids,
         )
         if available_special_feature_resolution.selected_feature_ids:
-            for feature_id in available_special_feature_resolution.selected_feature_ids:
-                configured_cost_per_sf = float(building_config.special_features[feature_id])
-                pricing_status = available_special_feature_resolution.pricing_status_by_feature_id[feature_id]
-                available_special_feature_pricing.append({
-                    'id': feature_id,
-                    'pricing_status': pricing_status,
-                    'configured_cost_per_sf': configured_cost_per_sf,
-                    'label': _humanize_special_feature_label(feature_id),
-                })
+            available_special_feature_rules = resolve_normalized_special_feature_pricing_rules(
+                building_config=building_config,
+                selected_feature_ids=available_special_feature_resolution.selected_feature_ids,
+            )
+            for normalized_rule in available_special_feature_rules:
+                pricing_status = available_special_feature_resolution.pricing_status_by_feature_id[
+                    normalized_rule.feature_id
+                ]
+                preview_row = serialize_special_feature_pricing_rule_preview(
+                    normalized_rule,
+                    pricing_status=pricing_status,
+                )
+                preview_row['label'] = _humanize_special_feature_label(normalized_rule.feature_id)
+                available_special_feature_pricing.append(preview_row)
 
         special_feature_resolution = resolve_special_feature_pricing(
             building_config=building_config,
             selected_feature_ids=resolved_special_feature_ids,
         )
         if special_feature_resolution.selected_feature_ids:
-            for feature_id in special_feature_resolution.selected_feature_ids:
-                configured_cost_per_sf = float(building_config.special_features[feature_id])
-                pricing_status = special_feature_resolution.pricing_status_by_feature_id[feature_id]
-                applied_cost_per_sf = (
-                    0.0 if pricing_status == INCLUDED_IN_BASELINE else configured_cost_per_sf
+            normalized_special_feature_rules = resolve_normalized_special_feature_pricing_rules(
+                building_config=building_config,
+                selected_feature_ids=special_feature_resolution.selected_feature_ids,
+            )
+            for normalized_rule in normalized_special_feature_rules:
+                pricing_status = special_feature_resolution.pricing_status_by_feature_id[
+                    normalized_rule.feature_id
+                ]
+                applied_pricing = apply_special_feature_pricing_rule(
+                    rule=normalized_rule,
+                    square_footage=square_footage,
+                    pricing_status=pricing_status,
                 )
-                feature_cost = applied_cost_per_sf * square_footage
-                special_features_breakdown.append({
-                    'id': feature_id,
-                    'pricing_status': pricing_status,
-                    'cost_per_sf': applied_cost_per_sf,
-                    'configured_cost_per_sf': configured_cost_per_sf,
-                    'total_cost': feature_cost,
-                    'label': _humanize_special_feature_label(feature_id),
-                })
+                breakdown_row = serialize_applied_special_feature_pricing(applied_pricing)
+                breakdown_row['label'] = _humanize_special_feature_label(normalized_rule.feature_id)
+                special_features_breakdown.append(breakdown_row)
+
+                trace_payload = {
+                    'feature': normalized_rule.feature_id,
+                    'pricing_basis': normalized_rule.basis.value,
+                    'configured_value': normalized_rule.configured_value,
+                    'applied_quantity': applied_pricing.applied_quantity,
+                    'assumption_source': normalized_rule.assumption_source,
+                }
+                configured_cost_per_sf = breakdown_row.get('configured_cost_per_sf')
+                if configured_cost_per_sf is not None:
+                    trace_payload['configured_cost_per_sf'] = configured_cost_per_sf
                 if pricing_status == INCLUDED_IN_BASELINE:
-                    self._log_trace("special_feature_included_in_baseline", {
-                        'feature': feature_id,
-                        'configured_cost_per_sf': configured_cost_per_sf,
-                    })
+                    self._log_trace("special_feature_included_in_baseline", trace_payload)
                 else:
-                    self._log_trace("special_feature_applied", {
-                        'feature': feature_id,
-                        'cost_per_sf': applied_cost_per_sf,
-                        'configured_cost_per_sf': configured_cost_per_sf,
-                        'total_cost': feature_cost,
-                    })
+                    applied_trace_payload = {
+                        **trace_payload,
+                        'applied_value': applied_pricing.applied_value,
+                        'total_cost': applied_pricing.total_cost,
+                    }
+                    applied_cost_per_sf = breakdown_row.get('cost_per_sf')
+                    if applied_cost_per_sf is not None:
+                        applied_trace_payload['cost_per_sf'] = applied_cost_per_sf
+                    self._log_trace("special_feature_applied", applied_trace_payload)
             special_features_cost = sum(
                 float(item.get('total_cost', 0.0) or 0.0)
                 for item in special_features_breakdown
