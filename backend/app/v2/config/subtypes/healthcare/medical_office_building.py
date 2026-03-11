@@ -85,6 +85,16 @@ CONFIG = (
             "mob_pharmacy_shell": 15,
             "mob_covered_dropoff": 15,
         },
+        special_feature_pricing_statuses={
+            "tenant_improvements": "incremental",
+            "ambulatory_buildout": "incremental",
+            "ambulatory_imaging": "incremental",
+            "mob_imaging_ready_shell": "included_in_baseline",
+            "mob_enhanced_mep": "incremental",
+            "mob_procedure_suite": "incremental",
+            "mob_pharmacy_shell": "incremental",
+            "mob_covered_dropoff": "incremental",
+        },
         financial_metrics={
             "primary_unit": "tenant suites",
             "units_per_sf": 1.0 / 2500.0,

@@ -85,6 +85,13 @@ CONFIG = (
             "water_slides": 45,
             "therapy_pool": 35,
         },
+        special_feature_pricing_statuses={
+            "competition_pool": "included_in_baseline",
+            "diving_well": "incremental",
+            "lazy_river": "incremental",
+            "water_slides": "incremental",
+            "therapy_pool": "incremental",
+        },
         base_revenue_per_sf_annual=45,
         occupancy_rate_base=0.65,
         occupancy_rate_premium=0.75,

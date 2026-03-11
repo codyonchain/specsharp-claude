@@ -72,6 +72,12 @@ CONFIG = (
             "ev_charging": 10,
             "security_system": 8,
         },
+        special_feature_pricing_statuses={
+            "covered_parking": "incremental",
+            "valet_booth": "incremental",
+            "ev_charging": "incremental",
+            "security_system": "incremental",
+        },
         base_revenue_per_sf_annual=30,
         base_revenue_per_space_monthly=100,
         spaces_per_sf=0.003,

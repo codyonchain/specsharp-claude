@@ -76,6 +76,11 @@ CONFIG = (
             "business_center": 20,
             "conference_facility": 30,
         },
+        special_feature_pricing_statuses={
+            "amenity_deck": "included_in_baseline",
+            "business_center": "incremental",
+            "conference_facility": "incremental",
+        },
         base_revenue_per_sf_annual=35,
         occupancy_rate_base=0.90,
         occupancy_rate_premium=0.93,

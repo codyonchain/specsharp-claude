@@ -76,6 +76,11 @@ CONFIG = (
             "parking_podium": 40,
             "retail_plaza": 25,
         },
+        special_feature_pricing_statuses={
+            "rooftop_deck": "included_in_baseline",
+            "parking_podium": "incremental",
+            "retail_plaza": "included_in_baseline",
+        },
         base_revenue_per_sf_annual=35,
         occupancy_rate_base=0.90,
         occupancy_rate_premium=0.93,

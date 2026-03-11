@@ -75,6 +75,12 @@ CONFIG = (
             "high_density_cctv": 10,
             "rv_power_pedestals": 9,
         },
+        special_feature_pricing_statuses={
+            "climate_control_zones": "included_in_baseline",
+            "biometric_access_control": "incremental",
+            "high_density_cctv": "incremental",
+            "rv_power_pedestals": "incremental",
+        },
         base_revenue_per_sf_annual=18,
         occupancy_rate_base=0.90,
         occupancy_rate_premium=0.95,

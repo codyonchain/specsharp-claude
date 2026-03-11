@@ -77,6 +77,12 @@ CONFIG = (
             "parking_structure": 45,
             "transit_connection": 30,
         },
+        special_feature_pricing_statuses={
+            "public_plaza": "included_in_baseline",
+            "green_roof": "incremental",
+            "parking_structure": "included_in_baseline",
+            "transit_connection": "incremental",
+        },
         base_revenue_per_sf_annual=35,
         occupancy_rate_base=0.90,
         occupancy_rate_premium=0.93,
