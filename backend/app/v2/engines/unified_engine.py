@@ -1166,6 +1166,7 @@ class UnifiedEngine:
         special_features_cost = 0
         special_features_breakdown: List[Dict[str, Any]] = []
         resolved_special_feature_ids: List[str] = []
+        available_special_feature_pricing: List[Dict[str, Any]] = []
         if special_features and building_config.special_features:
             healthcare_applied_feature_ids: set = set()
             available_feature_keys = list(building_config.special_features.keys())
@@ -1194,6 +1195,22 @@ class UnifiedEngine:
 
                 if canonical_feature_key in building_config.special_features:
                     resolved_special_feature_ids.append(canonical_feature_key)
+
+        available_feature_ids = list(building_config.special_features.keys()) if building_config.special_features else []
+        available_special_feature_resolution = resolve_special_feature_pricing(
+            building_config=building_config,
+            selected_feature_ids=available_feature_ids,
+        )
+        if available_special_feature_resolution.selected_feature_ids:
+            for feature_id in available_special_feature_resolution.selected_feature_ids:
+                configured_cost_per_sf = float(building_config.special_features[feature_id])
+                pricing_status = available_special_feature_resolution.pricing_status_by_feature_id[feature_id]
+                available_special_feature_pricing.append({
+                    'id': feature_id,
+                    'pricing_status': pricing_status,
+                    'configured_cost_per_sf': configured_cost_per_sf,
+                    'label': _humanize_special_feature_label(feature_id),
+                })
 
         special_feature_resolution = resolve_special_feature_pricing(
             building_config=building_config,
@@ -1521,6 +1538,7 @@ class UnifiedEngine:
                 'finish_level': normalized_finish_level or 'standard',
                 'finish_level_source': finish_source,
                 'available_special_features': list(building_config.special_features.keys()) if building_config.special_features else [],
+                'available_special_feature_pricing': available_special_feature_pricing,
                 'mixed_use_split': mixed_use_split_contract,
             },
             'profile': {

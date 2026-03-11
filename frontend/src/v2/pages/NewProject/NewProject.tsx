@@ -38,6 +38,11 @@ import {
   type MixedUseComponent,
   type MixedUseSplitContract,
 } from '../../utils/buildingTypeDetection';
+import {
+  getFeatureDisplayPricingPreview,
+  indexAvailableSpecialFeaturePricing,
+  type FeatureDisplayPricing,
+} from './featurePricingPreview';
 
 // Lucide icons
 import { 
@@ -1222,23 +1227,18 @@ export const NewProject: React.FC = () => {
     return `${typeDisplay} - ${subtypeDisplay}`;
   };
 
-  type FeatureDisplayPricing = {
-    amountLabel: string;
-    detailLabel?: string;
-    totalCost?: number;
-    isEstimate: boolean;
-    isPlaceholder: boolean;
-  };
-
   const usesSubtypeCostPerSF = ['healthcare', 'multifamily', 'restaurant', 'specialty', 'office', 'retail', 'educational', 'civic', 'recreation', 'mixed_use'].includes(
     parsedInput?.building_type ?? ''
   );
-  const isRestaurantProject = parsedInput?.building_type === 'restaurant';
   const isOfficeProject = parsedInput?.building_type === 'office';
   const isEducationalProject = parsedInput?.building_type === 'educational';
   const isCivicProject = parsedInput?.building_type === 'civic';
   const isRecreationProject = parsedInput?.building_type === 'recreation';
   const hasFeatureSquareFootage = typeof squareFootageSummary === 'number' && squareFootageSummary > 0;
+  const availableSpecialFeaturePricingById = useMemo(
+    () => indexAvailableSpecialFeaturePricing(result?.calculations?.project_info?.available_special_feature_pricing),
+    [result?.calculations?.project_info?.available_special_feature_pricing]
+  );
 
   const resolveFeatureCostPerSF = (feature: SpecialFeatureOption): number | undefined => {
     const catalogCost = parsedInput?.building_type
@@ -1275,42 +1275,15 @@ export const NewProject: React.FC = () => {
   };
 
   const getFeatureDisplayPricing = (feature: SpecialFeatureOption): FeatureDisplayPricing => {
-    const costPerSF = resolveFeatureCostPerSF(feature);
-    if (usesSubtypeCostPerSF && typeof costPerSF === 'number') {
-      if (hasFeatureSquareFootage && squareFootageSummary) {
-        const totalCost = costPerSF * squareFootageSummary;
-        return {
-          amountLabel: `+${formatCurrency(totalCost)}`,
-          detailLabel: `${formatCurrency(costPerSF)}/SF × ${formatNumber(squareFootageSummary)} SF`,
-          totalCost,
-          isEstimate: false,
-          isPlaceholder: false,
-        };
-      }
-      return {
-        amountLabel: `+${formatCurrency(costPerSF)}/SF`,
-        detailLabel: 'Estimate until project SF is provided',
-        isEstimate: true,
-        isPlaceholder: false,
-      };
-    }
-
-    if (typeof feature.cost === 'number' && Number.isFinite(feature.cost)) {
-      return {
-        amountLabel: `+${formatCurrency(feature.cost)}`,
-        detailLabel: usesSubtypeCostPerSF ? 'Estimate placeholder' : 'Static placeholder value',
-        totalCost: feature.cost,
-        isEstimate: true,
-        isPlaceholder: true,
-      };
-    }
-
-    return {
-      amountLabel: '+—',
-      detailLabel: 'Pricing unavailable',
-      isEstimate: true,
-      isPlaceholder: true,
-    };
+    return getFeatureDisplayPricingPreview({
+      backendFeaturePricing: availableSpecialFeaturePricingById[feature.id],
+      fallbackCostPerSF: resolveFeatureCostPerSF(feature),
+      fallbackStaticCost:
+        typeof feature.cost === 'number' && Number.isFinite(feature.cost) ? feature.cost : undefined,
+      usesSubtypeCostPerSF,
+      hasFeatureSquareFootage,
+      squareFootageSummary,
+    });
   };
 
   const selectedFeatureDetails = applicableSpecialFeatures
@@ -1323,6 +1296,10 @@ export const NewProject: React.FC = () => {
   const selectedFeatureHasUnknownTotal = selectedFeatureDetails.some(
     (item) => item.pricing.totalCost === undefined
   );
+  const selectedIncludedCount = selectedFeatureDetails.filter(
+    (item) => item.pricing.pricingStatus === 'included_in_baseline'
+  ).length;
+  const selectedIncrementalCount = selectedFeatureDetails.length - selectedIncludedCount;
   const selectedFeatureHasEstimate = selectedFeatureDetails.some(
     (item) => item.pricing.isEstimate
   );
@@ -1884,20 +1861,16 @@ export const NewProject: React.FC = () => {
                   <p className="text-sm font-medium text-gray-700 mb-3">Special Features</p>
                   <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
                     <p className="text-[11px] text-blue-700">
-                      Feature costs are applied as $/SF × project SF in final estimate.
+                      Features may be included in baseline or priced as incremental premiums depending on subtype.
                     </p>
                     {usesSubtypeCostPerSF && !hasFeatureSquareFootage && (
                       <p className="mt-1 text-[11px] text-blue-700">
-                        {isRestaurantProject
-                          ? 'Restaurant values below are estimates until square footage is provided.'
-                          : parsedInput?.building_type === 'healthcare'
-                            ? 'Healthcare values below are estimates until square footage is provided.'
-                            : 'Subtype values below are estimates until square footage is provided.'}
+                        Incremental premium values below are estimates until square footage is provided.
                       </p>
                     )}
                     {hasStaticFeaturePlaceholders && (
                       <p className="mt-1 text-[11px] text-blue-700">
-                        Some card values are static placeholders and may differ from backend-applied totals.
+                        Some displayed premium values are static placeholders and may differ from backend-applied totals.
                       </p>
                     )}
                   </div>
@@ -1905,6 +1878,7 @@ export const NewProject: React.FC = () => {
                     {parsedInput && applicableSpecialFeatures.length > 0 ? (
                       applicableSpecialFeatures.map(feature => {
                         const pricing = getFeatureDisplayPricing(feature);
+                        const showsIncludedInBaseline = pricing.pricingStatus === 'included_in_baseline';
                         return (
                           <label
                             key={feature.id}
@@ -1925,11 +1899,16 @@ export const NewProject: React.FC = () => {
                             <div className="flex-1">
                               <div className="flex items-center justify-between">
                                 <span className="text-sm font-medium text-gray-900">{feature.name}</span>
-                                <span className="text-xs text-green-600 font-semibold">
+                                <span className={`text-xs font-semibold ${
+                                  showsIncludedInBaseline ? 'text-sky-700' : 'text-green-600'
+                                }`}>
                                   {pricing.amountLabel}
                                 </span>
                               </div>
                               <span className="text-xs text-gray-500">{feature.description}</span>
+                              {pricing.statusLabel && (
+                                <p className="mt-1 text-[11px] font-medium text-sky-700">{pricing.statusLabel}</p>
+                              )}
                               {pricing.detailLabel && (
                                 <p className="mt-1 text-[11px] text-gray-500">{pricing.detailLabel}</p>
                               )}
@@ -1950,12 +1929,19 @@ export const NewProject: React.FC = () => {
                       <p className="text-sm text-gray-700">No special features selected.</p>
                     ) : selectedFeatureHasUnknownTotal ? (
                       <p className="text-sm text-gray-700">
-                        {selectedFeatureDetails.length} selected. Impact shown as estimate.
+                        {selectedFeatureDetails.length} selected. Incremental impact shown as estimate.
                       </p>
+                    ) : selectedIncrementalCount === 0 ? (
+                      <p className="text-sm font-semibold text-gray-900">No incremental premium</p>
                     ) : (
                       <p className="text-sm font-semibold text-gray-900">
                         +{formatCurrency(selectedFeatureKnownTotal)}
                         {selectedFeatureHasEstimate && <span className="ml-1 text-gray-600">(estimate)</span>}
+                      </p>
+                    )}
+                    {selectedIncludedCount > 0 && (
+                      <p className="text-[11px] text-gray-500">
+                        {selectedIncludedCount} selected {selectedIncludedCount === 1 ? 'feature is' : 'features are'} included in baseline.
                       </p>
                     )}
                     {!selectedFeatureHasUnknownTotal && hasFeatureSquareFootage && selectedFeatureKnownTotal > 0 && (

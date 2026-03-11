@@ -60,6 +60,32 @@ def test_special_features_breakdown_present():
     assert {"covered_walkway", "drive_thru"}.issubset(feature_ids)
 
 
+def test_project_info_exposes_available_special_feature_pricing_for_current_subtype():
+    result = _calculate_project(
+        building_type=BuildingType.HOSPITALITY,
+        subtype="full_service_hotel",
+        square_footage=85000,
+        location="Nashville, TN",
+        finish_level="standard",
+        special_features=["ballroom", "spa"],
+    )
+
+    project_info = result.get("project_info") or {}
+    available_pricing = project_info.get("available_special_feature_pricing") or []
+    pricing_by_id = {
+        row.get("id"): row
+        for row in available_pricing
+        if isinstance(row, dict) and row.get("id")
+    }
+
+    assert "ballroom" in pricing_by_id
+    assert "spa" in pricing_by_id
+    assert pricing_by_id["ballroom"].get("pricing_status") == "included_in_baseline"
+    assert pricing_by_id["spa"].get("pricing_status") == "incremental"
+    assert pricing_by_id["ballroom"].get("configured_cost_per_sf") == 50
+    assert pricing_by_id["spa"].get("configured_cost_per_sf") == 60
+
+
 def test_floor_count_reflects_request():
     result = _calculate_project(
         building_type=BuildingType.OFFICE,

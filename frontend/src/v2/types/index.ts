@@ -153,6 +153,13 @@ export interface ConstructionCosts {
   }>;
 }
 
+export interface AvailableSpecialFeaturePricing {
+  id: string;
+  label: string;
+  configured_cost_per_sf: number;
+  pricing_status: 'included_in_baseline' | 'incremental';
+}
+
 export interface RegionalContext {
   city?: string | null;
   state?: string | null;
@@ -232,6 +239,10 @@ export interface CalculationResult {
     location: string;
     floors: number;
     typical_floors: number;
+    finish_level?: string;
+    finish_level_source?: string;
+    available_special_features?: string[];
+    available_special_feature_pricing?: AvailableSpecialFeaturePricing[];
   };
   regional?: RegionalContext;
   regional_applied?: boolean;
