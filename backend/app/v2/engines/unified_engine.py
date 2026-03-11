@@ -1267,6 +1267,9 @@ class UnifiedEngine:
                 configured_cost_per_count = breakdown_row.get('configured_cost_per_count')
                 if configured_cost_per_count is not None:
                     trace_payload['configured_cost_per_count'] = configured_cost_per_count
+                configured_area_share_of_gsf = breakdown_row.get('configured_area_share_of_gsf')
+                if configured_area_share_of_gsf is not None:
+                    trace_payload['configured_area_share_of_gsf'] = configured_area_share_of_gsf
                 unit_label = breakdown_row.get('unit_label')
                 if unit_label is not None:
                     trace_payload['unit_label'] = unit_label

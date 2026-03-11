@@ -69,7 +69,11 @@ CONFIG = (
         regional_multipliers={},
         special_features={
             "automated_sorting": 25,
-            "refrigerated_area": 35,
+            "refrigerated_area": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.12,
+            },
             "loading_docks": 15,
             "extra_loading_docks": {
                 "basis": "COUNT_BASED",
@@ -90,8 +94,16 @@ CONFIG = (
                 ],
                 "unit_label": "dock",
             },
-            "office_buildout": 18,
-            "cold_storage": 40,
+            "office_buildout": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 18,
+                "area_share_of_gsf": 0.05,
+            },
+            "cold_storage": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.18,
+            },
         },
         special_feature_pricing_statuses={
             "automated_sorting": "included_in_baseline",

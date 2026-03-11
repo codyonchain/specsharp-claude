@@ -84,7 +84,7 @@ def test_legacy_float_engine_breakdown_uses_normalized_whole_project_sf_metadata
         square_footage=square_footage,
         location="Nashville, TN",
         project_class=ProjectClass.GROUND_UP,
-        special_features=["pool"],
+        special_features=["parking_garage"],
     )
 
     construction_costs = result["construction_costs"]
@@ -94,22 +94,171 @@ def test_legacy_float_engine_breakdown_uses_normalized_whole_project_sf_metadata
         for row in breakdown
         if isinstance(row, dict) and row.get("id")
     }
-    pool_row = breakdown_by_id["pool"]
+    parking_row = breakdown_by_id["parking_garage"]
 
-    assert construction_costs["special_features_total"] == pytest.approx(18.0 * square_footage)
-    assert pool_row["pricing_basis"] == SpecialFeaturePricingBasis.WHOLE_PROJECT_SF.value
-    assert pool_row["configured_value"] == pytest.approx(18.0)
-    assert pool_row["applied_value"] == pytest.approx(18.0)
-    assert pool_row["applied_quantity"] == pytest.approx(square_footage)
-    assert pool_row["configured_cost_per_sf"] == pytest.approx(18.0)
-    assert pool_row["cost_per_sf"] == pytest.approx(18.0)
-    assert pool_row["assumption_source"] == LEGACY_FLOAT_NORMALIZATION_SOURCE
-    assert pool_row["total_cost"] == pytest.approx(18.0 * square_footage)
+    assert construction_costs["special_features_total"] == pytest.approx(32.0 * square_footage)
+    assert parking_row["pricing_basis"] == SpecialFeaturePricingBasis.WHOLE_PROJECT_SF.value
+    assert parking_row["configured_value"] == pytest.approx(32.0)
+    assert parking_row["applied_value"] == pytest.approx(32.0)
+    assert parking_row["applied_quantity"] == pytest.approx(square_footage)
+    assert parking_row["configured_cost_per_sf"] == pytest.approx(32.0)
+    assert parking_row["cost_per_sf"] == pytest.approx(32.0)
+    assert parking_row["assumption_source"] == LEGACY_FLOAT_NORMALIZATION_SOURCE
+    assert parking_row["total_cost"] == pytest.approx(32.0 * square_footage)
     assert sum(
         float(item.get("total_cost", 0.0) or 0.0)
         for item in breakdown
         if isinstance(item, dict)
     ) == pytest.approx(construction_costs["special_features_total"])
+
+
+@pytest.mark.parametrize(
+    ("pricing_status", "expected_rate", "expected_total_cost"),
+    (
+        (INCREMENTAL, 60.0, 60.0 * (0.04 * 85_000.0)),
+        (INCLUDED_IN_BASELINE, 0.0, 0.0),
+    ),
+)
+def test_area_share_rule_application_preserves_status_zeroing(
+    pricing_status,
+    expected_rate,
+    expected_total_cost,
+):
+    rule = normalize_special_feature_pricing_rule(
+        "spa",
+        {
+            "basis": SpecialFeaturePricingBasis.AREA_SHARE_GSF.value,
+            "value": 60,
+            "area_share_of_gsf": 0.04,
+        },
+    )
+
+    applied = apply_special_feature_pricing_rule(
+        rule=rule,
+        square_footage=85_000,
+        pricing_status=pricing_status,
+    )
+
+    assert applied.pricing_basis == SpecialFeaturePricingBasis.AREA_SHARE_GSF
+    assert applied.configured_value == 60.0
+    assert applied.applied_value == pytest.approx(expected_rate)
+    assert applied.applied_quantity == pytest.approx(3_400.0)
+    assert applied.configured_area_share_of_gsf == pytest.approx(0.04)
+    assert applied.quantity_source == "area_share_of_gsf"
+    assert applied.total_cost == pytest.approx(expected_total_cost)
+
+
+def test_area_share_engine_breakdown_uses_structured_metadata_and_reconciles():
+    square_footage = 85_000
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.HOSPITALITY,
+        subtype="full_service_hotel",
+        square_footage=square_footage,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["ballroom", "spa"],
+    )
+
+    construction_costs = result["construction_costs"]
+    breakdown_by_id = _special_feature_breakdown_by_id(result)
+    ballroom_row = breakdown_by_id["ballroom"]
+    spa_row = breakdown_by_id["spa"]
+
+    assert construction_costs["special_features_total"] == pytest.approx(204000.0)
+
+    assert ballroom_row["pricing_basis"] == SpecialFeaturePricingBasis.AREA_SHARE_GSF.value
+    assert ballroom_row["pricing_status"] == INCLUDED_IN_BASELINE
+    assert ballroom_row["configured_value"] == pytest.approx(50.0)
+    assert ballroom_row["configured_area_share_of_gsf"] == pytest.approx(0.08)
+    assert ballroom_row["applied_value"] == 0.0
+    assert ballroom_row["applied_quantity"] == pytest.approx(6800.0)
+    assert ballroom_row["quantity_source"] == "area_share_of_gsf"
+    assert ballroom_row["total_cost"] == 0.0
+
+    assert spa_row["pricing_basis"] == SpecialFeaturePricingBasis.AREA_SHARE_GSF.value
+    assert spa_row["pricing_status"] == INCREMENTAL
+    assert spa_row["configured_value"] == pytest.approx(60.0)
+    assert spa_row["configured_area_share_of_gsf"] == pytest.approx(0.04)
+    assert spa_row["applied_value"] == pytest.approx(60.0)
+    assert spa_row["applied_quantity"] == pytest.approx(3400.0)
+    assert spa_row["quantity_source"] == "area_share_of_gsf"
+    assert spa_row["total_cost"] == pytest.approx(204000.0)
+
+    available_pricing_by_id = _available_special_feature_pricing_by_id(result)
+    assert available_pricing_by_id["ballroom"]["pricing_basis"] == (
+        SpecialFeaturePricingBasis.AREA_SHARE_GSF.value
+    )
+    assert available_pricing_by_id["ballroom"]["configured_area_share_of_gsf"] == pytest.approx(0.08)
+    assert available_pricing_by_id["spa"]["pricing_basis"] == (
+        SpecialFeaturePricingBasis.AREA_SHARE_GSF.value
+    )
+    assert available_pricing_by_id["spa"]["configured_area_share_of_gsf"] == pytest.approx(0.04)
+
+
+def test_area_share_rules_use_subtype_specific_shares_for_multifamily():
+    square_footage = 100_000
+    market_rate = unified_engine.calculate_project(
+        building_type=BuildingType.MULTIFAMILY,
+        subtype="market_rate_apartments",
+        square_footage=square_footage,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["rooftop_amenity"],
+    )
+    luxury = unified_engine.calculate_project(
+        building_type=BuildingType.MULTIFAMILY,
+        subtype="luxury_apartments",
+        square_footage=square_footage,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["rooftop_amenity"],
+    )
+
+    market_row = _special_feature_breakdown_by_id(market_rate)["rooftop_amenity"]
+    luxury_row = _special_feature_breakdown_by_id(luxury)["rooftop_amenity"]
+
+    assert market_row["configured_area_share_of_gsf"] == pytest.approx(0.03)
+    assert market_row["applied_quantity"] == pytest.approx(3_000.0)
+    assert market_row["total_cost"] == pytest.approx(72_000.0)
+
+    assert luxury_row["configured_area_share_of_gsf"] == pytest.approx(0.05)
+    assert luxury_row["applied_quantity"] == pytest.approx(5_000.0)
+    assert luxury_row["total_cost"] == pytest.approx(175_000.0)
+
+    assert market_rate["construction_costs"]["special_features_total"] == pytest.approx(72_000.0)
+    assert luxury["construction_costs"]["special_features_total"] == pytest.approx(175_000.0)
+
+
+def test_area_share_industrial_zones_reconcile_with_included_and_incremental_statuses():
+    square_footage = 220_000
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.INDUSTRIAL,
+        subtype="distribution_center",
+        square_footage=square_footage,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["office_buildout", "refrigerated_area"],
+    )
+
+    breakdown_by_id = _special_feature_breakdown_by_id(result)
+    office_row = breakdown_by_id["office_buildout"]
+    refrigerated_row = breakdown_by_id["refrigerated_area"]
+
+    assert result["construction_costs"]["special_features_total"] == pytest.approx(924_000.0)
+
+    assert office_row["pricing_basis"] == SpecialFeaturePricingBasis.AREA_SHARE_GSF.value
+    assert office_row["pricing_status"] == INCLUDED_IN_BASELINE
+    assert office_row["configured_area_share_of_gsf"] == pytest.approx(0.05)
+    assert office_row["applied_quantity"] == pytest.approx(11_000.0)
+    assert office_row["applied_value"] == 0.0
+    assert office_row["total_cost"] == 0.0
+
+    assert refrigerated_row["pricing_basis"] == SpecialFeaturePricingBasis.AREA_SHARE_GSF.value
+    assert refrigerated_row["pricing_status"] == INCREMENTAL
+    assert refrigerated_row["configured_area_share_of_gsf"] == pytest.approx(0.12)
+    assert refrigerated_row["applied_quantity"] == pytest.approx(26_400.0)
+    assert refrigerated_row["applied_value"] == pytest.approx(35.0)
+    assert refrigerated_row["total_cost"] == pytest.approx(924_000.0)
 
 
 def test_structured_whole_project_sf_rules_flow_through_engine_without_repricing(monkeypatch):

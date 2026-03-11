@@ -41,6 +41,20 @@ RESTAURANT_SPECIAL_FEATURE_CASES = {
 }
 
 
+def _expected_special_feature_total(configured_feature, square_footage: float, pricing_status: str) -> float:
+    if pricing_status == "included_in_baseline":
+        return 0.0
+    if isinstance(configured_feature, dict):
+        if configured_feature.get("basis") == "AREA_SHARE_GSF":
+            return (
+                float(configured_feature["value"])
+                * float(configured_feature["area_share_of_gsf"])
+                * square_footage
+            )
+        raise AssertionError(f"Unsupported structured restaurant feature config: {configured_feature}")
+    return float(configured_feature) * square_footage
+
+
 def _profile_item_keys(profile_id: str):
     profile = restaurant_scope_profiles.SCOPE_ITEM_PROFILES[profile_id]
     keys = set()
@@ -683,12 +697,12 @@ def test_restaurant_special_features_math_and_breakdown_reconcile_for_all_subtyp
         )
 
         config = get_building_config(BuildingType.RESTAURANT, subtype)
-        configured_cost_per_sf = float(config.special_features[feature_key])
+        configured_feature = config.special_features[feature_key]
         expected_status = (config.special_feature_pricing_statuses or {}).get(feature_key, "incremental")
-        expected_delta = (
-            0.0
-            if expected_status == "included_in_baseline"
-            else configured_cost_per_sf * square_footage
+        expected_delta = _expected_special_feature_total(
+            configured_feature,
+            square_footage,
+            expected_status,
         )
 
         base_total = float(baseline["construction_costs"]["special_features_total"])
@@ -706,17 +720,36 @@ def test_restaurant_special_features_math_and_breakdown_reconcile_for_all_subtyp
         assert feature_key in breakdown_map
         feature_entry = breakdown_map[feature_key]
         assert feature_entry.get("pricing_status") == expected_status
-        assert float(feature_entry.get("configured_cost_per_sf", 0.0) or 0.0) == pytest.approx(
-            configured_cost_per_sf,
-            rel=1e-3,
-        )
-        expected_applied_cost_per_sf = (
-            0.0 if expected_status == "included_in_baseline" else configured_cost_per_sf
-        )
-        assert float(feature_entry.get("cost_per_sf", 0.0) or 0.0) == pytest.approx(
-            expected_applied_cost_per_sf,
-            rel=1e-3,
-        )
+        if isinstance(configured_feature, dict):
+            assert feature_entry.get("pricing_basis") == "AREA_SHARE_GSF"
+            assert float(feature_entry.get("configured_value", 0.0) or 0.0) == pytest.approx(
+                float(configured_feature["value"]),
+                rel=1e-3,
+            )
+            assert float(feature_entry.get("configured_area_share_of_gsf", 0.0) or 0.0) == pytest.approx(
+                float(configured_feature["area_share_of_gsf"]),
+                rel=1e-3,
+            )
+        else:
+            assert float(feature_entry.get("configured_cost_per_sf", 0.0) or 0.0) == pytest.approx(
+                float(configured_feature),
+                rel=1e-3,
+            )
+            expected_applied_cost_per_sf = (
+                0.0 if expected_status == "included_in_baseline" else float(configured_feature)
+            )
+            assert float(feature_entry.get("cost_per_sf", 0.0) or 0.0) == pytest.approx(
+                expected_applied_cost_per_sf,
+                rel=1e-3,
+            )
+        if isinstance(configured_feature, dict):
+            expected_applied_value = (
+                0.0 if expected_status == "included_in_baseline" else float(configured_feature["value"])
+            )
+            assert float(feature_entry.get("applied_value", 0.0) or 0.0) == pytest.approx(
+                expected_applied_value,
+                rel=1e-3,
+            )
         assert float(feature_entry.get("total_cost", 0.0) or 0.0) == pytest.approx(expected_delta, rel=1e-3)
         assert sum(
             float(item.get("total_cost", 0.0) or 0.0)
@@ -738,7 +771,14 @@ def test_full_service_restaurant_prices_only_incremental_features_and_preserves_
 
     config = get_building_config(BuildingType.RESTAURANT, "full_service")
     assert config is not None
-    expected_incremental_total = float(config.special_features["wine_cellar"]) * square_footage
+    wine_cellar_rule = config.special_features["wine_cellar"]
+    outdoor_seating_rule = config.special_features["outdoor_seating"]
+    assert isinstance(wine_cellar_rule, dict)
+    assert isinstance(outdoor_seating_rule, (int, float))
+    expected_incremental_total = (
+        float(wine_cellar_rule["value"])
+        * (float(wine_cellar_rule["area_share_of_gsf"]) * square_footage)
+    )
 
     assert float(result["construction_costs"]["special_features_total"]) == pytest.approx(
         expected_incremental_total,
@@ -755,7 +795,7 @@ def test_full_service_restaurant_prices_only_incremental_features_and_preserves_
     included_row = breakdown_by_id["outdoor_seating"]
     assert included_row.get("pricing_status") == "included_in_baseline"
     assert float(included_row.get("configured_cost_per_sf", 0.0) or 0.0) == pytest.approx(
-        float(config.special_features["outdoor_seating"]),
+        float(outdoor_seating_rule),
         rel=1e-3,
     )
     assert float(included_row.get("cost_per_sf", 0.0) or 0.0) == 0.0
@@ -763,12 +803,17 @@ def test_full_service_restaurant_prices_only_incremental_features_and_preserves_
 
     incremental_row = breakdown_by_id["wine_cellar"]
     assert incremental_row.get("pricing_status") == "incremental"
-    assert float(incremental_row.get("configured_cost_per_sf", 0.0) or 0.0) == pytest.approx(
-        float(config.special_features["wine_cellar"]),
+    assert incremental_row.get("pricing_basis") == "AREA_SHARE_GSF"
+    assert float(incremental_row.get("configured_value", 0.0) or 0.0) == pytest.approx(
+        float(wine_cellar_rule["value"]),
         rel=1e-3,
     )
-    assert float(incremental_row.get("cost_per_sf", 0.0) or 0.0) == pytest.approx(
-        float(config.special_features["wine_cellar"]),
+    assert float(incremental_row.get("configured_area_share_of_gsf", 0.0) or 0.0) == pytest.approx(
+        float(wine_cellar_rule["area_share_of_gsf"]),
+        rel=1e-3,
+    )
+    assert float(incremental_row.get("applied_value", 0.0) or 0.0) == pytest.approx(
+        float(wine_cellar_rule["value"]),
         rel=1e-3,
     )
     assert float(incremental_row.get("total_cost", 0.0) or 0.0) == pytest.approx(
@@ -806,7 +851,12 @@ def test_full_service_restaurant_included_feature_does_not_inflate_total_project
 
     config = get_building_config(BuildingType.RESTAURANT, "full_service")
     assert config is not None
-    expected_incremental_total = float(config.special_features["wine_cellar"]) * square_footage
+    wine_cellar_rule = config.special_features["wine_cellar"]
+    assert isinstance(wine_cellar_rule, dict)
+    expected_incremental_total = (
+        float(wine_cellar_rule["value"])
+        * (float(wine_cellar_rule["area_share_of_gsf"]) * square_footage)
+    )
 
     assert float(included_only["construction_costs"]["special_features_total"]) == 0.0
     assert float(included_only["totals"]["total_project_cost"]) == pytest.approx(

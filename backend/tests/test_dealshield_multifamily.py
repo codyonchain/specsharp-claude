@@ -603,6 +603,17 @@ def test_multifamily_decision_insurance_outputs_and_provenance():
 
 
 def test_multifamily_special_feature_increases_total_project_cost_for_each_subtype():
+    def expected_special_feature_total(configured_feature, square_footage: float) -> float:
+        if isinstance(configured_feature, dict):
+            if configured_feature.get("basis") == "AREA_SHARE_GSF":
+                return (
+                    float(configured_feature["value"])
+                    * float(configured_feature["area_share_of_gsf"])
+                    * square_footage
+                )
+            raise AssertionError(f"Unsupported structured multifamily feature config: {configured_feature}")
+        return float(configured_feature) * square_footage
+
     subtype_feature_map = {
         "market_rate_apartments": "parking_garage",
         "luxury_apartments": "parking_garage",
@@ -632,7 +643,7 @@ def test_multifamily_special_feature_increases_total_project_cost_for_each_subty
 
         config = get_building_config(BuildingType.MULTIFAMILY, subtype)
         assert config is not None
-        expected_single_total = float(config.special_features[feature]) * 120_000.0
+        expected_single_total = expected_special_feature_total(config.special_features[feature], 120_000.0)
 
         breakdown = with_feature["construction_costs"].get("special_features_breakdown")
         assert isinstance(breakdown, list)
@@ -671,10 +682,13 @@ def test_multifamily_special_feature_increases_total_project_cost_for_each_subty
             assert selected_feature in multi_breakdown_by_id
             assert abs(
                 float(multi_breakdown_by_id[selected_feature].get("total_cost", 0.0))
-                - float(config.special_features[selected_feature]) * 120_000.0
+                - expected_special_feature_total(config.special_features[selected_feature], 120_000.0)
             ) < 1e-6
 
-        expected_multi_total = sum(float(config.special_features[key]) * 120_000.0 for key in selected_multi)
+        expected_multi_total = sum(
+            expected_special_feature_total(config.special_features[key], 120_000.0)
+            for key in selected_multi
+        )
         assert abs(float(multi_feature["construction_costs"]["special_features_total"]) - expected_multi_total) < 1e-6
         summed_multi_breakdown = sum(
             float(item.get("total_cost", 0.0))

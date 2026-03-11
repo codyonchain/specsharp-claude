@@ -32,6 +32,20 @@ HOSPITALITY_SPECIAL_FEATURE_CASES = {
 }
 
 
+def _expected_special_feature_total(configured_feature, square_footage: float, pricing_status: str) -> float:
+    if pricing_status == "included_in_baseline":
+        return 0.0
+    if isinstance(configured_feature, dict):
+        if configured_feature.get("basis") == "AREA_SHARE_GSF":
+            return (
+                float(configured_feature["value"])
+                * float(configured_feature["area_share_of_gsf"])
+                * square_footage
+            )
+        raise AssertionError(f"Unsupported structured hospitality feature config: {configured_feature}")
+    return float(configured_feature) * square_footage
+
+
 def _profile_item_keys(profile_id: str):
     profile = hospitality_scope_profiles.SCOPE_ITEM_PROFILES[profile_id]
     keys = set()
@@ -456,12 +470,12 @@ def test_hospitality_special_features_math_and_breakdown_reconcile_for_both_subt
         )
 
         config = get_building_config(BuildingType.HOSPITALITY, subtype)
-        configured_cost_per_sf = float(config.special_features[feature_key])
+        configured_feature = config.special_features[feature_key]
         expected_status = (config.special_feature_pricing_statuses or {}).get(feature_key, "incremental")
-        expected_delta = (
-            0.0
-            if expected_status == "included_in_baseline"
-            else configured_cost_per_sf * square_footage
+        expected_delta = _expected_special_feature_total(
+            configured_feature,
+            square_footage,
+            expected_status,
         )
 
         baseline_special_features_total = float(baseline["construction_costs"]["special_features_total"])
@@ -484,17 +498,36 @@ def test_hospitality_special_features_math_and_breakdown_reconcile_for_both_subt
         assert feature_key in breakdown_map
         feature_entry = breakdown_map[feature_key]
         assert feature_entry.get("pricing_status") == expected_status
-        assert float(feature_entry.get("configured_cost_per_sf", 0.0) or 0.0) == pytest.approx(
-            configured_cost_per_sf,
-            rel=1e-3,
-        )
-        expected_applied_cost_per_sf = (
-            0.0 if expected_status == "included_in_baseline" else configured_cost_per_sf
-        )
-        assert float(feature_entry.get("cost_per_sf", 0.0) or 0.0) == pytest.approx(
-            expected_applied_cost_per_sf,
-            rel=1e-3,
-        )
+        if isinstance(configured_feature, dict):
+            assert feature_entry.get("pricing_basis") == "AREA_SHARE_GSF"
+            assert float(feature_entry.get("configured_value", 0.0) or 0.0) == pytest.approx(
+                float(configured_feature["value"]),
+                rel=1e-3,
+            )
+            assert float(feature_entry.get("configured_area_share_of_gsf", 0.0) or 0.0) == pytest.approx(
+                float(configured_feature["area_share_of_gsf"]),
+                rel=1e-3,
+            )
+        else:
+            assert float(feature_entry.get("configured_cost_per_sf", 0.0) or 0.0) == pytest.approx(
+                float(configured_feature),
+                rel=1e-3,
+            )
+            expected_applied_cost_per_sf = (
+                0.0 if expected_status == "included_in_baseline" else float(configured_feature)
+            )
+            assert float(feature_entry.get("cost_per_sf", 0.0) or 0.0) == pytest.approx(
+                expected_applied_cost_per_sf,
+                rel=1e-3,
+            )
+        if isinstance(configured_feature, dict):
+            expected_applied_value = (
+                0.0 if expected_status == "included_in_baseline" else float(configured_feature["value"])
+            )
+            assert float(feature_entry.get("applied_value", 0.0) or 0.0) == pytest.approx(
+                expected_applied_value,
+                rel=1e-3,
+            )
         assert float(feature_entry.get("total_cost", 0.0) or 0.0) == pytest.approx(expected_delta, rel=1e-3)
 
         summed_breakdown_total = sum(
@@ -526,11 +559,18 @@ def test_full_service_hotel_included_features_price_to_zero_and_remain_visible()
         if isinstance(item, dict) and item.get("id")
     }
     for feature_id in ("ballroom", "rooftop_bar"):
+        configured_rule = config.special_features[feature_id]
+        assert isinstance(configured_rule, dict)
         row = breakdown_by_id[feature_id]
         assert row.get("pricing_status") == "included_in_baseline"
-        assert float(row.get("configured_cost_per_sf", 0.0) or 0.0) == pytest.approx(
-            float(config.special_features[feature_id]),
+        assert row.get("pricing_basis") == "AREA_SHARE_GSF"
+        assert float(row.get("configured_value", 0.0) or 0.0) == pytest.approx(
+            float(configured_rule["value"]),
             rel=1e-3,
         )
-        assert float(row.get("cost_per_sf", 0.0) or 0.0) == 0.0
+        assert float(row.get("configured_area_share_of_gsf", 0.0) or 0.0) == pytest.approx(
+            float(configured_rule["area_share_of_gsf"]),
+            rel=1e-3,
+        )
+        assert float(row.get("applied_value", 0.0) or 0.0) == 0.0
         assert float(row.get("total_cost", 0.0) or 0.0) == 0.0

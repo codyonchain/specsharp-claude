@@ -1,6 +1,8 @@
+import pytest
+
 from app.services.nlp_service import nlp_service
 from app.services.dealshield_export import render_dealshield_html
-from app.v2.config.master_config import BuildingType, ProjectClass
+from app.v2.config.master_config import BuildingType, ProjectClass, get_building_config
 from app.v2.config.type_profiles.dealshield_tiles import get_dealshield_profile
 from app.v2.engines.unified_engine import unified_engine
 from app.v2.services.dealshield_service import build_dealshield_view_model
@@ -20,6 +22,12 @@ def _calculate_project(**kwargs):
         special_features=kwargs.get("special_features", []),
         parsed_input_overrides=kwargs.get("parsed_input_overrides", {}),
     )
+
+
+def _area_share_rule(config, feature_id):
+    feature_rule = config.special_features[feature_id]
+    assert isinstance(feature_rule, dict)
+    return feature_rule
 
 
 def test_nlp_parser_extracts_type_subtype_and_floors():
@@ -61,6 +69,8 @@ def test_special_features_breakdown_present():
 
 
 def test_project_info_exposes_available_special_feature_pricing_for_current_subtype():
+    config = get_building_config(BuildingType.HOSPITALITY, "full_service_hotel")
+    assert config is not None
     result = _calculate_project(
         building_type=BuildingType.HOSPITALITY,
         subtype="full_service_hotel",
@@ -82,8 +92,12 @@ def test_project_info_exposes_available_special_feature_pricing_for_current_subt
     assert "spa" in pricing_by_id
     assert pricing_by_id["ballroom"].get("pricing_status") == "included_in_baseline"
     assert pricing_by_id["spa"].get("pricing_status") == "incremental"
-    assert pricing_by_id["ballroom"].get("configured_cost_per_sf") == 50
-    assert pricing_by_id["spa"].get("configured_cost_per_sf") == 60
+    assert pricing_by_id["ballroom"].get("pricing_basis") == "AREA_SHARE_GSF"
+    assert pricing_by_id["spa"].get("pricing_basis") == "AREA_SHARE_GSF"
+    assert pricing_by_id["ballroom"].get("configured_value") == _area_share_rule(config, "ballroom")["value"]
+    assert pricing_by_id["spa"].get("configured_value") == _area_share_rule(config, "spa")["value"]
+    assert pricing_by_id["ballroom"].get("configured_area_share_of_gsf") == _area_share_rule(config, "ballroom")["area_share_of_gsf"]
+    assert pricing_by_id["spa"].get("configured_area_share_of_gsf") == _area_share_rule(config, "spa")["area_share_of_gsf"]
 
 
 def test_medium_shopping_center_prices_only_incremental_features_and_preserves_statuses():
@@ -180,6 +194,10 @@ def test_project_info_exposes_available_special_feature_pricing_for_medium_subty
 
 def test_low_market_rate_apartments_features_remain_visible_and_price_as_incremental():
     square_footage = 64_000
+    config = get_building_config(BuildingType.MULTIFAMILY, "market_rate_apartments")
+    assert config is not None
+    rooftop_rule = _area_share_rule(config, "rooftop_amenity")
+    pool_rule = _area_share_rule(config, "pool")
     result = _calculate_project(
         building_type=BuildingType.MULTIFAMILY,
         subtype="market_rate_apartments",
@@ -190,7 +208,11 @@ def test_low_market_rate_apartments_features_remain_visible_and_price_as_increme
     )
 
     construction_costs = result.get("construction_costs") or {}
-    assert construction_costs.get("special_features_total") == 42 * square_footage
+    expected_total = (
+        rooftop_rule["value"] * (rooftop_rule["area_share_of_gsf"] * square_footage)
+        + pool_rule["value"] * (pool_rule["area_share_of_gsf"] * square_footage)
+    )
+    assert construction_costs.get("special_features_total") == pytest.approx(expected_total)
 
     breakdown = construction_costs.get("special_features_breakdown") or []
     breakdown_by_id = {
@@ -201,15 +223,23 @@ def test_low_market_rate_apartments_features_remain_visible_and_price_as_increme
 
     rooftop_row = breakdown_by_id["rooftop_amenity"]
     assert rooftop_row.get("pricing_status") == "incremental"
-    assert rooftop_row.get("configured_cost_per_sf") == 24
-    assert rooftop_row.get("cost_per_sf") == 24
-    assert rooftop_row.get("total_cost") == 24 * square_footage
+    assert rooftop_row.get("pricing_basis") == "AREA_SHARE_GSF"
+    assert rooftop_row.get("configured_value") == pytest.approx(rooftop_rule["value"])
+    assert rooftop_row.get("configured_area_share_of_gsf") == pytest.approx(rooftop_rule["area_share_of_gsf"])
+    assert rooftop_row.get("applied_quantity") == pytest.approx(rooftop_rule["area_share_of_gsf"] * square_footage)
+    assert rooftop_row.get("total_cost") == pytest.approx(rooftop_rule["value"] * (
+        rooftop_rule["area_share_of_gsf"] * square_footage
+    ))
 
     pool_row = breakdown_by_id["pool"]
     assert pool_row.get("pricing_status") == "incremental"
-    assert pool_row.get("configured_cost_per_sf") == 18
-    assert pool_row.get("cost_per_sf") == 18
-    assert pool_row.get("total_cost") == 18 * square_footage
+    assert pool_row.get("pricing_basis") == "AREA_SHARE_GSF"
+    assert pool_row.get("configured_value") == pytest.approx(pool_rule["value"])
+    assert pool_row.get("configured_area_share_of_gsf") == pytest.approx(pool_rule["area_share_of_gsf"])
+    assert pool_row.get("applied_quantity") == pytest.approx(pool_rule["area_share_of_gsf"] * square_footage)
+    assert pool_row.get("total_cost") == pytest.approx(pool_rule["value"] * (
+        pool_rule["area_share_of_gsf"] * square_footage
+    ))
 
 
 def test_low_limited_service_hotel_features_remain_incremental():
@@ -247,6 +277,8 @@ def test_low_limited_service_hotel_features_remain_incremental():
 
 
 def test_project_info_exposes_available_special_feature_pricing_for_low_subtype():
+    config = get_building_config(BuildingType.MULTIFAMILY, "market_rate_apartments")
+    assert config is not None
     result = _calculate_project(
         building_type=BuildingType.MULTIFAMILY,
         subtype="market_rate_apartments",
@@ -265,9 +297,13 @@ def test_project_info_exposes_available_special_feature_pricing_for_low_subtype(
     }
 
     assert pricing_by_id["rooftop_amenity"].get("pricing_status") == "incremental"
-    assert pricing_by_id["rooftop_amenity"].get("configured_cost_per_sf") == 24
+    assert pricing_by_id["rooftop_amenity"].get("pricing_basis") == "AREA_SHARE_GSF"
+    assert pricing_by_id["rooftop_amenity"].get("configured_value") == pytest.approx(_area_share_rule(config, "rooftop_amenity")["value"])
+    assert pricing_by_id["rooftop_amenity"].get("configured_area_share_of_gsf") == pytest.approx(_area_share_rule(config, "rooftop_amenity")["area_share_of_gsf"])
     assert pricing_by_id["pool"].get("pricing_status") == "incremental"
-    assert pricing_by_id["pool"].get("configured_cost_per_sf") == 18
+    assert pricing_by_id["pool"].get("pricing_basis") == "AREA_SHARE_GSF"
+    assert pricing_by_id["pool"].get("configured_value") == pytest.approx(_area_share_rule(config, "pool")["value"])
+    assert pricing_by_id["pool"].get("configured_area_share_of_gsf") == pytest.approx(_area_share_rule(config, "pool")["area_share_of_gsf"])
 
 
 def test_floor_count_reflects_request():

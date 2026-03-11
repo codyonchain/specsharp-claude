@@ -81,6 +81,7 @@ class AppliedSpecialFeaturePricing:
     cost_per_sf: Optional[float] = None
     configured_cost_per_count: Optional[float] = None
     cost_per_count: Optional[float] = None
+    configured_area_share_of_gsf: Optional[float] = None
     count_pricing_mode: Optional[SpecialFeatureCountPricingMode] = None
     unit_label: Optional[str] = None
     resolved_size_band: Optional[str] = None
@@ -406,6 +407,11 @@ def normalize_special_feature_pricing_rule(
         feature_id=feature_id,
         raw_bands=raw_rule.get("default_count_bands"),
     )
+    normalized_area_share_of_gsf = _coerce_optional_float(
+        feature_id=feature_id,
+        field_name="area_share_of_gsf",
+        raw_value=raw_rule.get("area_share_of_gsf"),
+    )
     if (
         basis == SpecialFeaturePricingBasis.COUNT_BASED
         and count_pricing_mode == SpecialFeatureCountPricingMode.OVERAGE_ABOVE_DEFAULT
@@ -415,6 +421,15 @@ def normalize_special_feature_pricing_rule(
         raise ValueError(
             f"Count-based overage feature '{feature_id}' must define a baseline default count"
         )
+    if basis == SpecialFeaturePricingBasis.AREA_SHARE_GSF:
+        if normalized_area_share_of_gsf is None:
+            raise ValueError(
+                f"Area-share special feature '{feature_id}' must define 'area_share_of_gsf'"
+            )
+        if normalized_area_share_of_gsf <= 0 or normalized_area_share_of_gsf > 1:
+            raise ValueError(
+                f"Area-share special feature '{feature_id}' must define 'area_share_of_gsf' within (0, 1]"
+            )
 
     return NormalizedSpecialFeaturePricingRule(
         feature_id=feature_id,
@@ -433,11 +448,7 @@ def normalize_special_feature_pricing_rule(
             raw_value=raw_rule.get("unit_label"),
         ),
         default_count_bands=normalized_default_count_bands,
-        area_share_of_gsf=_coerce_optional_float(
-            feature_id=feature_id,
-            field_name="area_share_of_gsf",
-            raw_value=raw_rule.get("area_share_of_gsf"),
-        ),
+        area_share_of_gsf=normalized_area_share_of_gsf,
         size_band=raw_size_band,
         assumption_source=STRUCTURED_RULE_SOURCE,
     )
@@ -501,6 +512,8 @@ def serialize_special_feature_pricing_rule_preview(
                 }
                 for band in rule.default_count_bands
             ]
+    if rule.basis == SpecialFeaturePricingBasis.AREA_SHARE_GSF:
+        preview["configured_cost_per_feature_area_sf"] = rule.configured_value
     if rule.count is not None:
         preview["configured_count"] = rule.count
     if rule.area_share_of_gsf is not None:
@@ -626,6 +639,31 @@ def apply_special_feature_pricing_rule(
             assumption_source=rule.assumption_source,
         )
 
+    if rule.basis == SpecialFeaturePricingBasis.AREA_SHARE_GSF:
+        if rule.area_share_of_gsf is None:
+            raise ValueError(
+                f"Area-share special feature '{rule.feature_id}' is missing 'area_share_of_gsf'"
+            )
+        configured_cost_per_feature_area_sf = rule.configured_value
+        applied_cost_per_feature_area_sf = (
+            0.0
+            if pricing_status == INCLUDED_IN_BASELINE
+            else configured_cost_per_feature_area_sf
+        )
+        applied_quantity = float(square_footage or 0.0) * float(rule.area_share_of_gsf)
+        return AppliedSpecialFeaturePricing(
+            feature_id=rule.feature_id,
+            pricing_status=pricing_status,
+            pricing_basis=rule.basis,
+            configured_value=rule.configured_value,
+            applied_value=applied_cost_per_feature_area_sf,
+            applied_quantity=applied_quantity,
+            quantity_source="area_share_of_gsf",
+            total_cost=applied_cost_per_feature_area_sf * applied_quantity,
+            configured_area_share_of_gsf=rule.area_share_of_gsf,
+            assumption_source=rule.assumption_source,
+        )
+
     raise NotImplementedError(
         f"Special feature pricing basis '{rule.basis.value}' is not active yet for feature '{rule.feature_id}'"
     )
@@ -653,6 +691,8 @@ def serialize_applied_special_feature_pricing(
         row["configured_cost_per_count"] = applied_pricing.configured_cost_per_count
     if applied_pricing.cost_per_count is not None:
         row["cost_per_count"] = applied_pricing.cost_per_count
+    if applied_pricing.configured_area_share_of_gsf is not None:
+        row["configured_area_share_of_gsf"] = applied_pricing.configured_area_share_of_gsf
     if applied_pricing.count_pricing_mode is not None:
         row["count_pricing_mode"] = applied_pricing.count_pricing_mode.value
     if applied_pricing.unit_label is not None:

@@ -72,9 +72,21 @@ CONFIG = (
             "Miami": 1.20,
         },
         special_features={
-            "rooftop_amenity": 35,
-            "pool": 25,
-            "fitness_center": 20,
+            "rooftop_amenity": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.05,
+            },
+            "pool": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.025,
+            },
+            "fitness_center": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.015,
+            },
             "parking_garage": 45,
             "concierge": 15,
         },

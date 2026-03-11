@@ -69,11 +69,27 @@ CONFIG = (
             "San Francisco": 1.50,
         },
         special_features={
-            "wine_cellar": 60,  # Premium wine storage
-            "private_dining": 45,  # Multiple private rooms
+            "wine_cellar": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 60,
+                "area_share_of_gsf": 0.02,
+            },  # Premium wine storage
+            "private_dining": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 45,
+                "area_share_of_gsf": 0.12,
+            },  # Multiple private rooms
             "chef_table": 40,  # Chef's table experience
-            "dry_aging_room": 50,  # Meat aging facility
-            "pastry_kitchen": 35,  # Separate pastry kitchen
+            "dry_aging_room": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 50,
+                "area_share_of_gsf": 0.012,
+            },  # Meat aging facility
+            "pastry_kitchen": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.10,
+            },  # Separate pastry kitchen
             "sommelier_station": 30,  # Wine service station
             "valet_parking": 25,  # Valet required
         },

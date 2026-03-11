@@ -78,7 +78,11 @@ CONFIG = (
         },
         special_features={
             # Specialized manufacturing features (opt-in only)
-            "clean_room": 75,
+            "clean_room": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 75,
+                "area_share_of_gsf": 0.15,
+            },
             "heavy_power": 40,
             "crane_bays": {
                 "basis": "COUNT_BASED",

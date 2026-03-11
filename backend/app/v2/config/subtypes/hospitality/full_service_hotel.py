@@ -72,11 +72,27 @@ CONFIG = (
             "Miami": 1.20,
         },
         special_features={
-            "ballroom": 50,
+            "ballroom": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 50,
+                "area_share_of_gsf": 0.08,
+            },
             "restaurant": 75,
-            "spa": 60,
-            "conference_center": 45,
-            "rooftop_bar": 55,
+            "spa": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 60,
+                "area_share_of_gsf": 0.04,
+            },
+            "conference_center": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 45,
+                "area_share_of_gsf": 0.07,
+            },
+            "rooftop_bar": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 55,
+                "area_share_of_gsf": 0.03,
+            },
         },
         special_feature_pricing_statuses={
             "ballroom": "included_in_baseline",

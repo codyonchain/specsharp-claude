@@ -97,7 +97,11 @@ CONFIG = (
             "enhanced_office_showroom_finish": 18,
             "two_story_office_mezzanine": 12,
             "heavy_power": 20,
-            "clean_room": 60,
+            "clean_room": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 60,
+                "area_share_of_gsf": 0.08,
+            },
             "crane_bays": {
                 "basis": "COUNT_BASED",
                 "value": 250000,
