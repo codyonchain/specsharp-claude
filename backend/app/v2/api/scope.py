@@ -396,6 +396,10 @@ async def analyze_project(
             parsed.update(overrides)
         override_keys = [
             "dock_doors", "dock_count",
+            "operating_room_count", "operatory_count",
+            "mri_suite_count", "ct_suite_count", "pet_scan_count",
+            "loading_dock_count", "dock_door_count",
+            "service_bay_count", "crane_bay_count", "drive_thru_lane_count",
             "office_sf", "office_percent", "office_pct",
             "mezzanine_sf", "mezzanine_percent",
             "clear_height", "clear_height_ft",
@@ -1167,6 +1171,10 @@ async def generate_scope(
             sf_list = list(sf_list) if sf_list else []
         override_keys = [
             "dock_doors", "dock_count",
+            "operating_room_count", "operatory_count",
+            "mri_suite_count", "ct_suite_count", "pet_scan_count",
+            "loading_dock_count", "dock_door_count",
+            "service_bay_count", "crane_bay_count", "drive_thru_lane_count",
             "office_sf", "office_percent", "office_pct",
             "mezzanine_sf", "mezzanine_percent",
             "finish_level", "finish_level_source",

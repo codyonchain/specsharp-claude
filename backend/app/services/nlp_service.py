@@ -1229,6 +1229,96 @@ class NLPService:
         # Default to ground_up if uncertain
         return 'ground_up'
 
+    def _extract_first_numeric_override(
+        self,
+        text_lower: str,
+        patterns: List[str],
+        *,
+        max_value: int = 300,
+    ) -> Optional[int]:
+        for pattern in patterns:
+            match = re.search(pattern, text_lower, re.IGNORECASE)
+            if not match:
+                continue
+            try:
+                value = int(match.group(1))
+            except (TypeError, ValueError):
+                continue
+            return max(0, min(max_value, value))
+        return None
+
+    def _extract_special_feature_count_overrides(self, text_lower: str) -> Dict[str, int]:
+        feature_patterns: List[Tuple[str, List[str], int]] = [
+            (
+                "operating_room_count",
+                [
+                    r'\b(\d{1,3})\s*operating\s+rooms?\b',
+                    r'\b(\d{1,2})\s*o\.?r\.?s?\b',
+                ],
+                50,
+            ),
+            (
+                "operatory_count",
+                [r'\b(\d{1,3})\s*(?:dental\s+)?operator(?:y|ies)\b'],
+                100,
+            ),
+            (
+                "mri_suite_count",
+                [r'\b(\d{1,2})\s*mri\s+suites?\b'],
+                20,
+            ),
+            (
+                "ct_suite_count",
+                [r'\b(\d{1,2})\s*ct\s+suites?\b'],
+                20,
+            ),
+            (
+                "pet_scan_count",
+                [r'\b(\d{1,2})\s*pet(?:\s+|[-/])?scans?\b'],
+                20,
+            ),
+            (
+                "loading_dock_count",
+                [
+                    r'\b(\d{1,3})\s*(?:loading\s+docks?|dock\s+doors?)\b',
+                    r'\b(?:loading\s+docks?|dock\s+doors?)\s*[:=]?\s*(\d{1,3})\b',
+                ],
+                300,
+            ),
+            (
+                "service_bay_count",
+                [r'\b(\d{1,3})\s*(?:expanded\s+)?service\s+bays?\b'],
+                100,
+            ),
+            (
+                "crane_bay_count",
+                [r'\b(\d{1,3})\s*crane\s+bays?\b'],
+                100,
+            ),
+            (
+                "drive_thru_lane_count",
+                [r'\b(\d{1,2})\s*drive[\s-]?(?:thru|through)\s+lanes?\b'],
+                20,
+            ),
+        ]
+
+        overrides: Dict[str, int] = {}
+        for key, patterns, max_value in feature_patterns:
+            value = self._extract_first_numeric_override(
+                text_lower,
+                patterns,
+                max_value=max_value,
+            )
+            if value is not None:
+                overrides[key] = value
+
+        loading_dock_count = overrides.get("loading_dock_count")
+        if loading_dock_count is not None:
+            overrides.setdefault("dock_door_count", loading_dock_count)
+            overrides.setdefault("dock_count", loading_dock_count)
+
+        return overrides
+
     def extract_project_details(self, text: str) -> Dict[str, Any]:
         """Main parsing function that returns all extracted information"""
         # Detect building type and subtype
@@ -1269,6 +1359,10 @@ class NLPService:
                 extracted["key_count"] = int(key_match.group(1))
             except Exception:
                 pass
+
+        special_feature_count_overrides = self._extract_special_feature_count_overrides(text_lower)
+        if special_feature_count_overrides:
+            extracted.update(special_feature_count_overrides)
 
         detection_metadata = self._last_detection_metadata if isinstance(self._last_detection_metadata, dict) else {}
         alias_mapping = detection_metadata.get("alias_mapping")
