@@ -76,6 +76,12 @@ CONFIG = (
             "fitness_center": 14,
             "parking_garage": 32,
         },
+        special_feature_pricing_statuses={
+            "rooftop_amenity": "incremental",
+            "pool": "incremental",
+            "fitness_center": "incremental",
+            "parking_garage": "incremental",
+        },
         base_revenue_per_sf_annual=28.5,
         base_revenue_per_unit_monthly=2000,
         units_per_sf=0.00125,  # ≈ 1 unit / 800 SF

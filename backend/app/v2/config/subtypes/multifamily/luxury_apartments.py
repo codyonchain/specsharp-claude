@@ -78,6 +78,13 @@ CONFIG = (
             "parking_garage": 45,
             "concierge": 15,
         },
+        special_feature_pricing_statuses={
+            "rooftop_amenity": "incremental",
+            "pool": "incremental",
+            "fitness_center": "incremental",
+            "parking_garage": "incremental",
+            "concierge": "incremental",
+        },
         base_revenue_per_sf_annual=36.0,
         base_revenue_per_unit_monthly=3500,  # Nashville luxury market rate
         units_per_sf=0.000909,  # ≈ 1 unit / 1,100 SF

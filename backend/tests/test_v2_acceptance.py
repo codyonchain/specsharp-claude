@@ -178,6 +178,98 @@ def test_project_info_exposes_available_special_feature_pricing_for_medium_subty
     assert pricing_by_id["drive_thru"].get("configured_cost_per_sf") == 40
 
 
+def test_low_market_rate_apartments_features_remain_visible_and_price_as_incremental():
+    square_footage = 64_000
+    result = _calculate_project(
+        building_type=BuildingType.MULTIFAMILY,
+        subtype="market_rate_apartments",
+        square_footage=square_footage,
+        location="Nashville, TN",
+        finish_level="standard",
+        special_features=["rooftop_amenity", "pool"],
+    )
+
+    construction_costs = result.get("construction_costs") or {}
+    assert construction_costs.get("special_features_total") == 42 * square_footage
+
+    breakdown = construction_costs.get("special_features_breakdown") or []
+    breakdown_by_id = {
+        row.get("id"): row
+        for row in breakdown
+        if isinstance(row, dict) and row.get("id")
+    }
+
+    rooftop_row = breakdown_by_id["rooftop_amenity"]
+    assert rooftop_row.get("pricing_status") == "incremental"
+    assert rooftop_row.get("configured_cost_per_sf") == 24
+    assert rooftop_row.get("cost_per_sf") == 24
+    assert rooftop_row.get("total_cost") == 24 * square_footage
+
+    pool_row = breakdown_by_id["pool"]
+    assert pool_row.get("pricing_status") == "incremental"
+    assert pool_row.get("configured_cost_per_sf") == 18
+    assert pool_row.get("cost_per_sf") == 18
+    assert pool_row.get("total_cost") == 18 * square_footage
+
+
+def test_low_limited_service_hotel_features_remain_incremental():
+    square_footage = 52_000
+    result = _calculate_project(
+        building_type=BuildingType.HOSPITALITY,
+        subtype="limited_service_hotel",
+        square_footage=square_footage,
+        location="Nashville, TN",
+        finish_level="standard",
+        special_features=["breakfast_area", "pool"],
+    )
+
+    construction_costs = result.get("construction_costs") or {}
+    assert construction_costs.get("special_features_total") == 45 * square_footage
+
+    breakdown = construction_costs.get("special_features_breakdown") or []
+    breakdown_by_id = {
+        row.get("id"): row
+        for row in breakdown
+        if isinstance(row, dict) and row.get("id")
+    }
+
+    breakfast_row = breakdown_by_id["breakfast_area"]
+    assert breakfast_row.get("pricing_status") == "incremental"
+    assert breakfast_row.get("configured_cost_per_sf") == 20
+    assert breakfast_row.get("cost_per_sf") == 20
+    assert breakfast_row.get("total_cost") == 20 * square_footage
+
+    pool_row = breakdown_by_id["pool"]
+    assert pool_row.get("pricing_status") == "incremental"
+    assert pool_row.get("configured_cost_per_sf") == 25
+    assert pool_row.get("cost_per_sf") == 25
+    assert pool_row.get("total_cost") == 25 * square_footage
+
+
+def test_project_info_exposes_available_special_feature_pricing_for_low_subtype():
+    result = _calculate_project(
+        building_type=BuildingType.MULTIFAMILY,
+        subtype="market_rate_apartments",
+        square_footage=64_000,
+        location="Nashville, TN",
+        finish_level="standard",
+        special_features=["rooftop_amenity", "pool"],
+    )
+
+    project_info = result.get("project_info") or {}
+    available_pricing = project_info.get("available_special_feature_pricing") or []
+    pricing_by_id = {
+        row.get("id"): row
+        for row in available_pricing
+        if isinstance(row, dict) and row.get("id")
+    }
+
+    assert pricing_by_id["rooftop_amenity"].get("pricing_status") == "incremental"
+    assert pricing_by_id["rooftop_amenity"].get("configured_cost_per_sf") == 24
+    assert pricing_by_id["pool"].get("pricing_status") == "incremental"
+    assert pricing_by_id["pool"].get("configured_cost_per_sf") == 18
+
+
 def test_floor_count_reflects_request():
     result = _calculate_project(
         building_type=BuildingType.OFFICE,

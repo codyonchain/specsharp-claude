@@ -77,6 +77,12 @@ CONFIG = (
             "business_center": 10,
             "pool": 25,
         },
+        special_feature_pricing_statuses={
+            "breakfast_area": "incremental",
+            "fitness_center": "incremental",
+            "business_center": "incremental",
+            "pool": "incremental",
+        },
         base_revenue_per_sf_annual=52,
         base_revenue_per_room_annual=50000,
         rooms_per_sf=1.0 / 600.0,
