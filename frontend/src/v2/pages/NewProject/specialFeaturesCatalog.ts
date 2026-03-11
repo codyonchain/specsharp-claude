@@ -2396,6 +2396,14 @@ const RESTAURANT_KEYWORD_DETECTION: Array<{
   patterns: RegExp[];
 }> = [
   {
+    featureId: "double_drive_thru",
+    patterns: [
+      /\bdouble drive[\s-]?(?:thru|through)\b/i,
+      /\bdual drive[\s-]?(?:thru|through)\b/i,
+      /\btwo[-\s]lane drive[\s-]?(?:thru|through)\b/i,
+    ],
+  },
+  {
     featureId: "drive_thru",
     patterns: [/drive[\s-]?thru/i, /drive[\s-]?through/i],
   },
@@ -2449,6 +2457,9 @@ export const detectRestaurantFeatureIdsFromDescription = (
     if (patterns.some((pattern) => pattern.test(description))) {
       detectedFeatureIds.add(featureId);
     }
+  }
+  if (detectedFeatureIds.has("double_drive_thru")) {
+    detectedFeatureIds.delete("drive_thru");
   }
   return Array.from(detectedFeatureIds);
 };
@@ -2569,6 +2580,12 @@ export const detectRetailFeatureIdsFromDescription = (
     if (patterns.some((pattern) => pattern.test(description))) {
       detectedFeatureIds.add(featureId);
     }
+  }
+  if (
+    /\b(?:double|dual)\s+drive[\s-]?(?:thru|through)\b/i.test(description) ||
+    /\btwo[-\s]lane drive[\s-]?(?:thru|through)\b/i.test(description)
+  ) {
+    detectedFeatureIds.delete("drive_thru");
   }
   return Array.from(detectedFeatureIds);
 };
@@ -3250,6 +3267,8 @@ const INDUSTRIAL_KEYWORD_DETECTION: Array<{
       /\badditional loading docks?\b/i,
       /\bextra dock doors?\b/i,
       /\badditional dock doors?\b/i,
+      /\b\d{1,3}\s+loading docks?\b/i,
+      /\b\d{1,3}\s+dock doors?\b/i,
     ],
   },
   {
@@ -3529,7 +3548,7 @@ const HEALTHCARE_KEYWORD_DETECTION: Array<{
   },
   {
     featureId: "operating_room",
-    patterns: [/\boperating room\b/i, /\bOR room\b/i],
+    patterns: [/\boperating rooms?\b/i, /\bOR rooms?\b/i],
   },
   {
     featureId: "pre_op",
@@ -3545,7 +3564,7 @@ const HEALTHCARE_KEYWORD_DETECTION: Array<{
   },
   {
     featureId: "mri_suite",
-    patterns: [/\bmri suite\b/i],
+    patterns: [/\bmri suites?\b/i],
   },
   {
     featureId: "ct_suite",
@@ -3593,7 +3612,7 @@ const HEALTHCARE_KEYWORD_DETECTION: Array<{
   },
   {
     featureId: "operatory",
-    patterns: [/\bdental operator(?:y|ies)\b/i, /\boperatory\b/i],
+    patterns: [/\b(?:dental\s+)?operator(?:y|ies)\b/i],
   },
   {
     featureId: "sterilization",

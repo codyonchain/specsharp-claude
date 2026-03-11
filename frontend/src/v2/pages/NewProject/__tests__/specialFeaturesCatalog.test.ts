@@ -583,6 +583,12 @@ describe("industrial special features catalog", () => {
       "lab_buildout",
       "two_story_office_mezzanine",
     ]);
+
+    const countedDockFeatures = detectIndustrialFeatureIdsFromDescription(
+      "New 220,000 SF distribution center with 10 loading docks and refrigerated area in Nashville, TN"
+    );
+    expect(countedDockFeatures).toContain("extra_loading_docks");
+    expect(countedDockFeatures).not.toContain("loading_docks");
   });
 
   it("filters raw industrial detector hits back to the intended subtype inventory", () => {
@@ -755,6 +761,20 @@ describe("restaurant special features catalog", () => {
       expect(restaurantSubtypeHasSpecialFeatures(subtype)).toBe(true);
       expect(filterSpecialFeaturesBySubtype(restaurantFeatures, subtype).length).toBeGreaterThan(0);
     }
+  });
+
+  it("detects first-wave restaurant drive-thru feature ids from prompt language", () => {
+    expect(
+      detectRestaurantFeatureIdsFromDescription(
+        "New 6,500 SF quick service restaurant with drive thru in Nashville, TN"
+      )
+    ).toContain("drive_thru");
+
+    expect(
+      detectRestaurantFeatureIdsFromDescription(
+        "New 6,500 SF quick service restaurant with double drive thru in Nashville, TN"
+      )
+    ).toEqual(["double_drive_thru"]);
   });
 });
 
@@ -1694,6 +1714,39 @@ describe("healthcare special features catalog", () => {
         "imaging_suite",
         "laboratory",
         "icu",
+      ])
+    );
+  });
+
+  it("detects first-wave healthcare count-based feature ids from plural prompt language", () => {
+    expect(
+      detectHealthcareFeatureIdsFromDescription(
+        "New 24,000 SF ambulatory surgery center with 6 operating rooms in Nashville, TN"
+      )
+    ).toContain("operating_room");
+
+    expect(
+      detectHealthcareFeatureIdsFromDescription(
+        "New 4,500 SF dental office with 9 operatories in Nashville, TN"
+      )
+    ).toContain("operatory");
+
+    expect(
+      detectHealthcareFeatureIdsFromDescription(
+        "New 12,000 SF imaging center with 2 MRI suites and 1 CT suite in Nashville, TN"
+      )
+    ).toEqual(expect.arrayContaining(["mri_suite", "ct_suite"]));
+
+    expect(
+      detectHealthcareFeatureIdsFromDescription(
+        "New 12,000 SF imaging center with PET scan, second MRI, interventional radiology, and cath lab in Nashville, TN"
+      )
+    ).toEqual(
+      expect.arrayContaining([
+        "pet_scan",
+        "hc_imaging_second_mri",
+        "hc_imaging_interventional_rad",
+        "hc_asc_hybrid_or_cath_lab",
       ])
     );
   });

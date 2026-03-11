@@ -116,4 +116,66 @@ describe('NewProject auto-detection path', () => {
       expect(result.filteredFeatureIds.sort()).toEqual(expectedFiltered.sort());
     }
   );
+
+  it.each([
+    {
+      name: 'quick service double drive thru exact id',
+      description: 'New 6,500 SF quick service restaurant with double drive thru in Nashville, TN',
+      parsedBuildingType: 'restaurant',
+      parsedSubtype: 'quick_service',
+      expectedFeatureId: 'double_drive_thru',
+      unexpectedFilteredId: 'drive_thru',
+    },
+    {
+      name: 'surgical center operating rooms exact id',
+      description: 'New 24,000 SF ambulatory surgery center with 6 operating rooms in Nashville, TN',
+      parsedBuildingType: 'healthcare',
+      parsedSubtype: 'surgical_center',
+      expectedFeatureId: 'operating_room',
+    },
+    {
+      name: 'dental office operatories exact id',
+      description: 'New 4,500 SF dental office with 9 operatories in Nashville, TN',
+      parsedBuildingType: 'healthcare',
+      parsedSubtype: 'dental_office',
+      expectedFeatureId: 'operatory',
+    },
+    {
+      name: 'imaging center MRI suites exact id',
+      description: 'New 12,000 SF imaging center with 2 MRI suites and 1 CT suite in Nashville, TN',
+      parsedBuildingType: 'healthcare',
+      parsedSubtype: 'imaging_center',
+      expectedFeatureId: 'mri_suite',
+    },
+    {
+      name: 'distribution center counted loading docks map to extra loading docks',
+      description: 'New 220,000 SF distribution center with 10 loading docks and refrigerated area in Nashville, TN',
+      parsedBuildingType: 'industrial',
+      parsedSubtype: 'distribution_center',
+      expectedFeatureId: 'extra_loading_docks',
+      unexpectedFilteredId: 'loading_docks',
+    },
+  ])(
+    'keeps first-wave count-based exact ids through filtering for $name',
+    ({
+      description,
+      parsedBuildingType,
+      parsedSubtype,
+      expectedFeatureId,
+      unexpectedFilteredId,
+    }) => {
+      const result = resolveNewProjectAutoDetection({
+        description,
+        parsedBuildingType,
+        parsedSubtype,
+      });
+
+      expect(result.rawDetectedFeatureIds).toContain(expectedFeatureId);
+      expect(result.allowedFeatureIds).toContain(expectedFeatureId);
+      expect(result.filteredFeatureIds).toContain(expectedFeatureId);
+      if (unexpectedFilteredId) {
+        expect(result.filteredFeatureIds).not.toContain(unexpectedFilteredId);
+      }
+    }
+  );
 });
