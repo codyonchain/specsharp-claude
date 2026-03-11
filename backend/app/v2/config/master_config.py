@@ -65,6 +65,12 @@ class SpecialFeaturePricingBasis(str, Enum):
     TIERED_INTENSITY = "TIERED_INTENSITY"
 
 
+class SpecialFeatureCountPricingMode(str, Enum):
+    """How count-based rules should treat resolved quantities."""
+    ALL_UNITS = "all_units"
+    OVERAGE_ABOVE_DEFAULT = "overage_above_default"
+
+
 SpecialFeaturePricingBasisLiteral = Literal[
     "WHOLE_PROJECT_SF",
     "COUNT_BASED",
@@ -76,6 +82,14 @@ SpecialFeaturePricingBasisConfig = Union[
     SpecialFeaturePricingBasis,
     SpecialFeaturePricingBasisLiteral,
 ]
+SpecialFeatureCountPricingModeLiteral = Literal[
+    "all_units",
+    "overage_above_default",
+]
+SpecialFeatureCountPricingModeConfig = Union[
+    SpecialFeatureCountPricingMode,
+    SpecialFeatureCountPricingModeLiteral,
+]
 
 
 class SpecialFeaturePricingRule(TypedDict, total=False):
@@ -83,6 +97,7 @@ class SpecialFeaturePricingRule(TypedDict, total=False):
     basis: SpecialFeaturePricingBasisConfig
     value: float
     count: float
+    count_pricing_mode: SpecialFeatureCountPricingModeConfig
     count_override_keys: List[str]
     unit_label: str
     default_count_bands: List["SpecialFeaturePricingCountBand"]

@@ -74,6 +74,7 @@ CONFIG = (
             "extra_loading_docks": {
                 "basis": "COUNT_BASED",
                 "value": 65000,
+                "count_pricing_mode": "overage_above_default",
                 "count_override_keys": [
                     "extra_loading_dock_count",
                     "extra_dock_count",

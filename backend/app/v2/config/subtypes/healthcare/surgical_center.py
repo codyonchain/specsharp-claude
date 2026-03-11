@@ -79,6 +79,7 @@ CONFIG = (
             "operating_room": {
                 "basis": "COUNT_BASED",
                 "value": 450000,
+                "count_pricing_mode": "overage_above_default",
                 "count_override_keys": ["operating_room_count", "or_count"],
                 "default_count_bands": [
                     {"label": "small_asc", "max_square_footage": 12000, "count": 2},

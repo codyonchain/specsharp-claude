@@ -4,6 +4,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 from app.v2.config.master_config import (
     BuildingConfig,
     SpecialFeaturePricingBasis,
+    SpecialFeatureCountPricingMode,
 )
 
 INCLUDED_IN_BASELINE = "included_in_baseline"
@@ -38,11 +39,31 @@ class NormalizedSpecialFeaturePricingRule:
     configured_value: float
     assumption_source: str
     count: Optional[float] = None
+    count_pricing_mode: SpecialFeatureCountPricingMode = SpecialFeatureCountPricingMode.ALL_UNITS
     count_override_keys: Tuple[str, ...] = ()
     unit_label: Optional[str] = None
     default_count_bands: Tuple[NormalizedSpecialFeatureCountBand, ...] = ()
     area_share_of_gsf: Optional[float] = None
     size_band: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ResolvedSpecialFeatureCountQuantity:
+    quantity: float
+    source: str
+    resolved_size_band: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ResolvedCountBasedPricingQuantities:
+    requested_quantity: float
+    requested_quantity_source: str
+    billed_quantity: float
+    billed_quantity_source: str
+    included_baseline_quantity: Optional[float] = None
+    included_baseline_quantity_source: Optional[str] = None
+    resolved_size_band: Optional[str] = None
+    has_explicit_requested_quantity: bool = False
 
 
 @dataclass(frozen=True)
@@ -60,8 +81,15 @@ class AppliedSpecialFeaturePricing:
     cost_per_sf: Optional[float] = None
     configured_cost_per_count: Optional[float] = None
     cost_per_count: Optional[float] = None
+    count_pricing_mode: Optional[SpecialFeatureCountPricingMode] = None
     unit_label: Optional[str] = None
     resolved_size_band: Optional[str] = None
+    requested_quantity: Optional[float] = None
+    requested_quantity_source: Optional[str] = None
+    included_baseline_quantity: Optional[float] = None
+    included_baseline_quantity_source: Optional[str] = None
+    billed_quantity: Optional[float] = None
+    billed_quantity_source: Optional[str] = None
 
 
 def _coerce_special_feature_pricing_basis(
@@ -81,6 +109,27 @@ def _coerce_special_feature_pricing_basis(
             ) from exc
     raise ValueError(
         f"Invalid special feature pricing basis type '{type(raw_basis).__name__}' "
+        f"for feature '{feature_id}'"
+    )
+
+
+def _coerce_special_feature_count_pricing_mode(
+    feature_id: str,
+    raw_mode: Any,
+) -> SpecialFeatureCountPricingMode:
+    if raw_mode is None:
+        return SpecialFeatureCountPricingMode.ALL_UNITS
+    if isinstance(raw_mode, SpecialFeatureCountPricingMode):
+        return raw_mode
+    if isinstance(raw_mode, str):
+        try:
+            return SpecialFeatureCountPricingMode(raw_mode)
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid special feature count pricing mode '{raw_mode}' for feature '{feature_id}'"
+            ) from exc
+    raise ValueError(
+        f"Invalid special feature count pricing mode type '{type(raw_mode).__name__}' "
         f"for feature '{feature_id}'"
     )
 
@@ -203,12 +252,11 @@ def _normalize_count_quantity(raw_value: Any) -> Optional[float]:
     return float(max(1, int(round(normalized_value))))
 
 
-def _resolve_count_based_quantity(
+def _resolve_explicit_count_override(
     *,
     rule: NormalizedSpecialFeaturePricingRule,
-    square_footage: float,
     pricing_override_sources: Optional[Iterable[Mapping[str, Any]]],
-) -> Tuple[float, str, Optional[str]]:
+) -> Optional[ResolvedSpecialFeatureCountQuantity]:
     for source in pricing_override_sources or []:
         if not isinstance(source, Mapping):
             continue
@@ -217,22 +265,100 @@ def _resolve_count_based_quantity(
                 continue
             override_count = _normalize_count_quantity(source.get(key))
             if override_count is not None:
-                return override_count, f"explicit_override:{key}", None
+                return ResolvedSpecialFeatureCountQuantity(
+                    quantity=override_count,
+                    source=f"explicit_override:{key}",
+                )
+    return None
 
+
+def _resolve_default_count_quantity(
+    *,
+    rule: NormalizedSpecialFeaturePricingRule,
+    square_footage: float,
+) -> Optional[ResolvedSpecialFeatureCountQuantity]:
     sf_value = float(square_footage or 0.0)
     for band in rule.default_count_bands:
         max_square_footage = band.max_square_footage
         if max_square_footage is None or sf_value <= float(max_square_footage):
             band_count = _normalize_count_quantity(band.count)
             if band_count is not None:
-                return band_count, "size_band_default", band.label
+                return ResolvedSpecialFeatureCountQuantity(
+                    quantity=band_count,
+                    source="size_band_default",
+                    resolved_size_band=band.label,
+                )
 
     configured_count = _normalize_count_quantity(rule.count)
     if configured_count is not None:
-        return configured_count, "configured_default_count", rule.size_band
+        return ResolvedSpecialFeatureCountQuantity(
+            quantity=configured_count,
+            source="configured_default_count",
+            resolved_size_band=rule.size_band,
+        )
+    return None
 
-    raise ValueError(
-        f"Count-based special feature '{rule.feature_id}' is missing a usable count override or default"
+
+def _resolve_count_based_pricing_quantities(
+    *,
+    rule: NormalizedSpecialFeaturePricingRule,
+    square_footage: float,
+    pricing_override_sources: Optional[Iterable[Mapping[str, Any]]],
+) -> ResolvedCountBasedPricingQuantities:
+    explicit_quantity = _resolve_explicit_count_override(
+        rule=rule,
+        pricing_override_sources=pricing_override_sources,
+    )
+    default_quantity = _resolve_default_count_quantity(
+        rule=rule,
+        square_footage=square_footage,
+    )
+    requested_quantity = explicit_quantity or default_quantity
+    if requested_quantity is None:
+        raise ValueError(
+            f"Count-based special feature '{rule.feature_id}' is missing a usable count override or default"
+        )
+
+    if rule.count_pricing_mode == SpecialFeatureCountPricingMode.ALL_UNITS:
+        return ResolvedCountBasedPricingQuantities(
+            requested_quantity=requested_quantity.quantity,
+            requested_quantity_source=requested_quantity.source,
+            billed_quantity=requested_quantity.quantity,
+            billed_quantity_source=requested_quantity.source,
+            resolved_size_band=requested_quantity.resolved_size_band,
+            has_explicit_requested_quantity=explicit_quantity is not None,
+        )
+
+    if explicit_quantity is not None:
+        if default_quantity is None:
+            raise ValueError(
+                f"Count-based overage feature '{rule.feature_id}' is missing a usable baseline default"
+            )
+        billed_quantity = max(0.0, explicit_quantity.quantity - default_quantity.quantity)
+        return ResolvedCountBasedPricingQuantities(
+            requested_quantity=explicit_quantity.quantity,
+            requested_quantity_source=explicit_quantity.source,
+            billed_quantity=billed_quantity,
+            billed_quantity_source="overage_above_default",
+            included_baseline_quantity=default_quantity.quantity,
+            included_baseline_quantity_source=default_quantity.source,
+            resolved_size_band=default_quantity.resolved_size_band,
+            has_explicit_requested_quantity=True,
+        )
+
+    return ResolvedCountBasedPricingQuantities(
+        requested_quantity=requested_quantity.quantity,
+        requested_quantity_source=requested_quantity.source,
+        billed_quantity=requested_quantity.quantity,
+        billed_quantity_source=requested_quantity.source,
+        included_baseline_quantity=(
+            default_quantity.quantity if default_quantity is not None else None
+        ),
+        included_baseline_quantity_source=(
+            default_quantity.source if default_quantity is not None else None
+        ),
+        resolved_size_band=requested_quantity.resolved_size_band,
+        has_explicit_requested_quantity=False,
     )
 
 
@@ -261,21 +387,41 @@ def normalize_special_feature_pricing_rule(
         raw_value=raw_rule.get("value"),
         required=True,
     )
+    count_pricing_mode = _coerce_special_feature_count_pricing_mode(
+        feature_id,
+        raw_rule.get("count_pricing_mode"),
+    )
     raw_size_band = raw_rule.get("size_band")
     if raw_size_band is not None and not isinstance(raw_size_band, str):
         raise ValueError(
             f"Special feature pricing field 'size_band' for feature '{feature_id}' must be a string"
         )
 
+    normalized_count = _coerce_optional_float(
+        feature_id=feature_id,
+        field_name="count",
+        raw_value=raw_rule.get("count"),
+    )
+    normalized_default_count_bands = _normalize_default_count_bands(
+        feature_id=feature_id,
+        raw_bands=raw_rule.get("default_count_bands"),
+    )
+    if (
+        basis == SpecialFeaturePricingBasis.COUNT_BASED
+        and count_pricing_mode == SpecialFeatureCountPricingMode.OVERAGE_ABOVE_DEFAULT
+        and normalized_count is None
+        and not normalized_default_count_bands
+    ):
+        raise ValueError(
+            f"Count-based overage feature '{feature_id}' must define a baseline default count"
+        )
+
     return NormalizedSpecialFeaturePricingRule(
         feature_id=feature_id,
         basis=basis,
         configured_value=float(configured_value),
-        count=_coerce_optional_float(
-            feature_id=feature_id,
-            field_name="count",
-            raw_value=raw_rule.get("count"),
-        ),
+        count=normalized_count,
+        count_pricing_mode=count_pricing_mode,
         count_override_keys=_coerce_string_list(
             feature_id=feature_id,
             field_name="count_override_keys",
@@ -286,10 +432,7 @@ def normalize_special_feature_pricing_rule(
             field_name="unit_label",
             raw_value=raw_rule.get("unit_label"),
         ),
-        default_count_bands=_normalize_default_count_bands(
-            feature_id=feature_id,
-            raw_bands=raw_rule.get("default_count_bands"),
-        ),
+        default_count_bands=normalized_default_count_bands,
         area_share_of_gsf=_coerce_optional_float(
             feature_id=feature_id,
             field_name="area_share_of_gsf",
@@ -344,6 +487,7 @@ def serialize_special_feature_pricing_rule_preview(
         preview["configured_cost_per_sf"] = rule.configured_value
     if rule.basis == SpecialFeaturePricingBasis.COUNT_BASED:
         preview["configured_cost_per_count"] = rule.configured_value
+        preview["count_pricing_mode"] = rule.count_pricing_mode.value
         if rule.unit_label is not None:
             preview["unit_label"] = rule.unit_label
         if rule.count_override_keys:
@@ -399,28 +543,52 @@ def apply_special_feature_pricing_rule(
         )
 
     if rule.basis == SpecialFeaturePricingBasis.COUNT_BASED:
-        resolved_count, quantity_source, resolved_size_band = _resolve_count_based_quantity(
+        resolved_quantities = _resolve_count_based_pricing_quantities(
             rule=rule,
             square_footage=square_footage,
             pricing_override_sources=pricing_override_sources,
         )
         configured_cost_per_count = rule.configured_value
-        applied_cost_per_count = (
-            0.0 if pricing_status == INCLUDED_IN_BASELINE else configured_cost_per_count
+        should_apply_overage_charge = (
+            rule.count_pricing_mode == SpecialFeatureCountPricingMode.OVERAGE_ABOVE_DEFAULT
+            and resolved_quantities.has_explicit_requested_quantity
         )
+        if should_apply_overage_charge:
+            applied_cost_per_count = (
+                configured_cost_per_count if resolved_quantities.billed_quantity > 0 else 0.0
+            )
+        else:
+            applied_cost_per_count = (
+                0.0
+                if pricing_status == INCLUDED_IN_BASELINE
+                else (
+                    configured_cost_per_count
+                    if resolved_quantities.billed_quantity > 0
+                    else 0.0
+                )
+            )
         return AppliedSpecialFeaturePricing(
             feature_id=rule.feature_id,
             pricing_status=pricing_status,
             pricing_basis=rule.basis,
             configured_value=rule.configured_value,
             applied_value=applied_cost_per_count,
-            applied_quantity=resolved_count,
-            quantity_source=quantity_source,
-            total_cost=applied_cost_per_count * resolved_count,
+            applied_quantity=resolved_quantities.billed_quantity,
+            quantity_source=resolved_quantities.billed_quantity_source,
+            total_cost=applied_cost_per_count * resolved_quantities.billed_quantity,
             configured_cost_per_count=configured_cost_per_count,
             cost_per_count=applied_cost_per_count,
+            count_pricing_mode=rule.count_pricing_mode,
             unit_label=rule.unit_label,
-            resolved_size_band=resolved_size_band,
+            resolved_size_band=resolved_quantities.resolved_size_band,
+            requested_quantity=resolved_quantities.requested_quantity,
+            requested_quantity_source=resolved_quantities.requested_quantity_source,
+            included_baseline_quantity=resolved_quantities.included_baseline_quantity,
+            included_baseline_quantity_source=(
+                resolved_quantities.included_baseline_quantity_source
+            ),
+            billed_quantity=resolved_quantities.billed_quantity,
+            billed_quantity_source=resolved_quantities.billed_quantity_source,
             assumption_source=rule.assumption_source,
         )
 
@@ -451,10 +619,26 @@ def serialize_applied_special_feature_pricing(
         row["configured_cost_per_count"] = applied_pricing.configured_cost_per_count
     if applied_pricing.cost_per_count is not None:
         row["cost_per_count"] = applied_pricing.cost_per_count
+    if applied_pricing.count_pricing_mode is not None:
+        row["count_pricing_mode"] = applied_pricing.count_pricing_mode.value
     if applied_pricing.unit_label is not None:
         row["unit_label"] = applied_pricing.unit_label
     if applied_pricing.resolved_size_band is not None:
         row["resolved_size_band"] = applied_pricing.resolved_size_band
+    if applied_pricing.requested_quantity is not None:
+        row["requested_quantity"] = applied_pricing.requested_quantity
+    if applied_pricing.requested_quantity_source is not None:
+        row["requested_quantity_source"] = applied_pricing.requested_quantity_source
+    if applied_pricing.included_baseline_quantity is not None:
+        row["included_baseline_quantity"] = applied_pricing.included_baseline_quantity
+    if applied_pricing.included_baseline_quantity_source is not None:
+        row["included_baseline_quantity_source"] = (
+            applied_pricing.included_baseline_quantity_source
+        )
+    if applied_pricing.billed_quantity is not None:
+        row["billed_quantity"] = applied_pricing.billed_quantity
+    if applied_pricing.billed_quantity_source is not None:
+        row["billed_quantity_source"] = applied_pricing.billed_quantity_source
     return row
 
 

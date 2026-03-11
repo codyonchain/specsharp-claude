@@ -83,6 +83,7 @@ CONFIG = (
             "crane_bays": {
                 "basis": "COUNT_BASED",
                 "value": 300000,
+                "count_pricing_mode": "overage_above_default",
                 "count_override_keys": ["crane_bay_count", "crane_count"],
                 "default_count_bands": [
                     {"label": "light_lift", "max_square_footage": 75000, "count": 1},

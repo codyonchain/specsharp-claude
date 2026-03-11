@@ -72,6 +72,7 @@ CONFIG = (
             "expanded_service_bays": {
                 "basis": "COUNT_BASED",
                 "value": 95000,
+                "count_pricing_mode": "overage_above_default",
                 "count_override_keys": [
                     "expanded_service_bay_count",
                     "service_bay_count",

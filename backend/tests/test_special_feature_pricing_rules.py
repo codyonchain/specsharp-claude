@@ -186,7 +186,7 @@ def test_structured_whole_project_sf_rules_flow_through_engine_without_repricing
     assert available_pricing_by_id["drive_thru"]["configured_value"] == pytest.approx(40.0)
 
 
-def test_operating_room_count_override_wins_and_included_status_keeps_total_zero():
+def test_operating_room_count_override_bills_only_overage_above_included_baseline():
     result = unified_engine.calculate_project(
         building_type=BuildingType.HEALTHCARE,
         subtype="surgical_center",
@@ -199,17 +199,25 @@ def test_operating_room_count_override_wins_and_included_status_keeps_total_zero
 
     operating_room_row = _special_feature_breakdown_by_id(result)["operating_room"]
 
-    assert result["construction_costs"]["special_features_total"] == 0.0
+    assert result["construction_costs"]["special_features_total"] == pytest.approx(450000.0)
     assert operating_room_row["pricing_basis"] == SpecialFeaturePricingBasis.COUNT_BASED.value
+    assert operating_room_row["count_pricing_mode"] == "overage_above_default"
     assert operating_room_row["configured_cost_per_count"] == pytest.approx(450000.0)
-    assert operating_room_row["cost_per_count"] == 0.0
-    assert operating_room_row["applied_quantity"] == pytest.approx(5.0)
-    assert operating_room_row["quantity_source"] == "explicit_override:operating_room_count"
+    assert operating_room_row["cost_per_count"] == pytest.approx(450000.0)
+    assert operating_room_row["applied_quantity"] == pytest.approx(1.0)
+    assert operating_room_row["quantity_source"] == "overage_above_default"
+    assert operating_room_row["requested_quantity"] == pytest.approx(5.0)
+    assert operating_room_row["requested_quantity_source"] == "explicit_override:operating_room_count"
+    assert operating_room_row["included_baseline_quantity"] == pytest.approx(4.0)
+    assert operating_room_row["included_baseline_quantity_source"] == "size_band_default"
+    assert operating_room_row["billed_quantity"] == pytest.approx(1.0)
+    assert operating_room_row["billed_quantity_source"] == "overage_above_default"
+    assert operating_room_row["resolved_size_band"] == "mid_asc"
     assert operating_room_row["unit_label"] == "room"
-    assert operating_room_row["total_cost"] == 0.0
+    assert operating_room_row["total_cost"] == pytest.approx(450000.0)
 
 
-def test_operatory_count_override_wins_and_included_status_keeps_total_zero():
+def test_operatory_count_override_bills_only_overage_above_included_baseline():
     result = unified_engine.calculate_project(
         building_type=BuildingType.HEALTHCARE,
         subtype="dental_office",
@@ -222,16 +230,25 @@ def test_operatory_count_override_wins_and_included_status_keeps_total_zero():
 
     operatory_row = _special_feature_breakdown_by_id(result)["operatory"]
 
-    assert result["construction_costs"]["special_features_total"] == 0.0
+    assert result["construction_costs"]["special_features_total"] == pytest.approx(45000.0)
     assert operatory_row["pricing_basis"] == SpecialFeaturePricingBasis.COUNT_BASED.value
+    assert operatory_row["count_pricing_mode"] == "overage_above_default"
     assert operatory_row["configured_cost_per_count"] == pytest.approx(45000.0)
-    assert operatory_row["cost_per_count"] == 0.0
-    assert operatory_row["applied_quantity"] == pytest.approx(9.0)
-    assert operatory_row["quantity_source"] == "explicit_override:operatory_count"
+    assert operatory_row["cost_per_count"] == pytest.approx(45000.0)
+    assert operatory_row["applied_quantity"] == pytest.approx(1.0)
+    assert operatory_row["quantity_source"] == "overage_above_default"
+    assert operatory_row["requested_quantity"] == pytest.approx(9.0)
+    assert operatory_row["requested_quantity_source"] == "explicit_override:operatory_count"
+    assert operatory_row["included_baseline_quantity"] == pytest.approx(8.0)
+    assert operatory_row["included_baseline_quantity_source"] == "size_band_default"
+    assert operatory_row["billed_quantity"] == pytest.approx(1.0)
+    assert operatory_row["billed_quantity_source"] == "overage_above_default"
+    assert operatory_row["resolved_size_band"] == "large_practice"
     assert operatory_row["unit_label"] == "operatory"
+    assert operatory_row["total_cost"] == pytest.approx(45000.0)
 
 
-def test_mri_suite_count_override_wins_and_included_status_keeps_total_zero():
+def test_mri_suite_count_override_bills_only_overage_above_included_baseline():
     result = unified_engine.calculate_project(
         building_type=BuildingType.HEALTHCARE,
         subtype="imaging_center",
@@ -244,13 +261,96 @@ def test_mri_suite_count_override_wins_and_included_status_keeps_total_zero():
 
     mri_row = _special_feature_breakdown_by_id(result)["mri_suite"]
 
-    assert result["construction_costs"]["special_features_total"] == 0.0
+    assert result["construction_costs"]["special_features_total"] == pytest.approx(850000.0)
     assert mri_row["pricing_basis"] == SpecialFeaturePricingBasis.COUNT_BASED.value
+    assert mri_row["count_pricing_mode"] == "overage_above_default"
     assert mri_row["configured_cost_per_count"] == pytest.approx(850000.0)
-    assert mri_row["cost_per_count"] == 0.0
-    assert mri_row["applied_quantity"] == pytest.approx(2.0)
-    assert mri_row["quantity_source"] == "explicit_override:mri_suite_count"
+    assert mri_row["cost_per_count"] == pytest.approx(850000.0)
+    assert mri_row["applied_quantity"] == pytest.approx(1.0)
+    assert mri_row["quantity_source"] == "overage_above_default"
+    assert mri_row["requested_quantity"] == pytest.approx(2.0)
+    assert mri_row["requested_quantity_source"] == "explicit_override:mri_suite_count"
+    assert mri_row["included_baseline_quantity"] == pytest.approx(1.0)
+    assert mri_row["included_baseline_quantity_source"] == "configured_default_count"
+    assert mri_row["billed_quantity"] == pytest.approx(1.0)
+    assert mri_row["billed_quantity_source"] == "overage_above_default"
     assert mri_row["unit_label"] == "suite"
+    assert mri_row["total_cost"] == pytest.approx(850000.0)
+
+
+@pytest.mark.parametrize(
+    (
+        "building_type",
+        "subtype",
+        "square_footage",
+        "feature_id",
+        "parsed_input_overrides",
+        "expected_baseline_quantity",
+        "expected_baseline_source",
+    ),
+    (
+        (
+            BuildingType.HEALTHCARE,
+            "surgical_center",
+            18_000,
+            "operating_room",
+            {"operating_room_count": 4},
+            4.0,
+            "size_band_default",
+        ),
+        (
+            BuildingType.HEALTHCARE,
+            "imaging_center",
+            12_000,
+            "mri_suite",
+            {"mri_suite_count": 1},
+            1.0,
+            "configured_default_count",
+        ),
+        (
+            BuildingType.INDUSTRIAL,
+            "distribution_center",
+            220_000,
+            "extra_loading_docks",
+            {"loading_dock_count": 8},
+            8.0,
+            "size_band_default",
+        ),
+    ),
+)
+def test_overage_mode_features_bill_zero_when_requested_count_does_not_exceed_baseline(
+    building_type,
+    subtype,
+    square_footage,
+    feature_id,
+    parsed_input_overrides,
+    expected_baseline_quantity,
+    expected_baseline_source,
+):
+    result = unified_engine.calculate_project(
+        building_type=building_type,
+        subtype=subtype,
+        square_footage=square_footage,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=[feature_id],
+        parsed_input_overrides=parsed_input_overrides,
+    )
+
+    row = _special_feature_breakdown_by_id(result)[feature_id]
+
+    requested_count = next(iter(parsed_input_overrides.values()))
+    assert result["construction_costs"]["special_features_total"] == 0.0
+    assert row["count_pricing_mode"] == "overage_above_default"
+    assert row["cost_per_count"] == 0.0
+    assert row["applied_quantity"] == 0.0
+    assert row["quantity_source"] == "overage_above_default"
+    assert row["requested_quantity"] == pytest.approx(float(requested_count))
+    assert row["included_baseline_quantity"] == pytest.approx(expected_baseline_quantity)
+    assert row["included_baseline_quantity_source"] == expected_baseline_source
+    assert row["billed_quantity"] == 0.0
+    assert row["billed_quantity_source"] == "overage_above_default"
+    assert row["total_cost"] == 0.0
 
 
 @pytest.mark.parametrize(
@@ -262,7 +362,10 @@ def test_mri_suite_count_override_wins_and_included_status_keeps_total_zero():
         "parsed_input_overrides",
         "expected_total_cost",
         "expected_quantity_source",
+        "expected_applied_quantity",
         "expected_unit_label",
+        "expected_count_pricing_mode",
+        "expected_included_baseline_quantity",
     ),
     (
         (
@@ -273,7 +376,10 @@ def test_mri_suite_count_override_wins_and_included_status_keeps_total_zero():
             {"drive_thru_lane_count": 2},
             150000.0,
             "explicit_override:drive_thru_lane_count",
+            2.0,
             "lane",
+            "all_units",
+            None,
         ),
         (
             BuildingType.INDUSTRIAL,
@@ -281,9 +387,12 @@ def test_mri_suite_count_override_wins_and_included_status_keeps_total_zero():
             220_000,
             "extra_loading_docks",
             {"loading_dock_count": 10},
-            650000.0,
-            "explicit_override:loading_dock_count",
+            130000.0,
+            "overage_above_default",
+            2.0,
             "dock",
+            "overage_above_default",
+            8.0,
         ),
         (
             BuildingType.INDUSTRIAL,
@@ -293,21 +402,40 @@ def test_mri_suite_count_override_wins_and_included_status_keeps_total_zero():
             {"crane_bay_count": 3},
             750000.0,
             "explicit_override:crane_bay_count",
+            3.0,
             "bay",
+            "all_units",
+            None,
         ),
         (
             BuildingType.SPECIALTY,
             "car_dealership",
             40_000,
             "expanded_service_bays",
-            {"service_bay_count": 7},
-            665000.0,
-            "explicit_override:service_bay_count",
+            {"service_bay_count": 10},
+            190000.0,
+            "overage_above_default",
+            2.0,
             "bay",
+            "overage_above_default",
+            8.0,
+        ),
+        (
+            BuildingType.INDUSTRIAL,
+            "manufacturing",
+            100_000,
+            "crane_bays",
+            {"crane_bay_count": 3},
+            300000.0,
+            "overage_above_default",
+            1.0,
+            "bay",
+            "overage_above_default",
+            2.0,
         ),
     ),
 )
-def test_incremental_count_based_features_use_explicit_overrides(
+def test_count_based_features_apply_explicit_quantities_according_to_configured_mode(
     building_type,
     subtype,
     square_footage,
@@ -315,7 +443,10 @@ def test_incremental_count_based_features_use_explicit_overrides(
     parsed_input_overrides,
     expected_total_cost,
     expected_quantity_source,
+    expected_applied_quantity,
     expected_unit_label,
+    expected_count_pricing_mode,
+    expected_included_baseline_quantity,
 ):
     result = unified_engine.calculate_project(
         building_type=building_type,
@@ -330,9 +461,20 @@ def test_incremental_count_based_features_use_explicit_overrides(
     row = _special_feature_breakdown_by_id(result)[feature_id]
 
     assert row["pricing_basis"] == SpecialFeaturePricingBasis.COUNT_BASED.value
+    assert row["count_pricing_mode"] == expected_count_pricing_mode
     assert row["quantity_source"] == expected_quantity_source
+    assert row["applied_quantity"] == pytest.approx(expected_applied_quantity)
+    assert row["requested_quantity"] == pytest.approx(
+        float(next(iter(parsed_input_overrides.values())))
+    )
     assert row["unit_label"] == expected_unit_label
     assert row["total_cost"] == pytest.approx(expected_total_cost)
+    if expected_included_baseline_quantity is None:
+        assert "included_baseline_quantity" not in row
+    else:
+        assert row["included_baseline_quantity"] == pytest.approx(
+            expected_included_baseline_quantity
+        )
     assert result["construction_costs"]["special_features_total"] == pytest.approx(expected_total_cost)
 
 
@@ -357,10 +499,38 @@ def test_operating_room_defaults_use_deterministic_size_bands(square_footage, ex
     row = _special_feature_breakdown_by_id(result)["operating_room"]
 
     assert row["pricing_basis"] == SpecialFeaturePricingBasis.COUNT_BASED.value
+    assert row["count_pricing_mode"] == "overage_above_default"
     assert row["applied_quantity"] == pytest.approx(expected_quantity)
     assert row["quantity_source"] == "size_band_default"
+    assert row["requested_quantity"] == pytest.approx(expected_quantity)
+    assert row["included_baseline_quantity"] == pytest.approx(expected_quantity)
+    assert row["billed_quantity"] == pytest.approx(expected_quantity)
     assert row["resolved_size_band"] == expected_band
     assert row["total_cost"] == 0.0
+
+
+def test_overage_mode_incremental_features_preserve_safe_default_behavior_without_explicit_count():
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.INDUSTRIAL,
+        subtype="distribution_center",
+        square_footage=220_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["extra_loading_docks"],
+    )
+
+    row = _special_feature_breakdown_by_id(result)["extra_loading_docks"]
+
+    assert row["pricing_basis"] == SpecialFeaturePricingBasis.COUNT_BASED.value
+    assert row["count_pricing_mode"] == "overage_above_default"
+    assert row["requested_quantity"] == pytest.approx(8.0)
+    assert row["included_baseline_quantity"] == pytest.approx(8.0)
+    assert row["billed_quantity"] == pytest.approx(8.0)
+    assert row["quantity_source"] == "size_band_default"
+    assert row["cost_per_count"] == pytest.approx(65000.0)
+    assert row["applied_quantity"] == pytest.approx(8.0)
+    assert row["total_cost"] == pytest.approx(520000.0)
+    assert result["construction_costs"]["special_features_total"] == pytest.approx(520000.0)
 
 
 def test_cafe_drive_thru_uses_configured_default_count_and_no_longer_scales_with_square_footage():
@@ -429,6 +599,7 @@ def test_available_special_feature_pricing_exposes_count_based_metadata_for_migr
     assert pricing_row["pricing_basis"] == SpecialFeaturePricingBasis.COUNT_BASED.value
     assert pricing_row["configured_value"] == pytest.approx(95000.0)
     assert pricing_row["configured_cost_per_count"] == pytest.approx(95000.0)
+    assert pricing_row["count_pricing_mode"] == "overage_above_default"
     assert pricing_row["unit_label"] == "bay"
     assert pricing_row["count_override_keys"] == [
         "expanded_service_bay_count",

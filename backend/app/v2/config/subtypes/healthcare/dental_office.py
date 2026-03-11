@@ -77,6 +77,7 @@ CONFIG = (
             "operatory": {
                 "basis": "COUNT_BASED",
                 "value": 45000,
+                "count_pricing_mode": "overage_above_default",
                 "count_override_keys": ["operatory_count", "dental_operatory_count", "chair_count"],
                 "default_count_bands": [
                     {"label": "compact_practice", "max_square_footage": 2500, "count": 4},
