@@ -41,16 +41,16 @@ const analysisResult = {
       typical_floors: 1,
       available_special_feature_pricing: [
         {
-          id: 'private_dining',
-          label: 'Private Dining',
+          id: 'outdoor_seating',
+          label: 'Outdoor Seating',
           pricing_status: 'included_in_baseline',
-          configured_cost_per_sf: 30,
+          configured_cost_per_sf: 25,
         },
         {
-          id: 'wine_cellar',
-          label: 'Wine Cellar',
+          id: 'bar',
+          label: 'Bar',
           pricing_status: 'incremental',
-          configured_cost_per_sf: 45,
+          configured_cost_per_sf: 35,
         },
       ],
     },
@@ -71,6 +71,73 @@ const analysisResult = {
       soft_costs: 480000,
       total_project_cost: 3680000,
       cost_per_sf: 566.15,
+    },
+    calculation_trace: [],
+    timestamp: '2026-03-10T12:00:00Z',
+  },
+  confidence: 1,
+} as any;
+
+const areaShareAnalysisResult = {
+  parsed_input: {
+    building_type: 'hospitality',
+    subtype: 'full_service_hotel',
+    square_footage: 85000,
+    location: 'Nashville, TN',
+    project_class: 'ground_up',
+    floors: 8,
+    confidence: 1,
+  },
+  calculations: {
+    project_info: {
+      building_type: 'hospitality',
+      subtype: 'full_service_hotel',
+      display_name: 'Full Service Hotel',
+      project_class: 'ground_up',
+      square_footage: 85000,
+      location: 'Nashville, TN',
+      floors: 8,
+      typical_floors: 8,
+      available_special_feature_pricing: [
+        {
+          id: 'ballroom',
+          label: 'Ballroom',
+          pricing_status: 'included_in_baseline',
+          pricing_basis: 'AREA_SHARE_GSF',
+          configured_value: 50,
+          configured_area_share_of_gsf: 0.08,
+          applied_quantity: 6800,
+        },
+        {
+          id: 'spa',
+          label: 'Spa',
+          pricing_status: 'incremental',
+          pricing_basis: 'AREA_SHARE_GSF',
+          configured_value: 60,
+          configured_area_share_of_gsf: 0.04,
+          applied_quantity: 3400,
+          applied_value: 60,
+          total_cost: 204000,
+        },
+      ],
+    },
+    construction_costs: {
+      base_cost_per_sf: 420,
+      class_multiplier: 1,
+      regional_multiplier: 1.03,
+      final_cost_per_sf: 432.6,
+      construction_total: 36771000,
+      equipment_total: 0,
+      special_features_total: 0,
+      special_features_breakdown: [],
+    },
+    trade_breakdown: {},
+    soft_costs: {},
+    totals: {
+      hard_costs: 36771000,
+      soft_costs: 5515650,
+      total_project_cost: 42286650,
+      cost_per_sf: 497.5,
     },
     calculation_trace: [],
     timestamp: '2026-03-10T12:00:00Z',
@@ -300,35 +367,97 @@ describe('NewProject special feature pricing parity', () => {
       </MemoryRouter>
     );
 
-    const privateDiningCheckbox = screen.getByRole('checkbox', { name: /private dining/i });
-    const wineCellarCheckbox = screen.getByRole('checkbox', { name: /wine cellar/i });
+    const outdoorSeatingCheckbox = screen.getByRole('checkbox', { name: /outdoor seating/i });
+    const barCheckbox = screen.getByRole('checkbox', { name: /bar/i });
 
-    fireEvent.click(privateDiningCheckbox);
-    fireEvent.click(wineCellarCheckbox);
+    fireEvent.click(outdoorSeatingCheckbox);
+    fireEvent.click(barCheckbox);
 
-    const privateDiningRow = privateDiningCheckbox.closest('label');
-    expect(privateDiningRow).not.toBeNull();
-    expect(within(privateDiningRow as HTMLElement).getByText('Included in baseline')).toBeInTheDocument();
+    const outdoorSeatingRow = outdoorSeatingCheckbox.closest('label');
+    expect(outdoorSeatingRow).not.toBeNull();
+    expect(within(outdoorSeatingRow as HTMLElement).getByText('Included in baseline')).toBeInTheDocument();
     expect(
-      within(privateDiningRow as HTMLElement).getByText('No additional premium for this subtype')
+      within(outdoorSeatingRow as HTMLElement).getByText('No additional premium for this subtype')
     ).toBeInTheDocument();
-    expect(within(privateDiningRow as HTMLElement).queryByText(/\+\$/)).not.toBeInTheDocument();
-    expect(within(privateDiningRow as HTMLElement).queryByText(/\/SF/)).not.toBeInTheDocument();
+    expect(within(outdoorSeatingRow as HTMLElement).queryByText(/\+\$/)).not.toBeInTheDocument();
+    expect(within(outdoorSeatingRow as HTMLElement).queryByText(/\/SF/)).not.toBeInTheDocument();
 
-    const wineCellarRow = wineCellarCheckbox.closest('label');
-    expect(wineCellarRow).not.toBeNull();
-    expect(within(wineCellarRow as HTMLElement).getByText('Incremental premium')).toBeInTheDocument();
-    expect(within(wineCellarRow as HTMLElement).getByText('+$292,500')).toBeInTheDocument();
-    expect(within(wineCellarRow as HTMLElement).getByText('$45.00/SF × 6,500 SF')).toBeInTheDocument();
+    const barRow = barCheckbox.closest('label');
+    expect(barRow).not.toBeNull();
+    expect(within(barRow as HTMLElement).getByText('Incremental premium')).toBeInTheDocument();
+    expect(within(barRow as HTMLElement).getByText('+$227,500')).toBeInTheDocument();
+    expect(within(barRow as HTMLElement).getByText('$35.00/SF × 6,500 SF')).toBeInTheDocument();
 
     const selectedImpactSummary = screen.getByText('Selected Feature Impact').parentElement;
     expect(selectedImpactSummary).not.toBeNull();
-    expect(within(selectedImpactSummary as HTMLElement).getByText('+$292,500')).toBeInTheDocument();
+    expect(within(selectedImpactSummary as HTMLElement).getByText('+$227,500')).toBeInTheDocument();
     expect(
       within(selectedImpactSummary as HTMLElement).getByText('1 selected feature is included in baseline.')
     ).toBeInTheDocument();
     expect(
       within(selectedImpactSummary as HTMLElement).queryByText('No incremental premium')
+    ).not.toBeInTheDocument();
+    expect(
+      within(selectedImpactSummary as HTMLElement).getByText('$35 / SF combined impact')
+    ).toBeInTheDocument();
+  });
+
+  it('renders area-share backend pricing truth for selected included and incremental features', () => {
+    mockUseProjectAnalysis.mockReturnValue({
+      analyzing: false,
+      calculating: false,
+      result: areaShareAnalysisResult,
+      error: null,
+      analyzeDescription: vi.fn(),
+      calculateDirect: vi.fn(),
+      reset: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <NewProject />
+      </MemoryRouter>
+    );
+
+    const ballroomCheckbox = screen.getByRole('checkbox', { name: /ballroom/i });
+    const spaCheckbox = screen.getByRole('checkbox', { name: /spa/i });
+
+    fireEvent.click(ballroomCheckbox);
+    fireEvent.click(spaCheckbox);
+
+    const ballroomRow = ballroomCheckbox.closest('label');
+    expect(ballroomRow).not.toBeNull();
+    expect(within(ballroomRow as HTMLElement).getByText('Included in baseline')).toBeInTheDocument();
+    expect(
+      within(ballroomRow as HTMLElement).getByText('No additional premium for this subtype')
+    ).toBeInTheDocument();
+    expect(
+      within(ballroomRow as HTMLElement).getByText('Assumed feature area = 8% of project GSF')
+    ).toBeInTheDocument();
+    expect(within(ballroomRow as HTMLElement).queryByText(/\/SF × 85,000 SF/)).not.toBeInTheDocument();
+
+    const spaRow = spaCheckbox.closest('label');
+    expect(spaRow).not.toBeNull();
+    expect(within(spaRow as HTMLElement).getByText('Incremental premium')).toBeInTheDocument();
+    expect(within(spaRow as HTMLElement).getByText('+$204,000')).toBeInTheDocument();
+    expect(
+      within(spaRow as HTMLElement).getByText(
+        '$60.00 per feature-area SF × 3,400 SF assumed feature area'
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(spaRow as HTMLElement).getByText('Assumed feature area = 4% of project GSF')
+    ).toBeInTheDocument();
+    expect(within(spaRow as HTMLElement).queryByText(/\/SF × 85,000 SF/)).not.toBeInTheDocument();
+
+    const selectedImpactSummary = screen.getByText('Selected Feature Impact').parentElement;
+    expect(selectedImpactSummary).not.toBeNull();
+    expect(within(selectedImpactSummary as HTMLElement).getByText('+$204,000')).toBeInTheDocument();
+    expect(
+      within(selectedImpactSummary as HTMLElement).getByText('1 selected feature is included in baseline.')
+    ).toBeInTheDocument();
+    expect(
+      within(selectedImpactSummary as HTMLElement).queryByText(/combined impact/i)
     ).not.toBeInTheDocument();
   });
 

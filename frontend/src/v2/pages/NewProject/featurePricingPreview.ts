@@ -75,6 +75,18 @@ export function getFeatureDisplayPricingPreview(params: {
     return overageDisplayPricing;
   }
 
+  const areaShareDisplayPricing = resolveAreaShareFeatureDisplayPricing({
+    backendAppliedFeaturePricing,
+    backendFeaturePricing,
+    pricingBasis,
+    sourcePricingStatus,
+    hasFeatureSquareFootage,
+    squareFootageSummary,
+  });
+  if (areaShareDisplayPricing) {
+    return areaShareDisplayPricing;
+  }
+
   if (sourcePricingStatus === 'included_in_baseline') {
     return {
       amountLabel: 'Included in baseline',
@@ -217,6 +229,12 @@ function resolvePricingBasis(params: {
     return backendAppliedFeaturePricing.pricing_basis;
   }
   if (
+    typeof backendAppliedFeaturePricing?.configured_area_share_of_gsf === 'number' &&
+    Number.isFinite(backendAppliedFeaturePricing.configured_area_share_of_gsf)
+  ) {
+    return 'AREA_SHARE_GSF';
+  }
+  if (
     typeof backendAppliedFeaturePricing?.configured_cost_per_count === 'number' ||
     typeof backendAppliedFeaturePricing?.cost_per_count === 'number'
   ) {
@@ -235,6 +253,12 @@ function resolvePricingBasis(params: {
     return backendFeaturePricing.pricing_basis;
   }
   if (
+    typeof backendFeaturePricing.configured_area_share_of_gsf === 'number' &&
+    Number.isFinite(backendFeaturePricing.configured_area_share_of_gsf)
+  ) {
+    return 'AREA_SHARE_GSF';
+  }
+  if (
     typeof backendFeaturePricing.configured_cost_per_count === 'number' &&
     Number.isFinite(backendFeaturePricing.configured_cost_per_count)
   ) {
@@ -245,6 +269,161 @@ function resolvePricingBasis(params: {
     Number.isFinite(backendFeaturePricing.configured_cost_per_sf)
   ) {
     return 'WHOLE_PROJECT_SF';
+  }
+  return undefined;
+}
+
+function resolveAreaShareFeatureDisplayPricing(params: {
+  backendAppliedFeaturePricing?: SpecialFeatureBreakdownRow;
+  backendFeaturePricing?: AvailableSpecialFeaturePricing;
+  pricingBasis: SpecialFeaturePricingBasis | null;
+  sourcePricingStatus: FeaturePricingStatus | null;
+  hasFeatureSquareFootage: boolean;
+  squareFootageSummary?: number;
+}): FeatureDisplayPricing | undefined {
+  const {
+    backendAppliedFeaturePricing,
+    backendFeaturePricing,
+    pricingBasis,
+    sourcePricingStatus,
+    hasFeatureSquareFootage,
+    squareFootageSummary,
+  } = params;
+  if (pricingBasis !== 'AREA_SHARE_GSF') {
+    return undefined;
+  }
+
+  const configuredAreaShareOfGsf = resolveNumericField(
+    backendAppliedFeaturePricing?.configured_area_share_of_gsf,
+    backendFeaturePricing?.configured_area_share_of_gsf,
+  );
+  const costPerFeatureAreaSF = resolveAreaShareRate({
+    backendAppliedFeaturePricing,
+    backendFeaturePricing,
+  });
+  const appliedQuantity = resolveAreaShareQuantity({
+    backendAppliedFeaturePricing,
+    backendFeaturePricing,
+    configuredAreaShareOfGsf,
+    squareFootageSummary,
+  });
+  const totalCost = resolveAreaShareTotalCost({
+    backendAppliedFeaturePricing,
+    costPerFeatureAreaSF,
+    appliedQuantity,
+  });
+  const explanationLines =
+    typeof configuredAreaShareOfGsf === 'number'
+      ? [`Assumed feature area = ${formatPercent(configuredAreaShareOfGsf)} of project GSF`]
+      : undefined;
+  const statusLabel = sourcePricingStatus === 'incremental' ? 'Incremental premium' : undefined;
+
+  if (sourcePricingStatus === 'included_in_baseline') {
+    return {
+      amountLabel: 'Included in baseline',
+      detailLabel: 'No additional premium for this subtype',
+      explanationLines,
+      totalCost: 0,
+      isEstimate: false,
+      isPlaceholder: false,
+      pricingStatus: 'included_in_baseline',
+      pricingBasis,
+    };
+  }
+
+  if (
+    typeof costPerFeatureAreaSF === 'number' &&
+    typeof appliedQuantity === 'number' &&
+    typeof totalCost === 'number'
+  ) {
+    return {
+      amountLabel: `+${formatCurrency(totalCost)}`,
+      detailLabel: `${formatCurrency(costPerFeatureAreaSF)} per feature-area SF × ${formatNumber(appliedQuantity)} SF assumed feature area`,
+      explanationLines,
+      totalCost,
+      isEstimate: false,
+      isPlaceholder: false,
+      pricingStatus: sourcePricingStatus,
+      pricingBasis,
+      statusLabel,
+    };
+  }
+
+  if (typeof costPerFeatureAreaSF === 'number') {
+    return {
+      amountLabel: `+${formatCurrency(costPerFeatureAreaSF)} per feature-area SF`,
+      detailLabel:
+        hasFeatureSquareFootage && typeof configuredAreaShareOfGsf === 'number'
+          ? `Assumed feature area = ${formatPercent(configuredAreaShareOfGsf)} of project GSF`
+          : 'Estimate until project SF is provided',
+      explanationLines,
+      isEstimate: true,
+      isPlaceholder: false,
+      pricingStatus: sourcePricingStatus,
+      pricingBasis,
+      statusLabel,
+    };
+  }
+
+  return undefined;
+}
+
+function resolveAreaShareRate(params: {
+  backendAppliedFeaturePricing?: SpecialFeatureBreakdownRow;
+  backendFeaturePricing?: AvailableSpecialFeaturePricing;
+}): number | undefined {
+  const { backendAppliedFeaturePricing, backendFeaturePricing } = params;
+  return resolveNumericField(
+    backendAppliedFeaturePricing?.configured_cost_per_feature_area_sf,
+    backendAppliedFeaturePricing?.configured_value,
+    backendFeaturePricing?.configured_cost_per_feature_area_sf,
+    backendFeaturePricing?.configured_value,
+  );
+}
+
+function resolveAreaShareQuantity(params: {
+  backendAppliedFeaturePricing?: SpecialFeatureBreakdownRow;
+  backendFeaturePricing?: AvailableSpecialFeaturePricing;
+  configuredAreaShareOfGsf?: number;
+  squareFootageSummary?: number;
+}): number | undefined {
+  const {
+    backendAppliedFeaturePricing,
+    backendFeaturePricing,
+    configuredAreaShareOfGsf,
+    squareFootageSummary,
+  } = params;
+  const explicitQuantity = resolveNumericField(
+    backendAppliedFeaturePricing?.applied_quantity,
+    backendFeaturePricing?.applied_quantity,
+  );
+  if (typeof explicitQuantity === 'number') {
+    return explicitQuantity;
+  }
+  if (
+    typeof configuredAreaShareOfGsf === 'number' &&
+    typeof squareFootageSummary === 'number' &&
+    squareFootageSummary > 0
+  ) {
+    return configuredAreaShareOfGsf * squareFootageSummary;
+  }
+  return undefined;
+}
+
+function resolveAreaShareTotalCost(params: {
+  backendAppliedFeaturePricing?: SpecialFeatureBreakdownRow;
+  costPerFeatureAreaSF?: number;
+  appliedQuantity?: number;
+}): number | undefined {
+  const { backendAppliedFeaturePricing, costPerFeatureAreaSF, appliedQuantity } = params;
+  if (
+    typeof backendAppliedFeaturePricing?.total_cost === 'number' &&
+    Number.isFinite(backendAppliedFeaturePricing.total_cost)
+  ) {
+    return backendAppliedFeaturePricing.total_cost;
+  }
+  if (typeof costPerFeatureAreaSF === 'number' && typeof appliedQuantity === 'number') {
+    return costPerFeatureAreaSF * appliedQuantity;
   }
   return undefined;
 }
@@ -493,6 +672,11 @@ function formatQuantityWithUnit(quantity: number, unitLabel: string): string {
 
 function formatAdditionalQuantityWithUnit(quantity: number, unitLabel: string): string {
   return `${formatNumber(quantity)} additional ${pluralizeUnitLabel(unitLabel, quantity)}`;
+}
+
+function formatPercent(value: number): string {
+  const pct = value * 100;
+  return `${pct.toFixed(Number.isInteger(pct) ? 0 : 1)}%`;
 }
 
 function pluralizeUnitLabel(unitLabel: string, quantity: number): string {

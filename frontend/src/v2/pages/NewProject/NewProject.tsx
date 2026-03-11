@@ -1285,8 +1285,10 @@ export const NewProject: React.FC = () => {
   const selectedFeatureHasEstimate = selectedFeatureDetails.some(
     (item) => item.pricing.isEstimate
   );
-  const selectedFeatureHasCountBasedPricing = selectedFeatureDetails.some(
-    (item) => item.pricing.pricingBasis === 'COUNT_BASED'
+  const selectedFeatureHasNonWholeProjectPricing = selectedFeatureDetails.some(
+    (item) =>
+      item.pricing.pricingBasis !== null &&
+      item.pricing.pricingBasis !== 'WHOLE_PROJECT_SF'
   );
   const hasStaticFeaturePlaceholders = applicableSpecialFeatures.some(
     (feature) => getFeatureDisplayPricing(feature).isPlaceholder
@@ -1939,7 +1941,7 @@ export const NewProject: React.FC = () => {
                       </p>
                     )}
                     {!selectedFeatureHasUnknownTotal &&
-                      !selectedFeatureHasCountBasedPricing &&
+                      !selectedFeatureHasNonWholeProjectPricing &&
                       hasFeatureSquareFootage &&
                       selectedFeatureKnownTotal > 0 && (
                       <p className="text-[11px] text-gray-500">

@@ -173,6 +173,7 @@ export interface SpecialFeatureBreakdownRow {
   pricing_basis?: SpecialFeaturePricingBasis;
   count_pricing_mode?: SpecialFeatureCountPricingMode;
   configured_value?: number;
+  configured_cost_per_feature_area_sf?: number;
   applied_value?: number;
   applied_quantity?: number;
   quantity_source?: string;
@@ -180,6 +181,7 @@ export interface SpecialFeatureBreakdownRow {
   cost_per_sf?: number;
   configured_cost_per_count?: number;
   cost_per_count?: number;
+  configured_area_share_of_gsf?: number;
   configured_count?: number;
   configured_count_bands?: SpecialFeaturePricingCountBand[];
   unit_label?: string;
@@ -200,7 +202,9 @@ export interface AvailableSpecialFeaturePricing {
   count_pricing_mode?: SpecialFeatureCountPricingMode;
   configured_value?: number;
   configured_cost_per_sf?: number;
+  configured_cost_per_feature_area_sf?: number;
   configured_cost_per_count?: number;
+  configured_area_share_of_gsf?: number;
   configured_count?: number;
   configured_count_bands?: SpecialFeaturePricingCountBand[];
   count_override_keys?: string[];

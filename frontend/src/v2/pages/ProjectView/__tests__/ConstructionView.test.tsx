@@ -2279,12 +2279,12 @@ describe("ConstructionView", () => {
         total_cost: 0,
       },
       {
-        id: "wine_cellar",
-        label: "Wine Cellar",
+        id: "bar",
+        label: "Bar",
         pricing_status: "incremental",
-        configured_cost_per_sf: 15,
-        cost_per_sf: 15,
-        total_cost: 120000,
+        configured_cost_per_sf: 35,
+        cost_per_sf: 35,
+        total_cost: 280000,
       },
     ];
 
@@ -2295,11 +2295,11 @@ describe("ConstructionView", () => {
     expect(within(includedRow as HTMLElement).getByText("Included in baseline")).toBeInTheDocument();
     expect(within(includedRow as HTMLElement).getByText("$0")).toBeInTheDocument();
 
-    const incrementalRow = screen.getByText("Wine Cellar").closest(".rounded-lg");
+    const incrementalRow = screen.getByText("Bar").closest(".rounded-lg");
     expect(incrementalRow).not.toBeNull();
     expect(within(incrementalRow as HTMLElement).getByText("Incremental premium applied")).toBeInTheDocument();
-    expect(within(incrementalRow as HTMLElement).getByText("$120,000")).toBeInTheDocument();
-    expect(within(incrementalRow as HTMLElement).getByText("$15/SF × 8,000 SF")).toBeInTheDocument();
+    expect(within(incrementalRow as HTMLElement).getByText("$280,000")).toBeInTheDocument();
+    expect(within(incrementalRow as HTMLElement).getByText("$35/SF × 8,000 SF")).toBeInTheDocument();
   });
 
   it("keeps included-in-baseline special features visible when the applied aggregate is zero", () => {
@@ -2309,9 +2309,12 @@ describe("ConstructionView", () => {
       {
         id: "ballroom",
         label: "Ballroom",
+        pricing_basis: "AREA_SHARE_GSF",
         pricing_status: "included_in_baseline",
-        configured_cost_per_sf: 50,
-        cost_per_sf: 0,
+        configured_value: 50,
+        configured_area_share_of_gsf: 0.08,
+        applied_value: 0,
+        applied_quantity: 6800,
         total_cost: 0,
       },
     ];
@@ -2323,6 +2326,63 @@ describe("ConstructionView", () => {
     expect(ballroomRow).not.toBeNull();
     expect(within(ballroomRow as HTMLElement).getByText("Included in baseline")).toBeInTheDocument();
     expect(within(ballroomRow as HTMLElement).getByText("$0")).toBeInTheDocument();
+    expect(
+      within(ballroomRow as HTMLElement).getByText("Assumed feature area = 8% of project GSF")
+    ).toBeInTheDocument();
+  });
+
+  it("renders area-share special features with feature-area copy and keeps included rows visible", () => {
+    const project = buildHospitalityProject("hospitality_full_service_hotel_v1", "subtype");
+    project.analysis.calculations.construction_costs.special_features_total = 204000;
+    project.analysis.calculations.construction_costs.special_features_breakdown = [
+      {
+        id: "ballroom",
+        label: "Ballroom",
+        pricing_basis: "AREA_SHARE_GSF",
+        pricing_status: "included_in_baseline",
+        configured_value: 50,
+        configured_area_share_of_gsf: 0.08,
+        applied_value: 0,
+        applied_quantity: 6800,
+        total_cost: 0,
+      },
+      {
+        id: "spa",
+        label: "Spa",
+        pricing_basis: "AREA_SHARE_GSF",
+        pricing_status: "incremental",
+        configured_value: 60,
+        configured_area_share_of_gsf: 0.04,
+        applied_value: 60,
+        applied_quantity: 3400,
+        total_cost: 204000,
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+
+    const includedRow = screen.getByText("Ballroom").closest(".rounded-lg");
+    expect(includedRow).not.toBeNull();
+    expect(within(includedRow as HTMLElement).getByText("Included in baseline")).toBeInTheDocument();
+    expect(within(includedRow as HTMLElement).getByText("$0")).toBeInTheDocument();
+    expect(
+      within(includedRow as HTMLElement).getByText("Assumed feature area = 8% of project GSF")
+    ).toBeInTheDocument();
+    expect(within(includedRow as HTMLElement).queryByText(/\/SF ×/)).not.toBeInTheDocument();
+
+    const incrementalRow = screen.getByText("Spa").closest(".rounded-lg");
+    expect(incrementalRow).not.toBeNull();
+    expect(within(incrementalRow as HTMLElement).getByText("Incremental premium applied")).toBeInTheDocument();
+    expect(within(incrementalRow as HTMLElement).getByText("$204,000")).toBeInTheDocument();
+    expect(
+      within(incrementalRow as HTMLElement).getByText(
+        "$60 per feature-area SF × 3,400 SF assumed feature area"
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(incrementalRow as HTMLElement).getByText("Assumed feature area = 4% of project GSF")
+    ).toBeInTheDocument();
+    expect(within(incrementalRow as HTMLElement).queryByText(/\/SF × 8,000 SF/)).not.toBeInTheDocument();
   });
 
   it("renders count-based special features with unit pricing copy and keeps included rows visible", () => {

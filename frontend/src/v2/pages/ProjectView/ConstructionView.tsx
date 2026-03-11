@@ -34,10 +34,13 @@ type NormalizedSpecialFeatureBreakdownRow = {
   pricingStatus: SpecialFeaturePricingStatus;
   pricingBasis: SpecialFeaturePricingBasis;
   countPricingMode?: SpecialFeatureCountPricingMode;
+  configuredValue?: number;
+  appliedValue?: number;
   costPerSF?: number;
   configuredCostPerSF?: number;
   costPerCount?: number;
   configuredCostPerCount?: number;
+  configuredAreaShareOfGsf?: number;
   appliedQuantity?: number;
   unitLabel?: string;
   requestedQuantity?: number;
@@ -76,14 +79,21 @@ const toFiniteNumber = (value: unknown): number | null => {
 const resolveSpecialFeaturePricingBasis = (
   item: SpecialFeatureBreakdownRow | AnyRecord,
   hasCountPricing: boolean,
+  hasAreaSharePricing: boolean,
 ): SpecialFeaturePricingBasis => {
   if (item.pricing_basis === 'COUNT_BASED') {
     return 'COUNT_BASED';
   }
+  if (item.pricing_basis === 'AREA_SHARE_GSF') {
+    return 'AREA_SHARE_GSF';
+  }
   if (item.pricing_basis === 'WHOLE_PROJECT_SF') {
     return 'WHOLE_PROJECT_SF';
   }
-  return hasCountPricing ? 'COUNT_BASED' : 'WHOLE_PROJECT_SF';
+  if (hasCountPricing) {
+    return 'COUNT_BASED';
+  }
+  return hasAreaSharePricing ? 'AREA_SHARE_GSF' : 'WHOLE_PROJECT_SF';
 };
 
 const pluralizeUnitLabel = (unitLabel: string, quantity: number): string => {
@@ -106,6 +116,18 @@ const formatCountBasedDetail = (
 ): string => {
   const normalizedUnitLabel = unitLabel || 'item';
   return `${formatCurrency(costPerCount)} per ${normalizedUnitLabel} × ${formatNumber(appliedQuantity)} ${pluralizeUnitLabel(normalizedUnitLabel, appliedQuantity)}`;
+};
+
+const formatAreaShareDetail = (
+  configuredValue: number,
+  appliedQuantity: number,
+): string => (
+  `${formatCurrency(configuredValue)} per feature-area SF × ${formatNumber(appliedQuantity)} SF assumed feature area`
+);
+
+const formatAreaSharePercent = (value: number): string => {
+  const pct = value * 100;
+  return `${pct.toFixed(Number.isInteger(pct) ? 0 : 1)}%`;
 };
 
 const formatAdditionalQuantityWithUnit = (
@@ -137,6 +159,20 @@ const resolveOverageExplanationLines = (
     feature.billedQuantity > 0
       ? `Pricing includes ${formatAdditionalQuantityWithUnit(feature.billedQuantity, unitLabel)}`
       : `No additional ${pluralizeUnitLabel(unitLabel, 2)} priced`,
+  ];
+};
+
+const resolveAreaShareExplanationLines = (
+  feature: NormalizedSpecialFeatureBreakdownRow,
+): string[] => {
+  if (
+    feature.pricingBasis !== 'AREA_SHARE_GSF' ||
+    typeof feature.configuredAreaShareOfGsf !== 'number'
+  ) {
+    return [];
+  }
+  return [
+    `Assumed feature area = ${formatAreaSharePercent(feature.configuredAreaShareOfGsf)} of project GSF`,
   ];
 };
 
@@ -742,10 +778,15 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
           const configuredCostPerSF = toFiniteNumber(item.configured_cost_per_sf);
           const costPerCount = toFiniteNumber(item.cost_per_count);
           const configuredCostPerCount = toFiniteNumber(item.configured_cost_per_count);
+          const configuredValue = toFiniteNumber(item.configured_value);
+          const appliedValue = toFiniteNumber(item.applied_value);
+          const configuredAreaShareOfGsf = toFiniteNumber(item.configured_area_share_of_gsf);
           const hasCountPricing = costPerCount !== null || configuredCostPerCount !== null;
+          const hasAreaSharePricing =
+            item.pricing_basis === 'AREA_SHARE_GSF' || configuredAreaShareOfGsf !== null;
           const hasSfPricing = costPerSF !== null || configuredCostPerSF !== null;
 
-          if (!hasCountPricing && !hasSfPricing) {
+          if (!hasCountPricing && !hasSfPricing && !hasAreaSharePricing) {
             return null;
           }
 
@@ -755,17 +796,20 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
             totalCost,
             pricingStatus:
               item.pricing_status === 'included_in_baseline' ? 'included_in_baseline' : 'incremental',
-            pricingBasis: resolveSpecialFeaturePricingBasis(item, hasCountPricing),
+            pricingBasis: resolveSpecialFeaturePricingBasis(item, hasCountPricing, hasAreaSharePricing),
             countPricingMode:
               item.count_pricing_mode === 'overage_above_default'
                 ? 'overage_above_default'
                 : item.count_pricing_mode === 'all_units'
                   ? 'all_units'
                   : undefined,
+            configuredValue: configuredValue ?? undefined,
+            appliedValue: appliedValue ?? undefined,
             costPerSF: costPerSF ?? undefined,
             configuredCostPerSF: configuredCostPerSF ?? costPerSF ?? undefined,
             costPerCount: costPerCount ?? undefined,
             configuredCostPerCount: configuredCostPerCount ?? costPerCount ?? undefined,
+            configuredAreaShareOfGsf: configuredAreaShareOfGsf ?? undefined,
             appliedQuantity: toFiniteNumber(item.applied_quantity) ?? undefined,
             requestedQuantity: toFiniteNumber(item.requested_quantity) ?? undefined,
             requestedQuantitySource:
@@ -2085,10 +2129,21 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
                                     feature.unitLabel,
                                   )
                                 : undefined
+                              : feature.pricingBasis === 'AREA_SHARE_GSF'
+                                ? !isIncludedInBaseline &&
+                                  typeof feature.configuredValue === 'number' &&
+                                  typeof feature.appliedQuantity === 'number' &&
+                                  feature.appliedQuantity > 0
+                                  ? formatAreaShareDetail(
+                                      feature.configuredValue,
+                                      feature.appliedQuantity,
+                                    )
+                                  : undefined
                               : !isIncludedInBaseline && squareFootage > 0 && typeof feature.costPerSF === 'number'
                                 ? `${formatCurrency(feature.costPerSF)}/SF × ${formatNumber(squareFootage)} SF`
                                 : undefined;
                           const overageExplanationLines = resolveOverageExplanationLines(feature);
+                          const areaShareExplanationLines = resolveAreaShareExplanationLines(feature);
 
 	                          return (
 	                            <div
@@ -2120,6 +2175,15 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
                               {overageExplanationLines.length > 0 && (
                                 <div className="mt-1 space-y-1">
                                   {overageExplanationLines.map((line) => (
+                                    <p key={line} className="text-xs text-gray-500">
+                                      {line}
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
+                              {areaShareExplanationLines.length > 0 && (
+                                <div className="mt-1 space-y-1">
+                                  {areaShareExplanationLines.map((line) => (
                                     <p key={line} className="text-xs text-gray-500">
                                       {line}
                                     </p>

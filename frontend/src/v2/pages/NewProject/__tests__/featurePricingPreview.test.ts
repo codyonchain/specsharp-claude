@@ -128,6 +128,63 @@ describe('featurePricingPreview', () => {
     expect(pricing.detailLabel).toBe('No additional premium for this subtype');
   });
 
+  it('renders area-share incremental premiums from backend preview metadata', () => {
+    const pricingById = indexAvailableSpecialFeaturePricing([
+      {
+        id: 'spa',
+        label: 'Spa',
+        pricing_status: 'incremental',
+        pricing_basis: 'AREA_SHARE_GSF',
+        configured_value: 60,
+        configured_area_share_of_gsf: 0.04,
+      },
+    ]);
+
+    const pricing = getFeatureDisplayPricingPreview({
+      backendFeaturePricing: pricingById.spa,
+      usesSubtypeCostPerSF: true,
+      hasFeatureSquareFootage: true,
+      squareFootageSummary: 85000,
+    });
+
+    expect(pricing.pricingStatus).toBe('incremental');
+    expect(pricing.pricingBasis).toBe('AREA_SHARE_GSF');
+    expect(pricing.statusLabel).toBe('Incremental premium');
+    expect(pricing.amountLabel).toBe('+$204,000');
+    expect(pricing.detailLabel).toBe(
+      '$60.00 per feature-area SF × 3,400 SF assumed feature area'
+    );
+    expect(pricing.explanationLines).toEqual(['Assumed feature area = 4% of project GSF']);
+    expect(pricing.totalCost).toBe(204000);
+  });
+
+  it('renders area-share included features as included in baseline', () => {
+    const pricingById = indexAvailableSpecialFeaturePricing([
+      {
+        id: 'ballroom',
+        label: 'Ballroom',
+        pricing_status: 'included_in_baseline',
+        pricing_basis: 'AREA_SHARE_GSF',
+        configured_value: 50,
+        configured_area_share_of_gsf: 0.08,
+      },
+    ]);
+
+    const pricing = getFeatureDisplayPricingPreview({
+      backendFeaturePricing: pricingById.ballroom,
+      usesSubtypeCostPerSF: true,
+      hasFeatureSquareFootage: true,
+      squareFootageSummary: 85000,
+    });
+
+    expect(pricing.pricingStatus).toBe('included_in_baseline');
+    expect(pricing.pricingBasis).toBe('AREA_SHARE_GSF');
+    expect(pricing.amountLabel).toBe('Included in baseline');
+    expect(pricing.detailLabel).toBe('No additional premium for this subtype');
+    expect(pricing.explanationLines).toEqual(['Assumed feature area = 8% of project GSF']);
+    expect(pricing.totalCost).toBe(0);
+  });
+
   it('renders overage-mode count-based pricing with baseline, requested, and billed quantities', () => {
     const pricingById = indexAvailableSpecialFeaturePricing([
       {
