@@ -155,6 +155,10 @@ export type SpecialFeaturePricingBasis =
   | 'FIXED_LUMP_SUM'
   | 'TIERED_INTENSITY';
 
+export type SpecialFeatureCountPricingMode =
+  | 'all_units'
+  | 'overage_above_default';
+
 export interface SpecialFeaturePricingCountBand {
   label?: string;
   max_square_footage?: number;
@@ -167,6 +171,7 @@ export interface SpecialFeatureBreakdownRow {
   total_cost: number;
   pricing_status?: SpecialFeaturePricingStatus;
   pricing_basis?: SpecialFeaturePricingBasis;
+  count_pricing_mode?: SpecialFeatureCountPricingMode;
   configured_value?: number;
   applied_value?: number;
   applied_quantity?: number;
@@ -179,6 +184,12 @@ export interface SpecialFeatureBreakdownRow {
   configured_count_bands?: SpecialFeaturePricingCountBand[];
   unit_label?: string;
   resolved_size_band?: string;
+  requested_quantity?: number;
+  requested_quantity_source?: string;
+  included_baseline_quantity?: number;
+  included_baseline_quantity_source?: string;
+  billed_quantity?: number;
+  billed_quantity_source?: string;
 }
 
 export interface AvailableSpecialFeaturePricing {
@@ -186,6 +197,7 @@ export interface AvailableSpecialFeaturePricing {
   label: string;
   pricing_status: SpecialFeaturePricingStatus;
   pricing_basis?: SpecialFeaturePricingBasis;
+  count_pricing_mode?: SpecialFeatureCountPricingMode;
   configured_value?: number;
   configured_cost_per_sf?: number;
   configured_cost_per_count?: number;
@@ -193,6 +205,13 @@ export interface AvailableSpecialFeaturePricing {
   configured_count_bands?: SpecialFeaturePricingCountBand[];
   count_override_keys?: string[];
   unit_label?: string;
+  resolved_size_band?: string;
+  requested_quantity?: number;
+  requested_quantity_source?: string;
+  included_baseline_quantity?: number;
+  included_baseline_quantity_source?: string;
+  billed_quantity?: number;
+  billed_quantity_source?: string;
 }
 
 export interface RegionalContext {

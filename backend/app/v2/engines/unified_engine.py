@@ -33,7 +33,7 @@ from app.v2.services.special_feature_pricing import (
     resolve_special_feature_pricing,
     resolve_normalized_special_feature_pricing_rules,
     serialize_applied_special_feature_pricing,
-    serialize_special_feature_pricing_rule_preview,
+    serialize_resolved_special_feature_pricing_rule_preview,
 )
 from app.services.nlp_service import NLPService
 # from app.v2.services.financial_analyzer import FinancialAnalyzer  # TODO: Implement this
@@ -1221,8 +1221,10 @@ class UnifiedEngine:
                 pricing_status = available_special_feature_resolution.pricing_status_by_feature_id[
                     normalized_rule.feature_id
                 ]
-                preview_row = serialize_special_feature_pricing_rule_preview(
+                preview_row = serialize_resolved_special_feature_pricing_rule_preview(
                     normalized_rule,
+                    square_footage=square_footage,
+                    pricing_override_sources=pricing_override_sources,
                     pricing_status=pricing_status,
                 )
                 preview_row['label'] = _humanize_special_feature_label(normalized_rule.feature_id)

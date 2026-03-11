@@ -1,5 +1,7 @@
 import type {
   AvailableSpecialFeaturePricing,
+  SpecialFeatureBreakdownRow,
+  SpecialFeatureCountPricingMode,
   SpecialFeaturePricingBasis,
   SpecialFeaturePricingCountBand,
   SpecialFeaturePricingStatus,
@@ -10,6 +12,7 @@ export type FeaturePricingStatus = SpecialFeaturePricingStatus;
 export type FeatureDisplayPricing = {
   amountLabel: string;
   detailLabel?: string;
+  explanationLines?: string[];
   totalCost?: number;
   isEstimate: boolean;
   isPlaceholder: boolean;
@@ -34,6 +37,7 @@ export function indexAvailableSpecialFeaturePricing(
 }
 
 export function getFeatureDisplayPricingPreview(params: {
+  backendAppliedFeaturePricing?: SpecialFeatureBreakdownRow;
   backendFeaturePricing?: AvailableSpecialFeaturePricing;
   fallbackCostPerSF?: number;
   fallbackStaticCost?: number;
@@ -42,6 +46,7 @@ export function getFeatureDisplayPricingPreview(params: {
   squareFootageSummary?: number;
 }): FeatureDisplayPricing {
   const {
+    backendAppliedFeaturePricing,
     backendFeaturePricing,
     fallbackCostPerSF,
     fallbackStaticCost,
@@ -50,7 +55,27 @@ export function getFeatureDisplayPricingPreview(params: {
     squareFootageSummary,
   } = params;
 
-  if (backendFeaturePricing?.pricing_status === 'included_in_baseline') {
+  const pricingBasis =
+    resolvePricingBasis({
+      backendAppliedFeaturePricing,
+      backendFeaturePricing,
+    }) ?? null;
+  const sourcePricingStatus =
+    backendAppliedFeaturePricing?.pricing_status ??
+    backendFeaturePricing?.pricing_status ??
+    null;
+
+  const overageDisplayPricing = resolveOverageFeatureDisplayPricing({
+    backendAppliedFeaturePricing,
+    backendFeaturePricing,
+    pricingBasis,
+    sourcePricingStatus,
+  });
+  if (overageDisplayPricing) {
+    return overageDisplayPricing;
+  }
+
+  if (sourcePricingStatus === 'included_in_baseline') {
     return {
       amountLabel: 'Included in baseline',
       detailLabel: 'No additional premium for this subtype',
@@ -58,29 +83,41 @@ export function getFeatureDisplayPricingPreview(params: {
       isEstimate: false,
       isPlaceholder: false,
       pricingStatus: 'included_in_baseline',
-      pricingBasis: resolvePricingBasis(backendFeaturePricing) ?? null,
+      pricingBasis,
     };
   }
 
-  const pricingBasis = resolvePricingBasis(backendFeaturePricing) ?? null;
   const costPerSF = backendFeaturePricing?.configured_cost_per_sf ?? fallbackCostPerSF;
-  const pricingStatus = backendFeaturePricing?.pricing_status ?? null;
+  const pricingStatus = sourcePricingStatus;
   const statusLabel = pricingStatus === 'incremental' ? 'Incremental premium' : undefined;
 
   if (pricingBasis === 'COUNT_BASED') {
-    const unitLabel = backendFeaturePricing?.unit_label ?? 'item';
-    const costPerCount = getConfiguredCountRate(backendFeaturePricing);
+    const unitLabel =
+      backendAppliedFeaturePricing?.unit_label ?? backendFeaturePricing?.unit_label ?? 'item';
+    const costPerCount = getConfiguredCountRate({
+      backendAppliedFeaturePricing,
+      backendFeaturePricing,
+    });
     const resolvedCount = resolveConfiguredCount({
+      backendAppliedFeaturePricing,
       backendFeaturePricing,
       squareFootageSummary,
     });
+    const appliedTotalCost = resolveAppliedCountTotalCost({
+      backendAppliedFeaturePricing,
+      costPerCount,
+      resolvedCount,
+    });
 
-    if (typeof costPerCount === 'number' && typeof resolvedCount === 'number') {
-      const totalCost = costPerCount * resolvedCount;
+    if (
+      typeof costPerCount === 'number' &&
+      typeof resolvedCount === 'number' &&
+      typeof appliedTotalCost === 'number'
+    ) {
       return {
-        amountLabel: `+${formatCurrency(totalCost)}`,
+        amountLabel: `+${formatCurrency(appliedTotalCost)}`,
         detailLabel: `${formatCurrency(costPerCount)} per ${unitLabel} × ${formatQuantityWithUnit(resolvedCount, unitLabel)}`,
-        totalCost,
+        totalCost: appliedTotalCost,
         isEstimate: false,
         isPlaceholder: false,
         pricingStatus,
@@ -155,15 +192,42 @@ export function getFeatureDisplayPricingPreview(params: {
 }
 
 function getConfiguredCountRate(
-  backendFeaturePricing?: AvailableSpecialFeaturePricing,
+  params: {
+    backendAppliedFeaturePricing?: SpecialFeatureBreakdownRow;
+    backendFeaturePricing?: AvailableSpecialFeaturePricing;
+  },
 ): number | undefined {
+  const { backendAppliedFeaturePricing, backendFeaturePricing } = params;
+  const appliedValue =
+    backendAppliedFeaturePricing?.cost_per_count ??
+    backendAppliedFeaturePricing?.configured_cost_per_count;
+  if (typeof appliedValue === 'number' && Number.isFinite(appliedValue)) {
+    return appliedValue;
+  }
   const value = backendFeaturePricing?.configured_cost_per_count ?? backendFeaturePricing?.configured_value;
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
-function resolvePricingBasis(
-  backendFeaturePricing?: AvailableSpecialFeaturePricing,
-): SpecialFeaturePricingBasis | undefined {
+function resolvePricingBasis(params: {
+  backendAppliedFeaturePricing?: SpecialFeatureBreakdownRow;
+  backendFeaturePricing?: AvailableSpecialFeaturePricing;
+}): SpecialFeaturePricingBasis | undefined {
+  const { backendAppliedFeaturePricing, backendFeaturePricing } = params;
+  if (backendAppliedFeaturePricing?.pricing_basis) {
+    return backendAppliedFeaturePricing.pricing_basis;
+  }
+  if (
+    typeof backendAppliedFeaturePricing?.configured_cost_per_count === 'number' ||
+    typeof backendAppliedFeaturePricing?.cost_per_count === 'number'
+  ) {
+    return 'COUNT_BASED';
+  }
+  if (
+    typeof backendAppliedFeaturePricing?.configured_cost_per_sf === 'number' ||
+    typeof backendAppliedFeaturePricing?.cost_per_sf === 'number'
+  ) {
+    return 'WHOLE_PROJECT_SF';
+  }
   if (!backendFeaturePricing) {
     return undefined;
   }
@@ -186,12 +250,39 @@ function resolvePricingBasis(
 }
 
 function resolveConfiguredCount(params: {
+  backendAppliedFeaturePricing?: SpecialFeatureBreakdownRow;
   backendFeaturePricing?: AvailableSpecialFeaturePricing;
   squareFootageSummary?: number;
 }): number | undefined {
-  const { backendFeaturePricing, squareFootageSummary } = params;
+  const { backendAppliedFeaturePricing, backendFeaturePricing, squareFootageSummary } = params;
   if (!backendFeaturePricing) {
-    return undefined;
+    const appliedQuantity =
+      backendAppliedFeaturePricing?.billed_quantity ??
+      backendAppliedFeaturePricing?.applied_quantity;
+    return typeof appliedQuantity === 'number' && Number.isFinite(appliedQuantity)
+      ? appliedQuantity
+      : undefined;
+  }
+
+  const appliedQuantity =
+    backendAppliedFeaturePricing?.billed_quantity ??
+    backendAppliedFeaturePricing?.applied_quantity;
+  if (typeof appliedQuantity === 'number' && Number.isFinite(appliedQuantity)) {
+    return appliedQuantity;
+  }
+
+  if (
+    typeof backendFeaturePricing.billed_quantity === 'number' &&
+    Number.isFinite(backendFeaturePricing.billed_quantity)
+  ) {
+    return backendFeaturePricing.billed_quantity;
+  }
+
+  if (
+    typeof backendFeaturePricing.requested_quantity === 'number' &&
+    Number.isFinite(backendFeaturePricing.requested_quantity)
+  ) {
+    return backendFeaturePricing.requested_quantity;
   }
 
   if (
@@ -217,6 +308,175 @@ function resolveConfiguredCount(params: {
   return undefined;
 }
 
+function resolveAppliedCountTotalCost(params: {
+  backendAppliedFeaturePricing?: SpecialFeatureBreakdownRow;
+  costPerCount?: number;
+  resolvedCount?: number;
+}): number | undefined {
+  const { backendAppliedFeaturePricing, costPerCount, resolvedCount } = params;
+  if (
+    typeof backendAppliedFeaturePricing?.total_cost === 'number' &&
+    Number.isFinite(backendAppliedFeaturePricing.total_cost)
+  ) {
+    return backendAppliedFeaturePricing.total_cost;
+  }
+  if (typeof costPerCount === 'number' && typeof resolvedCount === 'number') {
+    return costPerCount * resolvedCount;
+  }
+  return undefined;
+}
+
+function resolveCountPricingMode(params: {
+  backendAppliedFeaturePricing?: SpecialFeatureBreakdownRow;
+  backendFeaturePricing?: AvailableSpecialFeaturePricing;
+}): SpecialFeatureCountPricingMode | undefined {
+  const { backendAppliedFeaturePricing, backendFeaturePricing } = params;
+  if (backendAppliedFeaturePricing?.count_pricing_mode) {
+    return backendAppliedFeaturePricing.count_pricing_mode;
+  }
+  return backendFeaturePricing?.count_pricing_mode;
+}
+
+function resolveOverageFeatureDisplayPricing(params: {
+  backendAppliedFeaturePricing?: SpecialFeatureBreakdownRow;
+  backendFeaturePricing?: AvailableSpecialFeaturePricing;
+  pricingBasis: SpecialFeaturePricingBasis | null;
+  sourcePricingStatus: FeaturePricingStatus | null;
+}): FeatureDisplayPricing | undefined {
+  const {
+    backendAppliedFeaturePricing,
+    backendFeaturePricing,
+    pricingBasis,
+    sourcePricingStatus,
+  } = params;
+  if (pricingBasis !== 'COUNT_BASED') {
+    return undefined;
+  }
+
+  const countPricingMode = resolveCountPricingMode({
+    backendAppliedFeaturePricing,
+    backendFeaturePricing,
+  });
+  if (countPricingMode !== 'overage_above_default') {
+    return undefined;
+  }
+
+  const requestedQuantity = resolveNumericField(
+    backendAppliedFeaturePricing?.requested_quantity,
+    backendFeaturePricing?.requested_quantity,
+  );
+  const includedBaselineQuantity = resolveNumericField(
+    backendAppliedFeaturePricing?.included_baseline_quantity,
+    backendFeaturePricing?.included_baseline_quantity,
+  );
+  const billedQuantity = resolveNumericField(
+    backendAppliedFeaturePricing?.billed_quantity,
+    backendFeaturePricing?.billed_quantity,
+    backendAppliedFeaturePricing?.applied_quantity,
+  );
+  const requestedQuantitySource =
+    backendAppliedFeaturePricing?.requested_quantity_source ??
+    backendFeaturePricing?.requested_quantity_source;
+
+  const hasExplicitRequestedQuantity =
+    typeof requestedQuantitySource === 'string' &&
+    requestedQuantitySource.startsWith('explicit_override:');
+  if (
+    !hasExplicitRequestedQuantity ||
+    typeof requestedQuantity !== 'number' ||
+    typeof includedBaselineQuantity !== 'number' ||
+    typeof billedQuantity !== 'number'
+  ) {
+    return undefined;
+  }
+
+  const unitLabel =
+    backendAppliedFeaturePricing?.unit_label ?? backendFeaturePricing?.unit_label ?? 'item';
+  const costPerCount = getConfiguredCountRate({
+    backendAppliedFeaturePricing,
+    backendFeaturePricing,
+  });
+  const totalCost = resolveAppliedCountTotalCost({
+    backendAppliedFeaturePricing,
+    costPerCount,
+    resolvedCount: billedQuantity,
+  });
+  const hasBilledOverage = billedQuantity > 0;
+
+  return {
+    amountLabel: resolveOverageAmountLabel({
+      totalCost,
+      hasBilledOverage,
+      sourcePricingStatus,
+    }),
+    detailLabel: resolveOverageDetailLabel({
+      costPerCount,
+      billedQuantity,
+      unitLabel,
+      hasBilledOverage,
+      sourcePricingStatus,
+    }),
+    explanationLines: [
+      `Baseline includes ${formatQuantityWithUnit(includedBaselineQuantity, unitLabel)}`,
+      `You specified ${formatQuantityWithUnit(requestedQuantity, unitLabel)}`,
+      hasBilledOverage
+        ? `Pricing includes ${formatAdditionalQuantityWithUnit(billedQuantity, unitLabel)}`
+        : `No additional ${pluralizeUnitLabel(unitLabel, 2)} priced`,
+    ],
+    totalCost,
+    isEstimate: false,
+    isPlaceholder: false,
+    pricingStatus: hasBilledOverage ? 'incremental' : sourcePricingStatus,
+    pricingBasis,
+    statusLabel: hasBilledOverage
+      ? 'Incremental premium'
+      : sourcePricingStatus === 'incremental'
+        ? 'No additional premium'
+        : undefined,
+  };
+}
+
+function resolveOverageAmountLabel(params: {
+  totalCost?: number;
+  hasBilledOverage: boolean;
+  sourcePricingStatus: FeaturePricingStatus | null;
+}): string {
+  const { totalCost, hasBilledOverage, sourcePricingStatus } = params;
+  if (hasBilledOverage && typeof totalCost === 'number') {
+    return `+${formatCurrency(totalCost)}`;
+  }
+  if (sourcePricingStatus === 'included_in_baseline') {
+    return 'Included in baseline';
+  }
+  return '$0';
+}
+
+function resolveOverageDetailLabel(params: {
+  costPerCount?: number;
+  billedQuantity: number;
+  unitLabel: string;
+  hasBilledOverage: boolean;
+  sourcePricingStatus: FeaturePricingStatus | null;
+}): string {
+  const { costPerCount, billedQuantity, unitLabel, hasBilledOverage, sourcePricingStatus } = params;
+  if (hasBilledOverage && typeof costPerCount === 'number') {
+    return `${formatCurrency(costPerCount)} per ${unitLabel} × ${formatQuantityWithUnit(billedQuantity, unitLabel)}`;
+  }
+  if (sourcePricingStatus === 'included_in_baseline') {
+    return 'No additional premium for this subtype';
+  }
+  return 'No additional units priced';
+}
+
+function resolveNumericField(...values: Array<number | undefined>): number | undefined {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 function matchesSquareFootageBand(
   band: SpecialFeaturePricingCountBand,
   squareFootageSummary: number,
@@ -229,6 +489,10 @@ function matchesSquareFootageBand(
 
 function formatQuantityWithUnit(quantity: number, unitLabel: string): string {
   return `${formatNumber(quantity)} ${pluralizeUnitLabel(unitLabel, quantity)}`;
+}
+
+function formatAdditionalQuantityWithUnit(quantity: number, unitLabel: string): string {
+  return `${formatNumber(quantity)} additional ${pluralizeUnitLabel(unitLabel, quantity)}`;
 }
 
 function pluralizeUnitLabel(unitLabel: string, quantity: number): string {

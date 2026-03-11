@@ -98,6 +98,7 @@ describe('featurePricingPreview', () => {
     expect(pricing.amountLabel).toBe('+$1,800,000');
     expect(pricing.detailLabel).toBe('$450,000 per room × 4 rooms');
     expect(pricing.totalCost).toBe(1800000);
+    expect(pricing.explanationLines).toBeUndefined();
   });
 
   it('renders count-based included features as included in baseline', () => {
@@ -125,6 +126,76 @@ describe('featurePricingPreview', () => {
     expect(pricing.amountLabel).toBe('Included in baseline');
     expect(pricing.totalCost).toBe(0);
     expect(pricing.detailLabel).toBe('No additional premium for this subtype');
+  });
+
+  it('renders overage-mode count-based pricing with baseline, requested, and billed quantities', () => {
+    const pricingById = indexAvailableSpecialFeaturePricing([
+      {
+        id: 'operating_room',
+        label: 'Operating Room',
+        pricing_status: 'included_in_baseline',
+        pricing_basis: 'COUNT_BASED',
+        count_pricing_mode: 'overage_above_default',
+        configured_cost_per_count: 450000,
+        requested_quantity: 6,
+        requested_quantity_source: 'explicit_override:operating_room_count',
+        included_baseline_quantity: 4,
+        billed_quantity: 2,
+        unit_label: 'room',
+      },
+    ]);
+
+    const pricing = getFeatureDisplayPricingPreview({
+      backendFeaturePricing: pricingById.operating_room,
+      usesSubtypeCostPerSF: true,
+      hasFeatureSquareFootage: true,
+      squareFootageSummary: 18000,
+    });
+
+    expect(pricing.pricingStatus).toBe('incremental');
+    expect(pricing.pricingBasis).toBe('COUNT_BASED');
+    expect(pricing.statusLabel).toBe('Incremental premium');
+    expect(pricing.amountLabel).toBe('+$900,000');
+    expect(pricing.detailLabel).toBe('$450,000 per room × 2 rooms');
+    expect(pricing.explanationLines).toEqual([
+      'Baseline includes 4 rooms',
+      'You specified 6 rooms',
+      'Pricing includes 2 additional rooms',
+    ]);
+  });
+
+  it('renders overage-mode no-overage cases without billing extra quantity', () => {
+    const pricingById = indexAvailableSpecialFeaturePricing([
+      {
+        id: 'mri_suite',
+        label: 'MRI Suite',
+        pricing_status: 'included_in_baseline',
+        pricing_basis: 'COUNT_BASED',
+        count_pricing_mode: 'overage_above_default',
+        configured_cost_per_count: 850000,
+        requested_quantity: 1,
+        requested_quantity_source: 'explicit_override:mri_suite_count',
+        included_baseline_quantity: 1,
+        billed_quantity: 0,
+        unit_label: 'suite',
+      },
+    ]);
+
+    const pricing = getFeatureDisplayPricingPreview({
+      backendFeaturePricing: pricingById.mri_suite,
+      usesSubtypeCostPerSF: true,
+      hasFeatureSquareFootage: true,
+      squareFootageSummary: 12000,
+    });
+
+    expect(pricing.pricingStatus).toBe('included_in_baseline');
+    expect(pricing.amountLabel).toBe('Included in baseline');
+    expect(pricing.detailLabel).toBe('No additional premium for this subtype');
+    expect(pricing.explanationLines).toEqual([
+      'Baseline includes 1 suite',
+      'You specified 1 suite',
+      'No additional suites priced',
+    ]);
   });
 
   it('preserves additive fallback behavior when backend pricing status is absent', () => {

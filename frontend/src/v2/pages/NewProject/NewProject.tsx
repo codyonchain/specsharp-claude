@@ -45,6 +45,7 @@ import {
   indexAvailableSpecialFeaturePricing,
   type FeatureDisplayPricing,
 } from './featurePricingPreview';
+import type { SpecialFeatureBreakdownRow } from '../../types';
 
 // Lucide icons
 import { 
@@ -1206,6 +1207,19 @@ export const NewProject: React.FC = () => {
     () => indexAvailableSpecialFeaturePricing(result?.calculations?.project_info?.available_special_feature_pricing),
     [result?.calculations?.project_info?.available_special_feature_pricing]
   );
+  const appliedSpecialFeaturePricingById = useMemo(() => {
+    const rows = result?.calculations?.construction_costs?.special_features_breakdown;
+    if (!Array.isArray(rows)) {
+      return {};
+    }
+
+    return rows.reduce<Record<string, SpecialFeatureBreakdownRow>>((acc, row) => {
+      if (row && typeof row.id === 'string') {
+        acc[row.id] = row as SpecialFeatureBreakdownRow;
+      }
+      return acc;
+    }, {});
+  }, [result?.calculations?.construction_costs?.special_features_breakdown]);
 
   const resolveFeatureCostPerSF = (feature: SpecialFeatureOption): number | undefined => {
     const catalogCost = parsedInput?.building_type
@@ -1243,6 +1257,7 @@ export const NewProject: React.FC = () => {
 
   const getFeatureDisplayPricing = (feature: SpecialFeatureOption): FeatureDisplayPricing => {
     return getFeatureDisplayPricingPreview({
+      backendAppliedFeaturePricing: appliedSpecialFeaturePricingById[feature.id],
       backendFeaturePricing: availableSpecialFeaturePricingById[feature.id],
       fallbackCostPerSF: resolveFeatureCostPerSF(feature),
       fallbackStaticCost:
@@ -1881,6 +1896,15 @@ export const NewProject: React.FC = () => {
                               )}
                               {pricing.detailLabel && (
                                 <p className="mt-1 text-[11px] text-gray-500">{pricing.detailLabel}</p>
+                              )}
+                              {pricing.explanationLines && pricing.explanationLines.length > 0 && (
+                                <div className="mt-1 space-y-1">
+                                  {pricing.explanationLines.map((line) => (
+                                    <p key={line} className="text-[11px] text-gray-500">
+                                      {line}
+                                    </p>
+                                  ))}
+                                </div>
                               )}
                             </div>
                           </label>

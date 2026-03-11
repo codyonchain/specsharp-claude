@@ -1,5 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Project, type SpecialFeatureBreakdownRow, type SpecialFeaturePricingBasis, type SpecialFeaturePricingStatus } from '../../types';
+import {
+  Project,
+  type SpecialFeatureBreakdownRow,
+  type SpecialFeatureCountPricingMode,
+  type SpecialFeaturePricingBasis,
+  type SpecialFeaturePricingStatus,
+} from '../../types';
 import { formatCurrency, formatNumber, formatPercent } from '../../utils/formatters';
 import { pdfService } from '@/services/api';
 import { generateExportFilename } from '@/utils/filenameGenerator';
@@ -27,12 +33,17 @@ type NormalizedSpecialFeatureBreakdownRow = {
   totalCost: number;
   pricingStatus: SpecialFeaturePricingStatus;
   pricingBasis: SpecialFeaturePricingBasis;
+  countPricingMode?: SpecialFeatureCountPricingMode;
   costPerSF?: number;
   configuredCostPerSF?: number;
   costPerCount?: number;
   configuredCostPerCount?: number;
   appliedQuantity?: number;
   unitLabel?: string;
+  requestedQuantity?: number;
+  requestedQuantitySource?: string;
+  includedBaselineQuantity?: number;
+  billedQuantity?: number;
 };
 
 const toRecord = (value: unknown): AnyRecord =>
@@ -95,6 +106,53 @@ const formatCountBasedDetail = (
 ): string => {
   const normalizedUnitLabel = unitLabel || 'item';
   return `${formatCurrency(costPerCount)} per ${normalizedUnitLabel} × ${formatNumber(appliedQuantity)} ${pluralizeUnitLabel(normalizedUnitLabel, appliedQuantity)}`;
+};
+
+const formatAdditionalQuantityWithUnit = (
+  quantity: number,
+  unitLabel?: string,
+): string => {
+  const normalizedUnitLabel = unitLabel || 'item';
+  return `${formatNumber(quantity)} additional ${pluralizeUnitLabel(normalizedUnitLabel, quantity)}`;
+};
+
+const resolveOverageExplanationLines = (
+  feature: NormalizedSpecialFeatureBreakdownRow,
+): string[] => {
+  if (
+    feature.countPricingMode !== 'overage_above_default' ||
+    typeof feature.requestedQuantitySource !== 'string' ||
+    !feature.requestedQuantitySource.startsWith('explicit_override:') ||
+    typeof feature.requestedQuantity !== 'number' ||
+    typeof feature.includedBaselineQuantity !== 'number' ||
+    typeof feature.billedQuantity !== 'number'
+  ) {
+    return [];
+  }
+
+  const unitLabel = feature.unitLabel || 'item';
+  return [
+    `Baseline includes ${formatNumber(feature.includedBaselineQuantity)} ${pluralizeUnitLabel(unitLabel, feature.includedBaselineQuantity)}`,
+    `You specified ${formatNumber(feature.requestedQuantity)} ${pluralizeUnitLabel(unitLabel, feature.requestedQuantity)}`,
+    feature.billedQuantity > 0
+      ? `Pricing includes ${formatAdditionalQuantityWithUnit(feature.billedQuantity, unitLabel)}`
+      : `No additional ${pluralizeUnitLabel(unitLabel, 2)} priced`,
+  ];
+};
+
+const resolveSpecialFeatureStatusLabel = (
+  feature: NormalizedSpecialFeatureBreakdownRow,
+): string => {
+  if (feature.countPricingMode === 'overage_above_default') {
+    return typeof feature.billedQuantity === 'number' && feature.billedQuantity > 0
+      ? 'Incremental premium applied'
+      : feature.pricingStatus === 'included_in_baseline'
+        ? 'Included in baseline'
+        : 'No additional premium';
+  }
+  return feature.pricingStatus === 'included_in_baseline'
+    ? 'Included in baseline'
+    : 'Incremental premium applied';
 };
 
 const MIXED_USE_COMPONENT_ORDER: MixedUseComponent[] = [
@@ -698,11 +756,24 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
             pricingStatus:
               item.pricing_status === 'included_in_baseline' ? 'included_in_baseline' : 'incremental',
             pricingBasis: resolveSpecialFeaturePricingBasis(item, hasCountPricing),
+            countPricingMode:
+              item.count_pricing_mode === 'overage_above_default'
+                ? 'overage_above_default'
+                : item.count_pricing_mode === 'all_units'
+                  ? 'all_units'
+                  : undefined,
             costPerSF: costPerSF ?? undefined,
             configuredCostPerSF: configuredCostPerSF ?? costPerSF ?? undefined,
             costPerCount: costPerCount ?? undefined,
             configuredCostPerCount: configuredCostPerCount ?? costPerCount ?? undefined,
             appliedQuantity: toFiniteNumber(item.applied_quantity) ?? undefined,
+            requestedQuantity: toFiniteNumber(item.requested_quantity) ?? undefined,
+            requestedQuantitySource:
+              typeof item.requested_quantity_source === 'string' && item.requested_quantity_source.trim()
+                ? item.requested_quantity_source.trim()
+                : undefined,
+            includedBaselineQuantity: toFiniteNumber(item.included_baseline_quantity) ?? undefined,
+            billedQuantity: toFiniteNumber(item.billed_quantity) ?? undefined,
             unitLabel:
               typeof item.unit_label === 'string' && item.unit_label.trim()
                 ? item.unit_label.trim()
@@ -1999,14 +2070,15 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
 	                    <div className="mt-3 space-y-2">
 	                      {hasSpecialFeaturesBreakdown ? (
 	                        specialFeaturesBreakdown.map((feature) => {
-	                          const isIncludedInBaseline = feature.pricingStatus === 'included_in_baseline';
-	                          const statusLabel = isIncludedInBaseline
-	                            ? 'Included in baseline'
-	                            : 'Incremental premium applied';
+	                          const isIncludedInBaseline =
+                              feature.pricingStatus === 'included_in_baseline' &&
+                              !(feature.countPricingMode === 'overage_above_default' && typeof feature.billedQuantity === 'number' && feature.billedQuantity > 0);
+	                          const statusLabel = resolveSpecialFeatureStatusLabel(feature);
                           const detailLabel =
-                            !isIncludedInBaseline && feature.pricingBasis === 'COUNT_BASED'
+                            feature.pricingBasis === 'COUNT_BASED'
                               ? typeof feature.costPerCount === 'number' &&
                                 typeof feature.appliedQuantity === 'number'
+                                && feature.appliedQuantity > 0
                                 ? formatCountBasedDetail(
                                     feature.costPerCount,
                                     feature.appliedQuantity,
@@ -2016,6 +2088,7 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
                               : !isIncludedInBaseline && squareFootage > 0 && typeof feature.costPerSF === 'number'
                                 ? `${formatCurrency(feature.costPerSF)}/SF × ${formatNumber(squareFootage)} SF`
                                 : undefined;
+                          const overageExplanationLines = resolveOverageExplanationLines(feature);
 
 	                          return (
 	                            <div
@@ -2044,6 +2117,15 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
 	                                  {detailLabel}
 	                                </p>
 	                              )}
+                              {overageExplanationLines.length > 0 && (
+                                <div className="mt-1 space-y-1">
+                                  {overageExplanationLines.map((line) => (
+                                    <p key={line} className="text-xs text-gray-500">
+                                      {line}
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
 	                            </div>
 	                          );
 	                        })

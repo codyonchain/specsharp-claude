@@ -606,3 +606,26 @@ def test_available_special_feature_pricing_exposes_count_based_metadata_for_migr
         "service_bay_count",
         "bay_count",
     ]
+
+
+def test_available_special_feature_pricing_exposes_overage_preview_quantities_for_explicit_counts():
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.INDUSTRIAL,
+        subtype="distribution_center",
+        square_footage=220_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["extra_loading_docks"],
+        parsed_input_overrides={"loading_dock_count": 10},
+    )
+
+    pricing_row = _available_special_feature_pricing_by_id(result)["extra_loading_docks"]
+
+    assert pricing_row["pricing_basis"] == SpecialFeaturePricingBasis.COUNT_BASED.value
+    assert pricing_row["count_pricing_mode"] == "overage_above_default"
+    assert pricing_row["requested_quantity"] == pytest.approx(10.0)
+    assert pricing_row["requested_quantity_source"] == "explicit_override:loading_dock_count"
+    assert pricing_row["included_baseline_quantity"] == pytest.approx(8.0)
+    assert pricing_row["included_baseline_quantity_source"] == "size_band_default"
+    assert pricing_row["billed_quantity"] == pytest.approx(2.0)
+    assert pricing_row["billed_quantity_source"] == "overage_above_default"

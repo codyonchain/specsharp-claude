@@ -2369,6 +2369,7 @@ describe("ConstructionView", () => {
       within(incrementalRow as HTMLElement).getByText("$950,000 per lab × 1 lab")
     ).toBeInTheDocument();
     expect(within(incrementalRow as HTMLElement).queryByText(/\/SF/)).not.toBeInTheDocument();
+    expect(within(incrementalRow as HTMLElement).queryByText(/Baseline includes/i)).not.toBeInTheDocument();
   });
 
   it("keeps count-based included special features visible when the aggregate is zero", () => {
@@ -2395,6 +2396,75 @@ describe("ConstructionView", () => {
     expect(mriSuiteRow).not.toBeNull();
     expect(within(mriSuiteRow as HTMLElement).getByText("Included in baseline")).toBeInTheDocument();
     expect(within(mriSuiteRow as HTMLElement).getByText("$0")).toBeInTheDocument();
+  });
+
+  it("explains baseline, requested, and billed overage for overage-mode special features", () => {
+    const project = buildHealthcareScheduleProject("surgical_center", "subtype");
+    project.analysis.calculations.construction_costs.special_features_total = 900000;
+    project.analysis.calculations.construction_costs.special_features_breakdown = [
+      {
+        id: "operating_room",
+        label: "Operating Room",
+        pricing_basis: "COUNT_BASED",
+        pricing_status: "included_in_baseline",
+        count_pricing_mode: "overage_above_default",
+        configured_cost_per_count: 450000,
+        cost_per_count: 450000,
+        applied_quantity: 2,
+        requested_quantity: 6,
+        requested_quantity_source: "explicit_override:operating_room_count",
+        included_baseline_quantity: 4,
+        billed_quantity: 2,
+        unit_label: "room",
+        total_cost: 900000,
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+
+    const row = screen.getByText("Operating Room").closest(".rounded-lg");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByText("Incremental premium applied")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("$900,000")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("$450,000 per room × 2 rooms")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("Baseline includes 4 rooms")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("You specified 6 rooms")).toBeInTheDocument();
+    expect(
+      within(row as HTMLElement).getByText("Pricing includes 2 additional rooms")
+    ).toBeInTheDocument();
+  });
+
+  it("explains no-overage cases without hiding the selected baseline-capacity feature", () => {
+    const project = buildHealthcareScheduleProject("imaging_center", "subtype");
+    project.analysis.calculations.construction_costs.special_features_total = 0;
+    project.analysis.calculations.construction_costs.special_features_breakdown = [
+      {
+        id: "mri_suite",
+        label: "MRI Suite",
+        pricing_basis: "COUNT_BASED",
+        pricing_status: "included_in_baseline",
+        count_pricing_mode: "overage_above_default",
+        configured_cost_per_count: 850000,
+        cost_per_count: 0,
+        applied_quantity: 0,
+        requested_quantity: 1,
+        requested_quantity_source: "explicit_override:mri_suite_count",
+        included_baseline_quantity: 1,
+        billed_quantity: 0,
+        unit_label: "suite",
+        total_cost: 0,
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+
+    const row = screen.getByText("MRI Suite").closest(".rounded-lg");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByText("Included in baseline")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("$0")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("Baseline includes 1 suite")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("You specified 1 suite")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("No additional suites priced")).toBeInTheDocument();
   });
 
   it("keeps per-feature special-feature breakdown visible for imaging, urgent care, and medical-office subtype fixtures", () => {

@@ -510,6 +510,40 @@ def serialize_special_feature_pricing_rule_preview(
     return preview
 
 
+def serialize_resolved_special_feature_pricing_rule_preview(
+    rule: NormalizedSpecialFeaturePricingRule,
+    *,
+    square_footage: float,
+    pricing_override_sources: Optional[Iterable[Mapping[str, Any]]] = None,
+    pricing_status: Optional[str] = None,
+) -> Dict[str, Any]:
+    preview = serialize_special_feature_pricing_rule_preview(
+        rule,
+        pricing_status=pricing_status,
+    )
+    if rule.basis != SpecialFeaturePricingBasis.COUNT_BASED:
+        return preview
+
+    resolved_quantities = _resolve_count_based_pricing_quantities(
+        rule=rule,
+        square_footage=square_footage,
+        pricing_override_sources=pricing_override_sources,
+    )
+    preview["requested_quantity"] = resolved_quantities.requested_quantity
+    preview["requested_quantity_source"] = resolved_quantities.requested_quantity_source
+    preview["billed_quantity"] = resolved_quantities.billed_quantity
+    preview["billed_quantity_source"] = resolved_quantities.billed_quantity_source
+    if resolved_quantities.included_baseline_quantity is not None:
+        preview["included_baseline_quantity"] = resolved_quantities.included_baseline_quantity
+    if resolved_quantities.included_baseline_quantity_source is not None:
+        preview["included_baseline_quantity_source"] = (
+            resolved_quantities.included_baseline_quantity_source
+        )
+    if resolved_quantities.resolved_size_band is not None:
+        preview["resolved_size_band"] = resolved_quantities.resolved_size_band
+    return preview
+
+
 def apply_special_feature_pricing_rule(
     *,
     rule: NormalizedSpecialFeaturePricingRule,
