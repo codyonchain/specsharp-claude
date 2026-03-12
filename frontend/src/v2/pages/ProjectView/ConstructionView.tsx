@@ -2249,30 +2249,31 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
 
       {constructionRiskDrivers.length > 0 && (
         <div className="mt-10">
-          <div className="bg-white shadow-sm rounded-2xl border border-gray-100 p-5">
-            <div className="flex items-center justify-between mb-4">
+          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+            <div className="border-b border-gray-200/80 bg-gray-50/70 px-5 py-4 sm:px-6">
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">
+                <h3 className="text-base font-semibold tracking-tight text-gray-950 sm:text-lg">
                   Construction Risk Drivers
                 </h3>
-                <p className="max-w-2xl text-xs leading-5 text-gray-500">
+                <p className="mt-1.5 max-w-2xl text-sm leading-6 text-gray-600">
                   The build-side issues most likely to affect cost confidence, procurement, or schedule.
                 </p>
               </div>
             </div>
 
-            <div className={constructionRiskDriverGridClassName}>
-              {constructionRiskDrivers.map((driver) => (
-                <div
-                  key={driver.id}
-                  className="flex h-full flex-col rounded-xl border border-gray-200/80 bg-gray-50/40 p-4 sm:p-5"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <h4 className="min-w-0 text-sm font-semibold leading-5 text-gray-900">
-                      {driver.title}
-                    </h4>
-                    <span
-                      className={`
+            <div className="p-5 sm:p-6">
+              <div className={constructionRiskDriverGridClassName}>
+                {constructionRiskDrivers.map((driver) => (
+                  <div
+                    key={driver.id}
+                    className="flex h-full flex-col rounded-xl border border-gray-200/80 bg-gray-50/40 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <h4 className="min-w-0 text-sm font-semibold leading-5 text-gray-900">
+                        {driver.title}
+                      </h4>
+                      <span
+                        className={`
                         inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium whitespace-nowrap
                         ${
                           driver.severity === 'high'
@@ -2288,58 +2289,59 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
                         : driver.severity === 'moderate'
                           ? 'Moderate Risk'
                           : 'Lower Risk'}
-                    </span>
-                  </div>
-                  <div className="mt-3 space-y-3">
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500">
-                        Why this is showing
-                      </p>
-                      <p className="text-[13px] leading-5 text-gray-700">
-                        {driver.why_this_is_showing}
-                      </p>
+                      </span>
                     </div>
-
-                    <div className="space-y-3 border-t border-gray-200/80 pt-3">
-                      <div className="space-y-1">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500">
-                          Evidence
+                    <div className="mt-2.5 space-y-2.5">
+                      <div className="grid items-start gap-x-3 gap-y-1 sm:grid-cols-[96px_minmax(0,1fr)]">
+                        <p className="pt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500">
+                          Why this is showing
                         </p>
-                        <p className="text-[11px] leading-5 text-gray-600">
-                          {driver.evidence_summary}
+                        <p className="text-[12px] leading-[1.45] text-gray-700">
+                          {driver.why_this_is_showing}
                         </p>
                       </div>
 
-                      {driver.affects.length > 0 && (
-                        <div className="space-y-1.5">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500">
-                            Affects
+                      <div className="space-y-2.5 border-t border-gray-200/80 pt-2.5">
+                        <div className="grid items-start gap-x-3 gap-y-1 sm:grid-cols-[64px_minmax(0,1fr)]">
+                          <p className="pt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500">
+                            Evidence
                           </p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {driver.affects.map((affect) => (
-                              <span
-                                key={`${driver.id}-${affect}`}
-                                className="inline-flex items-center rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-600"
-                              >
-                                {CONSTRUCTION_RISK_AFFECT_LABELS[affect]}
-                              </span>
-                            ))}
-                          </div>
+                          <p className="text-[11px] leading-[1.45] text-gray-600">
+                            {driver.evidence_summary}
+                          </p>
                         </div>
-                      )}
 
-                      <div className="space-y-1">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500">
-                          Verify next
-                        </p>
-                        <p className="text-[11px] leading-5 text-gray-700">
-                          {driver.verify_next}
-                        </p>
+                        {driver.affects.length > 0 && (
+                          <div className="grid items-start gap-x-3 gap-y-1.5 sm:grid-cols-[64px_minmax(0,1fr)]">
+                            <p className="pt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500">
+                              Affects
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {driver.affects.map((affect) => (
+                                <span
+                                  key={`${driver.id}-${affect}`}
+                                  className="inline-flex items-center rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-600"
+                                >
+                                  {CONSTRUCTION_RISK_AFFECT_LABELS[affect]}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="grid items-start gap-x-3 gap-y-1 sm:grid-cols-[64px_minmax(0,1fr)]">
+                          <p className="pt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500">
+                            Verify next
+                          </p>
+                          <p className="text-[11px] leading-[1.45] text-gray-700">
+                            {driver.verify_next}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         </div>
