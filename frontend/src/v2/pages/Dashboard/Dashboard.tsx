@@ -8,6 +8,7 @@ import {
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { formatters } from '../../utils/displayFormatters';
 import { useProjects } from '../../hooks/useProjects';
+import authService from '../../../services/authService';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -84,13 +85,22 @@ export const Dashboard: React.FC = () => {
               <h1 className="text-2xl font-bold text-gray-900">Projects Dashboard</h1>
               <p className="text-sm text-gray-500">Manage your construction cost estimates</p>
             </div>
-            <button 
-              onClick={() => navigate('/new')}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              New Project
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate('/new')}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                New Project
+              </button>
+              <button
+                type="button"
+                onClick={() => authService.logout()}
+                className="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>

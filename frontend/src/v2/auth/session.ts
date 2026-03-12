@@ -10,6 +10,8 @@ type AuthCallbackResult =
 const ACCESS_TOKEN_KEY = 'specsharp_access_token';
 const EXPIRES_AT_KEY = 'specsharp_token_expires_at';
 const USER_KEY = 'specsharp_user';
+const V2_PROJECTS_CACHE_KEY = 'specsharp_projects';
+const V2_SCENARIOS_CACHE_KEY = 'specsharp_scenarios';
 
 const LEGACY_TOKEN_KEY = 'token';
 const LEGACY_AUTH_KEY = 'isAuthenticated';
@@ -42,6 +44,18 @@ const clearLegacyLocalAuthStorage = (): void => {
   window.localStorage.removeItem(USER_KEY);
   window.localStorage.removeItem(LEGACY_TOKEN_KEY);
   window.localStorage.removeItem(LEGACY_AUTH_KEY);
+};
+
+const clearV2FallbackCaches = (): void => {
+  const cacheKeys = [V2_PROJECTS_CACHE_KEY, V2_SCENARIOS_CACHE_KEY];
+
+  if (hasSessionStorage()) {
+    cacheKeys.forEach((key) => window.sessionStorage.removeItem(key));
+  }
+
+  if (hasLocalStorage()) {
+    cacheKeys.forEach((key) => window.localStorage.removeItem(key));
+  }
 };
 
 const migrateLegacyLocalStorageSession = (): void => {
@@ -122,6 +136,7 @@ export const clearAuthSession = () => {
   storageRemove(LEGACY_TOKEN_KEY);
   storageRemove(LEGACY_AUTH_KEY);
   clearLegacyLocalAuthStorage();
+  clearV2FallbackCaches();
 };
 
 const readSession = () => {

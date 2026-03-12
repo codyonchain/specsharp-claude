@@ -20,7 +20,7 @@ class AuthService {
 
   logout(): void {
     clearAuthSession();
-    window.location.href = '/login';
+    window.location.assign('/login');
   }
 
   isAuthenticated(): boolean {
