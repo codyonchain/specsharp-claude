@@ -436,6 +436,48 @@ def test_hospitality_decision_insurance_outputs_and_provenance():
                 assert isinstance(reason, str) and reason.strip()
 
 
+def test_hospitality_scenario_inputs_carry_human_readable_provenance_labels():
+    payload = unified_engine.calculate_project(
+        building_type=BuildingType.HOSPITALITY,
+        subtype="full_service_hotel",
+        square_footage=80_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+    )
+
+    scenarios_bundle = payload.get("dealshield_scenarios")
+    assert isinstance(scenarios_bundle, dict)
+    scenario_inputs = scenarios_bundle.get("provenance", {}).get("scenario_inputs")
+    assert isinstance(scenario_inputs, dict)
+
+    base = scenario_inputs.get("base")
+    ugly = scenario_inputs.get("ugly")
+
+    assert isinstance(base, dict)
+    assert base.get("scenario_label") == "Base"
+    assert base.get("applied_lever_labels") == []
+
+    assert isinstance(ugly, dict)
+    assert ugly.get("scenario_label") == "Ugly"
+    assert ugly.get("applied_tile_ids") == [
+        "cost_plus_10",
+        "revenue_minus_10",
+        "ballroom_and_fnb_fitout_plus_12",
+    ]
+    assert ugly.get("applied_lever_labels") == [
+        "Cost +10%",
+        "Revenue -10%",
+        "Ballroom and F&B Fit-Out +12%",
+    ]
+    assert ugly.get("driver") == {
+        "tile_id": "ballroom_and_fnb_fitout_plus_12",
+        "metric_ref": "trade_breakdown.finishes",
+        "label": "Ballroom and F&B Fit-Out +12%",
+        "op": "mul",
+        "value": 1.12,
+    }
+
+
 def test_hospitality_construction_schedule_uses_subtype_source_for_known_subtypes():
     for subtype, expected_total_months in HOSPITALITY_SUBTYPE_SCHEDULE_MONTHS.items():
         schedule = build_construction_schedule(

@@ -331,11 +331,26 @@ def _scalar_from_transforms(transforms: List[Dict[str, Any]]) -> Optional[float]
     return float(value)
 
 
-def _driver_entry(tile_id: str, metric_ref: str, transforms: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _tile_label(tile: Dict[str, Any], fallback: str) -> str:
+    label = tile.get("label")
+    if isinstance(label, str) and label.strip():
+        return label.strip()
+    return fallback
+
+
+def _driver_entry(
+    tile_id: str,
+    metric_ref: str,
+    transforms: List[Dict[str, Any]],
+    *,
+    label: Optional[str] = None,
+) -> Dict[str, Any]:
     entry: Dict[str, Any] = {
         "tile_id": tile_id,
         "metric_ref": metric_ref,
     }
+    if isinstance(label, str) and label.strip():
+        entry["label"] = label.strip()
     if len(transforms) == 1:
         entry["op"] = transforms[0].get("op")
         entry["value"] = transforms[0].get("value")
@@ -493,6 +508,11 @@ def build_dealshield_scenarios(
         plus_tiles = row.get("plus_tiles") if isinstance(row.get("plus_tiles"), list) else []
         scenario_defs.append({
             "scenario_id": scenario_id.strip(),
+            "scenario_label": (
+                row.get("label").strip()
+                if isinstance(row.get("label"), str) and row.get("label").strip()
+                else scenario_id.strip()
+            ),
             "apply_tiles": apply_tiles,
             "plus_tiles": plus_tiles,
         })
@@ -527,7 +547,9 @@ def build_dealshield_scenarios(
     scenarios: Dict[str, Dict[str, Any]] = {"base": base_snapshot}
 
     scenario_inputs["base"] = {
+        "scenario_label": "Base",
         "applied_tile_ids": [],
+        "applied_lever_labels": [],
         "cost_scalar": None,
         "revenue_scalar": None,
         "driver": None,
@@ -560,6 +582,7 @@ def build_dealshield_scenarios(
         cost_tiles: List[Dict[str, Any]] = []
         revenue_tiles: List[Dict[str, Any]] = []
         driver_entries: List[Dict[str, Any]] = []
+        applied_lever_labels: List[str] = []
         levers: List[str] = []
         commissioning_delay_months: Optional[int] = None
         ramp_factor: Optional[float] = None
@@ -569,6 +592,8 @@ def build_dealshield_scenarios(
             if not tile:
                 raise DealShieldScenarioError(f"Scenario '{scenario_id}' references missing tile '{tile_id}'")
             metric_ref = tile.get("metric_ref")
+            tile_label = _tile_label(tile, tile_id)
+            applied_lever_labels.append(tile_label)
             transforms = _normalize_transforms(tile.get("transform"))
             transforms = _scale_stress_band_transforms(
                 tile_id=tile_id,
@@ -592,15 +617,23 @@ def build_dealshield_scenarios(
                 levers.append(f"Revenue stress scaled via {metric_ref} (tile {tile_id}).")
             else:
                 driver_overrides.append((metric_ref, transforms))
-                driver_entries.append(_driver_entry(tile_id, metric_ref, transforms))
+                driver_entries.append(
+                    _driver_entry(tile_id, metric_ref, transforms, label=tile_label)
+                )
                 levers.append(f"Driver override applied (tile {tile_id}).")
 
-        display_name = scenario_id.replace("_", " ").title()
+        display_name = (
+            scenario.get("scenario_label")
+            if isinstance(scenario.get("scenario_label"), str) and scenario.get("scenario_label").strip()
+            else scenario_id.replace("_", " ").title()
+        )
         cost_scalar = _scalar_from_transforms(cost_tiles[0]["transforms"]) if len(cost_tiles) == 1 else None
         revenue_scalar = _scalar_from_transforms(revenue_tiles[0]["transforms"]) if len(revenue_tiles) == 1 else None
 
         scenario_input: Dict[str, Any] = {
+            "scenario_label": display_name,
             "applied_tile_ids": applied_tile_ids,
+            "applied_lever_labels": applied_lever_labels,
             "cost_scalar": cost_scalar,
             "revenue_scalar": revenue_scalar,
             "driver": None,
