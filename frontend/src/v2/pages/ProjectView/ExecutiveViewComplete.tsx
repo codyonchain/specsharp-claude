@@ -1221,8 +1221,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   if (isDistributionCenterProject) {
     friendlyType = distributionCenterLabel;
   }
-  // For multifamily and other building types, use typical_floors if available (more accurate)
-  const floors = projectInfo?.typical_floors || parsed?.floors || 1;
+  const floors =
+    projectInfo?.floors || parsed?.floors || projectInfo?.typical_floors || 1;
   const headerSquareFootage =
     Number(projectInfo?.square_footage) ||
     Number(totals?.square_footage) ||

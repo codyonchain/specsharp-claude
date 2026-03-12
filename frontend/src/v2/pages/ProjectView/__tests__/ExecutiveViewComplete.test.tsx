@@ -653,6 +653,17 @@ const buildHospitalityProject = (profileId: string) =>
     },
   }) as any;
 
+const buildHospitalityProjectWithExplicitFloors = (
+  profileId: string,
+  floors: number
+) => {
+  const project = buildHospitalityProject(profileId);
+  project.analysis.parsed_input.floors = floors;
+  project.analysis.calculations.project_info.floors = floors;
+  project.analysis.calculations.project_info.typical_floors = 8;
+  return project;
+};
+
 const restaurantDealShieldViewModel = {
   decision_status: "GO",
   decision_reason_code: "explicit_status_signal",
@@ -805,6 +816,27 @@ const withExecutiveRenderedCopy = (
 });
 
 describe("ExecutiveViewComplete", () => {
+  it("prefers resolved explicit floors over subtype typical floors in the executive header", () => {
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildHospitalityProjectWithExplicitFloors(
+            "hospitality_limited_service_hotel_v1",
+            12
+          )}
+          dealShieldData={
+            buildHospitalityDealShieldViewModel(
+              "hospitality_limited_service_hotel_v1"
+            ) as any
+          }
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("12 Floors")).toBeInTheDocument();
+    expect(screen.queryByText("8 Floors")).not.toBeInTheDocument();
+  });
+
   it("does not synthesize executive narrative copy when backend executive_rendered_copy is missing", () => {
     const payload = { ...restaurantDealShieldViewModel } as any;
     delete payload.executive_rendered_copy;
