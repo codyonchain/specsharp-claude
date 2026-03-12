@@ -76,35 +76,31 @@ def test_whole_project_sf_rule_application_preserves_status_zeroing(
     assert applied.total_cost == pytest.approx(expected_total_cost)
 
 
-def test_legacy_float_engine_breakdown_uses_normalized_whole_project_sf_metadata():
+def test_legacy_float_engine_breakdown_still_uses_normalized_whole_project_sf_for_unmigrated_feature():
     square_footage = 64_000
     result = unified_engine.calculate_project(
         building_type=BuildingType.MULTIFAMILY,
-        subtype="market_rate_apartments",
+        subtype="luxury_apartments",
         square_footage=square_footage,
         location="Nashville, TN",
         project_class=ProjectClass.GROUND_UP,
-        special_features=["parking_garage"],
+        special_features=["concierge"],
     )
 
     construction_costs = result["construction_costs"]
     breakdown = construction_costs["special_features_breakdown"]
-    breakdown_by_id = {
-        row["id"]: row
-        for row in breakdown
-        if isinstance(row, dict) and row.get("id")
-    }
-    parking_row = breakdown_by_id["parking_garage"]
+    breakdown_by_id = _special_feature_breakdown_by_id(result)
+    concierge_row = breakdown_by_id["concierge"]
 
-    assert construction_costs["special_features_total"] == pytest.approx(32.0 * square_footage)
-    assert parking_row["pricing_basis"] == SpecialFeaturePricingBasis.WHOLE_PROJECT_SF.value
-    assert parking_row["configured_value"] == pytest.approx(32.0)
-    assert parking_row["applied_value"] == pytest.approx(32.0)
-    assert parking_row["applied_quantity"] == pytest.approx(square_footage)
-    assert parking_row["configured_cost_per_sf"] == pytest.approx(32.0)
-    assert parking_row["cost_per_sf"] == pytest.approx(32.0)
-    assert parking_row["assumption_source"] == LEGACY_FLOAT_NORMALIZATION_SOURCE
-    assert parking_row["total_cost"] == pytest.approx(32.0 * square_footage)
+    assert construction_costs["special_features_total"] == pytest.approx(15.0 * square_footage)
+    assert concierge_row["pricing_basis"] == SpecialFeaturePricingBasis.WHOLE_PROJECT_SF.value
+    assert concierge_row["configured_value"] == pytest.approx(15.0)
+    assert concierge_row["applied_value"] == pytest.approx(15.0)
+    assert concierge_row["applied_quantity"] == pytest.approx(square_footage)
+    assert concierge_row["configured_cost_per_sf"] == pytest.approx(15.0)
+    assert concierge_row["cost_per_sf"] == pytest.approx(15.0)
+    assert concierge_row["assumption_source"] == LEGACY_FLOAT_NORMALIZATION_SOURCE
+    assert concierge_row["total_cost"] == pytest.approx(15.0 * square_footage)
     assert sum(
         float(item.get("total_cost", 0.0) or 0.0)
         for item in breakdown
@@ -227,6 +223,101 @@ def test_area_share_rules_use_subtype_specific_shares_for_multifamily():
 
     assert market_rate["construction_costs"]["special_features_total"] == pytest.approx(72_000.0)
     assert luxury["construction_costs"]["special_features_total"] == pytest.approx(175_000.0)
+
+
+@pytest.mark.parametrize(
+    (
+        "building_type",
+        "subtype",
+        "square_footage",
+        "feature_id",
+        "expected_value",
+        "expected_share",
+    ),
+    (
+        (
+            BuildingType.MULTIFAMILY,
+            "market_rate_apartments",
+            250_000,
+            "parking_garage",
+            32.0,
+            0.28,
+        ),
+        (
+            BuildingType.MULTIFAMILY,
+            "luxury_apartments",
+            250_000,
+            "parking_garage",
+            45.0,
+            0.32,
+        ),
+        (
+            BuildingType.MULTIFAMILY,
+            "affordable_housing",
+            250_000,
+            "parking_garage",
+            26.0,
+            0.22,
+        ),
+        (
+            BuildingType.OFFICE,
+            "class_a",
+            300_000,
+            "structured_parking",
+            45.0,
+            0.24,
+        ),
+        (
+            BuildingType.MIXED_USE,
+            "retail_residential",
+            250_000,
+            "parking_podium",
+            40.0,
+            0.22,
+        ),
+    ),
+)
+def test_garage_style_incremental_features_now_price_from_area_share_of_gsf(
+    building_type,
+    subtype,
+    square_footage,
+    feature_id,
+    expected_value,
+    expected_share,
+):
+    result = unified_engine.calculate_project(
+        building_type=building_type,
+        subtype=subtype,
+        square_footage=square_footage,
+        location="Dallas, TX",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=[feature_id],
+    )
+
+    construction_costs = result["construction_costs"]
+    breakdown_row = _special_feature_breakdown_by_id(result)[feature_id]
+    available_pricing_row = _available_special_feature_pricing_by_id(result)[feature_id]
+    expected_quantity = square_footage * expected_share
+    expected_total_cost = expected_value * expected_quantity
+
+    assert breakdown_row["pricing_status"] == INCREMENTAL
+    assert breakdown_row["pricing_basis"] == SpecialFeaturePricingBasis.AREA_SHARE_GSF.value
+    assert breakdown_row["configured_value"] == pytest.approx(expected_value)
+    assert breakdown_row["configured_area_share_of_gsf"] == pytest.approx(expected_share)
+    assert breakdown_row["applied_value"] == pytest.approx(expected_value)
+    assert breakdown_row["applied_quantity"] == pytest.approx(expected_quantity)
+    assert breakdown_row["quantity_source"] == "area_share_of_gsf"
+    assert breakdown_row["assumption_source"] == STRUCTURED_RULE_SOURCE
+    assert breakdown_row["total_cost"] == pytest.approx(expected_total_cost)
+    assert breakdown_row["applied_quantity"] < square_footage
+    assert breakdown_row["total_cost"] < expected_value * square_footage
+
+    assert construction_costs["special_features_total"] == pytest.approx(expected_total_cost)
+
+    assert available_pricing_row["pricing_status"] == INCREMENTAL
+    assert available_pricing_row["pricing_basis"] == SpecialFeaturePricingBasis.AREA_SHARE_GSF.value
+    assert available_pricing_row["configured_value"] == pytest.approx(expected_value)
+    assert available_pricing_row["configured_area_share_of_gsf"] == pytest.approx(expected_share)
 
 
 def test_area_share_industrial_zones_reconcile_with_included_and_incremental_statuses():

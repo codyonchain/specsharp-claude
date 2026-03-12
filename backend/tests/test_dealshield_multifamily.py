@@ -651,7 +651,16 @@ def test_multifamily_special_feature_increases_total_project_cost_for_each_subty
         breakdown_by_id = {item["id"]: item for item in breakdown if isinstance(item, dict) and item.get("id")}
         assert feature in breakdown_by_id
         single_entry = breakdown_by_id[feature]
-        assert single_entry.get("cost_per_sf") == float(config.special_features[feature])
+        configured_feature = config.special_features[feature]
+        if isinstance(configured_feature, dict):
+            assert single_entry.get("pricing_basis") == "AREA_SHARE_GSF"
+            assert abs(float(single_entry.get("applied_value", 0.0)) - float(configured_feature["value"])) < 1e-6
+            assert abs(
+                float(single_entry.get("configured_area_share_of_gsf", 0.0))
+                - float(configured_feature["area_share_of_gsf"])
+            ) < 1e-6
+        else:
+            assert single_entry.get("cost_per_sf") == float(configured_feature)
         assert abs(float(single_entry.get("total_cost", 0.0)) - expected_single_total) < 1e-6
         assert isinstance(single_entry.get("label"), str) and single_entry["label"].strip()
 

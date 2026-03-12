@@ -72,7 +72,11 @@ CONFIG = (
             "fitness_center": 35,
             "cafeteria": 30,
             "conference_center": 40,
-            "structured_parking": 45,
+            "structured_parking": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 45,
+                "area_share_of_gsf": 0.24,
+            },
             "green_roof": 35,
             "outdoor_terrace": 25,
             "executive_floor": 45,

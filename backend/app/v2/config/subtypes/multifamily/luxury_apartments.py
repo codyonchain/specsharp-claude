@@ -87,7 +87,11 @@ CONFIG = (
                 "value": 20,
                 "area_share_of_gsf": 0.015,
             },
-            "parking_garage": 45,
+            "parking_garage": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 45,
+                "area_share_of_gsf": 0.32,
+            },
             "concierge": 15,
         },
         special_feature_pricing_statuses={

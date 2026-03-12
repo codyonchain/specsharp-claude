@@ -73,7 +73,11 @@ CONFIG = (
         scope_items_profile="mixed_use_retail_residential_structural_v1",
         special_features={
             "rooftop_deck": 30,
-            "parking_podium": 40,
+            "parking_podium": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.22,
+            },
             "retail_plaza": 25,
         },
         special_feature_pricing_statuses={

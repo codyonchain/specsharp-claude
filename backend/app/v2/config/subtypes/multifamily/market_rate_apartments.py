@@ -86,7 +86,11 @@ CONFIG = (
                 "value": 14,
                 "area_share_of_gsf": 0.012,
             },
-            "parking_garage": 32,
+            "parking_garage": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 32,
+                "area_share_of_gsf": 0.28,
+            },
         },
         special_feature_pricing_statuses={
             "rooftop_amenity": "incremental",
