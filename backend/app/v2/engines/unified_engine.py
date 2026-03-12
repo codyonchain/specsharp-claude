@@ -35,6 +35,7 @@ from app.v2.services.special_feature_pricing import (
     serialize_applied_special_feature_pricing,
     serialize_resolved_special_feature_pricing_rule_preview,
 )
+from app.v2.services.construction_risk_drivers import build_construction_risk_drivers
 from app.services.nlp_service import NLPService
 # from app.v2.services.financial_analyzer import FinancialAnalyzer  # TODO: Implement this
 from typing import Optional, Dict, Any, List, Tuple
@@ -1639,6 +1640,7 @@ class UnifiedEngine:
             'calculation_trace': self.calculation_trace,
             'timestamp': datetime.now().isoformat()
         }
+        result['construction_risk_drivers'] = build_construction_risk_drivers(result)
 
         if financing_assumptions:
             result['financing_assumptions'] = financing_assumptions

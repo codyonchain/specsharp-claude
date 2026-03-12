@@ -287,6 +287,26 @@ export interface FinancingSummaryContract {
   items: FinancingSummaryItem[];
 }
 
+export type ConstructionRiskDriverSeverity = 'low' | 'moderate' | 'high';
+
+export type ConstructionRiskDriverAffect =
+  | 'basis'
+  | 'cost_confidence'
+  | 'procurement'
+  | 'schedule';
+
+export interface ConstructionRiskDriver {
+  id: string;
+  title: string;
+  severity: ConstructionRiskDriverSeverity;
+  why_this_is_showing: string;
+  affects: ConstructionRiskDriverAffect[];
+  verify_next: string;
+  evidence_summary: string;
+  source: string;
+  status: 'supported' | 'unavailable';
+}
+
 export interface CalculationResult {
   project_info: {
     building_type: string;
@@ -305,6 +325,7 @@ export interface CalculationResult {
   regional?: RegionalContext;
   regional_applied?: boolean;
   construction_costs: ConstructionCosts;
+  construction_risk_drivers?: ConstructionRiskDriver[];
   trade_breakdown: Record<string, number>;
   scope_items?: Array<{
     trade: string;

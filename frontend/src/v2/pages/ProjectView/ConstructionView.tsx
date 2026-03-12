@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Project,
+  type ConstructionRiskDriver,
+  type ConstructionRiskDriverAffect,
   type SpecialFeatureBreakdownRow,
   type SpecialFeatureCountPricingMode,
   type SpecialFeaturePricingBasis,
@@ -49,6 +51,13 @@ type NormalizedSpecialFeatureBreakdownRow = {
   billedQuantity?: number;
 };
 
+const CONSTRUCTION_RISK_AFFECT_LABELS: Record<ConstructionRiskDriverAffect, string> = {
+  basis: 'Basis',
+  cost_confidence: 'Cost confidence',
+  procurement: 'Procurement',
+  schedule: 'Schedule',
+};
+
 const toRecord = (value: unknown): AnyRecord =>
   value && typeof value === 'object' && !Array.isArray(value)
     ? (value as AnyRecord)
@@ -74,6 +83,33 @@ const toFiniteNumber = (value: unknown): number | null => {
     }
   }
   return null;
+};
+
+const isConstructionRiskDriver = (value: unknown): value is ConstructionRiskDriver => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const driver = value as Record<string, unknown>;
+  const affects = Array.isArray(driver.affects) ? driver.affects : [];
+
+  return (
+    typeof driver.id === 'string' &&
+    typeof driver.title === 'string' &&
+    (driver.severity === 'low' || driver.severity === 'moderate' || driver.severity === 'high') &&
+    typeof driver.why_this_is_showing === 'string' &&
+    affects.every(
+      (affect) =>
+        affect === 'basis' ||
+        affect === 'cost_confidence' ||
+        affect === 'procurement' ||
+        affect === 'schedule'
+    ) &&
+    typeof driver.verify_next === 'string' &&
+    typeof driver.evidence_summary === 'string' &&
+    typeof driver.source === 'string' &&
+    (driver.status === 'supported' || driver.status === 'unavailable')
+  );
 };
 
 const resolveSpecialFeaturePricingBasis = (
@@ -523,6 +559,12 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
     const payload = entry?.payload ?? entry?.data ?? entry ?? {};
     return { step, payload };
   });
+
+  const constructionRiskDrivers = Array.isArray(calculations.construction_risk_drivers)
+    ? calculations.construction_risk_drivers
+        .filter(isConstructionRiskDriver)
+        .filter((driver) => driver.status === 'supported')
+    : [];
 
   // ========================================
   // PULL FROM SAME CALCULATION ENGINE
@@ -982,139 +1024,6 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
     activeTradeFilter === 'all'
       ? `${trades.length} Major Trades`
       : `${filteredTrades.length} trade${filteredTrades.length === 1 ? '' : 's'} selected`;
-
-  // ========================================
-  // Risk & Exposure – derived signals
-  // ========================================
-  const softCosts = (calculations.soft_costs || {}) as Record<string, number>;
-  const contingencyAmount =
-    typeof softCosts.contingency === 'number' ? softCosts.contingency : 0;
-  const constructionBase = baseConstructionTotal || constructionTotal || 0;
-  const contingencyPct =
-    constructionBase > 0 ? contingencyAmount / constructionBase : 0;
-
-  const costModifiers = calculations.modifiers || {};
-  const regionalFactor =
-    typeof costModifiers.cost_factor === 'number'
-      ? costModifiers.cost_factor
-      : (typeof costModifiers.regional_cost_factor === 'number'
-          ? costModifiers.regional_cost_factor
-          : 1);
-  const marketFactor =
-    typeof costModifiers.market_factor === 'number'
-      ? costModifiers.market_factor
-      : 1;
-
-  const totalTradesAmount =
-    structuralAmount +
-      mechanicalAmount +
-      electricalAmount +
-      plumbingAmount +
-      finishesAmount ||
-    constructionBase;
-
-  const mechElecPlumb =
-    mechanicalAmount + electricalAmount + plumbingAmount;
-
-  const contingencyLevel =
-    contingencyPct >= 0.12
-      ? 'High'
-      : contingencyPct >= 0.08
-        ? 'Moderate'
-        : contingencyPct > 0
-          ? 'Low'
-          : 'Not specified';
-
-  const longLeadExposure =
-    (structuralAmount + mechanicalAmount) / (totalTradesAmount || 1);
-
-  const laborHeavyTradesShare =
-    mechElecPlumb / (totalTradesAmount || 1);
-
-  const isHighLaborVolatility = laborHeavyTradesShare >= 0.45;
-
-  const isAboveMarketRegion = marketFactor > 1.05;
-  const isBelowMarketRegion = marketFactor < 0.95;
-
-  const riskInsights: {
-    title: string;
-    level?: 'low' | 'moderate' | 'high';
-    note: string;
-  }[] = [];
-
-  if (contingencyPct > 0) {
-    let level: 'low' | 'moderate' | 'high';
-    if (contingencyPct >= 0.12) level = 'high';
-    else if (contingencyPct >= 0.08) level = 'moderate';
-    else level = 'low';
-
-    riskInsights.push({
-      title: 'Contingency Coverage',
-      level,
-      note:
-        contingencyLevel === 'Not specified'
-          ? 'Contingency line item is minimal or not clearly specified in soft costs.'
-          : `Contingency is approximately ${formatPercent(
-              contingencyPct
-            )} of core construction. Level: ${contingencyLevel}.`,
-    });
-  } else {
-    riskInsights.push({
-      title: 'Contingency Coverage',
-      level: 'low',
-      note:
-        'No explicit contingency was detected in soft costs. Consider adding a buffer for scope growth and change orders.',
-    });
-  }
-
-  riskInsights.push({
-    title: 'Long-Lead Components',
-    level: longLeadExposure >= 0.45 ? 'high' : longLeadExposure >= 0.30 ? 'moderate' : 'low',
-    note:
-      buildingTypeRaw.toLowerCase() === 'industrial'
-        ? 'Structural steel, tilt-wall panels, roof systems, and major mechanical equipment drive a significant portion of cost. Locking in suppliers and lead times early will be important.'
-        : 'Major structural and mechanical systems typically carry longer lead times. Early procurement and schedule protection are recommended.',
-  });
-
-  riskInsights.push({
-    title: 'Labor Volatility',
-    level: isHighLaborVolatility ? 'high' : 'moderate',
-    note: isHighLaborVolatility
-      ? 'Mechanical, electrical, and plumbing trades represent a large share of cost. Availability of licensed trades in this market can materially impact schedule and pricing.'
-      : 'Labor exposure is balanced across trades. Standard local labor market risk still applies.',
-  });
-
-  if (isAboveMarketRegion) {
-    riskInsights.push({
-      title: 'Regional Cost Pressure',
-      level: 'moderate',
-      note:
-        'Regional cost index is above national average. Local wages, materials, or logistics are likely inflating hard costs relative to other markets.',
-    });
-  } else if (isBelowMarketRegion) {
-    riskInsights.push({
-      title: 'Regional Cost Pressure',
-      level: 'low',
-      note:
-        'Regional cost index is slightly below national average. This provides some buffer against cost escalation relative to higher-cost markets.',
-    });
-  } else {
-    riskInsights.push({
-      title: 'Regional Cost Pressure',
-      level: 'low',
-      note:
-        'Regional cost index is approximately in line with national averages.',
-    });
-  }
-
-  riskInsights.push({
-    title: 'Code & Compliance Considerations',
-    level: 'moderate',
-    note:
-      buildingTypeRaw.toLowerCase() === 'industrial'
-        ? 'Fire protection (ESFR vs. CMDA), egress, and dock / traffic layouts will be key coordination points with the AHJ. Early conversations with local plan reviewers can de-risk later redesign.'
-        : 'Life safety, accessibility, and energy code requirements can introduce design iteration late in the process. Early alignment with local code officials is recommended.',
-  });
 
   // ========================================
   // Scope items by trade (from backend payload)
@@ -2332,61 +2241,73 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
         </div>
       </div>
 
-      {riskInsights.length > 0 && (
+      {constructionRiskDrivers.length > 0 && (
         <div className="mt-10">
           <div className="bg-white shadow-sm rounded-2xl border border-gray-100 p-5">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="text-sm font-semibold text-gray-900">
-                  Risk &amp; Exposure Notes
+                  Construction Risk Drivers
                 </h3>
                 <p className="text-xs text-gray-500">
-                  High-level factors that could move cost, schedule, or scope.
+                  The build-side issues most likely to affect cost confidence, procurement, or schedule.
                 </p>
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              {riskInsights.map((risk, idx) => (
+            <div className="grid gap-3 lg:grid-cols-3">
+              {constructionRiskDrivers.map((driver) => (
                 <div
-                  key={`${risk.title}-${idx}`}
-                  className="border border-gray-100 rounded-lg p-3 bg-gray-50/60"
+                  key={driver.id}
+                  className="border border-gray-100 rounded-lg p-4 bg-gray-50/60"
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-semibold text-gray-900">
-                      {risk.title}
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <h4 className="text-sm font-semibold text-gray-900">
+                      {driver.title}
+                    </h4>
+                    <span
+                      className={`
+                        inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium whitespace-nowrap
+                        ${
+                          driver.severity === 'high'
+                            ? 'bg-red-50 text-red-700 border border-red-100'
+                            : driver.severity === 'moderate'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                              : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                        }
+                      `}
+                    >
+                      {driver.severity === 'high'
+                        ? 'Higher Risk'
+                        : driver.severity === 'moderate'
+                          ? 'Moderate Risk'
+                          : 'Lower Risk'}
                     </span>
-                    {risk.level && (
-                      <span
-                        className={`
-                          inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium
-                          ${
-                            risk.level === 'high'
-                              ? 'bg-red-50 text-red-700 border border-red-100'
-                              : risk.level === 'moderate'
-                                ? 'bg-amber-50 text-amber-700 border border-amber-100'
-                                : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                          }
-                        `}
-                      >
-                        {risk.level === 'high'
-                          ? 'Higher Risk'
-                          : risk.level === 'moderate'
-                            ? 'Moderate Risk'
-                            : 'Lower Risk'}
-                      </span>
-                    )}
                   </div>
-                  <p className="text-[11px] leading-snug text-gray-700">
-                    {risk.note}
+                  <p className="text-xs leading-5 text-gray-700">
+                    {driver.why_this_is_showing}
                   </p>
+                  <div className="mt-3 space-y-2 text-[11px] leading-snug text-gray-600">
+                    <p>
+                      <span className="font-semibold text-gray-900">Evidence:</span>{' '}
+                      {driver.evidence_summary}
+                    </p>
+                    {driver.affects.length > 0 && (
+                      <p>
+                        <span className="font-semibold text-gray-900">Affects:</span>{' '}
+                        {driver.affects
+                          .map((affect) => CONSTRUCTION_RISK_AFFECT_LABELS[affect])
+                          .join(', ')}
+                      </p>
+                    )}
+                    <p>
+                      <span className="font-semibold text-gray-900">Verify next:</span>{' '}
+                      {driver.verify_next}
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>
-
-            <p className="mt-3 text-[10px] text-gray-500">
-              These notes are directional only and do not replace a full risk and constructability review.
-            </p>
           </div>
         </div>
       )}

@@ -423,6 +423,53 @@ const buildRestaurantProject = (scheduleSource: "subtype" | "building_type") =>
     },
   }) as any;
 
+const buildProjectWithConstructionRiskDrivers = () => {
+  const project = buildRestaurantProject("subtype");
+  project.analysis.calculations.construction_risk_drivers = [
+    {
+      id: "regional_cost_pressure",
+      title: "Regional Cost Pressure",
+      severity: "high",
+      why_this_is_showing:
+        "San Francisco, CA is 26.0% above the national construction-cost baseline, which can compress bid coverage and reduce tolerance for scope movement.",
+      affects: ["basis", "cost_confidence", "procurement"],
+      verify_next:
+        "Confirm current subcontractor pricing, freight/logistics assumptions, and any escalation coverage tied to this market.",
+      evidence_summary: "Regional construction multiplier: 1.26x vs 1.00 baseline.",
+      source: "construction_costs.regional_multiplier",
+      status: "supported",
+    },
+    {
+      id: "contingency_adequacy",
+      title: "Contingency Adequacy",
+      severity: "moderate",
+      why_this_is_showing:
+        "Contingency is 7.0% of core construction. That is workable, but buffer can tighten quickly if open scope or package pricing moves.",
+      affects: ["basis", "cost_confidence"],
+      verify_next:
+        "Confirm what is still truly uncommitted, what is already absorbing scope decisions, and who controls release of the remaining contingency.",
+      evidence_summary: "Contingency: 7.0% of $3,000,000 core construction.",
+      source: "soft_costs.contingency",
+      status: "supported",
+    },
+    {
+      id: "trade_procurement_concentration",
+      title: "Trade / Package Concentration",
+      severity: "low",
+      why_this_is_showing:
+        "The two largest packages account for 52.0% of core construction, so package concentration is more distributed across trades.",
+      affects: ["cost_confidence", "procurement", "schedule"],
+      verify_next:
+        "Pressure-test the current basis against Mechanical and Structural and confirm where scope definition or pricing could still move.",
+      evidence_summary: "Top packages: Mechanical 31.0%, Structural 21.0% (52.0% combined).",
+      source: "trade_breakdown",
+      status: "supported",
+    },
+  ];
+
+  return project;
+};
+
 const buildHospitalityProject = (
   profileId: string,
   scheduleSource: "subtype" | "building_type" = "subtype"
@@ -1336,6 +1383,69 @@ describe("ConstructionView", () => {
     expect(
       screen.getByText("Timeline uses building-type baseline (subtype override unavailable).")
     ).toBeInTheDocument();
+  });
+
+  it("renders backend-owned construction risk drivers in backend order", () => {
+    render(<ConstructionView project={buildProjectWithConstructionRiskDrivers()} />);
+
+    const sectionHeading = screen.getByText("Construction Risk Drivers");
+    const section = sectionHeading.closest(".rounded-2xl");
+    expect(section).not.toBeNull();
+    expect(
+      within(section as HTMLElement).getByText(
+        "The build-side issues most likely to affect cost confidence, procurement, or schedule."
+      )
+    ).toBeInTheDocument();
+
+    expect(
+      within(section as HTMLElement)
+        .getAllByRole("heading", { level: 4 })
+        .map((heading) => heading.textContent)
+    ).toEqual([
+      "Regional Cost Pressure",
+      "Contingency Adequacy",
+      "Trade / Package Concentration",
+    ]);
+
+    expect(within(section as HTMLElement).getByText("Higher Risk")).toBeInTheDocument();
+    expect(within(section as HTMLElement).getByText("Moderate Risk")).toBeInTheDocument();
+    expect(within(section as HTMLElement).getByText("Lower Risk")).toBeInTheDocument();
+    expect(
+      within(section as HTMLElement).getByText("Regional construction multiplier: 1.26x vs 1.00 baseline.")
+    ).toBeInTheDocument();
+    expect(
+      within(section as HTMLElement).getByText("Basis, Cost confidence, Procurement")
+    ).toBeInTheDocument();
+    expect(
+      within(section as HTMLElement).getByText(
+        "Confirm current subcontractor pricing, freight/logistics assumptions, and any escalation coverage tied to this market."
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(section as HTMLElement).getByText(
+        "Pressure-test the current basis against Mechanical and Structural and confirm where scope definition or pricing could still move."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("does not reconstruct legacy risk cards when the backend contract is absent", () => {
+    render(<ConstructionView project={buildRestaurantProject("subtype")} />);
+
+    expect(screen.queryByText("Construction Risk Drivers")).not.toBeInTheDocument();
+    expect(screen.queryByText("Risk & Exposure Notes")).not.toBeInTheDocument();
+    expect(screen.queryByText("Contingency Coverage")).not.toBeInTheDocument();
+    expect(screen.queryByText("Long-Lead Components")).not.toBeInTheDocument();
+    expect(screen.queryByText("Labor Volatility")).not.toBeInTheDocument();
+    expect(screen.queryByText("Code & Compliance Considerations")).not.toBeInTheDocument();
+  });
+
+  it("removes unsupported legacy filler when backend drivers are present", () => {
+    render(<ConstructionView project={buildProjectWithConstructionRiskDrivers()} />);
+
+    expect(screen.queryByText("Risk & Exposure Notes")).not.toBeInTheDocument();
+    expect(screen.queryByText("Long-Lead Components")).not.toBeInTheDocument();
+    expect(screen.queryByText("Labor Volatility")).not.toBeInTheDocument();
+    expect(screen.queryByText("Code & Compliance Considerations")).not.toBeInTheDocument();
   });
 
   it("renders hospitality subtype schedule contract for both hotel profiles", () => {
