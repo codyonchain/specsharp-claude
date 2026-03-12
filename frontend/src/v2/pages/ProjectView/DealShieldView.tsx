@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, ShieldCheck } from 'lucide-react';
 import { api } from '../../api/client';
 import {
@@ -432,6 +432,9 @@ const normalizeDealShieldControls = (value: unknown, scenarioInputsRaw: unknown)
   };
 };
 
+const hasValidCostAnchorValue = (controls: DealShieldControls) =>
+  toFiniteNumber(controls.anchor_total_project_cost) !== null;
+
 const getScenarioBadge = (scenarioLabel: string) => {
   const key = scenarioLabel.toLowerCase();
   if (key.includes('base')) {
@@ -467,6 +470,8 @@ export const DealShieldView: React.FC<Props> = ({
   const [controlsSaving, setControlsSaving] = useState(false);
   const [controlsError, setControlsError] = useState<string | null>(null);
   const [controls, setControls] = useState<DealShieldControls>(DEFAULT_DEALSHIELD_CONTROLS);
+  const [hasPendingCostAnchorDraft, setHasPendingCostAnchorDraft] = useState(false);
+  const lastProjectIdRef = useRef(projectId);
 
   useEffect(() => {
     if (isControlled || !projectId) return;
@@ -985,8 +990,25 @@ export const DealShieldView: React.FC<Props> = ({
   );
 
   useEffect(() => {
+    setControls((prevControls) => {
+      if (!hasPendingCostAnchorDraft) {
+        return controlsFromPayload;
+      }
+
+      return {
+        ...controlsFromPayload,
+        use_cost_anchor: prevControls.use_cost_anchor,
+        anchor_total_project_cost: prevControls.anchor_total_project_cost,
+      };
+    });
+  }, [controlsFromPayload, hasPendingCostAnchorDraft]);
+
+  useEffect(() => {
+    if (lastProjectIdRef.current === projectId) return;
+    lastProjectIdRef.current = projectId;
+    setHasPendingCostAnchorDraft(false);
     setControls(controlsFromPayload);
-  }, [controlsFromPayload]);
+  }, [controlsFromPayload, projectId]);
 
   const profileId =
     (dealShieldData as any)?.profile_id ??
@@ -1111,19 +1133,47 @@ export const DealShieldView: React.FC<Props> = ({
 
   const handleUseCostAnchorChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const useAnchor = event.target.checked;
-    void persistControls({
+    const nextControls = {
       ...controls,
       use_cost_anchor: useAnchor,
-    });
+    };
+
+    if (!useAnchor) {
+      setHasPendingCostAnchorDraft(false);
+      void persistControls(nextControls);
+      return;
+    }
+
+    setControls(nextControls);
+    setControlsError(null);
+
+    if (hasValidCostAnchorValue(nextControls)) {
+      setHasPendingCostAnchorDraft(false);
+      void persistControls(nextControls);
+      return;
+    }
+
+    setHasPendingCostAnchorDraft(true);
   };
 
   const handleAnchorTotalCostChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const raw = event.target.value;
     const numeric = raw.trim() ? toFiniteNumber(raw) : null;
-    void persistControls({
+    setControls({
       ...controls,
       anchor_total_project_cost: numeric,
     });
+    setControlsError(null);
+    setHasPendingCostAnchorDraft(controls.use_cost_anchor);
+  };
+
+  const handleAnchorTotalCostBlur = () => {
+    if (!controls.use_cost_anchor || !hasValidCostAnchorValue(controls)) {
+      return;
+    }
+
+    setHasPendingCostAnchorDraft(false);
+    void persistControls(controls);
   };
 
   const handleExportPdf = async () => {
@@ -1178,9 +1228,13 @@ export const DealShieldView: React.FC<Props> = ({
               )}
             </div>
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="mb-3 text-xs leading-5 text-slate-600">
+                Use the default basis for conceptual screening. If you have a real bid or GMP,
+                anchor scenarios to that cost basis before comparing downside cases.
+              </p>
               <div className="grid gap-3 sm:grid-cols-3">
-                <label className="flex flex-col gap-1 text-sm text-slate-700">
-                  <span className="font-medium">Stress band</span>
+                <label className="flex h-full flex-col gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
+                  <span className="font-medium text-slate-900">Downside Stress Level</span>
                   <select
                     value={controls.stress_band_pct}
                     onChange={handleStressBandChange}
@@ -1193,30 +1247,60 @@ export const DealShieldView: React.FC<Props> = ({
                       </option>
                     ))}
                   </select>
-                  <span className="text-xs text-slate-500">Stress band (not estimate accuracy).</span>
+                  <span className="text-xs leading-5 text-slate-500">
+                    Controls how aggressively conservative and ugly cases move relative to the current project basis.
+                  </span>
                 </label>
-                <label className="flex items-center gap-2 self-end text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={controls.use_cost_anchor}
-                    onChange={handleUseCostAnchorChange}
-                    disabled={controlsSaving}
-                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="font-medium">Use bid/GMP anchor</span>
+                <label className="flex h-full flex-col gap-2 rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
+                  <span className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={controls.use_cost_anchor}
+                      onChange={handleUseCostAnchorChange}
+                      disabled={controlsSaving}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>
+                      <span className="block font-medium text-slate-900">Anchor scenarios to bid/GMP cost</span>
+                      <span className="mt-1 block text-xs leading-5 text-slate-500">
+                        Use this when downside scenarios should start from a known bid or GMP cost basis.
+                      </span>
+                    </span>
+                  </span>
                 </label>
-                <label className="flex flex-col gap-1 text-sm text-slate-700">
-                  <span className="font-medium">Anchor total cost</span>
+                <label
+                  className={`flex h-full flex-col gap-1.5 rounded-lg border px-3 py-3 text-sm ${
+                    controls.use_cost_anchor
+                      ? 'border-slate-200 bg-white text-slate-700'
+                      : 'border-slate-200 bg-slate-100 text-slate-400'
+                  }`}
+                >
+                  <span className={`font-medium ${controls.use_cost_anchor ? 'text-slate-900' : 'text-slate-500'}`}>
+                    Bid/GMP cost basis
+                  </span>
                   <input
                     type="number"
                     value={controls.anchor_total_project_cost ?? ''}
                     onChange={handleAnchorTotalCostChange}
+                    onBlur={handleAnchorTotalCostBlur}
                     placeholder="15000000"
-                    disabled={controlsSaving}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={controlsSaving || !controls.use_cost_anchor}
+                    className={`rounded-lg border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60 ${
+                      controls.use_cost_anchor
+                        ? 'border-slate-300 bg-white text-slate-700'
+                        : 'border-slate-200 bg-slate-100 text-slate-400'
+                    }`}
                   />
+                  <span className={`text-xs leading-5 ${controls.use_cost_anchor ? 'text-slate-500' : 'text-slate-400'}`}>
+                    {controls.use_cost_anchor
+                      ? 'Used as the base cost before scenario stresses are applied.'
+                      : 'Turn on the anchor above to apply scenarios against a known bid/GMP cost.'}
+                  </span>
                 </label>
               </div>
+              <p className="mt-3 text-[11px] text-slate-500">
+                These controls affect base and downside scenario comparisons only.
+              </p>
               {controlsSaving && (
                 <p className="mt-2 text-xs text-slate-500">Updating DealShield scenarios...</p>
               )}

@@ -1,5 +1,6 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { api } from "../../../api/client";
 import { DealShieldView } from "../DealShieldView";
 
 const RESTAURANT_PROFILE_IDS = [
@@ -14,6 +15,8 @@ const HOSPITALITY_PROFILE_IDS = [
   "hospitality_limited_service_hotel_v1",
   "hospitality_full_service_hotel_v1",
 ];
+
+const clonePayload = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 const SPECIALTY_POLICY_CONTRACT_CASES = [
   {
@@ -2445,6 +2448,10 @@ const buildSubtypePolicyPayload = (
 };
 
 describe("DealShieldView", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("does not synthesize decision status or first-break narrative when backend rendered copy is missing", () => {
     const payload = buildRestaurantDealShieldPayload("restaurant_full_service_v1") as any;
     payload.view_model.rendered_copy = {};
@@ -2470,6 +2477,158 @@ describe("DealShieldView", () => {
     expect(
       screen.queryByText((text) => text.includes("Break occurs in") && text.includes("crosses threshold"))
     ).not.toBeInTheDocument();
+  });
+
+  it("renders clearer DealShield controls copy and makes the bid/GMP basis field state obvious", () => {
+    const { rerender } = render(
+      <DealShieldView
+        projectId="proj_hospitality_controls"
+        data={buildHospitalityDealShieldPayload("hospitality_full_service_hotel_v1") as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        "Use the default basis for conceptual screening. If you have a real bid or GMP, anchor scenarios to that cost basis before comparing downside cases."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: /Downside Stress Level/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Controls how aggressively conservative and ugly cases move relative to the current project basis."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", { name: /Anchor scenarios to bid\/GMP cost/i })
+    ).not.toBeChecked();
+    expect(
+      screen.getByText(
+        "Use this when downside scenarios should start from a known bid or GMP cost basis."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("spinbutton", { name: /Bid\/GMP cost basis/i })
+    ).toBeDisabled();
+    expect(
+      screen.getByText(
+        "Turn on the anchor above to apply scenarios against a known bid/GMP cost."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("These controls affect base and downside scenario comparisons only.")
+    ).toBeInTheDocument();
+
+    rerender(
+      <DealShieldView
+        projectId="proj_restaurant_controls"
+        data={buildRestaurantDealShieldPayload("restaurant_full_service_v1") as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(
+      screen.getByRole("checkbox", { name: /Anchor scenarios to bid\/GMP cost/i })
+    ).toBeChecked();
+    expect(
+      screen.getByRole("spinbutton", { name: /Bid\/GMP cost basis/i })
+    ).toBeEnabled();
+    expect(
+      screen.getByText("Used as the base cost before scenario stresses are applied.")
+    ).toBeInTheDocument();
+  });
+
+  it("stages a blank bid/GMP anchor locally until a valid cost basis is entered, then persists on and off states cleanly", async () => {
+    const projectId = "proj_anchor_state_fix";
+    const initialPayload = buildHospitalityDealShieldPayload("hospitality_full_service_hotel_v1") as any;
+    const enabledPayload = clonePayload(initialPayload);
+    enabledPayload.view_model.provenance.dealshield_controls = {
+      ...enabledPayload.view_model.provenance.dealshield_controls,
+      use_cost_anchor: true,
+      anchor_total_project_cost: 4200000,
+    };
+    const disabledPayload = clonePayload(enabledPayload);
+    disabledPayload.view_model.provenance.dealshield_controls = {
+      ...disabledPayload.view_model.provenance.dealshield_controls,
+      use_cost_anchor: false,
+    };
+
+    const updateControlsSpy = vi
+      .spyOn(api, "updateDealShieldControls")
+      .mockResolvedValue(undefined);
+    const fetchDealShieldSpy = vi
+      .spyOn(api, "fetchDealShield")
+      .mockResolvedValueOnce(enabledPayload)
+      .mockResolvedValueOnce(disabledPayload);
+
+    render(
+      <DealShieldView
+        projectId={projectId}
+        data={initialPayload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    const checkbox = screen.getByRole("checkbox", {
+      name: /Anchor scenarios to bid\/GMP cost/i,
+    });
+    const input = screen.getByRole("spinbutton", {
+      name: /Bid\/GMP cost basis/i,
+    });
+
+    expect(checkbox).not.toBeChecked();
+    expect(input).toBeDisabled();
+
+    fireEvent.click(checkbox);
+
+    expect(checkbox).toBeChecked();
+    expect(input).toBeEnabled();
+    expect(updateControlsSpy).not.toHaveBeenCalled();
+    expect(fetchDealShieldSpy).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: "4200000" } });
+
+    expect(input).toHaveValue(4200000);
+    expect(updateControlsSpy).not.toHaveBeenCalled();
+
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(updateControlsSpy).toHaveBeenCalledWith(
+        projectId,
+        expect.objectContaining({
+          use_cost_anchor: true,
+          anchor_total_project_cost: 4200000,
+        })
+      );
+    });
+    await waitFor(() => {
+      expect(fetchDealShieldSpy).toHaveBeenCalledTimes(1);
+      expect(checkbox).toBeChecked();
+      expect(input).toBeEnabled();
+    });
+
+    fireEvent.click(checkbox);
+
+    await waitFor(() => {
+      expect(updateControlsSpy).toHaveBeenLastCalledWith(
+        projectId,
+        expect.objectContaining({
+          use_cost_anchor: false,
+          anchor_total_project_cost: 4200000,
+        })
+      );
+    });
+    await waitFor(() => {
+      expect(fetchDealShieldSpy).toHaveBeenCalledTimes(2);
+      expect(checkbox).not.toBeChecked();
+      expect(input).toBeDisabled();
+    });
   });
 
   it("renders restaurant decision status, DI provenance, and backend-shaped scenario rows", () => {
