@@ -565,6 +565,12 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
         .filter(isConstructionRiskDriver)
         .filter((driver) => driver.status === 'supported')
     : [];
+  const constructionRiskDriverGridClassName =
+    constructionRiskDrivers.length <= 1
+      ? 'grid gap-4'
+      : constructionRiskDrivers.length === 2
+        ? 'grid gap-4 md:grid-cols-2'
+        : 'grid gap-4 md:grid-cols-2 lg:grid-cols-3';
 
   // ========================================
   // PULL FROM SAME CALCULATION ENGINE
@@ -2244,25 +2250,25 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
       {constructionRiskDrivers.length > 0 && (
         <div className="mt-10">
           <div className="bg-white shadow-sm rounded-2xl border border-gray-100 p-5">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-sm font-semibold text-gray-900">
                   Construction Risk Drivers
                 </h3>
-                <p className="text-xs text-gray-500">
+                <p className="max-w-2xl text-xs leading-5 text-gray-500">
                   The build-side issues most likely to affect cost confidence, procurement, or schedule.
                 </p>
               </div>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-3">
+            <div className={constructionRiskDriverGridClassName}>
               {constructionRiskDrivers.map((driver) => (
                 <div
                   key={driver.id}
-                  className="border border-gray-100 rounded-lg p-4 bg-gray-50/60"
+                  className="flex h-full flex-col rounded-xl border border-gray-200/80 bg-gray-50/40 p-4 sm:p-5"
                 >
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <h4 className="text-sm font-semibold text-gray-900">
+                  <div className="flex items-start justify-between gap-3">
+                    <h4 className="min-w-0 text-sm font-semibold leading-5 text-gray-900">
                       {driver.title}
                     </h4>
                     <span
@@ -2284,26 +2290,53 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
                           : 'Lower Risk'}
                     </span>
                   </div>
-                  <p className="text-xs leading-5 text-gray-700">
-                    {driver.why_this_is_showing}
-                  </p>
-                  <div className="mt-3 space-y-2 text-[11px] leading-snug text-gray-600">
-                    <p>
-                      <span className="font-semibold text-gray-900">Evidence:</span>{' '}
-                      {driver.evidence_summary}
-                    </p>
-                    {driver.affects.length > 0 && (
-                      <p>
-                        <span className="font-semibold text-gray-900">Affects:</span>{' '}
-                        {driver.affects
-                          .map((affect) => CONSTRUCTION_RISK_AFFECT_LABELS[affect])
-                          .join(', ')}
+                  <div className="mt-3 space-y-3">
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500">
+                        Why this is showing
                       </p>
-                    )}
-                    <p>
-                      <span className="font-semibold text-gray-900">Verify next:</span>{' '}
-                      {driver.verify_next}
-                    </p>
+                      <p className="text-[13px] leading-5 text-gray-700">
+                        {driver.why_this_is_showing}
+                      </p>
+                    </div>
+
+                    <div className="space-y-3 border-t border-gray-200/80 pt-3">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500">
+                          Evidence
+                        </p>
+                        <p className="text-[11px] leading-5 text-gray-600">
+                          {driver.evidence_summary}
+                        </p>
+                      </div>
+
+                      {driver.affects.length > 0 && (
+                        <div className="space-y-1.5">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500">
+                            Affects
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {driver.affects.map((affect) => (
+                              <span
+                                key={`${driver.id}-${affect}`}
+                                className="inline-flex items-center rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-600"
+                              >
+                                {CONSTRUCTION_RISK_AFFECT_LABELS[affect]}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500">
+                          Verify next
+                        </p>
+                        <p className="text-[11px] leading-5 text-gray-700">
+                          {driver.verify_next}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}

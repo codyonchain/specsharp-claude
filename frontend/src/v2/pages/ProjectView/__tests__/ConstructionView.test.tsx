@@ -470,6 +470,14 @@ const buildProjectWithConstructionRiskDrivers = () => {
   return project;
 };
 
+const buildProjectWithTwoConstructionRiskDrivers = () => {
+  const project = buildProjectWithConstructionRiskDrivers();
+  project.analysis.calculations.construction_risk_drivers =
+    project.analysis.calculations.construction_risk_drivers.slice(0, 2);
+
+  return project;
+};
+
 const buildHospitalityProject = (
   profileId: string,
   scheduleSource: "subtype" | "building_type" = "subtype"
@@ -1390,12 +1398,15 @@ describe("ConstructionView", () => {
 
     const sectionHeading = screen.getByText("Construction Risk Drivers");
     const section = sectionHeading.closest(".rounded-2xl");
+    const grid = section?.querySelector(".grid");
     expect(section).not.toBeNull();
+    expect(grid).not.toBeNull();
     expect(
       within(section as HTMLElement).getByText(
         "The build-side issues most likely to affect cost confidence, procurement, or schedule."
       )
     ).toBeInTheDocument();
+    expect(grid?.className).toContain("lg:grid-cols-3");
 
     expect(
       within(section as HTMLElement)
@@ -1414,8 +1425,14 @@ describe("ConstructionView", () => {
       within(section as HTMLElement).getByText("Regional construction multiplier: 1.26x vs 1.00 baseline.")
     ).toBeInTheDocument();
     expect(
-      within(section as HTMLElement).getByText("Basis, Cost confidence, Procurement")
-    ).toBeInTheDocument();
+      within(section as HTMLElement).getAllByText("Basis").length
+    ).toBeGreaterThan(0);
+    expect(
+      within(section as HTMLElement).getAllByText("Cost confidence").length
+    ).toBeGreaterThan(0);
+    expect(
+      within(section as HTMLElement).getAllByText("Procurement").length
+    ).toBeGreaterThan(0);
     expect(
       within(section as HTMLElement).getByText(
         "Confirm current subcontractor pricing, freight/logistics assumptions, and any escalation coverage tied to this market."
@@ -1426,6 +1443,27 @@ describe("ConstructionView", () => {
         "Pressure-test the current basis against Mechanical and Structural and confirm where scope definition or pricing could still move."
       )
     ).toBeInTheDocument();
+  });
+
+  it("uses a balanced two-column grid when only two construction risk drivers render", () => {
+    render(<ConstructionView project={buildProjectWithTwoConstructionRiskDrivers()} />);
+
+    const sectionHeading = screen.getByText("Construction Risk Drivers");
+    const section = sectionHeading.closest(".rounded-2xl");
+    const grid = section?.querySelector(".grid");
+
+    expect(section).not.toBeNull();
+    expect(grid).not.toBeNull();
+    expect(grid?.className).toContain("md:grid-cols-2");
+    expect(grid?.className).not.toContain("lg:grid-cols-3");
+    expect(
+      within(section as HTMLElement)
+        .getAllByRole("heading", { level: 4 })
+        .map((heading) => heading.textContent)
+    ).toEqual([
+      "Regional Cost Pressure",
+      "Contingency Adequacy",
+    ]);
   });
 
   it("does not reconstruct legacy risk cards when the backend contract is absent", () => {
