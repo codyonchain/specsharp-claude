@@ -1,6 +1,7 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { trustNarrative } from "@/content/trustNarrative";
 import { ExecutiveViewComplete } from "../ExecutiveViewComplete";
 
 const HOSPITALITY_PROFILE_IDS = [
@@ -816,6 +817,45 @@ const withExecutiveRenderedCopy = (
 });
 
 describe("ExecutiveViewComplete", () => {
+  it("keeps one Trust & Assumptions trigger and renders the shared executive trust guide in the drawer", () => {
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildRestaurantProject()}
+          dealShieldData={restaurantDealShieldViewModel as any}
+        />
+      </MemoryRouter>
+    );
+
+    const trustButtons = screen.getAllByRole("button", {
+      name: /Trust & Assumptions/i,
+    });
+    expect(trustButtons).toHaveLength(1);
+    expect(screen.queryByText("Why this estimate")).not.toBeInTheDocument();
+    expect(screen.queryByText("How we model construction")).not.toBeInTheDocument();
+    expect(screen.queryByText("What’s assumed here")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("How to interpret this recommendation")
+    ).not.toBeInTheDocument();
+
+    const trustPanel = screen.getByRole("dialog", { name: "Trust panel" });
+    expect(trustPanel.className).toContain("translate-x-full");
+
+    fireEvent.click(trustButtons[0]);
+
+    expect(trustPanel.className).toContain("translate-x-0");
+    expect(screen.queryByText("Interpretation lenses")).not.toBeInTheDocument();
+    expect(screen.getByText(trustNarrative.title)).toBeInTheDocument();
+    expect(screen.getByText(trustNarrative.sections[0].title)).toBeInTheDocument();
+    expect(screen.getByText(trustNarrative.sections[3].title)).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close trust panel" })
+    );
+
+    expect(trustPanel.className).toContain("translate-x-full");
+  });
+
   it("prefers resolved explicit floors over subtype typical floors in the executive header", () => {
     render(
       <MemoryRouter>

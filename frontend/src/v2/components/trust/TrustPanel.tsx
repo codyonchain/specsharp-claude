@@ -1,35 +1,17 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { trustNarrative } from '@/content/trustNarrative';
 
 interface TrustPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialSectionId?: string;
 }
 
-export const TrustPanel: React.FC<TrustPanelProps> = ({ open, onOpenChange, initialSectionId }) => {
+export const TrustPanel: React.FC<TrustPanelProps> = ({ open, onOpenChange }) => {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const lastActiveElementRef = useRef<HTMLElement | null>(null);
 
-  const sections = useMemo(() => (Array.isArray(trustNarrative?.sections) ? trustNarrative.sections : []), []);
-
-  const scrollToSection = useCallback((sectionId: string, behavior: ScrollBehavior = 'smooth') => {
-    const element = document.getElementById(`trust-${sectionId}`);
-    if (element) {
-      element.scrollIntoView({ behavior, block: 'start' });
-    }
-  }, []);
-
-  const resolveInitialSectionId = useCallback(() => {
-    if (!sections.length) return undefined;
-    if (initialSectionId && sections.some(section => section.id === initialSectionId)) {
-      return initialSectionId;
-    }
-    return sections[0].id;
-  }, [initialSectionId, sections]);
-
-  const [activeSectionId, setActiveSectionId] = useState<string | undefined>(() => resolveInitialSectionId());
+  const sections = Array.isArray(trustNarrative?.sections) ? trustNarrative.sections : [];
 
   const handleClose = useCallback(() => {
     onOpenChange(false);
@@ -49,13 +31,12 @@ export const TrustPanel: React.FC<TrustPanelProps> = ({ open, onOpenChange, init
     document.body.style.overflow = 'hidden';
     lastActiveElementRef.current = document.activeElement as HTMLElement | null;
 
-    const targetSectionId = resolveInitialSectionId();
-    if (targetSectionId) {
-      setActiveSectionId(targetSectionId);
-      requestAnimationFrame(() => scrollToSection(targetSectionId, 'auto'));
-    }
-
-    requestAnimationFrame(() => closeButtonRef.current?.focus());
+    requestAnimationFrame(() => {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = 0;
+      }
+      closeButtonRef.current?.focus();
+    });
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -68,49 +49,7 @@ export const TrustPanel: React.FC<TrustPanelProps> = ({ open, onOpenChange, init
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [handleClose, open, resolveInitialSectionId, scrollToSection]);
-
-  const updateActiveSectionFromScroll = useCallback(() => {
-    if (!sections.length) return;
-
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const containerTop = container.getBoundingClientRect().top + 24;
-    let closestSectionId = sections[0].id;
-    let smallestDistance = Number.POSITIVE_INFINITY;
-
-    sections.forEach(section => {
-      const element = document.getElementById(`trust-${section.id}`);
-      if (!element) return;
-      const distance = Math.abs(element.getBoundingClientRect().top - containerTop);
-      if (distance < smallestDistance) {
-        smallestDistance = distance;
-        closestSectionId = section.id;
-      }
-    });
-
-    setActiveSectionId(prev => (prev === closestSectionId ? prev : closestSectionId));
-  }, [sections]);
-
-  useEffect(() => {
-    if (!open) return;
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const handleScroll = () => updateActiveSectionFromScroll();
-    container.addEventListener('scroll', handleScroll);
-    updateActiveSectionFromScroll();
-
-    return () => {
-      container.removeEventListener('scroll', handleScroll);
-    };
-  }, [open, updateActiveSectionFromScroll]);
-
-  const handleLensClick = (sectionId: string) => {
-    setActiveSectionId(sectionId);
-    scrollToSection(sectionId);
-  };
+  }, [handleClose, open]);
 
   const hasNarrative = sections.length > 0;
 
@@ -140,35 +79,18 @@ export const TrustPanel: React.FC<TrustPanelProps> = ({ open, onOpenChange, init
           </button>
           <div className="sticky top-0 z-10 border-b border-slate-200 bg-white p-5 pb-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500">Trust &amp; Assumptions</p>
-            <h2 className="mt-2 text-2xl font-bold text-slate-900">{trustNarrative?.title ?? 'How to interpret this output'}</h2>
+            <h2 className="mt-2 text-2xl font-bold text-slate-900">{trustNarrative?.title ?? 'How to read this view'}</h2>
             {trustNarrative?.intro && <p className="mt-2 text-sm text-slate-600">{trustNarrative.intro}</p>}
-            <div className="mt-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Interpretation lenses</p>
-              <div className="mt-2 flex flex-wrap gap-2 pr-8">
-                {sections.map(section => {
-                  const isActive = section.id === activeSectionId;
-                  return (
-                    <button
-                      key={section.id}
-                      type="button"
-                      onClick={() => handleLensClick(section.id)}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                        isActive
-                          ? 'border-slate-900 bg-slate-900 text-white'
-                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                      }`}
-                    >
-                      {section.title}
-                    </button>
-                  );
-                })}
-                {!hasNarrative && <p className="text-xs text-amber-600">Trust narrative not available.</p>}
-              </div>
-            </div>
+            {!hasNarrative && <p className="mt-3 text-xs text-amber-600">Trust narrative not available.</p>}
           </div>
-          <div ref={scrollContainerRef} className="h-[calc(100vh-240px)] flex-1 overflow-y-auto p-5 pt-4">
+          <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-5 pt-4">
             {sections.map(section => (
-              <section key={section.id} id={`trust-${section.id}`} data-trust-section={section.id} className="py-4 scroll-mt-24">
+              <section
+                key={section.id}
+                id={`trust-${section.id}`}
+                data-trust-section={section.id}
+                className="border-t border-slate-100 py-4 first:border-t-0 first:pt-0"
+              >
                 <h3 className="text-base font-semibold text-slate-900">{section.title}</h3>
                 <div className="mt-2 space-y-3">
                   {section.bodyParagraphs.map((paragraph, index) => (

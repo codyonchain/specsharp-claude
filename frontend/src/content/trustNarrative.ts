@@ -1,57 +1,38 @@
 export const trustNarrative = {
-  title: 'How to interpret this output',
-  intro: 'SpecSharp is not here to replace judgment. It’s here to make judgment safer, faster, and more informed.',
+  title: 'How to Read Executive View',
+  intro:
+    'Executive View is the fast decision summary. Use it to understand the current basis, the headline recommendation, and which assumptions deserve a second look before you act.',
   sections: [
     {
-      id: 'assumptions',
-      title: 'Key assumptions',
+      id: 'purpose',
+      title: 'What this view is for',
       bodyParagraphs: [
-        'Every estimate depends on assumptions; SpecSharp surfaces key scope and cost assumptions so you can see what the number depends on.',
+        'Executive View is a high-level read on cost, revenue, financing, and recommendation under the current modeled basis.',
+        'It is meant to tell you whether the deal looks investable enough to keep advancing, not to replace deeper underwriting or preconstruction review.',
       ],
     },
     {
-      id: 'conservative',
-      title: 'Conservative bias',
+      id: 'directional',
+      title: 'What to treat as directional',
       bodyParagraphs: [
-        'When inputs are incomplete or ambiguous, SpecSharp defaults to conservative interpretations and flags downside risk.',
+        'Yield, DSCR, value support, and the recommendation are only as strong as the rent, cost, scope, and financing assumptions underneath them.',
+        'If one of those inputs is still moving, treat this view as a directional screen rather than a final answer.',
       ],
     },
     {
-      id: 'uncertainty',
-      title: 'Failure points',
+      id: 'verify',
+      title: 'What to verify before acting',
       bodyParagraphs: [
-        'Highlights sensitive drivers, high-variance items, and coordination/constructability risks.',
+        'Pressure-test the biggest assumptions first: total basis, revenue support, operating costs, lease-up or ramp timing, and debt terms.',
+        'If one of those drivers is uncertain, assume the recommendation can move with it.',
       ],
     },
     {
-      id: 'operator',
-      title: 'Operator control',
+      id: 'companions',
+      title: 'How to use this with other views',
       bodyParagraphs: [
-        'SpecSharp is designed to support operator adjustments and scenario testing.',
-        'Today, it surfaces assumptions and risk drivers so you can sanity-check outputs quickly.',
-        'Override controls are planned, not assumed.',
-      ],
-    },
-    {
-      id: 'explainable',
-      title: 'Defensible logic',
-      bodyParagraphs: [
-        'Logic is meant to be defensible in front of principals/IC/GCs with clear rationale.',
-      ],
-    },
-    {
-      id: 'learns',
-      title: 'Grounded in real data',
-      bodyParagraphs: [
-        'Sharing real scopes and outcomes keeps the model grounded, but any improvement depends entirely on data clarity and comparability.',
-        'Treat every number as a starting point for diligence, not a promise of better outcomes.',
-      ],
-    },
-    {
-      id: 'lens',
-      title: 'Decision lens',
-      bodyParagraphs: [
-        'Decision-support framing; reduces blind spots; trust comes from clarity, not certainty.',
+        'Use DealShield to see the first break condition and downside sensitivity. Use Construction View to inspect build-side drivers, scope burden, and schedule pressure.',
+        'Read Executive View first, then use those views to validate the assumptions most likely to change the decision.',
       ],
     },
   ],

@@ -171,16 +171,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const navigate = useNavigate();
   const [isScenarioOpen, setIsScenarioOpen] = useState(false);
   const [isTrustPanelOpen, setIsTrustPanelOpen] = useState(false);
-  const [trustPanelSection, setTrustPanelSection] = useState<string | undefined>();
-  const openTrustPanel = (sectionId?: string) => {
-    setTrustPanelSection(sectionId);
+  const openTrustPanel = () => {
     setIsTrustPanelOpen(true);
   };
-  useEffect(() => {
-    if (!isTrustPanelOpen) {
-      setTrustPanelSection(undefined);
-    }
-  }, [isTrustPanelOpen]);
   
   // Early return if no project data - check multiple paths for data
   if (!project?.analysis && !project?.calculation_data) {
@@ -2050,7 +2043,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                 </button>
                 <button
                   type="button"
-                  onClick={() => openTrustPanel('uncertainty')}
+                  onClick={openTrustPanel}
                   className="w-full sm:w-auto px-4 py-2 border border-white/0 text-white/80 rounded-lg hover:bg-white/10 transition flex items-center justify-center gap-2 text-sm"
                 >
                   <span role="img" aria-hidden="true">🔒</span>
@@ -2063,13 +2056,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
             <p className="text-xs text-blue-200 uppercase tracking-wider font-medium">TOTAL INVESTMENT REQUIRED</p>
             <p className="text-4xl sm:text-5xl font-bold break-words">{formatters.currency(totalProjectCost)}</p>
             <p className="text-base sm:text-lg text-blue-200">{formatters.costPerSF(totals.cost_per_sf)}</p>
-            <button
-              type="button"
-              onClick={() => openTrustPanel('assumptions')}
-              className="text-[11px] font-semibold text-blue-100/80 underline decoration-dotted underline-offset-2 hover:text-white transition"
-            >
-              Why this estimate
-            </button>
             <div className="mt-3 flex flex-wrap gap-2 justify-start lg:justify-end">
               <span
                 className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${decisionStatus === 'GO'
@@ -2101,24 +2087,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
           <div>
             <p className="text-blue-200 text-xs uppercase tracking-wider mb-1 font-medium">CONSTRUCTION</p>
             <p className="text-2xl sm:text-3xl font-bold">{formatters.currency(constructionTotal)}</p>
-            <button
-              type="button"
-              onClick={() => openTrustPanel('conservative')}
-              className="mt-1 text-[11px] text-blue-100/80 underline decoration-dotted underline-offset-2 hover:text-white transition"
-            >
-              How we model construction
-            </button>
           </div>
           <div>
             <p className="text-blue-200 text-xs uppercase tracking-wider mb-1 font-medium">SOFT COSTS</p>
             <p className="text-2xl sm:text-3xl font-bold">{formatters.currency(softCostsTotal)}</p>
-            <button
-              type="button"
-              onClick={() => openTrustPanel('assumptions')}
-              className="mt-1 text-[11px] text-blue-100/80 underline decoration-dotted underline-offset-2 hover:text-white transition"
-            >
-              What’s assumed here
-            </button>
           </div>
           <div>
             <p className="text-blue-200 text-xs uppercase tracking-wider mb-1 font-medium">STABILIZED YIELD (NOI / COST)</p>
@@ -2199,13 +2171,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
               {isDealShieldCanonicalStatusActive && backendPolicyBasisLine && (
                 <p className="mt-1 text-xs text-slate-600">{backendPolicyBasisLine}</p>
               )}
-              <button
-                type="button"
-                onClick={() => openTrustPanel('lens')}
-                className="mt-1 text-xs font-semibold text-slate-600 underline decoration-dotted underline-offset-2 hover:text-slate-900 transition"
-              >
-                How to interpret this recommendation
-              </button>
               <p className={decisionBodyClass}>
                 {decisionNarrative.body}
               </p>
@@ -4283,7 +4248,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
         <TrustPanel
           open={isTrustPanelOpen}
           onOpenChange={setIsTrustPanelOpen}
-          initialSectionId={trustPanelSection}
         />
         <ScenarioModal
           open={isScenarioOpen}
