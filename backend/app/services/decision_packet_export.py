@@ -951,7 +951,7 @@ def _render_decision_metrics_table(table_block: Dict[str, Any]) -> str:
         )
 
     return (
-        "<section>"
+        "<section class=\"decision-table-section\">"
         "<h2>Decision Metrics Table</h2>"
         "<table class=\"decision-table\">"
         "<thead><tr><th>Scenario</th>"
@@ -1272,7 +1272,7 @@ def _render_schedule(section: Dict[str, Any]) -> str:
         )
 
     phases_html = (
-        "<table class=\"simple-table\">"
+        "<table class=\"simple-table schedule-table\">"
         "<thead><tr><th>Phase</th><th>Start Month</th><th>Duration</th></tr></thead>"
         "<tbody>"
         + "".join(phase_rows)
@@ -1281,7 +1281,7 @@ def _render_schedule(section: Dict[str, Any]) -> str:
         else "<div class=\"empty-note\">No modeled schedule available.</div>"
     )
     milestones_html = (
-        "<ul class=\"bullet-list\">"
+        "<ul class=\"bullet-list milestone-list\">"
         + "".join(milestone_items)
         + "</ul>"
         if milestone_items
@@ -1289,12 +1289,12 @@ def _render_schedule(section: Dict[str, Any]) -> str:
     )
 
     return (
-        "<section>"
+        "<section class=\"schedule-section\">"
         "<h2>Schedule + Key Milestones</h2>"
-        f"<div class=\"note-block\"><strong>Modeled duration:</strong> {html_module.escape(total_months)}</div>"
-        "<div class=\"two-column\">"
-        f"<div><h3>Phases</h3>{phases_html}</div>"
-        f"<div><h3>Key Milestones</h3>{milestones_html}</div>"
+        f"<div class=\"note-block schedule-overview\"><strong>Modeled duration:</strong> {html_module.escape(total_months)}</div>"
+        "<div class=\"schedule-layout\">"
+        f"<div class=\"subsection\"><h3>Phases</h3>{phases_html}</div>"
+        f"<div class=\"subsection\"><h3>Key Milestones</h3>{milestones_html}</div>"
         "</div>"
         "</section>"
     )
@@ -1496,37 +1496,52 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
     .page {{
       max-width: 980px;
       margin: 0 auto;
-      padding: 28px 22px 18px;
+      padding: 34px 28px 24px;
       background: #ffffff;
     }}
     .page-break {{
       page-break-before: always;
     }}
     h1 {{
-      margin: 0 0 12px;
-      font-size: 30px;
+      margin: 0 0 16px;
+      font-size: 32px;
       line-height: 1.1;
       color: #0f172a;
     }}
     h2 {{
-      margin: 0 0 14px;
+      margin: 0 0 18px;
       font-size: 20px;
       line-height: 1.2;
       color: #0f172a;
     }}
     h3 {{
-      margin: 0 0 10px;
+      margin: 0 0 12px;
       font-size: 14px;
       color: #1e293b;
       text-transform: uppercase;
       letter-spacing: 0.03em;
     }}
     section {{
-      margin-bottom: 26px;
-      padding: 18px 18px 16px;
+      margin-bottom: 30px;
+      padding: 22px 22px 20px;
       border: 1px solid #e2e8f0;
       border-radius: 14px;
       background: #ffffff;
+    }}
+    section > * + * {{
+      margin-top: 16px;
+    }}
+    section > h2 + * {{
+      margin-top: 0;
+    }}
+    .subsection {{
+      margin-top: 20px;
+    }}
+    .subsection:first-of-type {{
+      margin-top: 0;
+    }}
+    .subsection > * + * {{
+      margin-top: 12px;
     }}
     .eyebrow {{
       font-size: 12px;
@@ -1534,17 +1549,17 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: #475569;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }}
     .cover-grid {{
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px 18px;
+      gap: 14px 20px;
     }}
     .cover-row {{
       display: flex;
       flex-direction: column;
-      padding: 10px 12px;
+      padding: 12px 14px;
       border-radius: 10px;
       background: #f8fafc;
       border: 1px solid #e2e8f0;
@@ -1555,16 +1570,18 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
       letter-spacing: 0.05em;
       text-transform: uppercase;
       color: #64748b;
+      line-height: 1.35;
     }}
     .cover-value, .metric-value, .info-value {{
-      margin-top: 4px;
-      font-size: 16px;
+      margin-top: 6px;
+      font-size: 17px;
       font-weight: 700;
       color: #0f172a;
+      line-height: 1.25;
     }}
     .decision-banner {{
       border-width: 2px;
-      padding: 20px;
+      padding: 22px;
     }}
     .status-go {{ border-color: #16a34a; background: #f0fdf4; }}
     .status-no-go {{ border-color: #dc2626; background: #fef2f2; }}
@@ -1580,20 +1597,24 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
       font-weight: 700;
       letter-spacing: 0.06em;
       text-transform: uppercase;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }}
     .decision-reason, .banner-detail, .banner-basis, .metric-detail, .subcard-detail, .list-detail, .content-subtle {{
-      font-size: 12px;
+      font-size: 11px;
       color: #475569;
-      margin-top: 6px;
+      line-height: 1.55;
+      margin-top: 0;
     }}
     .metric-grid {{
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 12px;
+      gap: 14px;
     }}
     .metric-card, .info-item, .subcard {{
-      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 15px 16px;
       border-radius: 12px;
       border: 1px solid #e2e8f0;
       background: #f8fafc;
@@ -1601,8 +1622,8 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
     .subcard-grid {{
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-      margin-bottom: 14px;
+      gap: 14px;
+      margin-bottom: 18px;
     }}
     .subcard-title {{
       font-size: 11px;
@@ -1610,22 +1631,23 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
       letter-spacing: 0.05em;
       text-transform: uppercase;
       color: #64748b;
-      margin-bottom: 6px;
+      margin-bottom: 0;
     }}
     .subcard-value {{
-      font-size: 16px;
+      font-size: 17px;
       font-weight: 700;
       color: #0f172a;
+      line-height: 1.25;
     }}
     .info-grid {{
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
+      gap: 14px;
     }}
     .two-column {{
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 16px;
+      gap: 22px;
     }}
     table {{
       width: 100%;
@@ -1633,10 +1655,11 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
     }}
     th, td {{
       border-bottom: 1px solid #e2e8f0;
-      padding: 10px 12px;
+      padding: 12px 14px;
       text-align: left;
       vertical-align: top;
       font-size: 12px;
+      line-height: 1.45;
     }}
     th {{
       font-size: 11px;
@@ -1645,13 +1668,30 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
       color: #475569;
       background: #f8fafc;
     }}
+    .decision-table, .simple-table {{
+      margin-top: 8px;
+    }}
+    .decision-table th, .decision-table td {{
+      padding: 14px 16px;
+    }}
+    .decision-table thead th {{
+      font-size: 10px;
+      letter-spacing: 0.06em;
+    }}
+    .decision-table tbody tr:nth-child(even) {{
+      background: #fbfdff;
+    }}
+    .simple-table thead th {{
+      font-size: 10px;
+      letter-spacing: 0.05em;
+    }}
     .row-label {{
       white-space: nowrap;
       color: #0f172a;
     }}
     .bullet-list {{
       margin: 0;
-      padding-left: 18px;
+      padding-left: 20px;
     }}
     .bullet-list.compact {{
       margin-top: 8px;
@@ -1660,15 +1700,16 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
       margin-top: 8px;
     }}
     .bullet-list li {{
-      margin-bottom: 10px;
+      margin-bottom: 12px;
+      line-height: 1.5;
     }}
     .question-bank-groups {{
       display: grid;
-      gap: 14px;
-      margin-top: 14px;
+      gap: 16px;
+      margin-top: 16px;
     }}
     .question-bank-group {{
-      padding: 14px 16px;
+      padding: 16px 18px;
       border-radius: 12px;
       border: 1px solid #e2e8f0;
       background: #f8fafc;
@@ -1682,17 +1723,42 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
       color: #0f172a;
     }}
     .note-block {{
-      margin-top: 12px;
-      padding: 12px 14px;
+      margin: 0;
+      padding: 14px 16px;
       border-radius: 10px;
       background: #f8fafc;
       border: 1px solid #e2e8f0;
       font-size: 12px;
       color: #334155;
+      line-height: 1.55;
     }}
     .empty-note {{
       font-size: 12px;
       color: #64748b;
+    }}
+    .schedule-section .schedule-overview {{
+      max-width: 280px;
+    }}
+    .schedule-layout {{
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 22px;
+      align-items: start;
+    }}
+    .schedule-layout .subsection {{
+      margin-top: 0;
+    }}
+    .schedule-table th:first-child,
+    .schedule-table td:first-child {{
+      width: 52%;
+    }}
+    .milestone-list {{
+      display: grid;
+      gap: 8px;
+      padding-left: 20px;
+    }}
+    .milestone-list li {{
+      margin-bottom: 0;
     }}
   </style>
 </head>
@@ -1700,26 +1766,35 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
   <div class="page">
     {_render_cover_summary(cover_summary)}
     {_render_decision_banner(decision_banner)}
+  </div>
+
+  <div class="page page-break">
     <section>
       <h2>Key Metrics Strip</h2>
       {_render_metric_grid(metric_cards)}
     </section>
+    {_render_decision_insurance(decision_insurance)}
+    {_render_decision_metrics_table(decision_metrics_table)}
   </div>
 
   <div class="page page-break">
-    {_render_decision_insurance(decision_insurance)}
-    {_render_decision_metrics_table(decision_metrics_table)}
     {_render_assumptions(assumptions_not_modeled)}
     {_render_economics_snapshot(economics_snapshot)}
+  </div>
+
+  <div class="page page-break">
     {_render_revenue_required(revenue_required)}
     {_render_construction_summary(construction_summary)}
     {_render_trade_distribution(trade_distribution)}
-    {_render_cost_build_up(cost_build_up)}
-    {_render_schedule(schedule_milestones)}
   </div>
 
   <div class="page page-break">
+    {_render_schedule(schedule_milestones)}
+    {_render_cost_build_up(cost_build_up)}
     {trust_html}
+  </div>
+
+  <div class="page page-break">
     {_render_provenance(provenance)}
   </div>
 </body>

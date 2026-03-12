@@ -314,3 +314,93 @@ def test_packet_keeps_all_included_special_features_visible_when_applied_total_i
     assert html.count("Included in baseline") >= 2
     assert "Special Features" in html
     assert "$0" in html
+
+
+def test_packet_html_includes_shared_spacing_tokens_and_splits_packet_into_realistic_page_buckets():
+    project = SimpleNamespace(
+        name="Sunset Residences",
+        location="Dallas, TX",
+        building_type="multifamily",
+        square_footage=12_000,
+        total_cost=3_700_000,
+        cost_per_sqft=308.33,
+        project_id="proj-6",
+    )
+    project_payload = _build_project_payload(include_financing_summary=True)
+    project_payload["calculation_data"]["construction_schedule"] = {
+        "total_months": 18,
+        "phases": [
+            {"label": "Sitework", "start_month": 0, "duration_months": 3},
+            {"label": "Structure", "start_month": 3, "duration_months": 6},
+            {"label": "Interiors", "start_month": 9, "duration_months": 6},
+            {"label": "Closeout", "start_month": 15, "duration_months": 3},
+        ],
+    }
+    project_payload["calculation_data"]["construction_costs"]["cost_build_up"] = [
+        {"label": "Regional Factor", "multiplier": 1.08},
+        {"label": "Envelope Premium", "value_per_sf": 12.5},
+    ]
+    project_payload["calculation_data"]["trade_breakdown"] = {
+        "structural": 1_100_000,
+        "mechanical": 640_000,
+        "electrical": 420_000,
+    }
+
+    packet = compose_decision_packet_input(
+        project,
+        project_payload,
+        {"subtype": "market_rate_apartments"},
+        _build_dealshield_view_model(),
+        "SpecSharp Capital",
+    )
+
+    html = render_decision_packet_html(packet)
+
+    assert ".subsection {" in html
+    assert ".decision-table th, .decision-table td {" in html
+    assert ".simple-table thead th {" in html
+    assert ".schedule-layout {" in html
+    assert "class=\"schedule-section\"" in html
+    assert "class=\"simple-table schedule-table\"" in html
+    assert "class=\"bullet-list milestone-list\"" in html
+
+    page_breaks = []
+    search_from = 0
+    marker = '<div class="page page-break">'
+    while True:
+        next_break = html.find(marker, search_from)
+        if next_break == -1:
+            break
+        page_breaks.append(next_break)
+        search_from = next_break + 1
+
+    assert len(page_breaks) == 5
+
+    page_2 = html[page_breaks[0]:page_breaks[1]]
+    page_3 = html[page_breaks[1]:page_breaks[2]]
+    page_4 = html[page_breaks[2]:page_breaks[3]]
+    page_5 = html[page_breaks[3]:page_breaks[4]]
+    page_6 = html[page_breaks[4]:]
+
+    assert "Key Metrics Strip" in page_2
+    assert "Decision Insurance / Downside Summary" in page_2
+    assert "Decision Metrics Table" in page_2
+    assert "Financing Summary / What’s Not Modeled" not in page_2
+
+    assert "Financing Summary / What’s Not Modeled" in page_3
+    assert "Economics Snapshot" in page_3
+    assert "Revenue Required to Hit Target Yield" not in page_3
+
+    assert "Revenue Required to Hit Target Yield" in page_4
+    assert "Construction Cost Summary" in page_4
+    assert "Trade Distribution / Top Cost Drivers" in page_4
+    assert "Schedule + Key Milestones" not in page_4
+
+    assert "Schedule + Key Milestones" in page_5
+    assert "Cost Build-Up Analysis" in page_5
+    assert "Most Likely Wrong" in page_5
+    assert "Question Bank" in page_5
+    assert "Red Flags + Actions" in page_5
+
+    assert "Provenance" in page_6
+    assert "Most Likely Wrong" not in page_6
