@@ -1712,6 +1712,7 @@ const buildHospitalityDealShieldPayload = (profileId: string) => {
         base: {
           scenario_label: "Base",
           applied_tile_ids: [],
+          applied_lever_labels: [],
           stress_band_pct: 10,
           cost_scalar: 1.0,
           revenue_scalar: 1.0,
@@ -1719,16 +1720,44 @@ const buildHospitalityDealShieldPayload = (profileId: string) => {
         conservative: {
           scenario_label: "Conservative",
           applied_tile_ids: ["cost_plus_10", "revenue_minus_10"],
+          applied_lever_labels: [
+            "Cost +10%",
+            "Revenue -10%",
+          ],
           stress_band_pct: 10,
           cost_scalar: 1.1,
           revenue_scalar: 0.9,
         },
         ugly: {
           scenario_label: "Ugly",
-          applied_tile_ids: ["cost_plus_10", "revenue_minus_10"],
+          applied_tile_ids: [
+            "cost_plus_10",
+            "revenue_minus_10",
+            profileId === "hospitality_full_service_hotel_v1"
+              ? "ballroom_and_fnb_fitout_plus_12"
+              : "guestroom_turnover_and_ffe_plus_10",
+          ],
+          applied_lever_labels: [
+            "Cost +10%",
+            "Revenue -10%",
+            profileId === "hospitality_full_service_hotel_v1"
+              ? "Ballroom and F&B Fit-Out +12%"
+              : "Guestroom Turnover + FF&E +10%",
+          ],
           stress_band_pct: 10,
           cost_scalar: 1.15,
           revenue_scalar: 0.88,
+          driver: {
+            tile_id:
+              profileId === "hospitality_full_service_hotel_v1"
+                ? "ballroom_and_fnb_fitout_plus_12"
+                : "guestroom_turnover_and_ffe_plus_10",
+            label:
+              profileId === "hospitality_full_service_hotel_v1"
+                ? "Ballroom and F&B Fit-Out +12%"
+                : "Guestroom Turnover + FF&E +10%",
+            metric_ref: "trade_breakdown.finishes",
+          },
         },
       },
       metric_refs_used: [
@@ -3215,11 +3244,26 @@ describe("DealShieldView", () => {
     );
 
     expect(screen.getByText("Provenance")).toBeInTheDocument();
-    expect(screen.getByText("Driver metric (Ugly only)")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This receipt shows which scenario levers and controls were applied in this run. Plain-English levers are shown first; technical trace stays secondary."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText("What was stressed")).toBeInTheDocument();
+    expect(screen.getByText("Technical Trace")).toBeInTheDocument();
+    expect(screen.queryByText("Applied Tile IDs")).not.toBeInTheDocument();
+    expect(screen.queryByText("Driver metric (Ugly only)")).not.toBeInTheDocument();
     expect(screen.getAllByText("Conservative").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Ugly").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("cost_plus_10, revenue_minus_10").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("Cost +10%, Revenue -10%").length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByText("Ballroom and F&B Fit-Out +12%")
+    ).toBeInTheDocument();
     expect(screen.getAllByText("±10%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText((text) => text.includes("+10%")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText((text) => text.includes("-10%")).length).toBeGreaterThan(0);
   });
 
   it("renders explicit multifamily policy-backed first-break semantics with metric-aware observed/threshold formatting", () => {
@@ -3477,15 +3521,15 @@ describe("DealShieldView", () => {
           screen.getByText("Confirm sitework/civil allowances + utility routing")
         ).toBeInTheDocument();
         expect(
-          screen.getByText((text) =>
+          screen.getAllByText((text) =>
             text.includes("Validate rent/SF and absorption")
-          )
-        ).toBeInTheDocument();
+          ).length
+        ).toBeGreaterThan(0);
         expect(
-          screen.getByText((text) =>
+          screen.getAllByText((text) =>
             text.includes("Confirm dock count/clear height as it affects rent")
-          )
-        ).toBeInTheDocument();
+          ).length
+        ).toBeGreaterThan(0);
         expect(
           screen.getAllByText((text) =>
             text.includes(
@@ -3962,18 +4006,20 @@ describe("DealShieldView", () => {
       });
       expect(decisionPolicyMatches.length).toBeGreaterThan(0);
 
-      const controlsLineMatches = screen.getAllByText((_, element) => {
+      const profileLineMatches = screen.getAllByText((_, element) => {
         if (element?.tagName.toLowerCase() !== "p") return false;
         const text = element.textContent ?? "";
-        return (
-          text.includes(
-            `Tile: ${testCase.profileId} | Content: ${testCase.profileId} | Scope: ${testCase.scopeProfileId}`
-          ) &&
-          text.includes("Stress band: ±10%") &&
-          text.includes("Anchor: Off")
+        return text.includes(
+          `Tile: ${testCase.profileId} | Content: ${testCase.profileId} | Scope: ${testCase.scopeProfileId}`
         );
       });
-      expect(controlsLineMatches.length).toBeGreaterThan(0);
+      expect(profileLineMatches.length).toBeGreaterThan(0);
+      const runSettingsMatches = screen.getAllByText((_, element) => {
+        if (element?.tagName.toLowerCase() !== "p") return false;
+        const text = element.textContent ?? "";
+        return text.includes("Stress band: ±10%") && text.includes("Cost anchor: Off");
+      });
+      expect(runSettingsMatches.length).toBeGreaterThan(0);
       expect(screen.getAllByText("±10%").length).toBeGreaterThan(0);
 
       if (testCase.breakMetric === "value_gap_pct") {
@@ -4733,7 +4779,9 @@ describe("DealShieldView", () => {
         screen.getAllByText(`${testCase.subtype} downside concentration is under-modeled.`).length
       ).toBeGreaterThan(0);
       if (testCase.mixedUseSplitMetricRef) {
-        expect(screen.getAllByText(testCase.mixedUseSplitMetricRef).length).toBeGreaterThan(0);
+        expect(
+          screen.getAllByText((text) => text.includes(testCase.mixedUseSplitMetricRef!)).length
+        ).toBeGreaterThan(0);
       }
     }
   });

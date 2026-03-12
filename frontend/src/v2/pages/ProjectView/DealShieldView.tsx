@@ -339,6 +339,51 @@ const listValue = (value: unknown) => {
   return formatValue(value);
 };
 
+const toTextList = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (item == null ? '' : String(item).trim()))
+      .filter(Boolean);
+  }
+  if (value == null) return [];
+  const text = String(value).trim();
+  return text ? [text] : [];
+};
+
+const uniqueTextList = (values: string[]): string[] => {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized || seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
+};
+
+const formatScalarForReceipt = (value: unknown) => {
+  const numeric = toFiniteNumber(value);
+  if (numeric === null) return MISSING_VALUE;
+  const deltaPct = (numeric - 1) * 100;
+  if (Math.abs(deltaPct) < 0.0001) return 'Base';
+  const formattedDelta = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: Math.abs(deltaPct % 1) < 0.001 ? 0 : 1,
+    maximumFractionDigits: 1,
+  }).format(Math.abs(deltaPct));
+  return `${deltaPct > 0 ? '+' : '-'}${formattedDelta}%`;
+};
+
+const toDriverEntries = (value: unknown): Array<Record<string, unknown>> => {
+  if (Array.isArray(value)) {
+    return value.filter(
+      (item): item is Record<string, unknown> => !!item && typeof item === 'object'
+    );
+  }
+  if (value && typeof value === 'object') {
+    return [value as Record<string, unknown>];
+  }
+  return [];
+};
+
 const normalizeStressBand = (value: unknown): DealShieldControls['stress_band_pct'] => {
   const numeric = toFiniteNumber(value);
   if (numeric === null) return 10;
@@ -1602,14 +1647,21 @@ export const DealShieldView: React.FC<Props> = ({
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-semibold tracking-tight text-slate-900">Provenance</h3>
-              <span className="text-xs uppercase tracking-wide text-slate-400">Inputs</span>
+              <span className="text-xs uppercase tracking-wide text-slate-400">Audit receipt</span>
             </div>
-            <p className="mb-3 text-xs text-slate-600">
-              <span className="font-semibold text-slate-700">Profiles &amp; Controls:</span>{' '}
-              Tile: {formatValue(tileProfileId)} | Content: {formatValue(contentProfileId)} | Scope: {formatValue(scopeProfileId)} | Stress band: {stressBandText} | Anchor: {anchorText}
+            <p className="mb-3 text-xs text-slate-500">
+              This receipt shows which scenario levers and controls were applied in this run. Plain-English levers are shown first; technical trace stays secondary.
+            </p>
+            <p className="mb-2 text-xs text-slate-600">
+              <span className="font-semibold text-slate-700">Profiles used:</span>{' '}
+              Tile: {formatValue(tileProfileId)} | Content: {formatValue(contentProfileId)} | Scope: {formatValue(scopeProfileId)}
+            </p>
+            <p className="mb-2 text-xs text-slate-600">
+              <span className="font-semibold text-slate-700">Run settings:</span>{' '}
+              Stress band: {stressBandText} | Cost anchor: {anchorText}
             </p>
             <p className="mb-3 text-xs text-slate-600">
-              <span className="font-semibold text-slate-700">Decision Policy:</span>{' '}
+              <span className="font-semibold text-slate-700">Decision policy:</span>{' '}
               {policyBasisLine}
             </p>
             {scenarioInputs.length > 0 ? (
@@ -1618,28 +1670,70 @@ export const DealShieldView: React.FC<Props> = ({
                   <thead className="bg-slate-50/90 text-slate-600">
                     <tr>
                       <th className="px-2.5 py-2 text-left font-semibold">Scenario</th>
-                      <th className="px-2.5 py-2 text-left font-semibold">Applied Tile IDs</th>
+                      <th className="px-2.5 py-2 text-left font-semibold">What was stressed</th>
                       <th className="px-2.5 py-2 text-left font-semibold">Stress Band</th>
-                      <th className="px-2.5 py-2 text-left font-semibold">Cost Scalar</th>
-                      <th className="px-2.5 py-2 text-left font-semibold">Revenue Scalar</th>
+                      <th className="px-2.5 py-2 text-left font-semibold">Cost Stress</th>
+                      <th className="px-2.5 py-2 text-left font-semibold">Revenue Stress</th>
                       <th className="px-2.5 py-2 text-left font-semibold">Cost Anchor</th>
-                      <th className="px-2.5 py-2 text-left font-semibold">Driver metric (Ugly only)</th>
+                      <th className="px-2.5 py-2 text-left font-semibold">Technical Trace</th>
                     </tr>
                   </thead>
                   <tbody>
                     {scenarioInputs.map((input: any, index: number) => {
-                      const metricRef =
-                        input?.driver?.metric_ref ??
-                        input?.driver?.metricRef ??
-                        input?.metric_ref ??
-                        input?.metricRef;
+                      const scenarioLabel = labelFrom(
+                        input?.scenario_label ??
+                          input?.label ??
+                          input?.name ??
+                          input?.scenario
+                      );
+                      const rawAppliedTileIds = uniqueTextList(
+                        toTextList(
+                          input?.applied_tile_ids ?? input?.appliedTileIds ?? input?.tiles
+                        )
+                      );
+                      const backendAppliedLeverLabels = uniqueTextList(
+                        toTextList(
+                          input?.applied_lever_labels ?? input?.appliedLeverLabels
+                        )
+                      );
+                      const fallbackLeverLabels = uniqueTextList(
+                        rawAppliedTileIds.map(
+                          (tileId) => driverLabelByTileId.get(tileId) ?? tileId
+                        )
+                      );
+                      const appliedLeverLabels =
+                        backendAppliedLeverLabels.length > 0
+                          ? backendAppliedLeverLabels
+                          : fallbackLeverLabels;
+                      const appliedLeversText =
+                        appliedLeverLabels.length > 0
+                          ? appliedLeverLabels.join(', ')
+                          : 'No scenario levers applied';
+                      const rawAppliedTileTrace = rawAppliedTileIds.join(', ');
+                      const showAppliedTileTrace =
+                        rawAppliedTileTrace.length > 0 &&
+                        rawAppliedTileTrace !== appliedLeversText;
+                      const driverEntries = toDriverEntries(input?.driver);
+                      const technicalDriverLabels = uniqueTextList(
+                        driverEntries.map((entry) => labelFrom(entry, ''))
+                      );
+                      const technicalMetricRefs = uniqueTextList(
+                        driverEntries.flatMap((entry) =>
+                          toTextList(entry?.metric_ref ?? entry?.metricRef)
+                        )
+                      );
                       return (
                         <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
-                          <td className="px-2.5 py-2 text-slate-700">
-                            {labelFrom(input?.scenario ?? input?.scenario_label ?? input?.label ?? input?.name)}
+                          <td className="px-2.5 py-2 align-top text-slate-700">
+                            <span className="font-medium text-slate-900">{scenarioLabel}</span>
                           </td>
-                          <td className="px-2.5 py-2 text-slate-700">
-                            {listValue(input?.applied_tile_ids ?? input?.appliedTileIds ?? input?.tiles)}
+                          <td className="px-2.5 py-2 align-top text-slate-700">
+                            <p className="text-sm text-slate-900">{appliedLeversText}</p>
+                            {showAppliedTileTrace && (
+                              <p className="mt-1 font-mono text-[10px] text-slate-400">
+                                Trace: {rawAppliedTileTrace}
+                              </p>
+                            )}
                           </td>
                           <td className="px-2.5 py-2 text-slate-700">
                             {input?.stress_band_pct !== undefined && input?.stress_band_pct !== null
@@ -1647,18 +1741,29 @@ export const DealShieldView: React.FC<Props> = ({
                               : MISSING_VALUE}
                           </td>
                           <td className="px-2.5 py-2 text-slate-700">
-                            {formatValue(input?.cost_scalar ?? input?.costScalar)}
+                            {formatScalarForReceipt(input?.cost_scalar ?? input?.costScalar)}
                           </td>
                           <td className="px-2.5 py-2 text-slate-700">
-                            {formatValue(input?.revenue_scalar ?? input?.revenueScalar)}
+                            {formatScalarForReceipt(input?.revenue_scalar ?? input?.revenueScalar)}
                           </td>
                           <td className="px-2.5 py-2 text-slate-700">
                             {input?.cost_anchor_used
                               ? formatDecisionMetricValue(input?.cost_anchor_value, 'totals.total_project_cost')
-                              : 'No'}
+                              : 'Off'}
                           </td>
-                          <td className="px-2.5 py-2 text-slate-700">
-                            {formatValue(metricRef)}
+                          <td className="px-2.5 py-2 align-top text-slate-700">
+                            {technicalDriverLabels.length > 0 ? (
+                              <p className="text-[11px] text-slate-600">
+                                {technicalDriverLabels.join(', ')}
+                              </p>
+                            ) : (
+                              <p className="text-[11px] text-slate-400">—</p>
+                            )}
+                            {technicalMetricRefs.length > 0 && (
+                              <p className="mt-1 font-mono text-[10px] text-slate-400">
+                                Metric: {technicalMetricRefs.join(', ')}
+                              </p>
+                            )}
                           </td>
                         </tr>
                       );
