@@ -1,9 +1,11 @@
 import React from 'react';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { NewProject } from '../NewProject';
+import { authService } from '../../../../services/api';
+import { createProject } from '../../../api/client';
 import { useProjectAnalysis } from '../../../hooks/useProjectAnalysis';
 
 vi.mock('../../../hooks/useProjectAnalysis', () => ({
@@ -17,7 +19,15 @@ vi.mock('../../../api/client', () => ({
   createProject: vi.fn(),
 }));
 
+vi.mock('../../../../services/api', () => ({
+  authService: {
+    getCurrentUser: vi.fn(),
+  },
+}));
+
 const mockUseProjectAnalysis = vi.mocked(useProjectAnalysis);
+const mockCreateProject = vi.mocked(createProject);
+const mockGetCurrentUser = vi.mocked(authService.getCurrentUser);
 
 const analysisResult = {
   parsed_input: {
@@ -349,6 +359,15 @@ describe('NewProject special feature pricing parity', () => {
       calculateDirect: vi.fn(),
       reset: vi.fn(),
     });
+    mockCreateProject.mockResolvedValue({
+      id: 'project_123',
+    } as any);
+    mockGetCurrentUser.mockResolvedValue({
+      run_limits: {
+        is_unlimited: false,
+        remaining_runs: 3,
+      },
+    } as any);
 
     Object.defineProperty(window, 'scrollTo', {
       configurable: true,
@@ -358,6 +377,158 @@ describe('NewProject special feature pricing parity', () => {
       configurable: true,
       value: vi.fn(),
     });
+  });
+
+  it('shows a proactive run-limit blocker on /new only when trusted current state proves the org is exhausted', async () => {
+    mockGetCurrentUser.mockResolvedValueOnce({
+      run_limits: {
+        is_unlimited: false,
+        remaining_runs: 0,
+      },
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <NewProject />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByPlaceholderText(/Start with:/i), {
+      target: { value: '6,500 SF full service restaurant in Nashville, TN' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/City, ST \(e\.g\., Dallas, TX\)/i), {
+      target: { value: 'Nashville, TN' },
+    });
+
+    expect(
+      await screen.findByText("You've used all included runs")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'This org has used all included runs for Decision Packet generation. You can still analyze drafts and review existing work.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Generate Decision Packet/i })
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: /Generate Draft Packet/i })
+    ).toBeEnabled();
+  });
+
+  it('does not show a false proactive blocker when runs remain', async () => {
+    mockGetCurrentUser.mockResolvedValueOnce({
+      run_limits: {
+        is_unlimited: false,
+        remaining_runs: 2,
+      },
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <NewProject />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(mockGetCurrentUser).toHaveBeenCalled();
+    });
+
+    expect(
+      screen.queryByText("You've used all included runs")
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: /I confirm these inputs reflect the basis of this decision\./i,
+      })
+    );
+    expect(
+      screen.getByRole('button', { name: /Generate Decision Packet/i })
+    ).toBeEnabled();
+  });
+
+  it('does not proactively block when run-limit state is unknown', async () => {
+    mockGetCurrentUser.mockResolvedValueOnce({} as any);
+
+    render(
+      <MemoryRouter>
+        <NewProject />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(mockGetCurrentUser).toHaveBeenCalled();
+    });
+
+    expect(
+      screen.queryByText("You've used all included runs")
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: /I confirm these inputs reflect the basis of this decision\./i,
+      })
+    );
+    expect(
+      screen.getByRole('button', { name: /Generate Decision Packet/i })
+    ).toBeEnabled();
+  });
+
+  it('shows the shared exhaustion fallback only for exact backend run_limit_reached responses', async () => {
+    mockCreateProject.mockRejectedValueOnce({
+      message: 'Run limit reached. Call Cody to add more runs.',
+      code: 'run_limit_reached',
+      status: 403,
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <NewProject />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: /I confirm these inputs reflect the basis of this decision\./i,
+      })
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Generate Decision Packet/i }));
+
+    expect(
+      await screen.findByRole('dialog', { name: /You've used all included runs/i })
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Run limit reached. Call Cody to add more runs.')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /Email Cody to add more runs/i })
+    ).toHaveAttribute('href', expect.stringContaining('mailto:cody@specsharp.ai'));
+  });
+
+  it('keeps generic errors generic and does not show the exhaustion blocker for unrelated failures', async () => {
+    mockCreateProject.mockRejectedValueOnce({
+      message: 'Forbidden for another reason',
+      code: 'forbidden',
+      status: 403,
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <NewProject />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: /I confirm these inputs reflect the basis of this decision\./i,
+      })
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Generate Decision Packet/i }));
+
+    expect(
+      await screen.findByText('Forbidden for another reason')
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("You've used all included runs")
+    ).not.toBeInTheDocument();
   });
 
   it('renders backend-driven included and incremental feature pricing states in the actual component', () => {

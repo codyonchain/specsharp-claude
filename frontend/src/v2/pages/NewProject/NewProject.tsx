@@ -4,6 +4,7 @@ import { useProjectAnalysis } from '../../hooks/useProjectAnalysis';
 import { api, createProject } from '../../api/client';
 import { tracer } from '../../utils/traceSystem';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
+import { authService } from '../../../services/api';
 import { BuildingTaxonomy } from '../../../core/buildingTaxonomy';
 import {
   detectCivicFeatureIdsFromDescription,
@@ -45,7 +46,8 @@ import {
   indexAvailableSpecialFeaturePricing,
   type FeatureDisplayPricing,
 } from './featurePricingPreview';
-import type { SpecialFeatureBreakdownRow } from '../../types';
+import { RunLimitExhaustedNotice } from '../../components/common/RunLimitExhaustedNotice';
+import type { APIError, SpecialFeatureBreakdownRow } from '../../types';
 
 // Lucide icons
 import { 
@@ -246,6 +248,24 @@ const detectCityStateInDescription = (text: string): string | null => {
   return lastValid ? `${lastValid.city}, ${lastValid.state}` : null;
 };
 
+const isRunLimitReachedError = (value: unknown): value is APIError =>
+  Boolean(
+    value &&
+      typeof value === 'object' &&
+      (value as APIError).code === 'run_limit_reached'
+  );
+
+const isTrustedRunLimitExhausted = (runLimits: unknown): boolean => {
+  if (!runLimits || typeof runLimits !== 'object') return false;
+
+  const normalized = runLimits as Record<string, unknown>;
+  return (
+    normalized.is_unlimited === false &&
+    typeof normalized.remaining_runs === 'number' &&
+    normalized.remaining_runs === 0
+  );
+};
+
 const MIXED_USE_COMPONENT_LABELS: Record<MixedUseComponent, string> = {
   office: 'Office',
   residential: 'Residential',
@@ -428,6 +448,9 @@ export const NewProject: React.FC = () => {
   const [activeStep, setActiveStep] = useState<'input' | 'analyzing' | 'results'>('input');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [isOrgRunLimitExhausted, setIsOrgRunLimitExhausted] = useState(false);
+  const [isBackendRunLimitExhausted, setIsBackendRunLimitExhausted] = useState(false);
+  const [isRunLimitModalOpen, setIsRunLimitModalOpen] = useState(false);
   
   // Project configuration state
   const [specialFeatures, setSpecialFeatures] = useState<string[]>([]);
@@ -459,6 +482,9 @@ export const NewProject: React.FC = () => {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const previewTimeoutRef = useRef<number | null>(null);
   const previewAbortRef = useRef<AbortController | null>(null);
+  const isRunLimitBlocked = isOrgRunLimitExhausted || isBackendRunLimitExhausted;
+  const shouldShowInlineRunLimitBlocker =
+    isOrgRunLimitExhausted || (isBackendRunLimitExhausted && !isRunLimitModalOpen);
 
   const normalizedDescription = description.trim();
   const normalizedLocationInput = locationInput.trim();
@@ -500,6 +526,35 @@ export const NewProject: React.FC = () => {
       location: Boolean(liveDetectedLocation || cityKeywordDetected)
     });
   }, [description, isMixedUseIntentDetected, liveDetectedLocation, parkingIntentResolution.shouldRouteToParking]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadRunLimitState = async () => {
+      try {
+        const currentUser = await authService.getCurrentUser();
+        if (!isActive) return;
+
+        const currentRunLimits =
+          currentUser && typeof currentUser === 'object'
+            ? (currentUser as Record<string, unknown>).run_limits
+            : null;
+
+        setIsOrgRunLimitExhausted(
+          isTrustedRunLimitExhausted(currentRunLimits)
+        );
+      } catch {
+        if (!isActive) return;
+        setIsOrgRunLimitExhausted(false);
+      }
+    };
+
+    void loadRunLimitState();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
   
   // Example prompts focused on core launch subtypes (15 cards for a clean 3x5 layout)
   const examplePrompts = [
@@ -1056,7 +1111,7 @@ export const NewProject: React.FC = () => {
   };
 
   const handleSaveProject = async () => {
-    if (!result) return;
+    if (!result || isRunLimitBlocked) return;
     
     setSaving(true);
     setSaveError(null);
@@ -1111,6 +1166,14 @@ export const NewProject: React.FC = () => {
     } catch (err) {
       console.error('Failed to save project:', err);
       tracer.trace('SAVE_ERROR', 'Save failed', err);
+
+      if (isRunLimitReachedError(err)) {
+        setIsBackendRunLimitExhausted(true);
+        setIsRunLimitModalOpen(true);
+        setSaveError(null);
+        return;
+      }
+
       const message =
         typeof (err as any)?.message === 'string' && (err as any).message.trim()
           ? (err as any).message
@@ -2004,7 +2067,7 @@ export const NewProject: React.FC = () => {
               <div className="flex gap-4 mt-8">
                 <button
                   onClick={handleSaveProject}
-                  disabled={saving || !decisionInputsConfirmed}
+                  disabled={saving || !decisionInputsConfirmed || isRunLimitBlocked}
                   className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving ? (
@@ -2028,6 +2091,11 @@ export const NewProject: React.FC = () => {
                   Start Over
                 </button>
               </div>
+              {shouldShowInlineRunLimitBlocker && (
+                <div className="mt-4">
+                  <RunLimitExhaustedNotice />
+                </div>
+              )}
               {saveError && (
                 <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {saveError}
@@ -2037,6 +2105,11 @@ export const NewProject: React.FC = () => {
           </div>
         )}
       </div>
+      <RunLimitExhaustedNotice
+        variant="modal"
+        open={isRunLimitModalOpen}
+        onClose={() => setIsRunLimitModalOpen(false)}
+      />
     </div>
   );
 };
