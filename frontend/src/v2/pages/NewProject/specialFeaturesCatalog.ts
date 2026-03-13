@@ -514,7 +514,10 @@ export const INDUSTRIAL_FEATURE_COSTS_BY_SUBTYPE: Record<
   IndustrialSubtype,
   Record<string, number>
 > = {
-  warehouse: {},
+  warehouse: {
+    loading_docks: 65000,
+    office_buildout: 18,
+  },
   distribution_center: {
     automated_sorting: 25,
     refrigerated_area: 35,
@@ -1766,11 +1769,12 @@ const INDUSTRIAL_FEATURE_METADATA: Record<
   },
   loading_docks: {
     name: "Loading Docks",
-    description: "Dedicated dock door and truck-bay package beyond the base warehouse shell.",
+    description:
+      "Dock door and truck-bay package with baseline dock capacity included where the subtype carries dock-overage rules.",
   },
   extra_loading_docks: {
     name: "Extra Loading Docks",
-    description: "Additional dock capacity and apron improvements for higher trailer throughput.",
+    description: "Incremental dock capacity beyond the subtype's included baseline dock count.",
   },
   office_buildout: {
     name: "Office Buildout",

@@ -412,17 +412,32 @@ export const resolveNewProjectAutoDetection = ({
     effectiveBuildingType === 'mixed_use'
       ? normalizeMixedUseSubtypeAlias(parsedSubtype || subtypeFromDescription)
       : parsedSubtype || subtypeFromDescription;
+  const isWarehouseProject =
+    effectiveBuildingType === 'industrial' && resolvedSubtype === 'warehouse';
+  const rawDetectedFeatureIds = Array.from(
+    new Set(
+      parsed.specialFeatures.map((featureId) => {
+        if (!isWarehouseProject) {
+          return featureId;
+        }
+        if (featureId === 'extra_loading_docks' || featureId === 'loading_dock') {
+          return 'loading_docks';
+        }
+        return featureId;
+      })
+    )
+  );
   const allowedFeatureIds = getNewProjectAvailableFeatures(
     effectiveBuildingType || '',
     resolvedSubtype
   ).map((feature) => feature.id);
   const allowedFeatureIdSet = new Set(allowedFeatureIds);
-  const filteredFeatureIds = parsed.specialFeatures.filter((featureId) =>
+  const filteredFeatureIds = rawDetectedFeatureIds.filter((featureId) =>
     allowedFeatureIdSet.has(featureId)
   );
 
   return {
-    rawDetectedFeatureIds: parsed.specialFeatures,
+    rawDetectedFeatureIds,
     allowedFeatureIds,
     filteredFeatureIds,
     effectiveBuildingType,

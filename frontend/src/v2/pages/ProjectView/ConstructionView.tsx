@@ -215,8 +215,17 @@ const resolveAreaShareExplanationLines = (
 const resolveSpecialFeatureStatusLabel = (
   feature: NormalizedSpecialFeatureBreakdownRow,
 ): string => {
+  const hasExplicitRequestedQuantity =
+    typeof feature.requestedQuantitySource === 'string' &&
+    feature.requestedQuantitySource.startsWith('explicit_override:');
+  const hasAppliedOverage =
+    feature.countPricingMode === 'overage_above_default' &&
+    hasExplicitRequestedQuantity &&
+    typeof feature.billedQuantity === 'number' &&
+    feature.billedQuantity > 0;
+
   if (feature.countPricingMode === 'overage_above_default') {
-    return typeof feature.billedQuantity === 'number' && feature.billedQuantity > 0
+    return hasAppliedOverage
       ? 'Incremental premium applied'
       : feature.pricingStatus === 'included_in_baseline'
         ? 'Included in baseline'
@@ -2029,13 +2038,22 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
 	                    <div className="mt-3 space-y-2">
 	                      {hasSpecialFeaturesBreakdown ? (
 	                        specialFeaturesBreakdown.map((feature) => {
+                            const hasExplicitRequestedQuantity =
+                              typeof feature.requestedQuantitySource === 'string' &&
+                              feature.requestedQuantitySource.startsWith('explicit_override:');
+                            const hasAppliedOverage =
+                              feature.countPricingMode === 'overage_above_default' &&
+                              hasExplicitRequestedQuantity &&
+                              typeof feature.billedQuantity === 'number' &&
+                              feature.billedQuantity > 0;
 	                          const isIncludedInBaseline =
                               feature.pricingStatus === 'included_in_baseline' &&
-                              !(feature.countPricingMode === 'overage_above_default' && typeof feature.billedQuantity === 'number' && feature.billedQuantity > 0);
+                              !hasAppliedOverage;
 	                          const statusLabel = resolveSpecialFeatureStatusLabel(feature);
                           const detailLabel =
                             feature.pricingBasis === 'COUNT_BASED'
-                              ? typeof feature.costPerCount === 'number' &&
+                              ? !isIncludedInBaseline &&
+                                typeof feature.costPerCount === 'number' &&
                                 typeof feature.appliedQuantity === 'number'
                                 && feature.appliedQuantity > 0
                                 ? formatCountBasedDetail(

@@ -51,6 +51,36 @@ CONFIG = (
                 interest_only_months=0,
             )
         },
+        special_features={
+            "loading_docks": {
+                "basis": "COUNT_BASED",
+                "value": 65000,
+                "count_pricing_mode": "overage_above_default",
+                "count_override_keys": [
+                    "extra_loading_dock_count",
+                    "extra_dock_count",
+                    "loading_dock_count",
+                    "dock_door_count",
+                    "dock_count",
+                ],
+                "default_count_bands": [
+                    {"label": "mid_box", "max_square_footage": 150000, "count": 4},
+                    {"label": "regional", "max_square_footage": 300000, "count": 8},
+                    {"label": "large_box", "max_square_footage": 600000, "count": 12},
+                    {"label": "mega_box", "count": 16},
+                ],
+                "unit_label": "dock",
+            },
+            "office_buildout": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 18,
+                "area_share_of_gsf": 0.05,
+            },
+        },
+        special_feature_pricing_statuses={
+            "loading_docks": "included_in_baseline",
+            "office_buildout": "included_in_baseline",
+        },
         nlp=NLPConfig(
             keywords=[
                 "warehouse",

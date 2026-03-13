@@ -141,6 +141,24 @@ def test_explicit_loading_dock_count_from_prompt_reaches_overage_pricing():
     assert row["total_cost"] == pytest.approx(130000.0)
 
 
+def test_explicit_warehouse_loading_dock_count_bills_overage_through_loading_docks():
+    parsed, result = _calculate_from_description(
+        "New 220,000 SF warehouse with 10 loading docks in Nashville, TN",
+        special_features=["loading_docks"],
+    )
+
+    row = _special_feature_breakdown_by_id(result)["loading_docks"]
+
+    assert parsed["building_type"] == "industrial"
+    assert parsed["subtype"] == "warehouse"
+    assert parsed["loading_dock_count"] == 10
+    assert row["requested_quantity"] == pytest.approx(10.0)
+    assert row["requested_quantity_source"] == "explicit_override:loading_dock_count"
+    assert row["included_baseline_quantity"] == pytest.approx(8.0)
+    assert row["billed_quantity"] == pytest.approx(2.0)
+    assert row["total_cost"] == pytest.approx(130000.0)
+
+
 def test_explicit_service_bay_count_from_prompt_reaches_overage_pricing():
     parsed, result = _calculate_from_description(
         "New 40,000 SF car dealership with 10 service bays in Nashville, TN",

@@ -185,6 +185,62 @@ describe('featurePricingPreview', () => {
     expect(pricing.totalCost).toBe(0);
   });
 
+  it('keeps warehouse docks as one concept while preserving billed overage on loading_docks', () => {
+    const pricingById = indexAvailableSpecialFeaturePricing([
+      {
+        id: 'loading_docks',
+        label: 'Loading Docks',
+        pricing_status: 'included_in_baseline',
+        pricing_basis: 'COUNT_BASED',
+        count_pricing_mode: 'overage_above_default',
+        configured_cost_per_count: 65000,
+        requested_quantity: 10,
+        requested_quantity_source: 'explicit_override:loading_dock_count',
+        included_baseline_quantity: 8,
+        billed_quantity: 2,
+        unit_label: 'dock',
+      },
+      {
+        id: 'office_buildout',
+        label: 'Office Buildout',
+        pricing_status: 'included_in_baseline',
+        pricing_basis: 'AREA_SHARE_GSF',
+        configured_value: 18,
+        configured_area_share_of_gsf: 0.05,
+      },
+    ]);
+
+    const loadingDockPricing = getFeatureDisplayPricingPreview({
+      backendFeaturePricing: pricingById.loading_docks,
+      usesSubtypeCostPerSF: false,
+      hasFeatureSquareFootage: true,
+      squareFootageSummary: 220000,
+    });
+    const officeBuildoutPricing = getFeatureDisplayPricingPreview({
+      backendFeaturePricing: pricingById.office_buildout,
+      usesSubtypeCostPerSF: false,
+      hasFeatureSquareFootage: true,
+      squareFootageSummary: 220000,
+    });
+
+    expect(loadingDockPricing.pricingBasis).toBe('COUNT_BASED');
+    expect(loadingDockPricing.pricingStatus).toBe('incremental');
+    expect(loadingDockPricing.amountLabel).toBe('+$130,000');
+    expect(loadingDockPricing.explanationLines).toEqual([
+      'Baseline includes 8 docks',
+      'You specified 10 docks',
+      'Pricing includes 2 additional docks',
+    ]);
+    expect(loadingDockPricing.totalCost).toBe(130000);
+
+    expect(officeBuildoutPricing.pricingBasis).toBe('AREA_SHARE_GSF');
+    expect(officeBuildoutPricing.amountLabel).toBe('Included in baseline');
+    expect(officeBuildoutPricing.explanationLines).toEqual([
+      'Assumed feature area = 5% of project GSF',
+    ]);
+    expect(officeBuildoutPricing.totalCost).toBe(0);
+  });
+
   it('renders overage-mode count-based pricing with baseline, requested, and billed quantities', () => {
     const pricingById = indexAvailableSpecialFeaturePricing([
       {

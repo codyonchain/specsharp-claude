@@ -93,6 +93,25 @@ describe('NewProject auto-detection path', () => {
       expectedRaw: ['gymnasium'],
       expectedFiltered: ['gymnasium'],
     },
+    {
+      name: 'warehouse counted loading docks canonicalize to the single dock concept',
+      description: 'New 220,000 SF warehouse with 10 loading docks in Nashville, TN',
+      parsedBuildingType: 'industrial',
+      parsedSubtype: 'warehouse',
+      expectedAllowed: ['loading_docks', 'office_buildout'],
+      expectedRaw: ['loading_docks'],
+      expectedFiltered: ['loading_docks'],
+    },
+    {
+      name: 'warehouse office buildout language stays in the honest launch feature set',
+      description:
+        'New 220,000 SF warehouse in Nashville, TN with office buildout and standard loading docks',
+      parsedBuildingType: 'industrial',
+      parsedSubtype: 'warehouse',
+      expectedAllowed: ['loading_docks', 'office_buildout'],
+      expectedRaw: ['loading_docks', 'office_buildout'],
+      expectedFiltered: ['loading_docks', 'office_buildout'],
+    },
   ])(
     'resolves raw, allowed, and filtered ids for $name',
     ({

@@ -2675,6 +2675,40 @@ describe("ConstructionView", () => {
     expect(within(row as HTMLElement).getByText("No additional suites priced")).toBeInTheDocument();
   });
 
+  it("keeps warehouse loading docks honest when only the included baseline count is in play", () => {
+    const project = buildCrossTypeScheduleProject("industrial", "warehouse", "subtype");
+    project.analysis.calculations.construction_costs.special_features_total = 0;
+    project.analysis.calculations.construction_costs.special_features_breakdown = [
+      {
+        id: "loading_docks",
+        label: "Loading Docks",
+        pricing_basis: "COUNT_BASED",
+        pricing_status: "included_in_baseline",
+        count_pricing_mode: "overage_above_default",
+        configured_cost_per_count: 65000,
+        cost_per_count: 0,
+        applied_quantity: 8,
+        requested_quantity: 8,
+        requested_quantity_source: "size_band_default",
+        included_baseline_quantity: 8,
+        billed_quantity: 8,
+        unit_label: "dock",
+        total_cost: 0,
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+
+    const row = screen.getByText("Loading Docks").closest(".rounded-lg");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByText("Included in baseline")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("$0")).toBeInTheDocument();
+    expect(
+      within(row as HTMLElement).queryByText(/\$0\.00 per dock × 8 docks/i)
+    ).not.toBeInTheDocument();
+    expect(within(row as HTMLElement).queryByText(/Baseline includes 8 docks/i)).not.toBeInTheDocument();
+  });
+
   it("keeps per-feature special-feature breakdown visible for imaging, urgent care, and medical-office subtype fixtures", () => {
     const cases = [
       {

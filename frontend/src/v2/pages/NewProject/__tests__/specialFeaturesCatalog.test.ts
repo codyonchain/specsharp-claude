@@ -70,7 +70,10 @@ import {
 } from "../specialFeaturesCatalog";
 
 const REQUIRED_INDUSTRIAL_MAPPING = {
-  warehouse: {},
+  warehouse: {
+    loading_docks: 65000,
+    office_buildout: 18,
+  },
   distribution_center: {
     automated_sorting: 25,
     refrigerated_area: 35,
@@ -521,7 +524,7 @@ describe("industrial special features catalog", () => {
     expect(INDUSTRIAL_FEATURE_COSTS_BY_SUBTYPE).toEqual(REQUIRED_INDUSTRIAL_MAPPING);
   });
 
-  it("resolves exact industrial feature IDs per subtype, including the empty warehouse path", () => {
+  it("resolves exact industrial feature IDs per subtype, including warehouse launch-scope coverage", () => {
     const industrialFeatures = getIndustrialSpecialFeatures();
 
     for (const subtype of INDUSTRIAL_SUBTYPES) {
@@ -635,8 +638,13 @@ describe("industrial special features catalog", () => {
   });
 
   it("guards against stale local industrial IDs and subtype leakage", () => {
-    expect(getAvailableSpecialFeatures("industrial", "warehouse")).toEqual([]);
-    expect(industrialSubtypeHasSpecialFeatures("warehouse")).toBe(false);
+    expect(
+      getAvailableSpecialFeatures("industrial", "warehouse").map((feature) => feature.id).sort()
+    ).toEqual([
+      "loading_docks",
+      "office_buildout",
+    ]);
+    expect(industrialSubtypeHasSpecialFeatures("warehouse")).toBe(true);
     expect(industrialSubtypeHasSpecialFeatures("distribution_center")).toBe(true);
     expect(getSpecialFeatureCost("industrial", "cranes", "manufacturing")).toBeUndefined();
     expect(
