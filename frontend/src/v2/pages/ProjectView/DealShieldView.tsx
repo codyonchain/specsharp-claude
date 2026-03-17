@@ -13,6 +13,7 @@ import {
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { ErrorMessage } from '../../components/common/ErrorMessage';
 import { pdfService } from '@/services/api';
+import { generateExportFilename } from '@/utils/filenameGenerator';
 
 interface Props {
   projectId: string;
@@ -1180,13 +1181,20 @@ export const DealShieldView: React.FC<Props> = ({
     if (!projectId || exporting) return;
     try {
       setExporting(true);
-      const response = await pdfService.exportDealShield(projectId);
+      const response = await pdfService.exportProject(projectId);
       const blob = new Blob(
         [response.data],
         { type: response.headers?.['content-type'] || 'application/pdf' }
       );
 
-      const filename = `dealshield_${projectId}.pdf`;
+      const filename = generateExportFilename(
+        {
+          location: typeof contextLocation === 'string' && contextLocation.trim() ? contextLocation : undefined,
+          squareFootage: toFiniteNumber(contextSf) ?? undefined,
+        },
+        'pdf',
+        { includeDate: true }
+      );
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -1194,8 +1202,8 @@ export const DealShieldView: React.FC<Props> = ({
       link.click();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      console.error('DealShield PDF export failed:', err);
-      alert('Failed to export DealShield PDF. Please try again.');
+      console.error('PDF export failed:', err);
+      alert('Failed to export PDF report. Please try again.');
     } finally {
       setExporting(false);
     }
@@ -1316,7 +1324,7 @@ export const DealShieldView: React.FC<Props> = ({
             className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Download className="h-4 w-4" />
-            {exporting ? 'Exporting...' : 'Export DealShield PDF'}
+            {exporting ? 'Exporting...' : 'Export PDF'}
           </button>
         </div>
       </div>
