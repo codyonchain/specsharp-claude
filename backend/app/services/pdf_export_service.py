@@ -55,12 +55,28 @@ class ProfessionalPDFExportService:
     RENDER_TIMEOUT_SECONDS = 60
     DIAGNOSTIC_EXCERPT_CHARS = 240
     PROBE_EXCERPT_CHARS = 80
+    TEMPLATE_KIND_GENERIC = "generic"
+    TEMPLATE_KIND_DEALSHIELD = "dealshield"
+    TEMPLATE_KIND_DECISION_PACKET = "decision_packet"
+    MIN_DECISION_PACKET_FOUND_PROBES = 4
+    MIN_DECISION_PACKET_TEXT_PROBES = 4
+    MIN_DECISION_PACKET_LAID_OUT_PROBES = 3
     DEALSHIELD_RENDER_PROBES = (
         {"name": "title", "selector": "header > h1"},
         {"name": "subtitle", "selector": "header > .subtitle"},
         {"name": "table_header", "selector": "section.table-wrap thead th:first-child"},
         {"name": "context_note", "selector": "section.table-wrap > .context-note"},
         {"name": "provenance_heading", "selector": "body > section:nth-of-type(2) > h2"},
+    )
+    DECISION_PACKET_RENDER_PROBES = (
+        {"name": "page_wrapper", "selector": "body > div.page"},
+        {"name": "cover_summary", "selector": "section.cover-summary"},
+        {"name": "cover_eyebrow", "selector": "section.cover-summary .eyebrow"},
+        {"name": "cover_title", "selector": "section.cover-summary h1"},
+        {"name": "decision_banner_heading", "selector": "section.decision-banner h2"},
+        {"name": "key_metrics_heading", "selector": "body > div.page:nth-of-type(2) > section:first-of-type > h2"},
+        {"name": "decision_insurance_heading", "selector": "body > div.page:nth-of-type(2) > section:nth-of-type(2) > h2"},
+        {"name": "provenance_heading", "selector": "body > div.page:last-of-type > section h2"},
     )
     
     def __init__(self):
@@ -305,12 +321,23 @@ class ProfessionalPDFExportService:
             "device_scale_factor": 1,
         }
 
-    def _new_render_diagnostics(self, html: str, launch_options: Dict[str, Any]) -> Dict[str, Any]:
+    def _resolve_render_probes(self, template_kind: str) -> tuple[Dict[str, str], ...]:
+        normalized = str(template_kind or self.TEMPLATE_KIND_GENERIC)
+        if normalized == self.TEMPLATE_KIND_DEALSHIELD:
+            return self.DEALSHIELD_RENDER_PROBES
+        if normalized == self.TEMPLATE_KIND_DECISION_PACKET:
+            return self.DECISION_PACKET_RENDER_PROBES
+        return ()
+
+    def _new_render_diagnostics(self, html: str, launch_options: Dict[str, Any], template_kind: str) -> Dict[str, Any]:
         html_text_summary = self._summarize_html_text(html)
+        probes = self._resolve_render_probes(template_kind)
         return {
             "html_length": len(html or ""),
             "html_text_length": html_text_summary["text_length"],
             "html_text_excerpt": html_text_summary["text_excerpt"],
+            "template_kind": str(template_kind or self.TEMPLATE_KIND_GENERIC),
+            "probe_count": len(probes),
             "launch_options": {
                 "headless": bool(launch_options.get("headless")),
                 "chromium_sandbox": launch_options.get("chromium_sandbox"),
@@ -344,7 +371,8 @@ class ProfessionalPDFExportService:
 
     def _log_render_input_summary(self, diagnostics: Dict[str, Any]) -> None:
         logger.info(
-            "Chromium PDF render input summary: html_length=%s, html_text_length=%s, html_text_excerpt=%r",
+            "Chromium PDF render input summary: template_kind=%s, html_length=%s, html_text_length=%s, html_text_excerpt=%r",
+            diagnostics.get("template_kind", self.TEMPLATE_KIND_GENERIC),
             diagnostics.get("html_length", 0),
             diagnostics.get("html_text_length", 0),
             diagnostics.get("html_text_excerpt", ""),
@@ -427,13 +455,15 @@ class ProfessionalPDFExportService:
             }"""
         )
 
-    def _build_render_state_script(self, checkpoint_name: str) -> str:
-        probe_definitions = json.dumps(list(self.DEALSHIELD_RENDER_PROBES))
+    def _build_render_state_script(self, checkpoint_name: str, template_kind: str, probe_definitions: tuple[Dict[str, str], ...]) -> str:
+        probe_definitions_json = json.dumps(list(probe_definitions))
         checkpoint_literal = json.dumps(str(checkpoint_name or "unknown"))
+        template_kind_literal = json.dumps(str(template_kind or self.TEMPLATE_KIND_GENERIC))
         return f"""() => {{
                 const excerptLimit = {self.DIAGNOSTIC_EXCERPT_CHARS};
                 const checkpointName = {checkpoint_literal};
-                const probeDefinitions = {probe_definitions};
+                const templateKind = {template_kind_literal};
+                const probeDefinitions = {probe_definitions_json};
                 const normalizeText = (value) => {{
                     const text = (typeof value === 'string' ? value : '').replace(/\\s+/g, ' ').trim();
                     return {{
@@ -529,6 +559,7 @@ class ProfessionalPDFExportService:
 
                 return {{
                     checkpoint_name: checkpointName,
+                    template_kind: templateKind,
                     title: document.title || '',
                     document_ready_state: document.readyState || '',
                     document_fonts_status: fontsStatus,
@@ -564,7 +595,7 @@ class ProfessionalPDFExportService:
             return "none"
 
         preview_parts: List[str] = []
-        for probe in probes[: len(self.DEALSHIELD_RENDER_PROBES)]:
+        for probe in probes[:10]:
             if not isinstance(probe, dict):
                 continue
             name = self._trim_diagnostic_text(probe.get("name") or probe.get("selector") or "probe", limit=32)
@@ -608,16 +639,44 @@ class ProfessionalPDFExportService:
 
         return " | ".join(preview_parts) if preview_parts else "none"
 
+    def _summarize_anchor_probe_metrics(self, probes: Any) -> Dict[str, int]:
+        metrics = {
+            "found": 0,
+            "with_text_content": 0,
+            "with_inner_text": 0,
+            "laid_out": 0,
+        }
+        if not isinstance(probes, list):
+            return metrics
+
+        for probe in probes:
+            if not isinstance(probe, dict) or not probe.get("found"):
+                continue
+            metrics["found"] += 1
+            if int(probe.get("text_content_length") or 0) > 0:
+                metrics["with_text_content"] += 1
+            if int(probe.get("inner_text_length") or 0) > 0:
+                metrics["with_inner_text"] += 1
+            rect_width = float(probe.get("rect_width") or 0)
+            rect_height = float(probe.get("rect_height") or 0)
+            offset_height = int(probe.get("offset_height") or 0)
+            client_height = int(probe.get("client_height") or 0)
+            if rect_width > 0 and (rect_height > 0 or offset_height > 0 or client_height > 0):
+                metrics["laid_out"] += 1
+        return metrics
+
     def _format_checkpoint_state_preview(self, state: Any) -> str:
         if not isinstance(state, dict) or not state:
             return "none"
         checkpoint_name = self._trim_diagnostic_text(state.get("checkpoint_name"), limit=24) or "unknown"
+        template_kind = self._trim_diagnostic_text(state.get("template_kind"), limit=24) or self.TEMPLATE_KIND_GENERIC
         body_text_excerpt = self._trim_diagnostic_text(state.get("body_text_excerpt"))
         body_text_content_excerpt = self._trim_diagnostic_text(state.get("body_text_content_excerpt"))
         body_html_excerpt = self._trim_diagnostic_text(state.get("body_html_excerpt"))
         anchor_probe_preview = self._format_anchor_probe_preview(state.get("anchor_probes"))
         return (
             f"{checkpoint_name}["
+            f"template_kind={template_kind!r}, "
             f"ready_state={self._trim_diagnostic_text(state.get('document_ready_state'), limit=24)!r}, "
             f"fonts_status={self._trim_diagnostic_text(state.get('document_fonts_status'), limit=24)!r}, "
             f"fonts_ready={bool(state.get('document_fonts_ready'))}, "
@@ -632,8 +691,14 @@ class ProfessionalPDFExportService:
             f"anchor_probes={anchor_probe_preview}]"
         )
 
-    def _capture_render_state(self, page: Any, checkpoint_name: str = "unknown") -> Dict[str, Any]:
-        state = page.evaluate(self._build_render_state_script(checkpoint_name))
+    def _capture_render_state(
+        self,
+        page: Any,
+        checkpoint_name: str = "unknown",
+        template_kind: str = TEMPLATE_KIND_GENERIC,
+    ) -> Dict[str, Any]:
+        probes = self._resolve_render_probes(template_kind)
+        state = page.evaluate(self._build_render_state_script(checkpoint_name, template_kind, probes))
         return state if isinstance(state, dict) else {}
 
     def _analyze_screenshot(self, screenshot_bytes: bytes) -> Dict[str, Any]:
@@ -680,6 +745,7 @@ class ProfessionalPDFExportService:
             if isinstance(non_white_ratio, (int, float))
             else str(screenshot_analysis.get("error") or "unavailable")
         )
+        template_kind = self._trim_diagnostic_text(diagnostics.get("template_kind"), limit=24) or self.TEMPLATE_KIND_GENERIC
         excerpt = self._trim_diagnostic_text(render_state.get("body_text_excerpt"))
         text_content_excerpt = self._trim_diagnostic_text(render_state.get("body_text_content_excerpt"))
         dom_html_excerpt = self._trim_diagnostic_text(render_state.get("body_html_excerpt"))
@@ -700,6 +766,7 @@ class ProfessionalPDFExportService:
             for entry in diagnostics.get("request_failures", [])[:2]
         ) or "none"
         return (
+            f"template_kind={template_kind}; "
             "html_input="
             f"text_length={diagnostics.get('html_text_length', 0)}, "
             f"excerpt={self._trim_diagnostic_text(diagnostics.get('html_text_excerpt'))!r}; "
@@ -735,7 +802,9 @@ class ProfessionalPDFExportService:
         screenshot_analysis: Dict[str, Any],
     ) -> None:
         problems: List[str] = []
+        template_kind = str(diagnostics.get("template_kind") or self.TEMPLATE_KIND_GENERIC)
         body_text_length = int(render_state.get("body_text_length") or 0)
+        body_text_content_length = int(render_state.get("body_text_content_length") or 0)
         visible_text_blocks = int(render_state.get("visible_text_block_count") or 0)
         section_count = int(render_state.get("section_count") or 0)
         h1_count = int(render_state.get("h1_count") or 0)
@@ -744,15 +813,30 @@ class ProfessionalPDFExportService:
         scroll_height = int(render_state.get("scroll_height") or 0)
         pdf_size = len(pdf_bytes or b"")
         non_white_ratio = screenshot_analysis.get("non_white_ratio")
+        anchor_probe_metrics = self._summarize_anchor_probe_metrics(render_state.get("anchor_probes"))
 
-        if body_text_length < self.MIN_RENDERED_TEXT_CHARS:
-            problems.append(f"body text too short ({body_text_length} chars)")
-        if visible_text_blocks < self.MIN_VISIBLE_TEXT_BLOCKS:
-            problems.append(f"too few visible text blocks ({visible_text_blocks})")
-        if section_count == 0 and h1_count == 0:
-            problems.append("missing expected headings/sections")
-        if page_count > 0 and visible_page_count == 0:
-            problems.append("page containers rendered with no visible pages")
+        if template_kind == self.TEMPLATE_KIND_DECISION_PACKET:
+            if body_text_content_length < self.MIN_RENDERED_TEXT_CHARS:
+                problems.append(f"decision-packet DOM text too short ({body_text_content_length} textContent chars)")
+            if anchor_probe_metrics["found"] < self.MIN_DECISION_PACKET_FOUND_PROBES:
+                problems.append(f"missing expected packet anchors ({anchor_probe_metrics['found']} found)")
+            if anchor_probe_metrics["with_text_content"] < self.MIN_DECISION_PACKET_TEXT_PROBES:
+                problems.append(f"too few packet anchors with text ({anchor_probe_metrics['with_text_content']})")
+            if anchor_probe_metrics["laid_out"] < self.MIN_DECISION_PACKET_LAID_OUT_PROBES:
+                problems.append(f"too few laid-out packet anchors ({anchor_probe_metrics['laid_out']})")
+            if page_count == 0:
+                problems.append("missing decision-packet page containers")
+            elif visible_page_count == 0:
+                problems.append("page containers rendered with no visible pages")
+        else:
+            if body_text_length < self.MIN_RENDERED_TEXT_CHARS:
+                problems.append(f"body text too short ({body_text_length} chars)")
+            if visible_text_blocks < self.MIN_VISIBLE_TEXT_BLOCKS:
+                problems.append(f"too few visible text blocks ({visible_text_blocks})")
+            if section_count == 0 and h1_count == 0:
+                problems.append("missing expected headings/sections")
+            if page_count > 0 and visible_page_count == 0:
+                problems.append("page containers rendered with no visible pages")
         if scroll_height < 200:
             problems.append(f"scroll height suspiciously small ({scroll_height}px)")
         if isinstance(non_white_ratio, (int, float)) and float(non_white_ratio) < self.MIN_NON_WHITE_RATIO:
@@ -775,7 +859,7 @@ class ProfessionalPDFExportService:
                 + failure_context
             )
 
-    def _render_html_to_pdf(self, html: str) -> io.BytesIO:
+    def _render_html_to_pdf(self, html: str, template_kind: str = TEMPLATE_KIND_GENERIC) -> io.BytesIO:
         sync_playwright = self._get_sync_playwright()
 
         result_queue: "queue.Queue[bytes]" = queue.Queue(maxsize=1)
@@ -784,7 +868,7 @@ class ProfessionalPDFExportService:
         def worker():
             browser = None
             launch_options = self._build_chromium_launch_options()
-            diagnostics = self._new_render_diagnostics(html, launch_options)
+            diagnostics = self._new_render_diagnostics(html, launch_options, template_kind)
             self._log_render_input_summary(diagnostics)
             try:
                 with sync_playwright() as p:
@@ -792,12 +876,20 @@ class ProfessionalPDFExportService:
                     page = browser.new_page(**self._build_pdf_page_options())
                     self._attach_render_diagnostics(page, diagnostics)
                     self._wait_for_render_stability(page, html)
-                    after_wait_state = self._capture_render_state(page, checkpoint_name="after_wait")
+                    after_wait_state = self._capture_render_state(
+                        page,
+                        checkpoint_name="after_wait",
+                        template_kind=template_kind,
+                    )
                     render_state = dict(after_wait_state)
                     screenshot_analysis = self._analyze_screenshot(
                         page.screenshot(type="png", full_page=False)
                     )
-                    pre_pdf_state = self._capture_render_state(page, checkpoint_name="pre_pdf")
+                    pre_pdf_state = self._capture_render_state(
+                        page,
+                        checkpoint_name="pre_pdf",
+                        template_kind=template_kind,
+                    )
                     render_state["checkpoint_states"] = {
                         "after_wait": dict(after_wait_state),
                         "pre_pdf": dict(pre_pdf_state),
@@ -1265,12 +1357,12 @@ class ProfessionalPDFExportService:
     def generate_dealshield_pdf(self, view_model: Dict[str, Any]) -> io.BytesIO:
         """Generate DealShield PDF via Playwright-rendered HTML."""
         html = render_dealshield_html(view_model)
-        return self._render_html_to_pdf(html)
+        return self._render_html_to_pdf(html, template_kind=self.TEMPLATE_KIND_DEALSHIELD)
 
     def generate_decision_packet_pdf(self, packet: Dict[str, Any]) -> io.BytesIO:
         """Generate combined Decision Packet via Playwright-rendered HTML."""
         html = render_decision_packet_html(packet)
-        return self._render_html_to_pdf(html)
+        return self._render_html_to_pdf(html, template_kind=self.TEMPLATE_KIND_DECISION_PACKET)
     
     def _create_cover_page(self, project_data: Dict, client_name: str) -> List:
         """Create professional cover page"""
