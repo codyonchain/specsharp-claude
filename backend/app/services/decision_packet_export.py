@@ -1488,7 +1488,7 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
     * {{ box-sizing: border-box; }}
     body {{
       margin: 0;
-      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: "Liberation Sans", "DejaVu Sans", Arial, Helvetica, sans-serif;
       color: #0f172a;
       background: #f8fafc;
       line-height: 1.45;
