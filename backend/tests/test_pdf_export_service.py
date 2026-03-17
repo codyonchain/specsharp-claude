@@ -1,4 +1,11 @@
-from app.services.pdf_export_service import ProfessionalPDFExportService
+import io
+from typing import List, Optional
+
+import pytest
+from PIL import Image, ImageDraw
+
+from app.services import pdf_export_service as pdf_export_service_module
+from app.services.pdf_export_service import PDFRenderError, ProfessionalPDFExportService
 
 
 def _build_project_payload(feasible: bool, recommendation: str):
@@ -55,6 +62,123 @@ def _build_exec_summary():
     }
 
 
+def _build_png(has_visible_content: bool) -> bytes:
+    image = Image.new("RGB", (240, 240), "white")
+    if has_visible_content:
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((24, 24, 216, 90), fill="black")
+        draw.rectangle((24, 118, 180, 168), fill="#1f2937")
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+class FakeConsoleMessage:
+    def __init__(self, message_type: str, text: str):
+        self.type = message_type
+        self.text = text
+
+
+class FakePlaywrightContext:
+    def __init__(self, chromium):
+        self.chromium = chromium
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+class FakeSyncPlaywright:
+    def __init__(self, chromium):
+        self.chromium = chromium
+
+    def __call__(self):
+        return FakePlaywrightContext(self.chromium)
+
+
+class FakeBrowser:
+    def __init__(self, page):
+        self.page = page
+        self.page_options = None
+        self.closed = False
+
+    def new_page(self, **kwargs):
+        self.page_options = kwargs
+        return self.page
+
+    def close(self):
+        self.closed = True
+
+
+class FakeChromium:
+    def __init__(self, browser):
+        self.browser = browser
+        self.launch_kwargs = None
+
+    def launch(self, **kwargs):
+        self.launch_kwargs = kwargs
+        return self.browser
+
+
+class FakePage:
+    def __init__(
+        self,
+        render_state: dict,
+        screenshot_bytes: bytes,
+        pdf_bytes: bytes,
+        *,
+        console_messages: Optional[List[FakeConsoleMessage]] = None,
+        page_errors: Optional[List[BaseException]] = None,
+    ):
+        self.render_state = render_state
+        self.screenshot_bytes = screenshot_bytes
+        self.pdf_bytes = pdf_bytes
+        self.console_messages = console_messages or []
+        self.page_errors = page_errors or []
+        self.handlers: dict[str, list] = {}
+        self.wait_until = None
+        self.media = None
+
+    def on(self, event: str, handler):
+        self.handlers.setdefault(event, []).append(handler)
+
+    def set_content(self, html: str, wait_until: Optional[str] = None):
+        self.html = html
+        self.wait_until = wait_until
+        for message in self.console_messages:
+            for handler in self.handlers.get("console", []):
+                handler(message)
+        for error in self.page_errors:
+            for handler in self.handlers.get("pageerror", []):
+                handler(error)
+
+    def emulate_media(self, media: Optional[str] = None):
+        self.media = media
+
+    def evaluate(self, script: str):
+        if "requestAnimationFrame" in script:
+            return True
+        return dict(self.render_state)
+
+    def screenshot(self, **kwargs):
+        self.screenshot_kwargs = kwargs
+        return self.screenshot_bytes
+
+    def pdf(self, **kwargs):
+        self.pdf_kwargs = kwargs
+        return self.pdf_bytes
+
+
+def _install_fake_playwright(monkeypatch, service: ProfessionalPDFExportService, page: FakePage):
+    browser = FakeBrowser(page)
+    chromium = FakeChromium(browser)
+    fake_sync_playwright = FakeSyncPlaywright(chromium)
+    monkeypatch.setattr(service, "_get_sync_playwright", lambda: fake_sync_playwright)
+    return browser, chromium
+
+
 def test_project_pdf_prefers_canonical_dealshield_decision_when_available():
     service = ProfessionalPDFExportService()
     html = service._render_executive_overview_html(
@@ -92,3 +216,104 @@ def test_project_pdf_falls_back_to_feasibility_when_canonical_decision_missing()
 
     assert 'class="badge nogo">NO-GO<' in html
     assert recommendation in html
+
+
+def test_render_validation_accepts_meaningful_render_state():
+    service = ProfessionalPDFExportService()
+
+    service._validate_rendered_pdf_output(
+        {
+            "body_text_length": 220,
+            "visible_text_block_count": 18,
+            "section_count": 4,
+            "h1_count": 1,
+            "page_count": 5,
+            "visible_page_count": 5,
+            "scroll_height": 1800,
+            "body_text_excerpt": "SpecSharp decision packet overview",
+        },
+        b"%PDF-1.7\n" + (b"x" * 5000),
+        {"console_messages": [], "page_errors": [], "request_failures": [], "launch_options": {"args": []}},
+        {"non_white_ratio": 0.04},
+    )
+
+
+def test_render_validation_rejects_blank_render_state():
+    service = ProfessionalPDFExportService()
+
+    with pytest.raises(PDFRenderError) as exc_info:
+        service._validate_rendered_pdf_output(
+            {
+                "body_text_length": 0,
+                "visible_text_block_count": 0,
+                "section_count": 0,
+                "h1_count": 0,
+                "page_count": 1,
+                "visible_page_count": 0,
+                "scroll_height": 0,
+                "body_text_excerpt": "",
+            },
+            b"%PDF-1.7\n" + (b"x" * 5000),
+            {"console_messages": [], "page_errors": [], "request_failures": [], "launch_options": {"args": []}},
+            {"non_white_ratio": 0.0},
+        )
+
+    assert "body text too short" in str(exc_info.value)
+    assert "first-page screenshot nearly blank" in str(exc_info.value)
+
+
+def test_render_html_to_pdf_rejects_blank_output_and_surfaces_diagnostics(monkeypatch):
+    service = ProfessionalPDFExportService()
+    page = FakePage(
+        {
+            "body_text_length": 0,
+            "visible_text_block_count": 0,
+            "section_count": 0,
+            "h1_count": 0,
+            "page_count": 1,
+            "visible_page_count": 0,
+            "scroll_height": 0,
+            "body_text_excerpt": "",
+        },
+        _build_png(False),
+        b"%PDF-1.7\n" + (b"x" * 5000),
+        console_messages=[FakeConsoleMessage("error", "synthetic chromium paint failure")],
+    )
+    _install_fake_playwright(monkeypatch, service, page)
+
+    with pytest.raises(PDFRenderError) as exc_info:
+        service._render_html_to_pdf("<html><body>placeholder</body></html>")
+
+    assert "synthetic chromium paint failure" in str(exc_info.value)
+    assert "first-page screenshot nearly blank" in str(exc_info.value)
+
+
+def test_render_html_to_pdf_returns_pdf_and_uses_explicit_linux_launch_options(monkeypatch):
+    monkeypatch.setattr(pdf_export_service_module.sys, "platform", "linux")
+    service = ProfessionalPDFExportService()
+    page = FakePage(
+        {
+            "body_text_length": 420,
+            "visible_text_block_count": 24,
+            "section_count": 6,
+            "h1_count": 1,
+            "page_count": 5,
+            "visible_page_count": 5,
+            "scroll_height": 2400,
+            "body_text_excerpt": "SpecSharp decision packet for Multifamily - Nashville, TN",
+        },
+        _build_png(True),
+        b"%PDF-1.7\n" + (b"x" * 7000),
+    )
+    browser, chromium = _install_fake_playwright(monkeypatch, service, page)
+
+    pdf_buffer = service._render_html_to_pdf("<html><body>meaningful packet</body></html>")
+
+    assert pdf_buffer.getvalue() == b"%PDF-1.7\n" + (b"x" * 7000)
+    assert chromium.launch_kwargs["headless"] is True
+    assert chromium.launch_kwargs["chromium_sandbox"] is False
+    assert "--no-sandbox" in chromium.launch_kwargs["args"]
+    assert "--disable-dev-shm-usage" in chromium.launch_kwargs["args"]
+    assert browser.page_options["viewport"] == service.PDF_VIEWPORT
+    assert page.wait_until == "domcontentloaded"
+    assert page.media == "screen"

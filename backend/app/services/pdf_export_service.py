@@ -30,6 +30,10 @@ from app.v2.presentation.client_text_sanitizer import sanitize_client_text
 logger = logging.getLogger(__name__)
 
 
+class PDFRenderError(RuntimeError):
+    """Raised when Chromium cannot produce a trustworthy PDF export."""
+
+
 class ProfessionalPDFExportService:
     """Service for generating premium PDF reports"""
     
@@ -39,6 +43,13 @@ class ProfessionalPDFExportService:
     BRAND_ACCENT = colors.HexColor('#10B981')
     BRAND_LIGHT = colors.HexColor('#F3F4F6')
     BRAND_DARK = colors.HexColor('#1F2937')
+    PDF_VIEWPORT = {"width": 1100, "height": 1400}
+    MAX_RENDER_DIAGNOSTICS = 10
+    MIN_RENDERED_TEXT_CHARS = 80
+    MIN_VISIBLE_TEXT_BLOCKS = 6
+    MIN_NON_WHITE_RATIO = 0.001
+    MIN_PDF_BYTES = 2048
+    RENDER_TIMEOUT_SECONDS = 60
     
     def __init__(self):
         self._init_styles()
@@ -232,7 +243,7 @@ class ProfessionalPDFExportService:
         )
         return self._render_html_to_pdf(html)
 
-    def _render_html_to_pdf(self, html: str) -> io.BytesIO:
+    def _get_sync_playwright(self):
         try:
             from playwright.sync_api import sync_playwright  # type: ignore
         except ImportError:
@@ -262,32 +273,356 @@ class ProfessionalPDFExportService:
                     f"({sys.executable}). Install it there with:\n"
                     f"  {sys.executable} -m pip install playwright && {sys.executable} -m playwright install chromium"
                 ) from exc
+        return sync_playwright
+
+    def _build_chromium_launch_options(self) -> Dict[str, Any]:
+        options: Dict[str, Any] = {"headless": True}
+        if sys.platform.startswith("linux"):
+            options["chromium_sandbox"] = False
+            options["args"] = [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+            ]
+        return options
+
+    def _build_pdf_page_options(self) -> Dict[str, Any]:
+        return {
+            "viewport": dict(self.PDF_VIEWPORT),
+            "device_scale_factor": 1,
+        }
+
+    def _new_render_diagnostics(self, html: str, launch_options: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "html_length": len(html or ""),
+            "launch_options": {
+                "headless": bool(launch_options.get("headless")),
+                "chromium_sandbox": launch_options.get("chromium_sandbox"),
+                "args": list(launch_options.get("args", [])),
+            },
+            "console_messages": [],
+            "page_errors": [],
+            "request_failures": [],
+        }
+
+    def _append_render_diagnostic(self, bucket: List[Dict[str, Any]], entry: Dict[str, Any]) -> None:
+        if len(bucket) >= self.MAX_RENDER_DIAGNOSTICS:
+            return
+        bucket.append(entry)
+
+    def _coerce_playwright_attr(self, value: Any) -> Any:
+        if callable(value):
+            try:
+                return value()
+            except TypeError:
+                return value
+        return value
+
+    def _attach_render_diagnostics(self, page: Any, diagnostics: Dict[str, Any]) -> None:
+        def handle_console(message: Any) -> None:
+            message_type = self._coerce_playwright_attr(getattr(message, "type", None)) or "unknown"
+            text = self._coerce_playwright_attr(getattr(message, "text", None))
+            text = str(text or message).strip()
+            if not text or message_type not in {"error", "warning"}:
+                return
+            self._append_render_diagnostic(
+                diagnostics["console_messages"],
+                {"type": str(message_type), "text": text[:400]},
+            )
+
+        def handle_page_error(exc: BaseException) -> None:
+            text = str(exc).strip()
+            if not text:
+                return
+            self._append_render_diagnostic(diagnostics["page_errors"], {"text": text[:400]})
+
+        def handle_request_failed(request: Any) -> None:
+            url = self._coerce_playwright_attr(getattr(request, "url", None)) or "unknown"
+            method = self._coerce_playwright_attr(getattr(request, "method", None)) or "GET"
+            resource_type = self._coerce_playwright_attr(getattr(request, "resource_type", None)) or "unknown"
+            failure = self._coerce_playwright_attr(getattr(request, "failure", None))
+            error_text = ""
+            if isinstance(failure, dict):
+                error_text = str(
+                    failure.get("errorText")
+                    or failure.get("error_text")
+                    or failure.get("message")
+                    or ""
+                ).strip()
+            elif failure:
+                error_text = str(failure).strip()
+            self._append_render_diagnostic(
+                diagnostics["request_failures"],
+                {
+                    "url": str(url)[:240],
+                    "method": str(method),
+                    "resource_type": str(resource_type),
+                    "error_text": error_text[:240],
+                },
+            )
+
+        page.on("console", handle_console)
+        page.on("pageerror", handle_page_error)
+        page.on("requestfailed", handle_request_failed)
+
+    def _wait_for_render_stability(self, page: Any, html: str) -> None:
+        page.set_content(html, wait_until="domcontentloaded")
+        page.emulate_media(media="screen")
+        page.evaluate(
+            """async () => {
+                if (document.fonts && document.fonts.ready) {
+                    try {
+                        await document.fonts.ready;
+                    } catch (error) {
+                        // Ignore font readiness failures and continue to DOM checks.
+                    }
+                }
+                await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                return true;
+            }"""
+        )
+
+    def _capture_render_state(self, page: Any) -> Dict[str, Any]:
+        state = page.evaluate(
+            """() => {
+                const isVisible = (element) => {
+                    if (!element) return false;
+                    const style = window.getComputedStyle(element);
+                    const rect = element.getBoundingClientRect();
+                    return (
+                        style.display !== 'none' &&
+                        style.visibility !== 'hidden' &&
+                        Number(style.opacity || '1') > 0 &&
+                        rect.width > 0 &&
+                        rect.height > 0
+                    );
+                };
+
+                const body = document.body;
+                const bodyText = body && typeof body.innerText === 'string'
+                    ? body.innerText.replace(/\\s+/g, ' ').trim()
+                    : '';
+                const pages = Array.from(document.querySelectorAll('.page'));
+                const sections = Array.from(document.querySelectorAll('section'));
+                const visibleTextBlocks = Array.from(document.querySelectorAll('h1, h2, h3, p, li, td, th, span, div'))
+                    .filter((element) => isVisible(element) && ((element.innerText || '').trim().length > 0))
+                    .length;
+
+                return {
+                    title: document.title || '',
+                    body_text_length: bodyText.length,
+                    body_text_excerpt: bodyText.slice(0, 240),
+                    body_child_count: body ? body.children.length : 0,
+                    h1_count: document.querySelectorAll('h1').length,
+                    section_count: sections.length,
+                    visible_section_count: sections.filter(isVisible).length,
+                    page_count: pages.length,
+                    visible_page_count: pages.filter(isVisible).length,
+                    table_count: document.querySelectorAll('table').length,
+                    visible_text_block_count: visibleTextBlocks,
+                    scroll_height: Math.max(
+                        document.documentElement ? document.documentElement.scrollHeight : 0,
+                        body ? body.scrollHeight : 0
+                    ),
+                    scroll_width: Math.max(
+                        document.documentElement ? document.documentElement.scrollWidth : 0,
+                        body ? body.scrollWidth : 0
+                    ),
+                };
+            }"""
+        )
+        return state if isinstance(state, dict) else {}
+
+    def _analyze_screenshot(self, screenshot_bytes: bytes) -> Dict[str, Any]:
+        if not screenshot_bytes:
+            return {}
+        try:
+            from PIL import Image
+
+            with Image.open(io.BytesIO(screenshot_bytes)) as image:
+                rgb_image = image.convert("RGB")
+                width, height = rgb_image.size
+                total_pixels = width * height
+                step = max(1, int((total_pixels / 150000) ** 0.5))
+                pixels = rgb_image.load()
+                sampled_pixels = 0
+                non_white_pixels = 0
+
+                for y in range(0, height, step):
+                    for x in range(0, width, step):
+                        sampled_pixels += 1
+                        red, green, blue = pixels[x, y]
+                        if min(red, green, blue) < 245 or (max(red, green, blue) - min(red, green, blue)) > 8:
+                            non_white_pixels += 1
+
+                return {
+                    "width": width,
+                    "height": height,
+                    "sampled_pixels": sampled_pixels,
+                    "non_white_ratio": (non_white_pixels / sampled_pixels) if sampled_pixels else 0.0,
+                }
+        except Exception as exc:
+            return {"error": f"screenshot analysis failed: {exc}"}
+
+    def _format_render_failure_context(
+        self,
+        render_state: Dict[str, Any],
+        pdf_bytes: bytes,
+        diagnostics: Dict[str, Any],
+        screenshot_analysis: Dict[str, Any],
+    ) -> str:
+        non_white_ratio = screenshot_analysis.get("non_white_ratio")
+        non_white_text = (
+            f"{float(non_white_ratio):.4f}"
+            if isinstance(non_white_ratio, (int, float))
+            else str(screenshot_analysis.get("error") or "unavailable")
+        )
+        excerpt = str(render_state.get("body_text_excerpt") or "").strip()
+        console_preview = "; ".join(
+            f"{entry.get('type')}: {entry.get('text')}"
+            for entry in diagnostics.get("console_messages", [])[:2]
+        ) or "none"
+        page_error_preview = "; ".join(
+            entry.get("text", "")
+            for entry in diagnostics.get("page_errors", [])[:2]
+        ) or "none"
+        request_failure_preview = "; ".join(
+            f"{entry.get('method')} {entry.get('url')} ({entry.get('error_text') or entry.get('resource_type')})"
+            for entry in diagnostics.get("request_failures", [])[:2]
+        ) or "none"
+        return (
+            "render_state="
+            f"text_length={render_state.get('body_text_length', 0)}, "
+            f"visible_text_blocks={render_state.get('visible_text_block_count', 0)}, "
+            f"sections={render_state.get('section_count', 0)}, "
+            f"visible_sections={render_state.get('visible_section_count', 0)}, "
+            f"pages={render_state.get('page_count', 0)}, "
+            f"visible_pages={render_state.get('visible_page_count', 0)}, "
+            f"scroll_height={render_state.get('scroll_height', 0)}, "
+            f"pdf_size={len(pdf_bytes)} bytes, "
+            f"first_page_non_white_ratio={non_white_text}, "
+            f"excerpt={excerpt!r}; "
+            "diagnostics="
+            f"console={console_preview}; "
+            f"page_errors={page_error_preview}; "
+            f"request_failures={request_failure_preview}; "
+            f"launch_args={diagnostics.get('launch_options', {}).get('args', [])}"
+        )
+
+    def _validate_rendered_pdf_output(
+        self,
+        render_state: Dict[str, Any],
+        pdf_bytes: bytes,
+        diagnostics: Dict[str, Any],
+        screenshot_analysis: Dict[str, Any],
+    ) -> None:
+        problems: List[str] = []
+        body_text_length = int(render_state.get("body_text_length") or 0)
+        visible_text_blocks = int(render_state.get("visible_text_block_count") or 0)
+        section_count = int(render_state.get("section_count") or 0)
+        h1_count = int(render_state.get("h1_count") or 0)
+        page_count = int(render_state.get("page_count") or 0)
+        visible_page_count = int(render_state.get("visible_page_count") or 0)
+        scroll_height = int(render_state.get("scroll_height") or 0)
+        pdf_size = len(pdf_bytes or b"")
+        non_white_ratio = screenshot_analysis.get("non_white_ratio")
+
+        if body_text_length < self.MIN_RENDERED_TEXT_CHARS:
+            problems.append(f"body text too short ({body_text_length} chars)")
+        if visible_text_blocks < self.MIN_VISIBLE_TEXT_BLOCKS:
+            problems.append(f"too few visible text blocks ({visible_text_blocks})")
+        if section_count == 0 and h1_count == 0:
+            problems.append("missing expected headings/sections")
+        if page_count > 0 and visible_page_count == 0:
+            problems.append("page containers rendered with no visible pages")
+        if scroll_height < 200:
+            problems.append(f"scroll height suspiciously small ({scroll_height}px)")
+        if isinstance(non_white_ratio, (int, float)) and float(non_white_ratio) < self.MIN_NON_WHITE_RATIO:
+            problems.append(f"first-page screenshot nearly blank ({float(non_white_ratio):.4f} non-white ratio)")
+        if pdf_size < self.MIN_PDF_BYTES:
+            problems.append(f"pdf byte size suspiciously small ({pdf_size} bytes)")
+
+        if problems:
+            failure_context = self._format_render_failure_context(
+                render_state,
+                pdf_bytes,
+                diagnostics,
+                screenshot_analysis,
+            )
+            logger.error("Chromium PDF render validation failed: %s; %s", "; ".join(problems), failure_context)
+            raise PDFRenderError(
+                "Chromium rendered suspicious PDF output: "
+                + "; ".join(problems)
+                + ". "
+                + failure_context
+            )
+
+    def _render_html_to_pdf(self, html: str) -> io.BytesIO:
+        sync_playwright = self._get_sync_playwright()
 
         result_queue: "queue.Queue[bytes]" = queue.Queue(maxsize=1)
         error_queue: "queue.Queue[BaseException]" = queue.Queue(maxsize=1)
 
         def worker():
+            browser = None
+            launch_options = self._build_chromium_launch_options()
+            diagnostics = self._new_render_diagnostics(html, launch_options)
             try:
                 with sync_playwright() as p:
-                    browser = p.chromium.launch()
-                    page = browser.new_page()
-                    page.set_content(html, wait_until="networkidle")
+                    browser = p.chromium.launch(**launch_options)
+                    page = browser.new_page(**self._build_pdf_page_options())
+                    self._attach_render_diagnostics(page, diagnostics)
+                    self._wait_for_render_stability(page, html)
+                    render_state = self._capture_render_state(page)
+                    screenshot_analysis = self._analyze_screenshot(
+                        page.screenshot(type="png", full_page=False)
+                    )
                     pdf_bytes = page.pdf(
                         format="Letter",
                         print_background=True,
                         margin={"top": "0.6in", "right": "0.6in", "bottom": "0.6in", "left": "0.6in"},
                     )
-                    browser.close()
+                    self._validate_rendered_pdf_output(
+                        render_state,
+                        pdf_bytes,
+                        diagnostics,
+                        screenshot_analysis,
+                    )
                     result_queue.put(pdf_bytes)
             except BaseException as exc:  # capture Playwright/system errors
-                error_queue.put(exc)
+                failure_context = self._format_render_failure_context(
+                    render_state if "render_state" in locals() and isinstance(render_state, dict) else {},
+                    pdf_bytes if "pdf_bytes" in locals() and isinstance(pdf_bytes, (bytes, bytearray)) else b"",
+                    diagnostics,
+                    screenshot_analysis if "screenshot_analysis" in locals() and isinstance(screenshot_analysis, dict) else {},
+                )
+                if isinstance(exc, PDFRenderError):
+                    error_queue.put(exc)
+                else:
+                    logger.error("Chromium PDF render failed: %s; %s", exc, failure_context)
+                    error_queue.put(PDFRenderError(f"Chromium PDF render failed: {exc}. {failure_context}"))
+            finally:
+                if browser is not None:
+                    try:
+                        browser.close()
+                    except Exception:
+                        pass
 
         thread = threading.Thread(target=worker, daemon=True)
         thread.start()
-        thread.join()
+        thread.join(timeout=self.RENDER_TIMEOUT_SECONDS)
+
+        if thread.is_alive():
+            raise PDFRenderError(
+                f"Chromium PDF render timed out after {self.RENDER_TIMEOUT_SECONDS} seconds"
+            )
 
         if not error_queue.empty():
             raise error_queue.get()
+
+        if result_queue.empty():
+            raise PDFRenderError("Chromium PDF render finished without producing PDF bytes")
 
         pdf_bytes = result_queue.get_nowait()
 
