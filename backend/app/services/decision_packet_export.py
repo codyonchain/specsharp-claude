@@ -1503,45 +1503,45 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
       page-break-before: always;
     }}
     h1 {{
-      margin: 0 0 16px;
+      margin: 0 0 14px;
       font-size: 32px;
       line-height: 1.1;
       color: #0f172a;
     }}
     h2 {{
-      margin: 0 0 18px;
+      margin: 0 0 14px;
       font-size: 20px;
       line-height: 1.2;
       color: #0f172a;
     }}
     h3 {{
-      margin: 0 0 12px;
+      margin: 0 0 10px;
       font-size: 14px;
       color: #1e293b;
       text-transform: uppercase;
       letter-spacing: 0.03em;
     }}
     section {{
-      margin-bottom: 30px;
-      padding: 22px 22px 20px;
+      margin-bottom: 24px;
+      padding: 18px 18px 16px;
       border: 1px solid #e2e8f0;
       border-radius: 14px;
       background: #ffffff;
     }}
     section > * + * {{
-      margin-top: 16px;
+      margin-top: 12px;
     }}
     section > h2 + * {{
       margin-top: 0;
     }}
     .subsection {{
-      margin-top: 20px;
+      margin-top: 16px;
     }}
     .subsection:first-of-type {{
       margin-top: 0;
     }}
     .subsection > * + * {{
-      margin-top: 12px;
+      margin-top: 10px;
     }}
     .eyebrow {{
       font-size: 12px;
@@ -1549,17 +1549,17 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: #475569;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }}
     .cover-grid {{
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px 20px;
+      gap: 12px 16px;
     }}
     .cover-row {{
       display: flex;
       flex-direction: column;
-      padding: 12px 14px;
+      padding: 10px 12px;
       border-radius: 10px;
       background: #f8fafc;
       border: 1px solid #e2e8f0;
@@ -1573,7 +1573,7 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
       line-height: 1.35;
     }}
     .cover-value, .metric-value, .info-value {{
-      margin-top: 6px;
+      margin-top: 5px;
       font-size: 17px;
       font-weight: 700;
       color: #0f172a;
@@ -1581,7 +1581,7 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
     }}
     .decision-banner {{
       border-width: 2px;
-      padding: 22px;
+      padding: 18px;
     }}
     .status-go {{ border-color: #16a34a; background: #f0fdf4; }}
     .status-no-go {{ border-color: #dc2626; background: #fef2f2; }}
@@ -1597,7 +1597,7 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
       font-weight: 700;
       letter-spacing: 0.06em;
       text-transform: uppercase;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }}
     .decision-reason, .banner-detail, .banner-basis, .metric-detail, .subcard-detail, .list-detail, .content-subtle {{
       font-size: 11px;
@@ -1608,13 +1608,13 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
     .metric-grid {{
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 14px;
+      gap: 12px;
     }}
     .metric-card, .info-item, .subcard {{
       display: flex;
       flex-direction: column;
-      gap: 8px;
-      padding: 15px 16px;
+      gap: 6px;
+      padding: 13px 14px;
       border-radius: 12px;
       border: 1px solid #e2e8f0;
       background: #f8fafc;
@@ -1622,8 +1622,8 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
     .subcard-grid {{
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px;
-      margin-bottom: 18px;
+      gap: 12px;
+      margin-bottom: 14px;
     }}
     .subcard-title {{
       font-size: 11px;
@@ -1642,7 +1642,7 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
     .info-grid {{
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px;
+      gap: 12px;
     }}
     .two-column {{
       display: grid;
@@ -1655,7 +1655,7 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
     }}
     th, td {{
       border-bottom: 1px solid #e2e8f0;
-      padding: 12px 14px;
+      padding: 10px 12px;
       text-align: left;
       vertical-align: top;
       font-size: 12px;
@@ -1669,10 +1669,10 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
       background: #f8fafc;
     }}
     .decision-table, .simple-table {{
-      margin-top: 8px;
+      margin-top: 6px;
     }}
     .decision-table th, .decision-table td {{
-      padding: 14px 16px;
+      padding: 12px 14px;
     }}
     .decision-table thead th {{
       font-size: 10px;
@@ -1694,28 +1694,28 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
       padding-left: 20px;
     }}
     .bullet-list.compact {{
-      margin-top: 8px;
+      margin-top: 6px;
     }}
     .bullet-list.nested {{
-      margin-top: 8px;
+      margin-top: 6px;
     }}
     .bullet-list li {{
-      margin-bottom: 12px;
+      margin-bottom: 8px;
       line-height: 1.5;
     }}
     .question-bank-groups {{
       display: grid;
-      gap: 16px;
-      margin-top: 16px;
+      gap: 12px;
+      margin-top: 12px;
     }}
     .question-bank-group {{
-      padding: 16px 18px;
+      padding: 14px 16px;
       border-radius: 12px;
       border: 1px solid #e2e8f0;
       background: #f8fafc;
     }}
     .question-bank-group-title {{
-      margin: 0 0 10px;
+      margin: 0 0 8px;
       font-size: 13px;
       font-weight: 700;
       letter-spacing: 0.02em;
@@ -1724,7 +1724,7 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
     }}
     .note-block {{
       margin: 0;
-      padding: 14px 16px;
+      padding: 12px 14px;
       border-radius: 10px;
       background: #f8fafc;
       border: 1px solid #e2e8f0;
