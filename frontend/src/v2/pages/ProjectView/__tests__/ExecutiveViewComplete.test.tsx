@@ -727,6 +727,32 @@ const buildCrossTypeProject = (
   project.analysis.calculations.project_info.building_type = buildingType;
   project.analysis.calculations.project_info.subtype = subtype;
   project.analysis.calculations.dealshield_scenarios.profile_id = profileId;
+  if (buildingType === "multifamily") {
+    const modeledUnits =
+      subtype === "luxury_apartments"
+        ? 72
+        : subtype === "affordable_housing"
+          ? 64
+          : 68;
+    const annualRevenue =
+      project.analysis.calculations.revenue_analysis?.annual_revenue ?? 1850000;
+    const totalProjectCost =
+      project.analysis.calculations.totals?.total_project_cost ?? 3700000;
+    project.analysis.calculations.operational_metrics = {
+      ...(project.analysis.calculations.operational_metrics || {}),
+      per_unit: {
+        ...(project.analysis.calculations.operational_metrics?.per_unit || {}),
+        units: modeledUnits,
+        units_source: "test_fixture",
+        annual_revenue_per_unit: annualRevenue / modeledUnits,
+        cost_per_unit: totalProjectCost / modeledUnits,
+      },
+    };
+    project.analysis.calculations.ownership_analysis.operational_metrics =
+      project.analysis.calculations.operational_metrics;
+    project.analysis.calculations.project_info.unit_label = "Units";
+    project.analysis.calculations.project_info.unit_type = "units";
+  }
   if (mixedUseSplit) {
     project.analysis.parsed_input.mixed_use_split = {
       source: "user_input",
@@ -815,6 +841,45 @@ const withExecutiveRenderedCopy = (
     target_yield_lens_label: copy.target_yield_lens_label ?? "Target Yield: Not Met",
   },
 });
+
+const buildOperatingModelMetric = (
+  id: string,
+  label: string,
+  value: number | string,
+  kind: "currency" | "percentage" | "number" | "text",
+  extras: Record<string, unknown> = {}
+) => ({
+  id,
+  label,
+  value,
+  kind,
+  ...extras,
+});
+
+const buildOperatingModel = (
+  variant: string,
+  sections: Array<{
+    id: string;
+    title: string;
+    layout: "tiles" | "list" | "signals";
+    metrics: Array<ReturnType<typeof buildOperatingModelMetric>>;
+  }>,
+  notes: string[] = []
+) => ({
+  variant,
+  title: "Operating Model",
+  sections,
+  notes,
+});
+
+const withOperatingModel = (project: any, operatingModel: any) => {
+  project.analysis.calculations.operating_model = operatingModel;
+  project.analysis.calculations.ownership_analysis = {
+    ...(project.analysis.calculations.ownership_analysis || {}),
+    operating_model: operatingModel,
+  };
+  return project;
+};
 
 describe("ExecutiveViewComplete", () => {
   it("keeps one Trust & Assumptions trigger and renders the shared executive trust guide in the drawer", () => {
@@ -3204,5 +3269,374 @@ describe("ExecutiveViewComplete", () => {
       expect(policyLineMatches.length).toBeGreaterThan(0);
       expect(screen.getByRole("button", { name: "Scenario" })).toBeInTheDocument();
     }
+  });
+
+  it("renders a backend-owned office operating model without efficiency-score fallback semantics", () => {
+    const project = withOperatingModel(
+      buildCrossTypeProject("office", "class_a", "office_class_a_v1"),
+      buildOperatingModel(
+        "office_underwriting",
+        [
+          {
+            id: "office_rent_recoveries",
+            title: "Rent & Recoveries",
+            layout: "list",
+            metrics: [
+              buildOperatingModelMetric("rent_sf", "Rent / SF", 38.25, "currency", {
+                decimals: 2,
+                suffix: "/yr",
+              }),
+              buildOperatingModelMetric("recoverable_cam", "Recoverable CAM", "$6.10/SF", "text"),
+            ],
+          },
+          {
+            id: "office_operating_burden",
+            title: "Operating Burden",
+            layout: "list",
+            metrics: [
+              buildOperatingModelMetric("office_opex", "Operating Expenses", 312000, "currency"),
+              buildOperatingModelMetric("office_margin", "NOI Margin", 0.62, "percentage"),
+              buildOperatingModelMetric("office_expense_ratio", "Expense Ratio", 0.38, "percentage"),
+            ],
+          },
+          {
+            id: "office_allocations",
+            title: "Cost Allocations",
+            layout: "list",
+            metrics: [
+              buildOperatingModelMetric("office_mgmt", "Management Allocation", 54000, "currency"),
+              buildOperatingModelMetric("office_maintenance", "Maintenance Allocation", 87000, "currency"),
+            ],
+          },
+        ],
+        ["Landlord-side office underwriting and recoverable operating costs."]
+      )
+    );
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={project}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "office_class_a_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Operating Model")).toBeInTheDocument();
+    expect(screen.getByText("Rent & Recoveries")).toBeInTheDocument();
+    expect(screen.getByText("Operating Burden")).toBeInTheDocument();
+    expect(screen.getByText("Cost Allocations")).toBeInTheDocument();
+    expect(screen.queryByText("Efficiency Score")).not.toBeInTheDocument();
+    expect(screen.queryByText("Target KPIs")).not.toBeInTheDocument();
+  });
+
+  it("renders warehouse projects with backend-owned property ops instead of staffing fallback tiles", () => {
+    const project = withOperatingModel(
+      buildCrossTypeProject("industrial", "warehouse", "industrial_warehouse_v1"),
+      buildOperatingModel(
+        "industrial_property_ops",
+        [
+          {
+            id: "warehouse_lease_productivity",
+            title: "Lease Productivity",
+            layout: "tiles",
+            metrics: [
+              buildOperatingModelMetric("warehouse_rent", "Effective Rent / SF", 11.5, "currency", {
+                decimals: 2,
+                suffix: "/yr",
+                emphasis: "primary",
+              }),
+              buildOperatingModelMetric("warehouse_occ", "Occupancy Assumption", 0.95, "percentage"),
+              buildOperatingModelMetric("warehouse_margin", "NOI Margin", 0.88, "percentage"),
+            ],
+          },
+          {
+            id: "warehouse_cost_mix",
+            title: "Operating Cost Mix",
+            layout: "list",
+            metrics: [
+              buildOperatingModelMetric("warehouse_tax", "Property Tax", 42110, "currency"),
+              buildOperatingModelMetric("warehouse_utilities", "Utilities", 26318, "currency"),
+              buildOperatingModelMetric("warehouse_total_expenses", "Total Expenses", 189046, "currency"),
+            ],
+          },
+        ],
+        ["Landlord-side property operations only; tenant business operations excluded."]
+      )
+    );
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={project}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "industrial_warehouse_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Operating Model")).toBeInTheDocument();
+    expect(screen.getByText("Lease Productivity")).toBeInTheDocument();
+    expect(screen.getByText("Operating Cost Mix")).toBeInTheDocument();
+    expect(screen.getByText("Effective Rent / SF")).toBeInTheDocument();
+    expect(screen.queryByText("Operational Efficiency")).not.toBeInTheDocument();
+    expect(screen.queryByText("Staffing Metrics")).not.toBeInTheDocument();
+    expect(screen.queryByText("Efficiency Score")).not.toBeInTheDocument();
+    expect(screen.queryByText("Target KPIs")).not.toBeInTheDocument();
+  });
+
+  it("renders backend-owned healthcare operating model content for medical office projects", () => {
+    const project = withOperatingModel(
+      buildCrossTypeProject(
+        "healthcare",
+        "medical_office_building",
+        "healthcare_medical_office_building_v1"
+      ),
+      buildOperatingModel(
+        "healthcare_operating_model",
+        [
+          {
+            id: "mob_staffing",
+            title: "Staffing",
+            layout: "tiles",
+            metrics: [
+              buildOperatingModelMetric("mob_providers", "Providers (MD/DO/NP/PA FTE)", 6, "number"),
+              buildOperatingModelMetric("mob_suites", "Tenant Suites", 14, "number"),
+            ],
+          },
+          {
+            id: "mob_revenue_productivity",
+            title: "Revenue Productivity",
+            layout: "list",
+            metrics: [
+              buildOperatingModelMetric("mob_provider_revenue", "Revenue per Provider", 520000, "currency"),
+              buildOperatingModelMetric("mob_suite_revenue", "Revenue per Tenant Suites", 223000, "currency"),
+            ],
+          },
+          {
+            id: "mob_operating_signals",
+            title: "Operating Signals",
+            layout: "signals",
+            metrics: [
+              buildOperatingModelMetric("mob_utilization", "Suite Utilization", 0.87, "percentage", { state: "green" }),
+              buildOperatingModelMetric("mob_throughput", "Tenant Throughput Yield", "Stable", "text", { state: "green" }),
+            ],
+          },
+        ],
+        ["Backend-owned healthcare staffing, throughput, and utilization model."]
+      )
+    );
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={project}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "healthcare_medical_office_building_v1",
+            "GO",
+            "base_value_gap_positive"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Staffing")).toBeInTheDocument();
+    expect(screen.getByText("Revenue Productivity")).toBeInTheDocument();
+    expect(screen.getByText("Operating Signals")).toBeInTheDocument();
+    expect(screen.getByText("Tenant Suites")).toBeInTheDocument();
+    expect(screen.getByText("Tenant Throughput Yield")).toBeInTheDocument();
+    expect(screen.queryByText("Soft Costs % of Total")).not.toBeInTheDocument();
+    expect(screen.queryByText("Revenue Efficiency")).not.toBeInTheDocument();
+    expect(screen.queryByText("Target KPIs")).not.toBeInTheDocument();
+  });
+
+  it("renders hotel-native operating model metrics for hospitality projects", () => {
+    const project = withOperatingModel(
+      buildHospitalityProject("hospitality_limited_service_hotel_v1"),
+      buildOperatingModel(
+        "hospitality_keys",
+        [
+          {
+            id: "hotel_keys",
+            title: "Key Metrics",
+            layout: "tiles",
+            metrics: [
+              buildOperatingModelMetric("hotel_rooms", "Rooms", 160, "number"),
+              buildOperatingModelMetric("hotel_adr", "ADR", 212, "currency"),
+              buildOperatingModelMetric("hotel_occupancy", "Occupancy", 0.74, "percentage"),
+              buildOperatingModelMetric("hotel_revpar", "RevPAR", 156.88, "currency", { decimals: 2 }),
+            ],
+          },
+          {
+            id: "hotel_performance",
+            title: "Operating Performance",
+            layout: "list",
+            metrics: [
+              buildOperatingModelMetric("hotel_revenue", "Annual Room Revenue", 9020000, "currency"),
+              buildOperatingModelMetric("hotel_margin", "NOI Margin", 0.33, "percentage"),
+            ],
+          },
+        ],
+        ["Hotel key productivity and stabilized operating conversion."]
+      )
+    );
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={project}
+          dealShieldData={buildHospitalityDealShieldViewModel(
+            "hospitality_limited_service_hotel_v1"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Key Metrics")).toBeInTheDocument();
+    expect(screen.getByText("Operating Performance")).toBeInTheDocument();
+    expect(screen.getAllByText("Rooms").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("ADR").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Occupancy").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("RevPAR").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Staffing Metrics")).not.toBeInTheDocument();
+  });
+
+  it("renders multifamily operating model without heuristic staffing or target tiles", () => {
+    const project = withOperatingModel(
+      buildCrossTypeProject(
+        "multifamily",
+        "market_rate_apartments",
+        "multifamily_market_rate_apartments_v1"
+      ),
+      buildOperatingModel(
+        "multifamily_unit_economics",
+        [
+          {
+            id: "mf_unit_economics",
+            title: "Unit Economics",
+            layout: "tiles",
+            metrics: [
+              buildOperatingModelMetric("mf_units", "Units", 82, "number"),
+              buildOperatingModelMetric("mf_revenue_unit", "Revenue / Unit", 22800, "currency", {
+                suffix: "/yr",
+              }),
+              buildOperatingModelMetric("mf_average_rent", "Average Rent", 1900, "currency", {
+                suffix: "/mo",
+              }),
+              buildOperatingModelMetric("mf_occ", "Occupancy Assumption", 0.94, "percentage"),
+            ],
+          },
+          {
+            id: "mf_burden",
+            title: "Operating Burden",
+            layout: "list",
+            metrics: [
+              buildOperatingModelMetric("mf_expenses", "Total Expenses", 448000, "currency"),
+              buildOperatingModelMetric("mf_margin", "NOI Margin", 0.61, "percentage"),
+              buildOperatingModelMetric("mf_expense_ratio", "Expense Ratio", 0.39, "percentage"),
+            ],
+          },
+        ],
+        ["Unit economics and landlord-side operating burden only."]
+      )
+    );
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={project}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "multifamily_market_rate_apartments_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Unit Economics")).toBeInTheDocument();
+    expect(screen.getByText("Operating Burden")).toBeInTheDocument();
+    expect(screen.getByText("Average Rent")).toBeInTheDocument();
+    expect(screen.queryByText("Units per Manager")).not.toBeInTheDocument();
+    expect(screen.queryByText("Maintenance Staff")).not.toBeInTheDocument();
+    expect(screen.queryByText("Target KPIs")).not.toBeInTheDocument();
+  });
+
+  it("renders data center projects with subtype-native infrastructure cost mix", () => {
+    const project = withOperatingModel(
+      buildCrossTypeProject("specialty", "data_center", "specialty_data_center_v1"),
+      buildOperatingModel(
+        "data_center_infrastructure",
+        [
+          {
+            id: "dc_productivity",
+            title: "Asset Productivity",
+            layout: "tiles",
+            metrics: [
+              buildOperatingModelMetric("dc_revenue", "Revenue / SF", 150, "currency", {
+                decimals: 2,
+                suffix: "/yr",
+              }),
+              buildOperatingModelMetric("dc_margin", "NOI Margin", 0.45, "percentage"),
+            ],
+          },
+          {
+            id: "dc_cost_mix",
+            title: "Infrastructure Cost Mix",
+            layout: "list",
+            metrics: [
+              buildOperatingModelMetric("dc_utilities", "Utilities", 712500, "currency"),
+              buildOperatingModelMetric("dc_connectivity", "Connectivity", 142500, "currency"),
+              buildOperatingModelMetric("dc_expense_ratio", "Expense Ratio", 0.55, "percentage"),
+            ],
+          },
+        ],
+        ["Infrastructure-side operating cost mix; tenant compute load is not modeled."]
+      )
+    );
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={project}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "specialty_data_center_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Asset Productivity")).toBeInTheDocument();
+    expect(screen.getByText("Infrastructure Cost Mix")).toBeInTheDocument();
+    expect(screen.getByText("Connectivity")).toBeInTheDocument();
+    expect(screen.queryByText("Efficiency Score")).not.toBeInTheDocument();
+  });
+
+  it("omits the operating model section entirely for weak families without a backend contract", () => {
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject("retail", "shopping_center", "retail_shopping_center_v1")}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "retail_shopping_center_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByText("Operating Model")).not.toBeInTheDocument();
+    expect(screen.queryByText("Operational Efficiency")).not.toBeInTheDocument();
+    expect(screen.queryByText("Staffing Metrics")).not.toBeInTheDocument();
   });
 });

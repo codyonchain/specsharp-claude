@@ -1634,6 +1634,7 @@ class UnifiedEngine:
             # Add department and operational metrics at top level for easy frontend access
             'department_allocation': ownership_analysis.get('department_allocation', []) if ownership_analysis else [],
             'operational_metrics': ownership_analysis.get('operational_metrics', {}) if ownership_analysis else {},
+            'operating_model': ownership_analysis.get('operating_model') if ownership_analysis else None,
             # Expose sensitivity analysis at the top level for the v2 frontend
             'sensitivity_analysis': sensitivity_analysis,
             'regional_applied': True,
@@ -3372,6 +3373,7 @@ class UnifiedEngine:
                 ownership_analysis['revenue_requirements'] = revenue_data.get('revenue_requirements', {})
                 ownership_analysis['operational_efficiency'] = revenue_data.get('operational_efficiency', {})
                 ownership_analysis['operational_metrics'] = revenue_data.get('operational_metrics', {})
+                ownership_analysis['operating_model'] = revenue_data.get('operating_model')
                 if 'sensitivity_analysis' in revenue_data:
                     ownership_analysis['sensitivity_analysis'] = revenue_data.get('sensitivity_analysis')
                 if 'yield_on_cost' in revenue_data:
@@ -4044,6 +4046,18 @@ class UnifiedEngine:
                 'annual_revenue_per_unit': round(annual_revenue_per_unit, 2),
                 'monthly_revenue_per_unit': round(monthly_revenue_per_unit, 2),
             })
+
+        operating_model = self.calculate_operating_model_for_display(
+            building_type=building_type,
+            subtype=subtype,
+            operational_efficiency=operational_efficiency,
+            operational_metrics=operational_metrics,
+            square_footage=square_footage,
+            annual_revenue=annual_revenue,
+            occupancy_rate=occupancy_rate,
+            units=canonical_units,
+            calculation_context=calculations,
+        )
         
         # Underwriting refinement metrics: yield gap, break-even occupancy, sensitivity
         building_profile = get_building_profile(building_enum)
@@ -4227,6 +4241,7 @@ class UnifiedEngine:
             'revenue_requirements': revenue_requirements,
             'operational_efficiency': operational_efficiency,  # Keep raw data
             'operational_metrics': operational_metrics,  # ADD formatted display data
+            'operating_model': operating_model,
             'underwriting': underwriting,
             'sensitivity_analysis': sensitivity_analysis,
             'project_timeline': project_timeline,
@@ -5533,27 +5548,411 @@ class UnifiedEngine:
             ]
             
         else:
-            # Generic metrics for other building types
-            operational_metrics['staffing'] = [
-                {'label': 'Labor Cost', 'value': f'${labor_cost:,.0f}'},
-                {'label': 'Management', 'value': f'${operational_efficiency.get("management_fee", 0):,.0f}'}
-            ]
-            
-            operational_metrics['revenue'] = {
-                'Total Expenses': f'${total_expenses:,.0f}',
-                'Operating Margin': f'{operating_margin * 100:.1f}%',
-                'Efficiency Score': f'{efficiency_score:.0f}%'
-            }
-            
-            operational_metrics['kpis'] = [
-                {
-                    'label': 'Expense Ratio',
-                    'value': f'{expense_ratio * 100:.0f}%',
-                    'color': 'green' if (expense_ratio or 0) < 0.80 else 'yellow' if (expense_ratio or 0) < 0.90 else 'red'
-                }
-            ]
+            # Unsupported families no longer receive a generic analytical fallback.
+            pass
         
         return operational_metrics
+
+    def calculate_operating_model_for_display(
+        self,
+        building_type: str,
+        subtype: str,
+        operational_efficiency: dict,
+        operational_metrics: dict,
+        square_footage: float,
+        annual_revenue: float,
+        occupancy_rate: Optional[float] = None,
+        units: int = 0,
+        calculation_context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[dict]:
+        """Build a backend-owned Operating Model contract for supported ExecutiveView families."""
+        if not operational_efficiency:
+            return None
+
+        building_type_normalized = str(building_type or "").strip().lower()
+        subtype_normalized = str(subtype or "").strip().lower()
+        annual_revenue = float(annual_revenue or 0)
+        square_footage = float(square_footage or 0)
+        units = int(units or 0)
+        context = calculation_context or {}
+        operational_metrics = operational_metrics or {}
+
+        total_expenses = float(operational_efficiency.get("total_expenses", 0) or 0)
+        operating_margin = float(operational_efficiency.get("operating_margin", 0) or 0)
+        expense_ratio = float(operational_efficiency.get("expense_ratio", 0) or 0)
+
+        occupancy_value = self._coerce_number(occupancy_rate)
+        if occupancy_value is None:
+            occupancy_value = self._coerce_number(context.get("occupancy"))
+        if occupancy_value is not None and occupancy_value > 1 and occupancy_value <= 100:
+            occupancy_value = occupancy_value / 100.0
+
+        def metric_id(prefix: str, label: str) -> str:
+            slug = re.sub(r"[^a-z0-9]+", "_", str(label or "").strip().lower()).strip("_")
+            return f"{prefix}_{slug or 'metric'}"
+
+        def metric(
+            prefix: str,
+            label: str,
+            value: Any,
+            *,
+            kind: str = "text",
+            decimals: Optional[int] = None,
+            suffix: Optional[str] = None,
+            detail: Optional[str] = None,
+            emphasis: Optional[str] = None,
+            state: Optional[str] = None,
+            helper: Optional[str] = None,
+        ) -> Optional[dict]:
+            if value is None:
+                return None
+            if isinstance(value, str) and not value.strip():
+                return None
+            result = {
+                "id": metric_id(prefix, label),
+                "label": label,
+                "value": value,
+                "kind": kind,
+            }
+            if decimals is not None:
+                result["decimals"] = decimals
+            if suffix:
+                result["suffix"] = suffix
+            if detail:
+                result["detail"] = detail
+            if emphasis:
+                result["emphasis"] = emphasis
+            if state:
+                result["state"] = state
+            if helper:
+                result["helper"] = helper
+            return result
+
+        def section(section_id: str, title: str, layout: str, metrics: List[Optional[dict]]) -> Optional[dict]:
+            filtered_metrics = [entry for entry in metrics if entry]
+            if not filtered_metrics:
+                return None
+            return {
+                "id": section_id,
+                "title": title,
+                "layout": layout,
+                "metrics": filtered_metrics,
+            }
+
+        def list_metrics(prefix: str, rows: List[dict], layout: str, title: str, section_id: str) -> Optional[dict]:
+            metrics = []
+            for row in rows:
+                label = str(row.get("label") or "").strip()
+                value = row.get("value")
+                if not label:
+                    continue
+                metrics.append(
+                    metric(
+                        prefix,
+                        label,
+                        value,
+                        kind="text",
+                        state=row.get("color"),
+                    )
+                )
+            return section(section_id, title, layout, metrics)
+
+        def pct_detail(amount: float) -> Optional[str]:
+            if total_expenses <= 0:
+                return None
+            return f"{(amount / total_expenses) * 100:.0f}% of opex"
+
+        def currency_per_sf(amount: float) -> Optional[str]:
+            if square_footage <= 0:
+                return None
+            return f"${amount / square_footage:,.2f}/SF"
+
+        def resolve_units() -> int:
+            per_unit = operational_metrics.get("per_unit") if isinstance(operational_metrics, dict) else {}
+            per_unit_units = self._coerce_number((per_unit or {}).get("units"))
+            if per_unit_units is not None and per_unit_units > 0:
+                return max(1, int(round(per_unit_units)))
+            derived_units = self._coerce_number(context.get("resolved_unit_count"))
+            if derived_units is not None and derived_units > 0:
+                return max(1, int(round(derived_units)))
+            return max(0, units)
+
+        def supported_property_ops_subtype() -> bool:
+            return subtype_normalized in {"warehouse", "cold_storage"}
+
+        sections: List[dict] = []
+        notes: List[str] = []
+        variant: Optional[str] = None
+
+        if building_type_normalized == "healthcare":
+            variant = "healthcare_operating_model"
+            staffing_section = list_metrics(
+                "healthcare_staffing",
+                operational_metrics.get("staffing", []),
+                "tiles",
+                "Staffing",
+                "healthcare_staffing",
+            )
+            revenue_section = list_metrics(
+                "healthcare_productivity",
+                [
+                    {"label": label, "value": value}
+                    for label, value in (operational_metrics.get("revenue", {}) or {}).items()
+                ],
+                "list",
+                "Revenue Productivity",
+                "healthcare_revenue_productivity",
+            )
+            signals_section = list_metrics(
+                "healthcare_signal",
+                operational_metrics.get("kpis", []),
+                "signals",
+                "Operating Signals",
+                "healthcare_operating_signals",
+            )
+            sections = [entry for entry in [staffing_section, revenue_section, signals_section] if entry]
+            notes.append("Backend-owned healthcare staffing, throughput, and utilization model.")
+
+        elif building_type_normalized == "office":
+            variant = "office_underwriting"
+            property_mgmt_allocation = float(
+                operational_efficiency.get("property_mgmt_staffing", operational_efficiency.get("management_fee", 0)) or 0
+            )
+            maintenance_allocation = float(
+                operational_efficiency.get("maintenance_staffing", operational_efficiency.get("maintenance_cost", 0)) or 0
+            )
+            cam_charges = float(operational_efficiency.get("cam_charges", 0) or 0)
+            rent_per_sf = (annual_revenue / square_footage) if square_footage > 0 else None
+            sections = [
+                entry
+                for entry in [
+                    section(
+                        "office_rent_recoveries",
+                        "Rent & Recoveries",
+                        "list",
+                        [
+                            metric("office_rent", "Rent / SF", rent_per_sf, kind="currency", decimals=2, suffix="/yr"),
+                            (
+                                metric(
+                                    "office_cam",
+                                    "Recoverable CAM",
+                                    cam_charges,
+                                    kind="currency",
+                                    detail=currency_per_sf(cam_charges),
+                                )
+                                if cam_charges > 0
+                                else metric("office_cam", "Recoverable CAM", "Included in lease")
+                            ),
+                        ],
+                    ),
+                    section(
+                        "office_operating_burden",
+                        "Operating Burden",
+                        "list",
+                        [
+                            metric(
+                                "office_expenses",
+                                "Operating Expenses",
+                                total_expenses,
+                                kind="currency",
+                                detail=currency_per_sf(total_expenses),
+                            ),
+                            metric("office_margin", "NOI Margin", operating_margin, kind="percentage", emphasis="primary"),
+                            metric("office_expense_ratio", "Expense Ratio", expense_ratio, kind="percentage"),
+                        ],
+                    ),
+                    section(
+                        "office_cost_allocations",
+                        "Cost Allocations",
+                        "list",
+                        [
+                            metric("office_mgmt", "Management Allocation", property_mgmt_allocation, kind="currency"),
+                            metric("office_maintenance", "Maintenance Allocation", maintenance_allocation, kind="currency"),
+                        ],
+                    ),
+                ]
+                if entry
+            ]
+            notes.append("Landlord-side office underwriting and recoverable operating costs.")
+
+        elif building_type_normalized == "hospitality":
+            variant = "hospitality_keys"
+            rooms = self._coerce_number(context.get("rooms"))
+            adr = self._coerce_number(context.get("adr"))
+            hotel_occupancy = self._coerce_number(context.get("occupancy"))
+            if hotel_occupancy is not None and hotel_occupancy > 1 and hotel_occupancy <= 100:
+                hotel_occupancy = hotel_occupancy / 100.0
+            revpar = self._coerce_number(context.get("revpar"))
+            if revpar is None and adr is not None and hotel_occupancy is not None:
+                revpar = adr * hotel_occupancy
+            sections = [
+                entry
+                for entry in [
+                    section(
+                        "hospitality_key_metrics",
+                        "Key Metrics",
+                        "tiles",
+                        [
+                            metric("hotel_rooms", "Rooms", rooms, kind="number", decimals=0, emphasis="primary"),
+                            metric("hotel_adr", "ADR", adr, kind="currency", decimals=0),
+                            metric("hotel_occupancy", "Occupancy", hotel_occupancy, kind="percentage"),
+                            metric("hotel_revpar", "RevPAR", revpar, kind="currency", decimals=0),
+                        ],
+                    ),
+                    section(
+                        "hospitality_performance",
+                        "Operating Performance",
+                        "list",
+                        [
+                            metric("hotel_revenue", "Annual Room Revenue", annual_revenue, kind="currency"),
+                            metric("hotel_margin", "NOI Margin", operating_margin, kind="percentage", emphasis="primary"),
+                            metric("hotel_expense_ratio", "Expense Ratio", expense_ratio, kind="percentage"),
+                        ],
+                    ),
+                ]
+                if entry
+            ]
+            notes.append("Hotel key productivity and stabilized operating conversion.")
+
+        elif building_type_normalized == "multifamily":
+            variant = "multifamily_unit_economics"
+            resolved_units = resolve_units()
+            revenue_per_unit = (annual_revenue / resolved_units) if resolved_units > 0 else None
+            average_rent = (revenue_per_unit / 12.0) if revenue_per_unit is not None else None
+            sections = [
+                entry
+                for entry in [
+                    section(
+                        "multifamily_unit_economics",
+                        "Unit Economics",
+                        "tiles",
+                        [
+                            metric("mf_units", "Units", resolved_units if resolved_units > 0 else None, kind="number", decimals=0, emphasis="primary"),
+                            metric("mf_revenue_per_unit", "Revenue / Unit", revenue_per_unit, kind="currency", decimals=0, suffix="/yr"),
+                            metric("mf_average_rent", "Average Rent", average_rent, kind="currency", decimals=0, suffix="/mo"),
+                            metric("mf_occupancy", "Occupancy Assumption", occupancy_value, kind="percentage"),
+                        ],
+                    ),
+                    section(
+                        "multifamily_operating_burden",
+                        "Operating Burden",
+                        "list",
+                        [
+                            metric("mf_expenses", "Total Expenses", total_expenses, kind="currency"),
+                            metric("mf_margin", "NOI Margin", operating_margin, kind="percentage", emphasis="primary"),
+                            metric("mf_expense_ratio", "Expense Ratio", expense_ratio, kind="percentage"),
+                        ],
+                    ),
+                ]
+                if entry
+            ]
+            notes.append("Unit economics and landlord-side operating burden only.")
+
+        elif building_type_normalized == "industrial" and supported_property_ops_subtype():
+            variant = "industrial_property_ops"
+            rent_per_sf = (annual_revenue / square_footage) if square_footage > 0 else None
+            expense_rows = [
+                ("Property Tax", float(operational_efficiency.get("property_tax", 0) or 0)),
+                ("Utilities", float(operational_efficiency.get("utility_cost", 0) or 0)),
+                ("Maintenance", float(operational_efficiency.get("maintenance_cost", 0) or 0)),
+                ("Management", float(operational_efficiency.get("management_fee", 0) or 0)),
+                ("Labor", float(operational_efficiency.get("labor_cost", 0) or 0)),
+                ("Security", float(operational_efficiency.get("security", 0) or 0)),
+                ("Monitoring", float(operational_efficiency.get("monitoring_cost", 0) or 0)),
+            ]
+            sections = [
+                entry
+                for entry in [
+                    section(
+                        "industrial_lease_productivity",
+                        "Lease Productivity",
+                        "tiles",
+                        [
+                            metric("industrial_rent", "Effective Rent / SF", rent_per_sf, kind="currency", decimals=2, suffix="/yr", emphasis="primary"),
+                            metric("industrial_occupancy", "Occupancy Assumption", occupancy_value, kind="percentage"),
+                            metric("industrial_margin", "NOI Margin", operating_margin, kind="percentage"),
+                        ],
+                    ),
+                    section(
+                        "industrial_cost_mix",
+                        "Operating Cost Mix",
+                        "list",
+                        [
+                            metric(
+                                "industrial_cost_mix",
+                                label,
+                                amount,
+                                kind="currency",
+                                detail=pct_detail(amount),
+                            )
+                            for label, amount in expense_rows
+                            if amount > 0
+                        ]
+                        + [
+                            metric("industrial_total_expenses", "Total Expenses", total_expenses, kind="currency")
+                        ],
+                    ),
+                ]
+                if entry
+            ]
+            notes.append("Landlord-side property operations only; tenant business operations excluded.")
+
+        elif building_type_normalized == "specialty" and subtype_normalized == "data_center":
+            variant = "data_center_infrastructure"
+            revenue_per_sf = (annual_revenue / square_footage) if square_footage > 0 else None
+            sections = [
+                entry
+                for entry in [
+                    section(
+                        "data_center_productivity",
+                        "Asset Productivity",
+                        "tiles",
+                        [
+                            metric("dc_revenue_per_sf", "Revenue / SF", revenue_per_sf, kind="currency", decimals=2, suffix="/yr", emphasis="primary"),
+                            metric("dc_occupancy", "Occupancy Assumption", occupancy_value, kind="percentage"),
+                            metric("dc_margin", "NOI Margin", operating_margin, kind="percentage"),
+                        ],
+                    ),
+                    section(
+                        "data_center_cost_mix",
+                        "Infrastructure Cost Mix",
+                        "list",
+                        [
+                            metric(
+                                "dc_cost_mix",
+                                label,
+                                amount,
+                                kind="currency",
+                                detail=pct_detail(amount),
+                            )
+                            for label, amount in [
+                                ("Utilities", float(operational_efficiency.get("utility_cost", 0) or 0)),
+                                ("Connectivity", float(operational_efficiency.get("connectivity", 0) or 0)),
+                                ("Maintenance", float(operational_efficiency.get("maintenance_cost", 0) or 0)),
+                                ("Security", float(operational_efficiency.get("security", 0) or 0)),
+                                ("Labor", float(operational_efficiency.get("labor_cost", 0) or 0)),
+                            ]
+                            if amount > 0
+                        ]
+                        + [
+                            metric("dc_total_expenses", "Total Expenses", total_expenses, kind="currency"),
+                            metric("dc_expense_ratio", "Expense Ratio", expense_ratio, kind="percentage"),
+                        ],
+                    ),
+                ]
+                if entry
+            ]
+            notes.append("Infrastructure-side operating cost mix; tenant compute load is not modeled.")
+
+        if not sections or not variant:
+            return None
+
+        return {
+            "variant": variant,
+            "title": "Operating Model",
+            "sections": sections,
+            "notes": notes,
+        }
 
     def calculate_operational_efficiency(
         self,

@@ -3,7 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { DealShieldViewModel, DecisionStatus, FinancingSummaryItem, Project } from '../../types';
 import { formatters, safeGet } from '../../utils/displayFormatters';
 import { formatPerSf } from '@/v2/utils/formatters';
-import { BackendDataMapper } from '../../utils/backendDataMapper';
+import {
+  BackendDataMapper,
+  type OperatingModelContract,
+  type OperatingModelMetricContract,
+  type OperatingModelSectionContract,
+} from '../../utils/backendDataMapper';
 // Removed FinancialRequirementsCard - was only implemented for hospital
 import { pdfService } from '@/services/api';
 import { generateExportFilename } from '@/utils/filenameGenerator';
@@ -59,24 +64,6 @@ const coalesceRecord = (...candidates: unknown[]): AnyRecord => {
   return {};
 };
 
-const isZeroLikeMetricValue = (value: unknown): boolean => {
-  if (value === null || value === undefined) {
-    return true;
-  }
-  if (typeof value === 'number') {
-    return !Number.isFinite(value) || value === 0;
-  }
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed || trimmed === '—' || trimmed.toLowerCase() === 'n/a') {
-      return true;
-    }
-    const numeric = Number(trimmed.replace(/[^0-9.-]/g, ''));
-    return Number.isFinite(numeric) && numeric === 0;
-  }
-  return false;
-};
-
 const toFiniteNumber = (value: unknown): number | null => {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : null;
@@ -109,6 +96,125 @@ const formatFinancingSummaryValue = (item: FinancingSummaryItem): string => {
     default:
       return String(item.value);
   }
+};
+
+const formatOperatingModelMetricValue = (metric: OperatingModelMetricContract): string => {
+  if (typeof metric.value === 'string') {
+    return metric.value;
+  }
+
+  const decimals = typeof metric.decimals === 'number' ? metric.decimals : undefined;
+  let formatted = '';
+
+  switch (metric.kind) {
+    case 'currency':
+      formatted = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: decimals ?? 0,
+        maximumFractionDigits: decimals ?? 0,
+      }).format(metric.value);
+      break;
+    case 'percentage': {
+      const ratio = metric.value > 1 ? metric.value / 100 : metric.value;
+      formatted = formatters.percentage(ratio, decimals ?? 0);
+      break;
+    }
+    case 'number':
+      formatted = metric.value.toLocaleString(undefined, {
+        minimumFractionDigits: decimals ?? 0,
+        maximumFractionDigits: decimals ?? 0,
+      });
+      break;
+    default:
+      formatted = String(metric.value);
+      break;
+  }
+
+  return metric.suffix ? `${formatted}${metric.suffix}` : formatted;
+};
+
+const getOperatingModelSignalClasses = (state?: OperatingModelMetricContract['state']): string => {
+  switch (state) {
+    case 'green':
+      return 'bg-gradient-to-br from-emerald-100 to-emerald-200 text-emerald-700';
+    case 'yellow':
+      return 'bg-gradient-to-br from-amber-100 to-amber-200 text-amber-700';
+    case 'red':
+      return 'bg-gradient-to-br from-rose-100 to-rose-200 text-rose-700';
+    default:
+      return 'bg-gradient-to-br from-slate-100 to-slate-200 text-slate-700';
+  }
+};
+
+const renderOperatingModelTile = (metric: OperatingModelMetricContract) => {
+  const value = formatOperatingModelMetricValue(metric);
+  const valueClass =
+    metric.emphasis === 'primary'
+      ? 'text-3xl font-bold text-slate-900'
+      : 'text-2xl font-semibold text-slate-900';
+
+  return (
+    <div key={metric.id} className="bg-white rounded-lg p-4 shadow-sm border border-purple-100">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{metric.label}</p>
+      <p className={`mt-2 ${valueClass}`}>{value}</p>
+      {metric.detail ? <p className="mt-2 text-xs text-slate-500">{metric.detail}</p> : null}
+      {metric.helper ? <p className="mt-1 text-xs text-slate-500">{metric.helper}</p> : null}
+    </div>
+  );
+};
+
+const renderOperatingModelListMetric = (metric: OperatingModelMetricContract) => (
+  <div key={metric.id} className="rounded-lg border border-purple-100 bg-white p-3 shadow-sm">
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <p className="text-sm font-semibold text-slate-900">{metric.label}</p>
+        {metric.helper ? <p className="mt-1 text-xs text-slate-500">{metric.helper}</p> : null}
+      </div>
+      <p className="text-sm font-semibold text-slate-900">{formatOperatingModelMetricValue(metric)}</p>
+    </div>
+    {metric.detail ? <p className="mt-2 text-xs text-slate-500">{metric.detail}</p> : null}
+  </div>
+);
+
+const renderOperatingModelSignalMetric = (metric: OperatingModelMetricContract) => (
+  <div
+    key={metric.id}
+    className={`rounded-lg p-4 text-center shadow-sm ${getOperatingModelSignalClasses(metric.state)}`}
+  >
+    <p className="text-xl font-bold">{formatOperatingModelMetricValue(metric)}</p>
+    <p className="mt-1 text-xs font-semibold uppercase tracking-wide">{metric.label}</p>
+    {metric.detail ? <p className="mt-2 text-[11px] opacity-80">{metric.detail}</p> : null}
+    {metric.helper ? <p className="mt-1 text-[11px] opacity-80">{metric.helper}</p> : null}
+  </div>
+);
+
+const renderOperatingModelSection = (section: OperatingModelSectionContract) => {
+  if (!Array.isArray(section.metrics) || section.metrics.length === 0) {
+    return null;
+  }
+
+  const content =
+    section.layout === 'tiles' ? (
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {section.metrics.map(renderOperatingModelTile)}
+      </div>
+    ) : section.layout === 'signals' ? (
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {section.metrics.map(renderOperatingModelSignalMetric)}
+      </div>
+    ) : (
+      <div className="space-y-2">
+        {section.metrics.map(renderOperatingModelListMetric)}
+      </div>
+    );
+
+  return (
+    <div key={section.id}>
+      <h4 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-700">{section.title}</h4>
+      {content}
+    </div>
+  );
 };
 
 const normalizeBackendDecision = (value: unknown): DecisionStatus | undefined => {
@@ -195,9 +301,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     {};
   const calculations = analysis?.calculations || {};
   const calculationsRecord = toRecord(calculations);
-  const calculationFacilityMetrics = toRecord(
-    calculationsRecord.facilityMetrics ?? calculationsRecord.facility_metrics
-  );
   let { buildingType, facilityMetrics } = displayData;
   const rawBuildingType =
     analysis?.parsed_input?.building_type ??
@@ -398,15 +501,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     parsedBuildingType === 'healthcare' && parsedSubtype === 'imaging_center';
   const isSurgicalCenter =
     parsedBuildingType === 'healthcare' && parsedSubtype === 'surgical_center';
-  const isHealthcareMob =
-    parsedBuildingType === 'healthcare' &&
-    (
-      parsedSubtype === 'medical_office' ||
-      displaySubtypeLower === 'medical_office' ||
-      displaySubtypeLower.includes('medical_office') ||
-      (typeof facilityUnitLabel === 'string' &&
-        facilityUnitLabel.toLowerCase().includes('tenant suite'))
-    );
   // Scenario modal base metrics (v1 universal multipliers)
   const projectInfo = calculations?.project_info || {};
   const isDistributionCenterProject =
@@ -534,18 +628,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
         ? basePayback
         : Number(basePayback) || null,
   };
-  const isHealthcareSurgicalCenter =
-    isSurgicalCenter ||
-    (typeof facilityUnitLabel === 'string' &&
-      facilityUnitLabel.toLowerCase().includes('operating room'));
-  const revenuePerUnitLabel = isHealthcareSurgicalCenter
-    ? 'Revenue per Operating Room'
-    : isHealthcareMob
-      ? 'Revenue per Suite'
-      : 'Revenue per Bed';
-  const unitsPerNurseLabel = isHealthcareSurgicalCenter
-    ? 'ORs per Nurse'
-    : 'Beds per Nurse';
   let unitLabel = facilityUnitLabel
     ? toTitleCase(facilityUnitLabel)
     : displayUnitLabelRaw
@@ -568,327 +650,18 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
     buildingType === 'OFFICE' ||
     (typeof buildingType === 'string' && buildingType.toUpperCase().includes('OFFICE'));
   const isMultifamilyProject = parsedBuildingType.includes('multifamily');
-  const staffing = toRecord(
-    displayData?.operational_metrics?.staffing ??
-    displayData?.operational_metrics ??
-    displayData?.staffing
-  );
-  const facilityUnitsValue =
-    calculationFacilityMetrics.units ??
-    facilityMetrics?.units ??
-    displayData?.facilityMetrics?.units ??
-    null;
-  const backendStaffing = toRecord(
-    calculationsRecord.staffing ??
-    calculationsRecord.staffing_metrics ??
-    {}
-  );
-  const providersFromBackend =
-    typeof backendStaffing.providers === 'number' && backendStaffing.providers > 0
-      ? backendStaffing.providers
-      : typeof backendStaffing.total_providers === 'number' && backendStaffing.total_providers > 0
-        ? backendStaffing.total_providers
-        : undefined;
-  const fallbackProvidersValue =
-    typeof staffing?.providers === 'number' && staffing.providers > 0
-      ? staffing.providers
-      : undefined;
-  const dentalProviderCount = providersFromBackend ?? fallbackProvidersValue ?? 1;
-
-  const parseNumericOrNull = (value: unknown): number | null => {
-    if (typeof value === 'number' && !Number.isNaN(value)) return value;
-    if (typeof value === 'string') {
-      const cleaned = value.replace(/[^0-9.\-]/g, '');
-      const parsed = parseFloat(cleaned);
-      return Number.isFinite(parsed) ? parsed : null;
-    }
-    return null;
-  };
-
-  let dentalAnnualRevenueValue = parseNumericOrNull(
-    (revenueAnalysis as AnyRecord | null | undefined)?.annual_revenue
-  );
-
-  if (dentalAnnualRevenueValue == null) {
-    dentalAnnualRevenueValue =
-      typeof displayData?.annualRevenue === 'number'
-        ? displayData.annualRevenue
-        : null;
-  }
-
-  let dentalNoiMarginRaw = parseNumericOrNull(
-    (revenueAnalysis as AnyRecord | null | undefined)?.operating_margin
-  );
-
-  if (dentalNoiMarginRaw == null) {
-    dentalNoiMarginRaw =
-      typeof displayData?.operatingMargin === 'number'
-        ? displayData.operatingMargin
-        : null;
-  }
-
-  const dentalNoiMarginValue =
-    dentalNoiMarginRaw != null
-      ? dentalNoiMarginRaw > 1
-        ? dentalNoiMarginRaw / 100
-        : dentalNoiMarginRaw
-      : null;
-  const dentalOperatoriesValue =
-    typeof facilityUnitsValue === 'number' ? facilityUnitsValue : null;
-  const dentalRevenuePerProviderValue =
-    dentalAnnualRevenueValue != null && dentalProviderCount > 0
-      ? dentalAnnualRevenueValue / dentalProviderCount
-      : null;
-  const dentalRevenuePerOperatoryValue =
-    dentalAnnualRevenueValue != null &&
-    typeof dentalOperatoriesValue === 'number' &&
-    dentalOperatoriesValue > 0
-      ? dentalAnnualRevenueValue / dentalOperatoriesValue
-      : null;
-  const dentalUtilizationValue =
-    dentalRevenuePerOperatoryValue != null
-      ? Math.min(dentalRevenuePerOperatoryValue / 600000, 1)
-      : null;
-  const dentalOpsPerProviderValue =
-    typeof dentalOperatoriesValue === 'number' &&
-    dentalOperatoriesValue > 0 &&
-    dentalProviderCount > 0
-      ? (dentalOperatoriesValue / dentalProviderCount).toFixed(1)
-      : null;
-
-  if (DEBUG_EXECUTIVE && isDentalOffice) {
-    console.log('[SpecSharp][OE Dental Metrics]', {
-      revenueAnalysis,
-      staffingRecord: backendStaffing,
-      dentalAnnualRevenueValue,
-      dentalNoiMarginValue,
-      dentalProviderCount,
-      dentalOperatoriesValue,
-      dentalRevenuePerProviderValue,
-      dentalRevenuePerOperatoryValue,
-      dentalUtilizationValue,
-      dentalOpsPerProviderValue
-    });
-  }
   const revenueRequired = {
     impliedAdrForTargetRevpar: displayData.impliedAdrForTargetRevpar,
     impliedOccupancyForTargetRevpar: displayData.impliedOccupancyForTargetRevpar,
     requiredNoiPerSf: displayData.requiredNoiPerSf,
     currentNoiPerSf: displayData.currentNoiPerSf,
   };
-  const staffingMetricsArray = Array.isArray(displayData.staffingMetrics)
-    ? displayData.staffingMetrics
-    : [];
-  let normalizedStaffingMetrics = staffingMetricsArray.map(metric => {
-    if (
-      isHealthcareSurgicalCenter &&
-      typeof metric?.label === 'string' &&
-      metric.label.toLowerCase().includes('beds per nurse')
-    ) {
-      return { ...metric, label: unitsPerNurseLabel };
-    }
-    return metric;
-  });
-  if (isDentalOffice) {
-    const operatories = facilityUnitsValue;
-    const noiMarginValue = typeof revenueAnalysis?.operating_margin === 'number'
-      ? revenueAnalysis.operating_margin
+  const operatingModel =
+    displayData?.operatingModel &&
+    Array.isArray(displayData.operatingModel.sections) &&
+    displayData.operatingModel.sections.length > 0
+      ? displayData.operatingModel
       : null;
-    normalizedStaffingMetrics = [
-      {
-        label: 'Operatories',
-        value: operatories != null ? operatories : '-',
-      },
-      {
-        label: 'NOI Margin',
-        value: noiMarginValue != null
-          ? formatters.percentage(noiMarginValue)
-          : formatters.percentage(0),
-      },
-    ];
-  }
-  if (isHealthcareMob) {
-    const tenantSuites =
-      facilityMetrics?.units ??
-      displayData?.facilityMetrics?.units ??
-      null;
-    const noiMarginValue =
-      typeof displayData?.operatingMargin === 'number'
-        ? displayData.operatingMargin
-        : typeof displayData?.operationalEfficiency?.operating_margin === 'number'
-          ? displayData.operationalEfficiency.operating_margin
-          : typeof displayData?.operational_metrics?.operating_margin === 'number'
-            ? displayData.operational_metrics.operating_margin
-            : typeof revenueAnalysis?.operating_margin === 'number'
-              ? revenueAnalysis.operating_margin
-              : null;
-    normalizedStaffingMetrics = [
-      {
-        label: 'Tenant Suites',
-        value: tenantSuites != null ? tenantSuites : '-',
-      },
-      {
-        label: 'NOI Margin',
-        value: typeof noiMarginValue === 'number'
-          ? formatters.percentage(noiMarginValue)
-          : formatters.percentage(0),
-      },
-    ];
-  }
-  const revenueMetricsRecord = toRecord(displayData.revenueMetrics || {});
-  let normalizedRevenueMetrics = Object.entries(revenueMetricsRecord).map(
-    ([key, value]) => {
-      const normalizedKey = typeof key === 'string' ? key : '';
-      const normalizedKeyLower = normalizedKey.trim().toLowerCase();
-      const spacedLabel = normalizedKey.includes('_')
-        ? normalizedKey.replace(/_/g, ' ')
-        : normalizedKey;
-      const isPerBedMetric =
-        normalizedKeyLower === 'revenue_per_bed' ||
-        spacedLabel.toLowerCase() === 'revenue per bed';
-      const label =
-        isPerBedMetric && (isHealthcareSurgicalCenter || isHealthcareMob)
-          ? revenuePerUnitLabel
-          : spacedLabel.toLowerCase() === 'labor cost ratio' && isHealthcareMob
-            ? 'Labor Cost Ratio (N/A)'
-            : spacedLabel;
-      return { key: normalizedKey || 'metric', label, value };
-    }
-  );
-  if (isDentalOffice) {
-    const providersRaw =
-      typeof staffing?.providers === 'number'
-        ? staffing.providers
-        : null;
-    const providers = providersRaw && providersRaw > 0 ? providersRaw : 1;
-    const annualRevenueValue = typeof revenueAnalysis?.annual_revenue === 'number'
-      ? revenueAnalysis.annual_revenue
-      : null;
-    const operatories = facilityUnitsValue;
-    const revenuePerProvider = annualRevenueValue != null && providers > 0
-      ? formatters.currencyExact(annualRevenueValue / providers)
-      : formatters.currencyExact(0);
-    const revenuePerOperatory = annualRevenueValue != null &&
-      typeof operatories === 'number' &&
-      operatories > 0
-        ? formatters.currencyExact(annualRevenueValue / operatories)
-        : formatters.currencyExact(0);
-    const opMargin = typeof revenueAnalysis?.operating_margin === 'number'
-      ? formatters.percentage(revenueAnalysis.operating_margin)
-      : formatters.percentage(0);
-    normalizedRevenueMetrics = [
-      {
-        key: 'rev_provider',
-        label: 'Revenue per Provider',
-        value: revenuePerProvider
-      },
-      {
-        key: 'rev_operatory',
-        label: 'Revenue per Operatory',
-        value: revenuePerOperatory
-      },
-      {
-        key: 'op_margin',
-        label: 'Operating Margin',
-        value: opMargin
-      }
-    ];
-  }
-  let operationalKpis = displayData.kpis || [];
-  if (isHealthcareMob) {
-    const totalsData = displayData?.totals || calculations?.totals || {};
-    const softCostsValue =
-      totalsData?.soft_costs ??
-      totalsData?.soft_costs_total ??
-      totalsData?.softCosts ??
-      totalsData?.softCostsTotal ??
-      0;
-    const totalCostValue =
-      totalsData?.total_project_cost ??
-      totalsData?.total_cost ??
-      totalsData?.totalProjectCost ??
-      totalsData?.totalCost ??
-      0;
-    const yieldOnCostValue =
-      displayData?.yieldOnCost ??
-      displayData?.yield_on_cost ??
-      calculations?.ownership_analysis?.yield_on_cost ??
-      calculations?.ownership_analysis?.yieldOnCost ??
-      undefined;
-    const dscrValue =
-      displayData?.dscr ??
-      calculations?.ownership_analysis?.debt_metrics?.calculated_dscr ??
-      calculations?.ownership_analysis?.debt_metrics?.calculatedDSCR ??
-      undefined;
-    const softCostPct =
-      totalCostValue && softCostsValue
-        ? softCostsValue / totalCostValue
-        : undefined;
-    operationalKpis = [
-      {
-        label: 'Yield on Cost',
-        value: typeof yieldOnCostValue === 'number'
-          ? formatters.percentage(yieldOnCostValue)
-          : formatters.percentage(0),
-        color: 'purple'
-      },
-      {
-        label: 'DSCR',
-        value: typeof dscrValue === 'number'
-          ? `${dscrValue.toFixed(2)}×`
-          : '—',
-        color: 'indigo'
-      },
-      {
-        label: 'Soft Costs % of Total',
-        value: typeof softCostPct === 'number'
-          ? formatters.percentage(softCostPct)
-          : formatters.percentage(0),
-        color: 'pink'
-      }
-    ];
-  }
-  if (isDentalOffice) {
-    const providersRaw =
-      typeof staffing?.providers === 'number'
-        ? staffing.providers
-        : null;
-    const providers = providersRaw && providersRaw > 0 ? providersRaw : 1;
-    const annualRevenueValue = typeof revenueAnalysis?.annual_revenue === 'number'
-      ? revenueAnalysis.annual_revenue
-      : null;
-    const operatories = facilityUnitsValue;
-    const productionPerProvider = annualRevenueValue != null && providers > 0
-      ? formatters.currencyExact(annualRevenueValue / providers)
-      : formatters.currencyExact(0);
-    const utilizationPct = annualRevenueValue != null &&
-      typeof operatories === 'number' &&
-      operatories > 0
-        ? formatters.percentage(Math.min(annualRevenueValue / (operatories * 600000), 1))
-        : formatters.percentage(0);
-    const opsPerProvider = typeof operatories === 'number' &&
-      operatories > 0 &&
-      providers > 0
-        ? (operatories / providers).toFixed(1)
-        : '0.0';
-    operationalKpis = [
-      {
-        label: 'Production / Provider',
-        value: productionPerProvider,
-        color: 'purple'
-      },
-      {
-        label: 'Chair Utilization',
-        value: utilizationPct,
-        color: 'indigo'
-      },
-      {
-        label: 'Ops per Provider',
-        value: opsPerProvider,
-        color: 'pink'
-      }
-    ];
-  }
   const projectTimeline = displayData.projectTimeline;
   const dscrFromDisplay = typeof displayData.dscr === 'number' ? displayData.dscr : undefined;
   const dscrFromOwnership = typeof (analysis as AnyRecord)?.calculations?.ownership_analysis?.debt_metrics?.calculated_dscr === 'number'
@@ -3629,9 +3402,9 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
         );
       })()}
 
-      {/* Financing Structure & Operational Efficiency */}
+      {/* Financing Summary & Operating Model */}
       <section className={`${sectionCardClasses} border-0 bg-transparent shadow-none p-0`}>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className={`grid grid-cols-1 gap-6 ${operatingModel ? 'lg:grid-cols-2' : ''}`}>
         {/* Financing Structure */}
         <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl shadow-lg border border-green-100 overflow-hidden">
           <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-4 py-4 sm:px-6">
@@ -3673,207 +3446,29 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
           </div>
         </div>
 
-        {/* Operational Efficiency */}
-        {isDentalOffice ? (
+        {/* Operating Model */}
+        {operatingModel ? (
           <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl shadow-lg border border-purple-100 overflow-hidden">
             <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-4 sm:px-6">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
                 <Activity className="h-5 w-5" />
-                Operational Efficiency
+                {operatingModel.title || 'Operating Model'}
               </h3>
             </div>
             <div className="p-4 sm:p-6 space-y-6">
-              <div>
-                <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Staffing Metrics</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {[
-                    {
-                      label: 'Operatories',
-                      value: dentalOperatoriesValue != null ? dentalOperatoriesValue : '-',
-                      color: 'purple'
-                    },
-                    {
-                      label: 'NOI Margin',
-                      value: dentalNoiMarginValue != null
-                        ? formatters.percentage(dentalNoiMarginValue)
-                        : formatters.percentage(0),
-                      color: 'pink'
-                    }
-                  ].map((tile, idx) => (
-                    <div key={idx} className="bg-white text-center p-4 rounded-lg shadow-sm">
-                      <p className={`text-3xl font-bold ${tile.color === 'purple' ? 'text-purple-600' : 'text-pink-600'}`}>
-                        {tile.value}
-                      </p>
-                      <p className="text-xs text-gray-600">{tile.label}</p>
-                    </div>
+              {operatingModel.sections.map(renderOperatingModelSection)}
+              {Array.isArray(operatingModel.notes) && operatingModel.notes.length > 0 ? (
+                <div className="rounded-lg border border-purple-100 bg-white/80 px-3 py-2">
+                  {operatingModel.notes.map((note, index) => (
+                    <p key={`${operatingModel.variant}-note-${index}`} className="text-xs text-slate-600">
+                      {note}
+                    </p>
                   ))}
                 </div>
-              </div>
-
-              <div>
-                <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Revenue Efficiency</h4>
-                <div className="bg-white rounded-lg p-3 space-y-2 shadow-sm">
-                  {[
-                    {
-                      label: 'Revenue per Provider',
-                      value: dentalRevenuePerProviderValue != null
-                        ? formatters.currencyExact(dentalRevenuePerProviderValue)
-                        : formatters.currencyExact(0)
-                    },
-                    {
-                      label: 'Revenue per Operatory',
-                      value: dentalRevenuePerOperatoryValue != null
-                        ? formatters.currencyExact(dentalRevenuePerOperatoryValue)
-                        : formatters.currencyExact(0)
-                    },
-                    {
-                      label: 'Operating Margin',
-                      value: dentalNoiMarginValue != null
-                        ? formatters.percentage(dentalNoiMarginValue)
-                        : formatters.percentage(0)
-                    }
-                  ].map((row, idx) => (
-                    <div key={idx} className="flex justify-between text-sm">
-                      <span className="text-gray-600">{row.label}</span>
-                      <span className="font-bold text-gray-900">{row.value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Target KPIs</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {[
-                    {
-                      label: 'Production / Provider',
-                      value: dentalRevenuePerProviderValue != null
-                        ? formatters.currencyExact(dentalRevenuePerProviderValue)
-                        : formatters.currencyExact(0),
-                      color: 'purple'
-                    },
-                    {
-                      label: 'Chair Utilization',
-                      value: dentalUtilizationValue != null
-                        ? formatters.percentage(dentalUtilizationValue)
-                        : formatters.percentage(0),
-                      color: 'indigo'
-                    },
-                    {
-                      label: 'Ops per Provider',
-                      value: dentalOpsPerProviderValue ?? '0.0',
-                      color: 'pink'
-                    }
-                  ].map((kpi, idx) => (
-                    <div key={idx} className={`bg-gradient-to-br from-${kpi.color}-100 to-${kpi.color}-200 p-3 rounded-lg text-center`}>
-                      <p className={`text-xl font-bold text-${kpi.color}-700`}>{kpi.value}</p>
-                      <p className={`text-xs text-${kpi.color}-600`}>{kpi.label}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              ) : null}
             </div>
           </div>
-        ) : (
-          <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl shadow-lg border border-purple-100 overflow-hidden">
-            <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Activity className="h-5 w-5" />
-                Operational Efficiency
-              </h3>
-            </div>
-            <div className="p-6">
-              {normalizedStaffingMetrics.length > 0 && (
-                <div className="mb-4">
-                  <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Staffing Metrics</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {normalizedStaffingMetrics.slice(0, 2).map((metric, idx) => {
-                      const rawLabel =
-                        typeof metric?.label === 'string' && metric.label.trim()
-                          ? metric.label
-                          : `Metric ${idx + 1}`;
-                      const labelLower = rawLabel.toLowerCase();
-                      const isLaborMetric = labelLower.includes('labor');
-                      const isManagementMetric = labelLower.includes('management');
-                      const displayLabel = isLaborMetric ? 'Facility Ops Labor' : rawLabel;
-                      const rawValue = metric?.value;
-                      const zeroLike = (isLaborMetric || isManagementMetric) && isZeroLikeMetricValue(rawValue);
-                      const normalizedValue =
-                        rawValue === null || rawValue === undefined
-                          ? '—'
-                          : typeof rawValue === 'number'
-                            ? (Number.isFinite(rawValue) ? rawValue.toLocaleString() : '—')
-                            : rawValue;
-                      const displayValue = zeroLike ? 'Not modeled' : normalizedValue;
-                      const helperText = isLaborMetric ? 'Production labor excluded (tenant business).' : undefined;
-                      return (
-                        <div key={idx} className="bg-white text-center p-4 rounded-lg shadow-sm">
-                          <p className={`text-3xl font-bold ${idx === 0 ? 'text-purple-600' : 'text-pink-600'}`}>
-                            {displayValue}
-                          </p>
-                          <p className="text-xs text-gray-600">{displayLabel}</p>
-                          {helperText ? (
-                            <p className="text-[10px] text-gray-500 mt-1">{helperText}</p>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {normalizedRevenueMetrics.length > 0 && (
-                <div className="mb-4">
-                  <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Revenue Efficiency</h4>
-                  <div className="bg-white rounded-lg p-3 space-y-2 shadow-sm">
-                    {normalizedRevenueMetrics.slice(0, 3).map(({ key, label, value }) => (
-                      <div key={key} className="flex justify-between text-sm">
-                        <span className="text-gray-600">{label}</span>
-                        <span className="font-bold text-gray-900">{value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {buildingType === 'office' && (
-                <div className="mb-4">
-                  <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Office Opex & CAM</h4>
-                  <div className="bg-white rounded-lg p-3 shadow-sm space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Operating Expenses</span>
-                      <span className="font-bold text-gray-900">
-                        {formatters.currency(operatingExpensesTotal)} ({formatters.currencyExact(operatingExpensesTotal / normalizedOfficeSquareFootage)}/SF)
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Recoverable CAM</span>
-                      <span className="font-bold text-gray-900">
-                        {camChargesTotal > 0
-                          ? `${formatters.currency(camChargesTotal)} (${formatters.currencyExact(camChargesTotal / normalizedOfficeSquareFootage)}/SF)`
-                          : 'Included in rent'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {operationalKpis.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wider">Target KPIs</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {operationalKpis.slice(0, 3).map((kpi, idx) => (
-                      <div key={idx} className={`bg-gradient-to-br from-${kpi.color}-100 to-${kpi.color}-200 p-3 rounded-lg text-center`}>
-                        <p className={`text-xl font-bold text-${kpi.color}-700`}>{kpi.value}</p>
-                        <p className={`text-xs text-${kpi.color}-600`}>{kpi.label}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        ) : null}
       </div>
       </section>
 

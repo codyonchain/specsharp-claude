@@ -410,6 +410,7 @@ def _apply_financial_bundle(
     payload['roi_metrics'] = ownership_analysis.get('roi_metrics', {})
     payload['department_allocation'] = ownership_analysis.get('department_allocation', [])
     payload['operational_metrics'] = ownership_analysis.get('operational_metrics', {})
+    payload['operating_model'] = ownership_analysis.get('operating_model')
     payload['sensitivity_analysis'] = ownership_analysis.get('sensitivity_analysis')
 
     revenue_data = bundle.get('revenue_data') or {}

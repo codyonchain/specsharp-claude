@@ -46,6 +46,33 @@ interface FacilityMetrics {
   restaurantCostPerSf?: number;
 }
 
+export interface OperatingModelMetricContract {
+  id: string;
+  label: string;
+  value: number | string;
+  kind: 'currency' | 'percentage' | 'number' | 'text';
+  decimals?: number;
+  suffix?: string;
+  detail?: string;
+  emphasis?: 'primary' | 'secondary';
+  state?: 'green' | 'yellow' | 'red';
+  helper?: string;
+}
+
+export interface OperatingModelSectionContract {
+  id: string;
+  title: string;
+  layout: 'tiles' | 'list' | 'signals';
+  metrics: OperatingModelMetricContract[];
+}
+
+export interface OperatingModelContract {
+  variant: string;
+  title: string;
+  sections: OperatingModelSectionContract[];
+  notes?: string[];
+}
+
 export interface DisplayData {
   // Financial metrics
   roi: number;
@@ -155,6 +182,7 @@ export interface DisplayData {
     value: string;
     color: string;
   }>;
+  operatingModel?: OperatingModelContract | null;
   
   // Core project data
   totalProjectCost: number;
@@ -461,6 +489,10 @@ export class BackendDataMapper {
     const operationalMetrics = calculations?.operational_metrics ||
                               ownership?.operational_metrics ||
                               { staffing: [], revenue: {}, kpis: [] };
+    const operatingModel =
+      calculations?.operating_model ||
+      ownership?.operating_model ||
+      null;
     const perUnitMetrics = calculations?.operational_metrics?.per_unit || {};
     const sensitivityAnalysis = ownership?.sensitivity_analysis || {};
     const sensitivityBase = sensitivityAnalysis.base || {};
@@ -933,6 +965,7 @@ export class BackendDataMapper {
       staffingMetrics,
       revenueMetrics,
       kpis,
+      operatingModel,
       totalProjectCost: totalCost,
       constructionCost: safeGet(totals, 'hard_costs', 0),
       softCosts: safeGet(totals, 'soft_costs', 0),
@@ -1077,6 +1110,7 @@ export class BackendDataMapper {
       staffingMetrics: [],
       revenueMetrics: {},
       kpis: [],
+      operatingModel: null,
       yieldGapBps: undefined,
       breakEvenOccupancyForTargetYield: undefined,
       sensitivity: {

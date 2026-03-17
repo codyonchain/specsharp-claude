@@ -476,6 +476,9 @@ class V2APIClient {
             operational_metrics:
               project.analysis.calculations.operational_metrics ||
               project.analysis.calculations.calculations.operational_metrics,
+            operating_model:
+              project.analysis.calculations.operating_model ||
+              project.analysis.calculations.calculations.operating_model,
             department_allocation:
               project.analysis.calculations.department_allocation ||
               project.analysis.calculations.calculations.department_allocation,
