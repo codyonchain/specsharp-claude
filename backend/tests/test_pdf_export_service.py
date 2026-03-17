@@ -1,4 +1,6 @@
 import io
+import logging
+from types import SimpleNamespace
 from typing import List, Optional
 
 import pytest
@@ -6,6 +8,7 @@ from PIL import Image, ImageDraw
 
 from app.services import pdf_export_service as pdf_export_service_module
 from app.services.pdf_export_service import PDFRenderError, ProfessionalPDFExportService
+from app.v2.api import scope as scope_module
 
 
 def _build_project_payload(feasible: bool, recommendation: str):
@@ -267,6 +270,8 @@ def test_render_html_to_pdf_rejects_blank_output_and_surfaces_diagnostics(monkey
     page = FakePage(
         {
             "body_text_length": 0,
+            "body_html_length": 42,
+            "body_html_excerpt": "<div class=\"page\"><section></section></div>",
             "visible_text_block_count": 0,
             "section_count": 0,
             "h1_count": 0,
@@ -284,8 +289,41 @@ def test_render_html_to_pdf_rejects_blank_output_and_surfaces_diagnostics(monkey
     with pytest.raises(PDFRenderError) as exc_info:
         service._render_html_to_pdf("<html><body>placeholder</body></html>")
 
+    assert "html_input=text_length=11" in str(exc_info.value)
+    assert "dom_html_excerpt='<div class=\"page\"><section></section></div>'" in str(exc_info.value)
     assert "synthetic chromium paint failure" in str(exc_info.value)
     assert "first-page screenshot nearly blank" in str(exc_info.value)
+
+
+def test_render_html_to_pdf_logs_pre_playwright_text_summary(monkeypatch, caplog):
+    service = ProfessionalPDFExportService()
+    page = FakePage(
+        {
+            "body_text_length": 420,
+            "body_html_length": 128,
+            "body_html_excerpt": "<div class=\"page\"><section><h2>DealShield</h2><p>Boundary text survives.</p></section></div>",
+            "visible_text_block_count": 24,
+            "section_count": 6,
+            "h1_count": 1,
+            "page_count": 5,
+            "visible_page_count": 5,
+            "scroll_height": 2400,
+            "body_text_excerpt": "DealShield Boundary text survives.",
+        },
+        _build_png(True),
+        b"%PDF-1.7\n" + (b"x" * 7000),
+    )
+    _install_fake_playwright(monkeypatch, service, page)
+    caplog.set_level(logging.INFO, logger=pdf_export_service_module.logger.name)
+
+    service._render_html_to_pdf(
+        "<html><head><style>.noise{color:red;}</style></head><body><h1>DealShield</h1><p>Boundary text survives.</p></body></html>"
+    )
+
+    assert "Chromium PDF render input summary" in caplog.text
+    assert "html_text_length=34" in caplog.text
+    assert "DealShield Boundary text survives." in caplog.text
+    assert ".noise{color:red;}" not in caplog.text
 
 
 def test_render_html_to_pdf_returns_pdf_and_uses_explicit_linux_launch_options(monkeypatch):
@@ -294,6 +332,8 @@ def test_render_html_to_pdf_returns_pdf_and_uses_explicit_linux_launch_options(m
     page = FakePage(
         {
             "body_text_length": 420,
+            "body_html_length": 112,
+            "body_html_excerpt": "<div class=\"page\"><section><h2>SpecSharp</h2><p>decision packet text</p></section></div>",
             "visible_text_block_count": 24,
             "section_count": 6,
             "h1_count": 1,
@@ -317,3 +357,46 @@ def test_render_html_to_pdf_returns_pdf_and_uses_explicit_linux_launch_options(m
     assert browser.page_options["viewport"] == service.PDF_VIEWPORT
     assert page.wait_until == "domcontentloaded"
     assert page.media == "screen"
+
+
+@pytest.mark.asyncio
+async def test_dealshield_pdf_route_uses_dedicated_renderer(monkeypatch):
+    project = SimpleNamespace(project_id="project-297")
+    payload = {"dealshield_tile_profile": "multifamily_apartment_v1"}
+    profile = {"profile_id": "multifamily_apartment_v1"}
+    view_model = {"profile_id": "multifamily_apartment_v1", "decision_status": "GO"}
+    calls = []
+
+    monkeypatch.setattr(scope_module, "_get_scoped_project", lambda db, project_id, auth: project)
+    monkeypatch.setattr(scope_module, "_resolve_project_payload", lambda project_arg: dict(payload))
+    monkeypatch.setattr(
+        scope_module,
+        "_refresh_dealshield_payload_for_project",
+        lambda project_arg, payload_arg: dict(payload_arg),
+    )
+    monkeypatch.setattr(scope_module, "get_dealshield_profile", lambda profile_id: dict(profile))
+    monkeypatch.setattr(
+        scope_module,
+        "build_dealshield_view_model",
+        lambda project_id, payload_arg, profile_arg: dict(view_model),
+    )
+
+    def fake_generate_dealshield_pdf(arg):
+        calls.append(("dealshield", arg))
+        return io.BytesIO(b"%PDF-1.7\n")
+
+    def fail_generate_decision_packet_pdf(arg):
+        raise AssertionError("DealShield route should not call the decision packet PDF renderer")
+
+    monkeypatch.setattr(scope_module.pdf_export_service, "generate_dealshield_pdf", fake_generate_dealshield_pdf)
+    monkeypatch.setattr(
+        scope_module.pdf_export_service,
+        "generate_decision_packet_pdf",
+        fail_generate_decision_packet_pdf,
+    )
+
+    response = await scope_module.export_dealshield_pdf("project-297", db=object(), auth=object())
+
+    assert response.media_type == "application/pdf"
+    assert "DealShield_" in response.headers["content-disposition"]
+    assert calls == [("dealshield", view_model)]

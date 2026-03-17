@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 import threading
 import queue
+import re
+import html as html_module
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -50,6 +52,7 @@ class ProfessionalPDFExportService:
     MIN_NON_WHITE_RATIO = 0.001
     MIN_PDF_BYTES = 2048
     RENDER_TIMEOUT_SECONDS = 60
+    DIAGNOSTIC_EXCERPT_CHARS = 240
     
     def __init__(self):
         self._init_styles()
@@ -294,8 +297,11 @@ class ProfessionalPDFExportService:
         }
 
     def _new_render_diagnostics(self, html: str, launch_options: Dict[str, Any]) -> Dict[str, Any]:
+        html_text_summary = self._summarize_html_text(html)
         return {
             "html_length": len(html or ""),
+            "html_text_length": html_text_summary["text_length"],
+            "html_text_excerpt": html_text_summary["text_excerpt"],
             "launch_options": {
                 "headless": bool(launch_options.get("headless")),
                 "chromium_sandbox": launch_options.get("chromium_sandbox"),
@@ -305,6 +311,35 @@ class ProfessionalPDFExportService:
             "page_errors": [],
             "request_failures": [],
         }
+
+    def _trim_diagnostic_text(self, value: Any) -> str:
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        text = re.sub(r"\s+", " ", text)
+        return text[:self.DIAGNOSTIC_EXCERPT_CHARS]
+
+    def _summarize_html_text(self, html: str) -> Dict[str, Any]:
+        source = str(html or "")
+        body_match = re.search(r"<body\b[^>]*>(.*?)</body>", source, flags=re.IGNORECASE | re.DOTALL)
+        body_source = body_match.group(1) if body_match else source
+        cleaned = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", body_source, flags=re.IGNORECASE | re.DOTALL)
+        cleaned = re.sub(r"<!--.*?-->", " ", cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r"<[^>]+>", " ", cleaned)
+        cleaned = html_module.unescape(cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        return {
+            "text_length": len(cleaned),
+            "text_excerpt": cleaned[:self.DIAGNOSTIC_EXCERPT_CHARS],
+        }
+
+    def _log_render_input_summary(self, diagnostics: Dict[str, Any]) -> None:
+        logger.info(
+            "Chromium PDF render input summary: html_length=%s, html_text_length=%s, html_text_excerpt=%r",
+            diagnostics.get("html_length", 0),
+            diagnostics.get("html_text_length", 0),
+            diagnostics.get("html_text_excerpt", ""),
+        )
 
     def _append_render_diagnostic(self, bucket: List[Dict[str, Any]], entry: Dict[str, Any]) -> None:
         if len(bucket) >= self.MAX_RENDER_DIAGNOSTICS:
@@ -403,6 +438,9 @@ class ProfessionalPDFExportService:
                 const bodyText = body && typeof body.innerText === 'string'
                     ? body.innerText.replace(/\\s+/g, ' ').trim()
                     : '';
+                const bodyHtml = body && typeof body.innerHTML === 'string'
+                    ? body.innerHTML.replace(/\\s+/g, ' ').trim()
+                    : '';
                 const pages = Array.from(document.querySelectorAll('.page'));
                 const sections = Array.from(document.querySelectorAll('section'));
                 const visibleTextBlocks = Array.from(document.querySelectorAll('h1, h2, h3, p, li, td, th, span, div'))
@@ -413,6 +451,8 @@ class ProfessionalPDFExportService:
                     title: document.title || '',
                     body_text_length: bodyText.length,
                     body_text_excerpt: bodyText.slice(0, 240),
+                    body_html_length: bodyHtml.length,
+                    body_html_excerpt: bodyHtml.slice(0, 240),
                     body_child_count: body ? body.children.length : 0,
                     h1_count: document.querySelectorAll('h1').length,
                     section_count: sections.length,
@@ -478,7 +518,8 @@ class ProfessionalPDFExportService:
             if isinstance(non_white_ratio, (int, float))
             else str(screenshot_analysis.get("error") or "unavailable")
         )
-        excerpt = str(render_state.get("body_text_excerpt") or "").strip()
+        excerpt = self._trim_diagnostic_text(render_state.get("body_text_excerpt"))
+        dom_html_excerpt = self._trim_diagnostic_text(render_state.get("body_html_excerpt"))
         console_preview = "; ".join(
             f"{entry.get('type')}: {entry.get('text')}"
             for entry in diagnostics.get("console_messages", [])[:2]
@@ -492,8 +533,12 @@ class ProfessionalPDFExportService:
             for entry in diagnostics.get("request_failures", [])[:2]
         ) or "none"
         return (
+            "html_input="
+            f"text_length={diagnostics.get('html_text_length', 0)}, "
+            f"excerpt={self._trim_diagnostic_text(diagnostics.get('html_text_excerpt'))!r}; "
             "render_state="
             f"text_length={render_state.get('body_text_length', 0)}, "
+            f"dom_html_length={render_state.get('body_html_length', 0)}, "
             f"visible_text_blocks={render_state.get('visible_text_block_count', 0)}, "
             f"sections={render_state.get('section_count', 0)}, "
             f"visible_sections={render_state.get('visible_section_count', 0)}, "
@@ -502,7 +547,8 @@ class ProfessionalPDFExportService:
             f"scroll_height={render_state.get('scroll_height', 0)}, "
             f"pdf_size={len(pdf_bytes)} bytes, "
             f"first_page_non_white_ratio={non_white_text}, "
-            f"excerpt={excerpt!r}; "
+            f"dom_text_excerpt={excerpt!r}, "
+            f"dom_html_excerpt={dom_html_excerpt!r}; "
             "diagnostics="
             f"console={console_preview}; "
             f"page_errors={page_error_preview}; "
@@ -568,6 +614,7 @@ class ProfessionalPDFExportService:
             browser = None
             launch_options = self._build_chromium_launch_options()
             diagnostics = self._new_render_diagnostics(html, launch_options)
+            self._log_render_input_summary(diagnostics)
             try:
                 with sync_playwright() as p:
                     browser = p.chromium.launch(**launch_options)
