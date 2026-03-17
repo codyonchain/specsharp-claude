@@ -4057,6 +4057,7 @@ class UnifiedEngine:
             occupancy_rate=occupancy_rate,
             units=canonical_units,
             calculation_context=calculations,
+            subtype_config=subtype_config,
         )
         
         # Underwriting refinement metrics: yield gap, break-even occupancy, sensitivity
@@ -5564,6 +5565,7 @@ class UnifiedEngine:
         occupancy_rate: Optional[float] = None,
         units: int = 0,
         calculation_context: Optional[Dict[str, Any]] = None,
+        subtype_config: Any = None,
     ) -> Optional[dict]:
         """Build a backend-owned Operating Model contract for supported ExecutiveView families."""
         if not operational_efficiency:
@@ -5679,6 +5681,50 @@ class UnifiedEngine:
 
         def supported_property_ops_subtype() -> bool:
             return subtype_normalized in {"warehouse", "cold_storage"}
+
+        def humanize_token(value: Any) -> Optional[str]:
+            raw = str(value or "").strip().replace("-", "_")
+            if not raw:
+                return None
+            normalized = raw.lower()
+            explicit_labels = {
+                "user_input": "User Input",
+                "nlp_detected": "NLP Detected",
+                "default": "Subtype Default",
+            }
+            if normalized in explicit_labels:
+                return explicit_labels[normalized]
+            return raw.replace("_", " ").title()
+
+        def format_pct_value(value: float) -> str:
+            rounded = round(float(value), 1)
+            if abs(rounded - round(rounded)) < 0.05:
+                return f"{rounded:.0f}%"
+            return f"{rounded:.1f}%"
+
+        def format_mix_composition(split_value: Dict[str, Any]) -> Optional[str]:
+            if not isinstance(split_value, dict):
+                return None
+            parts: List[str] = []
+            for component in MIXED_USE_SPLIT_COMPONENTS:
+                share = self._coerce_number(split_value.get(component))
+                if share is None or share <= 0:
+                    continue
+                component_label = humanize_token(component) or component
+                parts.append(f"{component_label} {format_pct_value(share)}")
+            return " / ".join(parts) if parts else None
+
+        def resolve_parking_spaces() -> Optional[int]:
+            for key in ("spaces", "parking_spaces", "space_count", "spaceCount"):
+                explicit_spaces = self._coerce_number(context.get(key))
+                if explicit_spaces is not None and explicit_spaces > 0:
+                    return max(1, int(round(explicit_spaces)))
+
+            spaces_per_sf = self._coerce_number(getattr(subtype_config, "spaces_per_sf", None)) if subtype_config else None
+            if spaces_per_sf is not None and spaces_per_sf > 0 and square_footage > 0:
+                return max(1, int(round(square_footage * float(spaces_per_sf))))
+
+            return None
 
         sections: List[dict] = []
         notes: List[str] = []
@@ -5847,6 +5893,206 @@ class UnifiedEngine:
                 if entry
             ]
             notes.append("Unit economics and landlord-side operating burden only.")
+
+        elif building_type_normalized == "mixed_use":
+            variant = "mixed_use_revenue_mix"
+            mixed_use_split = context.get("mixed_use_split_applied") if isinstance(context.get("mixed_use_split_applied"), dict) else {}
+            split_value = mixed_use_split.get("value") if isinstance(mixed_use_split.get("value"), dict) else {}
+            mix_source = humanize_token(mixed_use_split.get("source")) or "Subtype Default"
+            mix_composition = format_mix_composition(split_value)
+            revenue_factor_applied = self._coerce_number(mixed_use_split.get("revenue_factor_applied"))
+            blended_revenue_per_sf = (annual_revenue / square_footage) if square_footage > 0 else None
+
+            mix_source_helper = None
+            if mixed_use_split.get("invalid_mix"):
+                mix_source_helper = "Invalid submitted mix fell back to the subtype default blend."
+            elif mixed_use_split.get("normalization_applied"):
+                mix_source_helper = "Input shares were normalized before revenue weighting."
+
+            sections = [
+                entry
+                for entry in [
+                    section(
+                        "mixed_use_revenue_mix",
+                        "Revenue Mix",
+                        "list",
+                        [
+                            metric("mixed_use_mix_source", "Mix Source", mix_source, helper=mix_source_helper),
+                            metric("mixed_use_mix_composition", "Mix Composition", mix_composition),
+                            metric(
+                                "mixed_use_revenue_factor",
+                                "Revenue Factor Applied",
+                                revenue_factor_applied,
+                                kind="number",
+                                decimals=2,
+                                suffix="×",
+                            ),
+                        ],
+                    ),
+                    section(
+                        "mixed_use_blended_productivity",
+                        "Blended Productivity & Burden",
+                        "tiles",
+                        [
+                            metric(
+                                "mixed_use_revenue_per_sf",
+                                "Blended Revenue / SF",
+                                blended_revenue_per_sf,
+                                kind="currency",
+                                decimals=2,
+                                suffix="/yr",
+                                emphasis="primary",
+                            ),
+                            metric("mixed_use_margin", "NOI Margin", operating_margin, kind="percentage"),
+                            metric("mixed_use_expense_ratio", "Expense Ratio", expense_ratio, kind="percentage"),
+                        ],
+                    ),
+                ]
+                if entry
+            ]
+            notes.append("Blended revenue reflects the applied mixed-use share weighting.")
+
+        elif building_type_normalized == "retail":
+            variant = "retail_lease_productivity"
+            effective_rent_per_sf = (annual_revenue / square_footage) if square_footage > 0 else None
+            sections = [
+                entry
+                for entry in [
+                    section(
+                        "retail_lease_productivity",
+                        "Lease Productivity",
+                        "tiles",
+                        [
+                            metric(
+                                "retail_rent_per_sf",
+                                "Effective Rent / SF",
+                                effective_rent_per_sf,
+                                kind="currency",
+                                decimals=2,
+                                suffix="/yr",
+                                emphasis="primary",
+                            ),
+                            metric("retail_occupancy", "Occupancy Assumption", occupancy_value, kind="percentage"),
+                        ],
+                    ),
+                    section(
+                        "retail_operating_burden",
+                        "Operating Burden",
+                        "list",
+                        [
+                            metric(
+                                "retail_total_expenses",
+                                "Total Expenses",
+                                total_expenses,
+                                kind="currency",
+                                detail=currency_per_sf(total_expenses),
+                            ),
+                            metric("retail_margin", "NOI Margin", operating_margin, kind="percentage"),
+                            metric("retail_expense_ratio", "Expense Ratio", expense_ratio, kind="percentage"),
+                        ],
+                    ),
+                ]
+                if entry
+            ]
+            notes.append("Landlord-side retail lease productivity and operating burden only; tenant staffing is excluded.")
+
+        elif building_type_normalized == "restaurant":
+            variant = "restaurant_core_economics"
+            sales_per_sf = (annual_revenue / square_footage) if square_footage > 0 else None
+            food_cost = float(operational_efficiency.get("food_cost", 0) or 0)
+            beverage_cost = float(operational_efficiency.get("beverage_cost", 0) or 0)
+            labor_cost = float(operational_efficiency.get("labor_cost", 0) or 0)
+            food_burden = (food_cost / annual_revenue) if annual_revenue > 0 else None
+            beverage_burden = (beverage_cost / annual_revenue) if annual_revenue > 0 else None
+            labor_burden = (labor_cost / annual_revenue) if annual_revenue > 0 else None
+            prime_cost = None
+            if food_burden is not None and labor_burden is not None:
+                prime_cost = food_burden + labor_burden
+
+            sections = [
+                entry
+                for entry in [
+                    section(
+                        "restaurant_core_economics",
+                        "Core Economics",
+                        "tiles",
+                        [
+                            metric(
+                                "restaurant_sales_per_sf",
+                                "Sales / SF",
+                                sales_per_sf,
+                                kind="currency",
+                                decimals=0,
+                                suffix="/yr",
+                                emphasis="primary",
+                            ),
+                            metric("restaurant_occupancy", "Occupancy Assumption", occupancy_value, kind="percentage"),
+                            metric("restaurant_margin", "NOI Margin", operating_margin, kind="percentage"),
+                        ],
+                    ),
+                    section(
+                        "restaurant_operating_burden",
+                        "Operating Burden",
+                        "list",
+                        [
+                            metric("restaurant_prime_cost", "Prime Cost", prime_cost, kind="percentage"),
+                            metric("restaurant_labor_burden", "Labor Burden", labor_burden, kind="percentage"),
+                            metric("restaurant_food_burden", "Food Burden", food_burden, kind="percentage"),
+                            (
+                                metric(
+                                    "restaurant_beverage_burden",
+                                    "Beverage Burden",
+                                    beverage_burden,
+                                    kind="percentage",
+                                )
+                                if beverage_cost > 0
+                                else None
+                            ),
+                            metric("restaurant_expense_ratio", "Expense Ratio", expense_ratio, kind="percentage"),
+                        ],
+                    ),
+                ]
+                if entry
+            ]
+            notes.append("Restaurant core economics reflect modeled sales and prime-cost burden assumptions.")
+
+        elif building_type_normalized == "parking":
+            variant = "parking_space_economics"
+            spaces = resolve_parking_spaces()
+            revenue_per_space_month = (annual_revenue / spaces / 12.0) if spaces and spaces > 0 else None
+            sections = [
+                entry
+                for entry in [
+                    section(
+                        "parking_space_economics",
+                        "Space Economics",
+                        "tiles",
+                        [
+                            metric("parking_spaces", "Spaces", spaces, kind="number", decimals=0, emphasis="primary"),
+                            metric(
+                                "parking_revenue_per_space",
+                                "Revenue / Space / Month",
+                                revenue_per_space_month,
+                                kind="currency",
+                                decimals=0,
+                                suffix="/mo",
+                            ),
+                            metric("parking_occupancy", "Occupancy Assumption", occupancy_value, kind="percentage"),
+                        ],
+                    ),
+                    section(
+                        "parking_operating_burden",
+                        "Operating Burden",
+                        "list",
+                        [
+                            metric("parking_margin", "NOI Margin", operating_margin, kind="percentage"),
+                            metric("parking_expense_ratio", "Expense Ratio", expense_ratio, kind="percentage"),
+                        ],
+                    ),
+                ]
+                if entry
+            ]
+            notes.append("Space economics reflect modeled stall productivity and stabilized parking burden.")
 
         elif building_type_normalized == "industrial" and supported_property_ops_subtype():
             variant = "industrial_property_ops"

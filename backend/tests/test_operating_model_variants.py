@@ -98,6 +98,38 @@ def _metric_labels(operating_model: dict) -> list[str]:
             ["Revenue / SF", "Connectivity", "Expense Ratio"],
             ["Efficiency Score", "Target KPIs"],
         ),
+        (
+            BuildingType.MIXED_USE,
+            "office_residential",
+            "mixed_use_revenue_mix",
+            ["Revenue Mix", "Blended Productivity & Burden"],
+            ["Mix Source", "Mix Composition", "Revenue Factor Applied", "Blended Revenue / SF", "NOI Margin", "Expense Ratio"],
+            ["Staffing Metrics", "Efficiency Score"],
+        ),
+        (
+            BuildingType.RETAIL,
+            "shopping_center",
+            "retail_lease_productivity",
+            ["Lease Productivity", "Operating Burden"],
+            ["Effective Rent / SF", "Occupancy Assumption", "NOI Margin", "Expense Ratio"],
+            ["Staffing Metrics", "Efficiency Score"],
+        ),
+        (
+            BuildingType.RESTAURANT,
+            "full_service",
+            "restaurant_core_economics",
+            ["Core Economics", "Operating Burden"],
+            ["Sales / SF", "Prime Cost", "Labor Burden", "Food Burden", "NOI Margin"],
+            ["Staffing Metrics", "Efficiency Score", "Target KPIs"],
+        ),
+        (
+            BuildingType.PARKING,
+            "parking_garage",
+            "parking_space_economics",
+            ["Space Economics", "Operating Burden"],
+            ["Spaces", "Revenue / Space / Month", "Occupancy Assumption", "NOI Margin", "Expense Ratio"],
+            ["Staffing Metrics", "Revenue / SF", "Efficiency Score"],
+        ),
     ],
 )
 def test_supported_operating_model_variants_are_backend_owned_and_family_specific(
@@ -125,15 +157,49 @@ def test_supported_operating_model_variants_are_backend_owned_and_family_specifi
 
 
 @pytest.mark.parametrize(
+    "building_type,subtype,expected_variant",
+    [
+        (BuildingType.MIXED_USE, "office_residential", "mixed_use_revenue_mix"),
+        (BuildingType.MIXED_USE, "retail_residential", "mixed_use_revenue_mix"),
+        (BuildingType.MIXED_USE, "hotel_retail", "mixed_use_revenue_mix"),
+        (BuildingType.MIXED_USE, "transit_oriented", "mixed_use_revenue_mix"),
+        (BuildingType.MIXED_USE, "urban_mixed", "mixed_use_revenue_mix"),
+        (BuildingType.RETAIL, "shopping_center", "retail_lease_productivity"),
+        (BuildingType.RETAIL, "big_box", "retail_lease_productivity"),
+        (BuildingType.RESTAURANT, "quick_service", "restaurant_core_economics"),
+        (BuildingType.RESTAURANT, "full_service", "restaurant_core_economics"),
+        (BuildingType.RESTAURANT, "fine_dining", "restaurant_core_economics"),
+        (BuildingType.RESTAURANT, "cafe", "restaurant_core_economics"),
+        (BuildingType.RESTAURANT, "bar_tavern", "restaurant_core_economics"),
+        (BuildingType.PARKING, "surface_parking", "parking_space_economics"),
+        (BuildingType.PARKING, "parking_garage", "parking_space_economics"),
+        (BuildingType.PARKING, "underground_parking", "parking_space_economics"),
+        (BuildingType.PARKING, "automated_parking", "parking_space_economics"),
+    ],
+)
+def test_phase2_launch_families_emit_operating_model_for_all_launch_subtypes(
+    building_type: BuildingType,
+    subtype: str,
+    expected_variant: str,
+):
+    result = _calculate(building_type, subtype)
+    operating_model = result.get("operating_model")
+
+    assert operating_model is not None
+    assert operating_model["variant"] == expected_variant
+    assert operating_model["title"] == "Operating Model"
+
+
+@pytest.mark.parametrize(
     "building_type,subtype",
     [
         (BuildingType.INDUSTRIAL, "distribution_center"),
-        (BuildingType.RETAIL, "shopping_center"),
-        (BuildingType.MIXED_USE, "office_residential"),
-        (BuildingType.PARKING, "parking_garage"),
+        (BuildingType.SPECIALTY, "laboratory"),
+        (BuildingType.CIVIC, "library"),
+        (BuildingType.EDUCATIONAL, "university"),
     ],
 )
-def test_unsupported_phase1_families_do_not_emit_generic_operating_model(
+def test_remaining_unsupported_families_do_not_emit_generic_operating_model(
     building_type: BuildingType,
     subtype: str,
 ):

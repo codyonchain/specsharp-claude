@@ -3621,13 +3621,240 @@ describe("ExecutiveViewComplete", () => {
     expect(screen.queryByText("Efficiency Score")).not.toBeInTheDocument();
   });
 
-  it("omits the operating model section entirely for weak families without a backend contract", () => {
+  it("renders mixed-use projects with backend-owned revenue mix semantics", () => {
+    const project = withOperatingModel(
+      buildCrossTypeProject("mixed_use", "office_residential", "mixed_use_office_residential_v1"),
+      buildOperatingModel(
+        "mixed_use_revenue_mix",
+        [
+          {
+            id: "mixed_use_revenue_mix",
+            title: "Revenue Mix",
+            layout: "list",
+            metrics: [
+              buildOperatingModelMetric("mixed_use_source", "Mix Source", "User Input", "text"),
+              buildOperatingModelMetric(
+                "mixed_use_composition",
+                "Mix Composition",
+                "Office 70% / Residential 30%",
+                "text"
+              ),
+              buildOperatingModelMetric("mixed_use_factor", "Revenue Factor Applied", 1.08, "number", {
+                decimals: 2,
+                suffix: "×",
+              }),
+            ],
+          },
+          {
+            id: "mixed_use_blended_productivity",
+            title: "Blended Productivity & Burden",
+            layout: "tiles",
+            metrics: [
+              buildOperatingModelMetric("mixed_use_revenue_sf", "Blended Revenue / SF", 42.5, "currency", {
+                decimals: 2,
+                suffix: "/yr",
+                emphasis: "primary",
+              }),
+              buildOperatingModelMetric("mixed_use_margin", "NOI Margin", 0.61, "percentage"),
+              buildOperatingModelMetric("mixed_use_expense_ratio", "Expense Ratio", 0.39, "percentage"),
+            ],
+          },
+        ],
+        ["Blended revenue reflects the applied mixed-use share weighting."]
+      )
+    );
+
     render(
       <MemoryRouter>
         <ExecutiveViewComplete
-          project={buildCrossTypeProject("retail", "shopping_center", "retail_shopping_center_v1")}
+          project={project}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "mixed_use_office_residential_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Revenue Mix")).toBeInTheDocument();
+    expect(screen.getByText("Blended Productivity & Burden")).toBeInTheDocument();
+    expect(screen.getByText("Mix Composition")).toBeInTheDocument();
+    expect(screen.queryByText("Staffing Metrics")).not.toBeInTheDocument();
+  });
+
+  it("renders retail projects with lease-productivity operating model content", () => {
+    const project = withOperatingModel(
+      buildCrossTypeProject("retail", "shopping_center", "retail_shopping_center_v1"),
+      buildOperatingModel(
+        "retail_lease_productivity",
+        [
+          {
+            id: "retail_lease_productivity",
+            title: "Lease Productivity",
+            layout: "tiles",
+            metrics: [
+              buildOperatingModelMetric("retail_rent", "Effective Rent / SF", 32.2, "currency", {
+                decimals: 2,
+                suffix: "/yr",
+                emphasis: "primary",
+              }),
+              buildOperatingModelMetric("retail_occupancy", "Occupancy Assumption", 0.92, "percentage"),
+            ],
+          },
+          {
+            id: "retail_operating_burden",
+            title: "Operating Burden",
+            layout: "list",
+            metrics: [
+              buildOperatingModelMetric("retail_expenses", "Total Expenses", 284000, "currency"),
+              buildOperatingModelMetric("retail_margin", "NOI Margin", 0.65, "percentage"),
+              buildOperatingModelMetric("retail_expense_ratio", "Expense Ratio", 0.35, "percentage"),
+            ],
+          },
+        ],
+        ["Landlord-side retail lease productivity and operating burden only; tenant staffing is excluded."]
+      )
+    );
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={project}
           dealShieldData={buildCrossTypeDealShieldViewModel(
             "retail_shopping_center_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Lease Productivity")).toBeInTheDocument();
+    expect(screen.getByText("Operating Burden")).toBeInTheDocument();
+    expect(screen.getByText("Effective Rent / SF")).toBeInTheDocument();
+    expect(screen.queryByText("Staffing Metrics")).not.toBeInTheDocument();
+    expect(screen.queryByText("Efficiency Score")).not.toBeInTheDocument();
+  });
+
+  it("renders restaurant projects with restaurant-native burden semantics", () => {
+    const project = withOperatingModel(
+      buildCrossTypeProject("restaurant", "full_service", "restaurant_full_service_v1"),
+      buildOperatingModel(
+        "restaurant_core_economics",
+        [
+          {
+            id: "restaurant_core_economics",
+            title: "Core Economics",
+            layout: "tiles",
+            metrics: [
+              buildOperatingModelMetric("restaurant_sales_sf", "Sales / SF", 350, "currency", {
+                decimals: 0,
+                suffix: "/yr",
+                emphasis: "primary",
+              }),
+              buildOperatingModelMetric("restaurant_occupancy", "Occupancy Assumption", 0.8, "percentage"),
+              buildOperatingModelMetric("restaurant_margin", "NOI Margin", 0.1, "percentage"),
+            ],
+          },
+          {
+            id: "restaurant_operating_burden",
+            title: "Operating Burden",
+            layout: "list",
+            metrics: [
+              buildOperatingModelMetric("restaurant_prime_cost", "Prime Cost", 0.65, "percentage"),
+              buildOperatingModelMetric("restaurant_labor_burden", "Labor Burden", 0.33, "percentage"),
+              buildOperatingModelMetric("restaurant_food_burden", "Food Burden", 0.32, "percentage"),
+              buildOperatingModelMetric("restaurant_beverage_burden", "Beverage Burden", 0.15, "percentage"),
+              buildOperatingModelMetric("restaurant_expense_ratio", "Expense Ratio", 0.9, "percentage"),
+            ],
+          },
+        ],
+        ["Restaurant core economics reflect modeled sales and prime-cost burden assumptions."]
+      )
+    );
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={project}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "restaurant_full_service_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Core Economics")).toBeInTheDocument();
+    expect(screen.getByText("Operating Burden")).toBeInTheDocument();
+    expect(screen.getByText("Prime Cost")).toBeInTheDocument();
+    expect(screen.queryByText("Efficiency Score")).not.toBeInTheDocument();
+    expect(screen.queryByText("Target KPIs")).not.toBeInTheDocument();
+  });
+
+  it("renders parking projects with space-economics operating model content", () => {
+    const project = withOperatingModel(
+      buildCrossTypeProject("parking", "parking_garage", "parking_parking_garage_v1"),
+      buildOperatingModel(
+        "parking_space_economics",
+        [
+          {
+            id: "parking_space_economics",
+            title: "Space Economics",
+            layout: "tiles",
+            metrics: [
+              buildOperatingModelMetric("parking_spaces", "Spaces", 66, "number", {
+                emphasis: "primary",
+              }),
+              buildOperatingModelMetric("parking_revenue_space", "Revenue / Space / Month", 150, "currency", {
+                decimals: 0,
+                suffix: "/mo",
+              }),
+              buildOperatingModelMetric("parking_occupancy", "Occupancy Assumption", 0.85, "percentage"),
+            ],
+          },
+          {
+            id: "parking_operating_burden",
+            title: "Operating Burden",
+            layout: "list",
+            metrics: [
+              buildOperatingModelMetric("parking_margin", "NOI Margin", 0.75, "percentage"),
+              buildOperatingModelMetric("parking_expense_ratio", "Expense Ratio", 0.25, "percentage"),
+            ],
+          },
+        ],
+        ["Space economics reflect modeled stall productivity and stabilized parking burden."]
+      )
+    );
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={project}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "parking_parking_garage_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Space Economics")).toBeInTheDocument();
+    expect(screen.getByText("Revenue / Space / Month")).toBeInTheDocument();
+    expect(screen.getByText("Operating Burden")).toBeInTheDocument();
+    expect(screen.queryByText("Staffing Metrics")).not.toBeInTheDocument();
+  });
+
+  it("omits the operating model section entirely for still-unsupported families without a backend contract", () => {
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildCrossTypeProject("civic", "library", "civic_library_v1")}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "civic_library_v1",
             "Needs Work",
             "low_flex_before_break_buffer"
           ) as any}
