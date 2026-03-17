@@ -1,12 +1,15 @@
-# UX Smoke E2E (Playwright)
+# Browser E2E (Playwright)
 
-These tests are scoped to high-signal UX flows:
+The canonical blocking launch suite lives under `tests/e2e/launch` and covers:
 
 - login/logout + session persistence
-- create project + key form interactions
-- packet export/download
-- run-limit reached UI
-- footer/legal + basic navigation sanity
+- dashboard route protection
+- `/new` draft packet -> confirmed save -> project view
+- dashboard reopen flow
+- DealShield control persistence + packet export/download
+- run-limit reached UI gating
+
+The additive smoke suite lives under `tests/e2e/smoke` and is not the primary CI launch signal.
 
 ## Environment
 
@@ -27,10 +30,16 @@ export E2E_SECONDARY_USER_TOKEN='...'
 ## Run
 
 ```bash
-npx playwright test --config=tests/playwright.config.ts tests/e2e/smoke
+npm run test:e2e
+```
+
+Optional additive smoke run:
+
+```bash
+npm run test:e2e:smoke
 ```
 
 Notes:
 
-- Authenticated tests auto-skip when `E2E_USER_TOKEN` is missing.
-- Run-limit test does not consume real credits; it stubs the backend 403 response and validates UI behavior.
+- The blocking launch suite requires `E2E_USER_TOKEN`; CI should fail preflight if it is missing.
+- The run-limit launch test does not consume real credits; it stubs the backend 403 response and validates UI behavior.
