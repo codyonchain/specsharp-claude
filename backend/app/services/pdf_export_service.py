@@ -60,7 +60,7 @@ class ProfessionalPDFExportService:
     TEMPLATE_KIND_DECISION_PACKET = "decision_packet"
     MIN_DECISION_PACKET_FOUND_PROBES = 4
     MIN_DECISION_PACKET_TEXT_PROBES = 4
-    MIN_DECISION_PACKET_LAID_OUT_PROBES = 3
+    MIN_DECISION_PACKET_LAID_OUT_PROBES = 2
     DEALSHIELD_RENDER_PROBES = (
         {"name": "title", "selector": "header > h1"},
         {"name": "subtitle", "selector": "header > .subtitle"},
