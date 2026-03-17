@@ -732,12 +732,14 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
   <title>DealShield</title>
   <style>
     * {{ box-sizing: border-box; }}
-    body {{ font-family: 'Helvetica Neue', Arial, sans-serif; color: #111827; margin: 0; padding: 32px; }}
-    h1 {{ margin: 0; font-size: 28px; letter-spacing: 0.3px; }}
+    body {{ font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 13px; line-height: 1.45; color: #111827; margin: 0; padding: 32px; }}
+    header {{ display: block; }}
+    header > * {{ display: block; }}
+    h1 {{ display: block; margin: 0; font-size: 28px; line-height: 1.15; letter-spacing: 0.3px; }}
     section {{ margin-top: 28px; }}
-    h2 {{ margin: 0 0 10px; font-size: 19px; color: #1f2937; }}
-    .subtitle {{ color: #4b5563; margin-top: 4px; font-size: 13px; }}
-    .meta {{ color: #6b7280; font-size: 12px; margin-top: 4px; }}
+    h2 {{ display: block; margin: 0 0 10px; font-size: 19px; line-height: 1.2; color: #1f2937; }}
+    .subtitle {{ display: block; color: #4b5563; margin-top: 4px; font-size: 13px; line-height: 1.4; }}
+    .meta {{ display: block; color: #6b7280; font-size: 12px; line-height: 1.35; margin-top: 4px; }}
     .table-wrap {{ margin-top: 22px; }}
     table {{ width: 100%; border-collapse: collapse; font-size: 12px; }}
     th, td {{ border: 1px solid #e5e7eb; padding: 7px 9px; text-align: left; }}
@@ -747,9 +749,9 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
     .scenario-label {{ font-weight: 600; }}
     .scenario-delta {{ margin-top: 2px; font-size: 10px; color: #64748b; font-weight: 500; }}
     .main-row-alt td {{ background: #f8fafc; }}
-    .context-note {{ margin-top: 8px; color: #6b7280; font-size: 12px; }}
-    .provenance-note {{ margin-top: 6px; color: #6b7280; font-size: 12px; }}
-    .provenance-meta {{ margin-top: 4px; color: #4b5563; font-size: 12px; }}
+    .context-note {{ display: block; margin-top: 8px; color: #6b7280; font-size: 12px; line-height: 1.4; }}
+    .provenance-note {{ display: block; margin-top: 6px; color: #6b7280; font-size: 12px; line-height: 1.4; }}
+    .provenance-meta {{ display: block; margin-top: 4px; color: #4b5563; font-size: 12px; line-height: 1.35; }}
     .provenance-meta-label {{ color: #374151; display: inline-block; margin-bottom: 6px; }}
     .provenance-ref-list {{ display: flex; flex-wrap: wrap; gap: 6px; }}
     .ref-pill {{ display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid #e5e7eb; background: #f8fafc; color: #374151; font-size: 11px; font-family: Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; line-height: 1.3; max-width: 100%; overflow-wrap: anywhere; }}
