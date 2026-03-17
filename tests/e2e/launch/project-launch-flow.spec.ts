@@ -56,16 +56,12 @@ test.describe("Launch project flow", () => {
     await page.getByRole("button", { name: "Executive View" }).click();
     await expect(page.getByRole("button", { name: "Export PDF" })).toBeVisible();
 
-    const executiveExportResponsePromise = page.waitForResponse((response) => {
-      return (
-        response.request().method() === "GET" &&
-        response.url().includes(`/api/v2/pdf/project/${projectId}/pdf`)
-      );
-    });
-    await page.getByRole("button", { name: "Export PDF" }).click();
-    const executiveExportResponse = await executiveExportResponsePromise;
-    expect(executiveExportResponse.ok()).toBeTruthy();
-    expect(executiveExportResponse.headers()["content-type"] || "").toContain("application/pdf");
+    const [executiveDownload] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByRole("button", { name: "Export PDF" }).click(),
+    ]);
+    expect(executiveDownload.suggestedFilename().toLowerCase()).toMatch(/^report_.*\.pdf$/);
+    expect(await executiveDownload.failure()).toBeNull();
 
     await page.goto("/dashboard");
     await expect(page.getByText("Projects Dashboard")).toBeVisible();

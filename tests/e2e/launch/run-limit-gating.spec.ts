@@ -38,6 +38,16 @@ test.describe("Launch run-limit gating", () => {
     const runLimitResponse = await runLimitResponsePromise;
     expect(runLimitResponse.ok()).toBeFalsy();
     await expect(page).toHaveURL(/\/new$/);
-    await expect(page.getByText("An unexpected error occurred")).toBeVisible();
+    const runLimitDialog = page.getByRole("dialog", { name: "You've used all included runs" });
+    await expect(runLimitDialog).toBeVisible();
+    await expect(
+      runLimitDialog.getByText(
+        "This org has used all included runs for Decision Packet generation. You can still analyze drafts and review existing work."
+      )
+    ).toBeVisible();
+    await expect(runLimitDialog.getByRole("link", { name: "Email Cody to add more runs" })).toHaveAttribute(
+      "href",
+      /mailto:cody@specsharp\.ai/
+    );
   });
 });
