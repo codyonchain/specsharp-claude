@@ -1,8 +1,16 @@
+import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { createDraftPacket, confirmDecisionInputs } from "../support/new-project";
 import { seedAuthenticatedSession } from "../support/session";
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const RECENT_DASHBOARD_PROJECT_TEXT = /^Updated (just now|1 minute ago)$/;
+
+const clickNewestDashboardProject = async (page: Page) => {
+  const newestProject = page.getByText(RECENT_DASHBOARD_PROJECT_TEXT).first();
+  await expect(newestProject).toBeVisible({ timeout: 20_000 });
+  await newestProject.click();
+};
 
 test.describe("Launch project flow", () => {
   test("creates a project from /new, reopens it from the dashboard, and exports launch packets", async ({ page }) => {
@@ -66,11 +74,7 @@ test.describe("Launch project flow", () => {
     await page.goto("/dashboard");
     await expect(page.getByText("Projects Dashboard")).toBeVisible();
 
-    const projectHeading = page.getByRole("heading", {
-      name: new RegExp(escapeRegExp(projectMarker)),
-    }).first();
-    await expect(projectHeading).toBeVisible({ timeout: 20_000 });
-    await projectHeading.click();
+    await clickNewestDashboardProject(page);
 
     await expect(page).toHaveURL(new RegExp(`/project/${escapeRegExp(projectId)}$`));
     await expect(page.getByRole("heading", { name: "DealShield" })).toBeVisible();

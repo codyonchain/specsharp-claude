@@ -4,6 +4,7 @@ import { E2E_API_BASE_URL } from "./env";
 const ACCESS_TOKEN_KEY = "specsharp_access_token";
 const EXPIRES_AT_KEY = "specsharp_token_expires_at";
 const USER_KEY = "specsharp_user";
+const E2E_SESSION_SEEDED_KEY = "__specsharp_e2e_session_seeded";
 
 type SeededSession = {
   accessToken: string;
@@ -94,11 +95,28 @@ export const seedAuthenticatedSession = async (page: Page, accessToken?: string)
       ? buildSessionFromJwt(accessToken)
       : await fetchTestingSession();
 
-  await page.addInitScript((seed: SeededSession) => {
-    sessionStorage.setItem("specsharp_access_token", seed.accessToken);
-    sessionStorage.setItem("specsharp_token_expires_at", String(seed.expiresAt));
-    sessionStorage.setItem("specsharp_user", JSON.stringify(seed.user));
-  }, session);
+  await page.addInitScript(
+    ({ seed, seedKey }: { seed: SeededSession; seedKey: string }) => {
+      try {
+        if (localStorage.getItem(seedKey) === "1") {
+          return;
+        }
+      } catch {
+        // Ignore storage access failures and attempt the normal session seed.
+      }
+
+      sessionStorage.setItem("specsharp_access_token", seed.accessToken);
+      sessionStorage.setItem("specsharp_token_expires_at", String(seed.expiresAt));
+      sessionStorage.setItem("specsharp_user", JSON.stringify(seed.user));
+
+      try {
+        localStorage.setItem(seedKey, "1");
+      } catch {
+        // Ignore storage access failures; the auth seed is still valid for this document.
+      }
+    },
+    { seed: session, seedKey: E2E_SESSION_SEEDED_KEY }
+  );
 };
 
 export const clearSessionAuth = async (page: Page): Promise<void> => {
