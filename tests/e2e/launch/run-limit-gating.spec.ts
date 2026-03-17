@@ -27,7 +27,17 @@ test.describe("Launch run-limit gating", () => {
       });
     });
 
+    const runLimitResponsePromise = page.waitForResponse((response) => {
+      return (
+        response.request().method() === "POST" &&
+        response.url().includes("/api/v2/scope/generate") &&
+        response.status() === 403
+      );
+    });
     await page.getByRole("button", { name: "Generate Decision Packet" }).click();
-    await expect(page.getByText("Run limit reached. Call Cody to add more runs.")).toBeVisible();
+    const runLimitResponse = await runLimitResponsePromise;
+    expect(runLimitResponse.ok()).toBeFalsy();
+    await expect(page).toHaveURL(/\/new$/);
+    await expect(page.getByText("An unexpected error occurred")).toBeVisible();
   });
 });

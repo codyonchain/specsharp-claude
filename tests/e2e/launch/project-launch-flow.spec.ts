@@ -42,20 +42,30 @@ test.describe("Launch project flow", () => {
     await expect(page.getByRole("heading", { name: "DealShield" })).toBeVisible();
     await expect(page.getByLabel("Downside Stress Level")).toHaveValue(nextStressBand);
 
-    const [dealShieldDownload] = await Promise.all([
-      page.waitForEvent("download"),
-      page.getByRole("button", { name: "Export DealShield PDF" }).click(),
-    ]);
-    expect(dealShieldDownload.suggestedFilename().toLowerCase()).toContain("dealshield");
+    const dealShieldExportResponsePromise = page.waitForResponse((response) => {
+      return (
+        response.request().method() === "GET" &&
+        response.url().includes(`/api/v2/pdf/project/${projectId}/pdf`)
+      );
+    });
+    await page.getByRole("button", { name: "Export PDF" }).click();
+    const dealShieldExportResponse = await dealShieldExportResponsePromise;
+    expect(dealShieldExportResponse.ok()).toBeTruthy();
+    expect(dealShieldExportResponse.headers()["content-type"] || "").toContain("application/pdf");
 
     await page.getByRole("button", { name: "Executive View" }).click();
     await expect(page.getByRole("button", { name: "Export PDF" })).toBeVisible();
 
-    const [executiveDownload] = await Promise.all([
-      page.waitForEvent("download"),
-      page.getByRole("button", { name: "Export PDF" }).click(),
-    ]);
-    expect(executiveDownload.suggestedFilename().toLowerCase()).toContain(".pdf");
+    const executiveExportResponsePromise = page.waitForResponse((response) => {
+      return (
+        response.request().method() === "GET" &&
+        response.url().includes(`/api/v2/pdf/project/${projectId}/pdf`)
+      );
+    });
+    await page.getByRole("button", { name: "Export PDF" }).click();
+    const executiveExportResponse = await executiveExportResponsePromise;
+    expect(executiveExportResponse.ok()).toBeTruthy();
+    expect(executiveExportResponse.headers()["content-type"] || "").toContain("application/pdf");
 
     await page.goto("/dashboard");
     await expect(page.getByText("Projects Dashboard")).toBeVisible();
