@@ -9,12 +9,12 @@ test.describe("Launch project flow", () => {
     test.setTimeout(120_000);
 
     const projectMarker = `LaunchFlow ${Date.now()}`;
-    const description = `${projectMarker} 120,000 sf medical office building with imaging suite and structured parking in Nashville, TN`;
+    const description = `${projectMarker} 140,000 SF warehouse with 24 dock doors in Nashville, TN`;
 
     await seedAuthenticatedSession(page);
     await createDraftPacket(page, {
       description,
-      squareFootage: 120000,
+      squareFootage: 140000,
       location: "Nashville, TN",
     });
     await confirmDecisionInputs(page);

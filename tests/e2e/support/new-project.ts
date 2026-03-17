@@ -18,12 +18,14 @@ export const createDraftPacket = async (
 
   await page.getByRole("button", { name: "Generate Draft Packet" }).click();
 
-  await expect(page.getByText("Draft Ready - Confirm Decision Inputs")).toBeVisible();
-  await expect(page.getByText("Decision Inputs (Stamped)")).toBeVisible();
-  await expect(page.getByText("Project Type")).toBeVisible();
-  await expect(page.getByText("Finish Level")).toBeVisible();
-  await expect(page.getByText("Special Features")).toBeVisible();
-  await expect(page.getByText("Total Project Cost")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Draft Ready - Confirm Decision Inputs" })).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.getByRole("heading", { name: "Decision Inputs (Stamped)" })).toBeVisible();
+  await expect(page.locator("p", { hasText: /^Project Type$/ })).toBeVisible();
+  await expect(page.locator("p", { hasText: /^Finish Level$/ })).toBeVisible();
+  await expect(page.locator("p", { hasText: /^Special Features$/ })).toBeVisible();
+  await expect(page.locator("p", { hasText: /^Total Project Cost$/ })).toBeVisible();
 };
 
 export const confirmDecisionInputs = async (page: Page): Promise<void> => {

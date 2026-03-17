@@ -23,7 +23,7 @@ test.describe("Launch auth + dashboard", () => {
 
     await page.getByRole("button", { name: "Logout" }).click();
     await expect(page).toHaveURL(/\/login$/);
-    await expect(page.getByRole("heading", { name: "Welcome Back" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Continue with Google" })).toBeVisible();
 
     await page.goto("/dashboard");
     await expect(page).toHaveURL(/\/login$/);
