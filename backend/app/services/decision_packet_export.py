@@ -1176,12 +1176,7 @@ def _render_construction_summary(section: Dict[str, Any]) -> str:
 def _render_trade_distribution(section: Dict[str, Any]) -> str:
     items = [item for item in _as_list(section.get("items")) if isinstance(item, dict)]
     if not items:
-        return (
-            "<section>"
-            "<h2>Trade Distribution / Top Cost Drivers</h2>"
-            "<div class=\"empty-note\">Trade distribution unavailable.</div>"
-            "</section>"
-        )
+        return ""
 
     rows = []
     for item in items[:8]:
@@ -1211,16 +1206,11 @@ def _render_trade_distribution(section: Dict[str, Any]) -> str:
 def _render_cost_build_up(section: Dict[str, Any]) -> str:
     items = [item for item in _as_list(section.get("items")) if isinstance(item, dict)]
     if not items:
-        return (
-            "<section>"
-            "<h2>Cost Build-Up Analysis</h2>"
-            "<div class=\"empty-note\">Cost build-up unavailable.</div>"
-            "</section>"
-        )
+        return ""
 
     rows = []
     for item in items:
-        label = _sanitize_text(item.get("label") or item.get("name")) or "Line item"
+        label = _sanitize_text(item.get("label") or item.get("name"))
         value = "—"
         if _to_number(item.get("value_per_sf")) is not None:
             value = _format_money_per_sf(item.get("value_per_sf"))
@@ -1228,12 +1218,17 @@ def _render_cost_build_up(section: Dict[str, Any]) -> str:
             value = _format_money(item.get("value"))
         elif _to_number(item.get("multiplier")) is not None:
             value = f"{_format_number(item.get('multiplier'), 2)}x"
+        if not label and value == "—":
+            continue
         rows.append(
             "<tr>"
-            f"<td>{html_module.escape(label)}</td>"
+            f"<td>{html_module.escape(label or 'Line item')}</td>"
             f"<td>{html_module.escape(value)}</td>"
             "</tr>"
         )
+
+    if not rows:
+        return ""
 
     return (
         "<section>"
@@ -1271,47 +1266,84 @@ def _render_schedule(section: Dict[str, Any]) -> str:
             "</li>"
         )
 
-    phases_html = (
-        "<table class=\"simple-table schedule-table\">"
-        "<thead><tr><th>Phase</th><th>Start Month</th><th>Duration</th></tr></thead>"
-        "<tbody>"
-        + "".join(phase_rows)
-        + "</tbody></table>"
-        if phase_rows
-        else "<div class=\"empty-note\">No modeled schedule available.</div>"
+    overview_html = (
+        f"<div class=\"note-block schedule-overview\"><strong>Modeled duration:</strong> {html_module.escape(total_months)}</div>"
+        if total_months != "—"
+        else ""
     )
-    milestones_html = (
-        "<ul class=\"bullet-list milestone-list\">"
-        + "".join(milestone_items)
-        + "</ul>"
-        if milestone_items
-        else "<div class=\"empty-note\">No modeled milestones available.</div>"
+
+    layout_parts: List[str] = []
+    if phase_rows:
+        layout_parts.append(
+            "<div class=\"subsection\">"
+            "<h3>Phases</h3>"
+            "<table class=\"simple-table schedule-table\">"
+            "<thead><tr><th>Phase</th><th>Start Month</th><th>Duration</th></tr></thead>"
+            "<tbody>"
+            + "".join(phase_rows)
+            + "</tbody></table>"
+            "</div>"
+        )
+    if milestone_items:
+        layout_parts.append(
+            "<div class=\"subsection\">"
+            "<h3>Key Milestones</h3>"
+            "<ul class=\"bullet-list milestone-list\">"
+            + "".join(milestone_items)
+            + "</ul>"
+            "</div>"
+        )
+
+    if not overview_html and not layout_parts:
+        return ""
+
+    layout_html = (
+        "<div class=\"schedule-layout\">"
+        + "".join(layout_parts)
+        + "</div>"
+        if layout_parts
+        else ""
     )
 
     return (
         "<section class=\"schedule-section\">"
         "<h2>Schedule + Key Milestones</h2>"
-        f"<div class=\"note-block schedule-overview\"><strong>Modeled duration:</strong> {html_module.escape(total_months)}</div>"
-        "<div class=\"schedule-layout\">"
-        f"<div class=\"subsection\"><h3>Phases</h3>{phases_html}</div>"
-        f"<div class=\"subsection\"><h3>Key Milestones</h3>{milestones_html}</div>"
-        "</div>"
-        "</section>"
+        + overview_html
+        + layout_html
+        + "</section>"
     )
 
 
 def _render_most_likely_wrong(items: List[Any]) -> str:
     if not items:
-        return "<section><h2>Most Likely Wrong</h2><div class=\"empty-note\">No entries configured.</div></section>"
+        return (
+            "<div class=\"content-subtle\">"
+            "<strong>Most Likely Wrong:</strong> Not configured for this packet."
+            "</div>"
+        )
 
     rendered = []
     for entry in items[:5]:
         item = _as_dict(entry)
+        label = _sanitize_text(item.get("text") or item.get("id"))
+        if not label:
+            continue
+        why = _sanitize_text(item.get("why"))
         rendered.append(
             "<li>"
-            f"<strong>{_escape(item.get('text') or item.get('id') or 'Risk')}</strong>"
-            f"<div class=\"list-detail\">Why: {_escape(item.get('why') or '—')}</div>"
-            "</li>"
+            f"<strong>{html_module.escape(label)}</strong>"
+            + (
+                f"<div class=\"list-detail\">Why: {html_module.escape(why)}</div>"
+                if why
+                else ""
+            )
+            + "</li>"
+        )
+    if not rendered:
+        return (
+            "<div class=\"content-subtle\">"
+            "<strong>Most Likely Wrong:</strong> Not configured for this packet."
+            "</div>"
         )
     return (
         "<section><h2>Most Likely Wrong</h2>"
@@ -1323,20 +1355,32 @@ def _render_most_likely_wrong(items: List[Any]) -> str:
 
 def _render_question_bank(items: List[Any]) -> str:
     if not items:
-        return "<section><h2>Question Bank</h2><div class=\"empty-note\">No entries configured.</div></section>"
+        return (
+            "<div class=\"content-subtle\">"
+            "<strong>Question Bank:</strong> Not configured for this packet."
+            "</div>"
+        )
 
     rendered_groups = []
     for entry in items:
         item = _as_dict(entry)
-        label = _resolve_question_bank_label(item)
         questions = [q for q in _as_list(item.get("questions")) if _sanitize_text(q)]
-        question_lines = "".join(f"<li>{_escape(question)}</li>" for question in questions) or "<li>No questions configured.</li>"
+        if not questions:
+            continue
+        label = _resolve_question_bank_label(item)
+        question_lines = "".join(f"<li>{_escape(question)}</li>" for question in questions)
         rendered_groups.append(
             "<div class=\"question-bank-group\">"
             f"<h3 class=\"question-bank-group-title\">{html_module.escape(label)}</h3>"
             "<ul class=\"bullet-list compact nested\">"
             + question_lines
             + "</ul></div>"
+        )
+    if not rendered_groups:
+        return (
+            "<div class=\"content-subtle\">"
+            "<strong>Question Bank:</strong> Not configured for this packet."
+            "</div>"
         )
     return (
         "<section><h2>Question Bank</h2>"
@@ -1349,16 +1393,38 @@ def _render_question_bank(items: List[Any]) -> str:
 
 def _render_red_flags_actions(items: List[Any]) -> str:
     if not items:
-        return "<section><h2>Red Flags + Actions</h2><div class=\"empty-note\">No entries configured.</div></section>"
+        return (
+            "<div class=\"content-subtle\">"
+            "<strong>Red Flags + Actions:</strong> Not configured for this packet."
+            "</div>"
+        )
 
     rendered = []
     for entry in items[:8]:
         item = _as_dict(entry)
+        flag = _sanitize_text(item.get("flag"))
+        action = _sanitize_text(item.get("action"))
+        if not flag and not action:
+            continue
         rendered.append(
             "<li>"
-            f"<strong>{_escape(item.get('flag') or 'Flag not set.')}</strong>"
-            f"<div class=\"list-detail\">Action: {_escape(item.get('action') or 'Action not set.')}</div>"
-            "</li>"
+            + (
+                f"<strong>{html_module.escape(flag)}</strong>"
+                if flag
+                else ""
+            )
+            + (
+                f"<div class=\"list-detail\">Action: {html_module.escape(action)}</div>"
+                if action
+                else ""
+            )
+            + "</li>"
+        )
+    if not rendered:
+        return (
+            "<div class=\"content-subtle\">"
+            "<strong>Red Flags + Actions:</strong> Not configured for this packet."
+            "</div>"
         )
     return (
         "<section><h2>Red Flags + Actions</h2>"
