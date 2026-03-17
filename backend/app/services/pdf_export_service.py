@@ -427,10 +427,12 @@ class ProfessionalPDFExportService:
             }"""
         )
 
-    def _build_render_state_script(self) -> str:
+    def _build_render_state_script(self, checkpoint_name: str) -> str:
         probe_definitions = json.dumps(list(self.DEALSHIELD_RENDER_PROBES))
+        checkpoint_literal = json.dumps(str(checkpoint_name or "unknown"))
         return f"""() => {{
                 const excerptLimit = {self.DIAGNOSTIC_EXCERPT_CHARS};
+                const checkpointName = {checkpoint_literal};
                 const probeDefinitions = {probe_definitions};
                 const normalizeText = (value) => {{
                     const text = (typeof value === 'string' ? value : '').replace(/\\s+/g, ' ').trim();
@@ -481,8 +483,17 @@ class ProfessionalPDFExportService:
                             opacity: style.opacity || '',
                             color: style.color || '',
                             font_size: style.fontSize || '',
+                            computed_line_height: style.lineHeight || '',
+                            computed_font_family: style.fontFamily || '',
                             rect_width: Math.round(Number(rect.width || 0) * 100) / 100,
                             rect_height: Math.round(Number(rect.height || 0) * 100) / 100,
+                            offset_width: Number(element.offsetWidth || 0),
+                            offset_height: Number(element.offsetHeight || 0),
+                            client_width: Number(element.clientWidth || 0),
+                            client_height: Number(element.clientHeight || 0),
+                            scroll_width: Number(element.scrollWidth || 0),
+                            scroll_height: Number(element.scrollHeight || 0),
+                            offset_parent_present: !!element.offsetParent,
                             client_rect_count: typeof element.getClientRects === 'function'
                                 ? element.getClientRects().length
                                 : 0,
@@ -509,12 +520,19 @@ class ProfessionalPDFExportService:
                     : '';
                 const pages = Array.from(document.querySelectorAll('.page'));
                 const sections = Array.from(document.querySelectorAll('section'));
+                const fontsStatus = document.fonts && typeof document.fonts.status === 'string'
+                    ? document.fonts.status
+                    : 'unavailable';
                 const visibleTextBlocks = Array.from(document.querySelectorAll('h1, h2, h3, p, li, td, th, span, div'))
                     .filter((element) => isVisible(element) && ((element.innerText || '').trim().length > 0))
                     .length;
 
                 return {{
+                    checkpoint_name: checkpointName,
                     title: document.title || '',
+                    document_ready_state: document.readyState || '',
+                    document_fonts_status: fontsStatus,
+                    document_fonts_ready: fontsStatus === 'loaded',
                     body_text_length: bodyText.length,
                     body_text_excerpt: bodyText.excerpt,
                     body_text_content_length: bodyTextContent.length,
@@ -579,13 +597,43 @@ class ProfessionalPDFExportService:
                 f"color={self._trim_diagnostic_text(probe.get('color'), limit=32)!r}, "
                 f"font={self._trim_diagnostic_text(probe.get('font_size'), limit=16)!r}, "
                 f"box={probe.get('rect_width', 0)}x{probe.get('rect_height', 0)}, "
+                f"offset={int(probe.get('offset_width') or 0)}x{int(probe.get('offset_height') or 0)}, "
+                f"client={int(probe.get('client_width') or 0)}x{int(probe.get('client_height') or 0)}, "
+                f"scroll={int(probe.get('scroll_width') or 0)}x{int(probe.get('scroll_height') or 0)}, "
+                f"offset_parent={bool(probe.get('offset_parent_present'))}, "
+                f"line_height={self._trim_diagnostic_text(probe.get('computed_line_height'), limit=24)!r}, "
+                f"font_family={self._trim_diagnostic_text(probe.get('computed_font_family'), limit=48)!r}, "
                 f"client_rects={int(probe.get('client_rect_count') or 0)}]"
             )
 
         return " | ".join(preview_parts) if preview_parts else "none"
 
-    def _capture_render_state(self, page: Any) -> Dict[str, Any]:
-        state = page.evaluate(self._build_render_state_script())
+    def _format_checkpoint_state_preview(self, state: Any) -> str:
+        if not isinstance(state, dict) or not state:
+            return "none"
+        checkpoint_name = self._trim_diagnostic_text(state.get("checkpoint_name"), limit=24) or "unknown"
+        body_text_excerpt = self._trim_diagnostic_text(state.get("body_text_excerpt"))
+        body_text_content_excerpt = self._trim_diagnostic_text(state.get("body_text_content_excerpt"))
+        body_html_excerpt = self._trim_diagnostic_text(state.get("body_html_excerpt"))
+        anchor_probe_preview = self._format_anchor_probe_preview(state.get("anchor_probes"))
+        return (
+            f"{checkpoint_name}["
+            f"ready_state={self._trim_diagnostic_text(state.get('document_ready_state'), limit=24)!r}, "
+            f"fonts_status={self._trim_diagnostic_text(state.get('document_fonts_status'), limit=24)!r}, "
+            f"fonts_ready={bool(state.get('document_fonts_ready'))}, "
+            f"text_length={int(state.get('body_text_length') or 0)}, "
+            f"text_content_length={int(state.get('body_text_content_length') or 0)}, "
+            f"dom_html_length={int(state.get('body_html_length') or 0)}, "
+            f"visible_text_blocks={int(state.get('visible_text_block_count') or 0)}, "
+            f"scroll_height={int(state.get('scroll_height') or 0)}, "
+            f"dom_text_excerpt={body_text_excerpt!r}, "
+            f"dom_text_content_excerpt={body_text_content_excerpt!r}, "
+            f"dom_html_excerpt={body_html_excerpt!r}, "
+            f"anchor_probes={anchor_probe_preview}]"
+        )
+
+    def _capture_render_state(self, page: Any, checkpoint_name: str = "unknown") -> Dict[str, Any]:
+        state = page.evaluate(self._build_render_state_script(checkpoint_name))
         return state if isinstance(state, dict) else {}
 
     def _analyze_screenshot(self, screenshot_bytes: bytes) -> Dict[str, Any]:
@@ -636,6 +684,9 @@ class ProfessionalPDFExportService:
         text_content_excerpt = self._trim_diagnostic_text(render_state.get("body_text_content_excerpt"))
         dom_html_excerpt = self._trim_diagnostic_text(render_state.get("body_html_excerpt"))
         anchor_probe_preview = self._format_anchor_probe_preview(render_state.get("anchor_probes"))
+        checkpoint_states = render_state.get("checkpoint_states") if isinstance(render_state.get("checkpoint_states"), dict) else {}
+        after_wait_preview = self._format_checkpoint_state_preview(checkpoint_states.get("after_wait"))
+        pre_pdf_preview = self._format_checkpoint_state_preview(checkpoint_states.get("pre_pdf"))
         console_preview = "; ".join(
             f"{entry.get('type')}: {entry.get('text')}"
             for entry in diagnostics.get("console_messages", [])[:2]
@@ -668,6 +719,7 @@ class ProfessionalPDFExportService:
             f"dom_text_content_excerpt={text_content_excerpt!r}, "
             f"dom_html_excerpt={dom_html_excerpt!r}; "
             f"anchor_probes={anchor_probe_preview}; "
+            f"checkpoints=after_wait:{after_wait_preview}; pre_pdf:{pre_pdf_preview}; "
             "diagnostics="
             f"console={console_preview}; "
             f"page_errors={page_error_preview}; "
@@ -740,10 +792,16 @@ class ProfessionalPDFExportService:
                     page = browser.new_page(**self._build_pdf_page_options())
                     self._attach_render_diagnostics(page, diagnostics)
                     self._wait_for_render_stability(page, html)
-                    render_state = self._capture_render_state(page)
+                    after_wait_state = self._capture_render_state(page, checkpoint_name="after_wait")
+                    render_state = dict(after_wait_state)
                     screenshot_analysis = self._analyze_screenshot(
                         page.screenshot(type="png", full_page=False)
                     )
+                    pre_pdf_state = self._capture_render_state(page, checkpoint_name="pre_pdf")
+                    render_state["checkpoint_states"] = {
+                        "after_wait": dict(after_wait_state),
+                        "pre_pdf": dict(pre_pdf_state),
+                    }
                     pdf_bytes = page.pdf(
                         format="Letter",
                         print_background=True,
