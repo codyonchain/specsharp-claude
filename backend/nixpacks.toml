@@ -1,5 +1,11 @@
+[variables]
+PLAYWRIGHT_BROWSERS_PATH = "/app/.playwright-browsers"
+
 [phases.setup]
 aptPkgs = [
+  "fontconfig",
+  "fonts-liberation2",
+  "fonts-dejavu-core",
   "libglib2.0-0t64",
   "libnspr4",
   "libnss3",
@@ -20,4 +26,7 @@ aptPkgs = [
 ]
 
 [phases.build]
-cmds = ["python -m playwright install chromium"]
+cmds = [
+  "python -m playwright install chromium",
+  "fc-cache -f"
+]

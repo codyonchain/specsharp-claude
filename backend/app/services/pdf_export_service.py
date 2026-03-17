@@ -2,6 +2,7 @@ from typing import Dict, List, Optional, Any
 import io
 from datetime import datetime
 import logging
+import os
 import sys
 from pathlib import Path
 import threading
@@ -9,6 +10,7 @@ import queue
 import re
 import html as html_module
 import json
+import zlib
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -31,6 +33,17 @@ from app.services.dealshield_export import render_dealshield_html
 from app.v2.presentation.client_text_sanitizer import sanitize_client_text
 
 logger = logging.getLogger(__name__)
+
+PDF_FONT_OBJECT_PATTERN = re.compile(rb"/Type\s*/Font\b")
+PDF_FONT_DESCRIPTOR_PATTERN = re.compile(rb"/FontDescriptor\b")
+PDF_PAGE_FONT_RESOURCE_PATTERN = re.compile(rb"/Font\s*<<")
+PDF_STREAM_PATTERN = re.compile(rb"stream\r?\n(.*?)\r?\nendstream", re.S)
+PDF_TEXT_OPERATOR_PATTERNS = {
+    "BT": re.compile(rb"(?<![A-Za-z])BT(?![A-Za-z])"),
+    "Tf": re.compile(rb"(?<![A-Za-z])Tf(?![A-Za-z])"),
+    "Tj": re.compile(rb"(?<![A-Za-z])Tj(?![A-Za-z])"),
+    "TJ": re.compile(rb"(?<![A-Za-z])TJ(?![A-Za-z])"),
+}
 
 
 class PDFRenderError(RuntimeError):
@@ -272,6 +285,7 @@ class ProfessionalPDFExportService:
         return self._render_html_to_pdf(html)
 
     def _get_sync_playwright(self):
+        self._resolve_playwright_browsers_path()
         try:
             from playwright.sync_api import sync_playwright  # type: ignore
         except ImportError:
@@ -302,6 +316,18 @@ class ProfessionalPDFExportService:
                     f"  {sys.executable} -m pip install playwright && {sys.executable} -m playwright install chromium"
                 ) from exc
         return sync_playwright
+
+    def _resolve_playwright_browsers_path(self) -> str:
+        configured_path = str(os.environ.get("PLAYWRIGHT_BROWSERS_PATH") or "").strip()
+        if configured_path:
+            return configured_path
+
+        bundled_path = Path(__file__).resolve().parents[2] / ".playwright-browsers"
+        if bundled_path.exists():
+            resolved = str(bundled_path)
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = resolved
+            return resolved
+        return ""
 
     def _build_chromium_launch_options(self) -> Dict[str, Any]:
         options: Dict[str, Any] = {"headless": True}
@@ -343,6 +369,13 @@ class ProfessionalPDFExportService:
                 "chromium_sandbox": launch_options.get("chromium_sandbox"),
                 "args": list(launch_options.get("args", [])),
             },
+            "runtime": {
+                "python_executable": sys.executable,
+                "playwright_browsers_path": self._resolve_playwright_browsers_path(),
+                "browser_type": "",
+                "browser_version": "",
+                "browser_executable_path": "",
+            },
             "console_messages": [],
             "page_errors": [],
             "request_failures": [],
@@ -376,6 +409,100 @@ class ProfessionalPDFExportService:
             diagnostics.get("html_length", 0),
             diagnostics.get("html_text_length", 0),
             diagnostics.get("html_text_excerpt", ""),
+        )
+
+    def _capture_browser_runtime_details(self, diagnostics: Dict[str, Any], browser: Any, browser_type: Any) -> None:
+        runtime = diagnostics.setdefault("runtime", {})
+        browser_type_name = self._trim_diagnostic_text(
+            self._coerce_playwright_attr(getattr(browser_type, "name", None)) or "chromium",
+            limit=48,
+        )
+        browser_version = self._trim_diagnostic_text(
+            self._coerce_playwright_attr(getattr(browser, "version", None)),
+            limit=64,
+        )
+        browser_executable_path = self._trim_diagnostic_text(
+            self._coerce_playwright_attr(getattr(browser_type, "executable_path", None)),
+            limit=240,
+        )
+        runtime.update(
+            {
+                "browser_type": browser_type_name,
+                "browser_version": browser_version,
+                "browser_executable_path": browser_executable_path,
+                "playwright_browsers_path": runtime.get("playwright_browsers_path") or self._resolve_playwright_browsers_path(),
+            }
+        )
+        logger.info(
+            "Chromium PDF runtime: template_kind=%s, browser_type=%s, browser_version=%s, executable_path=%s, playwright_browsers_path=%s, python=%s",
+            diagnostics.get("template_kind", self.TEMPLATE_KIND_GENERIC),
+            runtime.get("browser_type") or "unknown",
+            runtime.get("browser_version") or "unknown",
+            runtime.get("browser_executable_path") or "unknown",
+            runtime.get("playwright_browsers_path") or "default-cache",
+            runtime.get("python_executable") or sys.executable,
+        )
+
+    def _summarize_pdf_structure(self, pdf_bytes: bytes) -> Dict[str, Any]:
+        text_operator_counts = {name: 0 for name in PDF_TEXT_OPERATOR_PATTERNS}
+        if not pdf_bytes:
+            return {
+                "font_object_count": 0,
+                "font_descriptor_count": 0,
+                "page_font_resource_count": 0,
+                "decoded_stream_count": 0,
+                "text_operator_counts": text_operator_counts,
+                "has_font_resources": False,
+                "has_text_operators": False,
+            }
+
+        decoded_stream_count = 0
+        for encoded_stream in PDF_STREAM_PATTERN.findall(pdf_bytes):
+            decoded_stream = None
+            for wbits in (zlib.MAX_WBITS, -zlib.MAX_WBITS):
+                try:
+                    decoded_stream = zlib.decompress(encoded_stream, wbits)
+                    break
+                except zlib.error:
+                    continue
+            if decoded_stream is None:
+                continue
+            decoded_stream_count += 1
+            for name, pattern in PDF_TEXT_OPERATOR_PATTERNS.items():
+                text_operator_counts[name] += len(pattern.findall(decoded_stream))
+
+        font_object_count = len(PDF_FONT_OBJECT_PATTERN.findall(pdf_bytes))
+        font_descriptor_count = len(PDF_FONT_DESCRIPTOR_PATTERN.findall(pdf_bytes))
+        page_font_resource_count = len(PDF_PAGE_FONT_RESOURCE_PATTERN.findall(pdf_bytes))
+        has_text_operators = any(count > 0 for count in text_operator_counts.values())
+        has_font_resources = any(
+            count > 0 for count in (font_object_count, font_descriptor_count, page_font_resource_count)
+        )
+        return {
+            "font_object_count": font_object_count,
+            "font_descriptor_count": font_descriptor_count,
+            "page_font_resource_count": page_font_resource_count,
+            "decoded_stream_count": decoded_stream_count,
+            "text_operator_counts": text_operator_counts,
+            "has_font_resources": has_font_resources,
+            "has_text_operators": has_text_operators,
+        }
+
+    def _format_pdf_structure_preview(self, pdf_structure: Dict[str, Any]) -> str:
+        if not isinstance(pdf_structure, dict) or not pdf_structure:
+            return "unavailable"
+        text_operator_counts = pdf_structure.get("text_operator_counts")
+        if not isinstance(text_operator_counts, dict):
+            text_operator_counts = {}
+        return (
+            f"font_objects={int(pdf_structure.get('font_object_count') or 0)}, "
+            f"font_descriptors={int(pdf_structure.get('font_descriptor_count') or 0)}, "
+            f"page_font_resources={int(pdf_structure.get('page_font_resource_count') or 0)}, "
+            f"decoded_streams={int(pdf_structure.get('decoded_stream_count') or 0)}, "
+            f"text_ops=BT:{int(text_operator_counts.get('BT') or 0)},"
+            f"Tf:{int(text_operator_counts.get('Tf') or 0)},"
+            f"Tj:{int(text_operator_counts.get('Tj') or 0)},"
+            f"TJ:{int(text_operator_counts.get('TJ') or 0)}"
         )
 
     def _append_render_diagnostic(self, bucket: List[Dict[str, Any]], entry: Dict[str, Any]) -> None:
@@ -738,6 +865,7 @@ class ProfessionalPDFExportService:
         pdf_bytes: bytes,
         diagnostics: Dict[str, Any],
         screenshot_analysis: Dict[str, Any],
+        pdf_structure: Optional[Dict[str, Any]] = None,
     ) -> str:
         non_white_ratio = screenshot_analysis.get("non_white_ratio")
         non_white_text = (
@@ -745,6 +873,8 @@ class ProfessionalPDFExportService:
             if isinstance(non_white_ratio, (int, float))
             else str(screenshot_analysis.get("error") or "unavailable")
         )
+        if pdf_structure is None:
+            pdf_structure = self._summarize_pdf_structure(pdf_bytes)
         template_kind = self._trim_diagnostic_text(diagnostics.get("template_kind"), limit=24) or self.TEMPLATE_KIND_GENERIC
         excerpt = self._trim_diagnostic_text(render_state.get("body_text_excerpt"))
         text_content_excerpt = self._trim_diagnostic_text(render_state.get("body_text_content_excerpt"))
@@ -765,6 +895,7 @@ class ProfessionalPDFExportService:
             f"{entry.get('method')} {entry.get('url')} ({entry.get('error_text') or entry.get('resource_type')})"
             for entry in diagnostics.get("request_failures", [])[:2]
         ) or "none"
+        runtime = diagnostics.get("runtime") if isinstance(diagnostics.get("runtime"), dict) else {}
         return (
             f"template_kind={template_kind}; "
             "html_input="
@@ -781,12 +912,19 @@ class ProfessionalPDFExportService:
             f"visible_pages={render_state.get('visible_page_count', 0)}, "
             f"scroll_height={render_state.get('scroll_height', 0)}, "
             f"pdf_size={len(pdf_bytes)} bytes, "
+            f"pdf_structure={self._format_pdf_structure_preview(pdf_structure)}; "
             f"first_page_non_white_ratio={non_white_text}, "
             f"dom_text_excerpt={excerpt!r}, "
             f"dom_text_content_excerpt={text_content_excerpt!r}, "
             f"dom_html_excerpt={dom_html_excerpt!r}; "
             f"anchor_probes={anchor_probe_preview}; "
             f"checkpoints=after_wait:{after_wait_preview}; pre_pdf:{pre_pdf_preview}; "
+            "runtime="
+            f"browser_type={self._trim_diagnostic_text(runtime.get('browser_type'), limit=48)!r}, "
+            f"browser_version={self._trim_diagnostic_text(runtime.get('browser_version'), limit=64)!r}, "
+            f"browser_executable_path={self._trim_diagnostic_text(runtime.get('browser_executable_path'), limit=160)!r}, "
+            f"playwright_browsers_path={self._trim_diagnostic_text(runtime.get('playwright_browsers_path'), limit=160)!r}, "
+            f"python_executable={self._trim_diagnostic_text(runtime.get('python_executable'), limit=160)!r}; "
             "diagnostics="
             f"console={console_preview}; "
             f"page_errors={page_error_preview}; "
@@ -814,6 +952,11 @@ class ProfessionalPDFExportService:
         pdf_size = len(pdf_bytes or b"")
         non_white_ratio = screenshot_analysis.get("non_white_ratio")
         anchor_probe_metrics = self._summarize_anchor_probe_metrics(render_state.get("anchor_probes"))
+        pdf_structure = (
+            self._summarize_pdf_structure(pdf_bytes)
+            if template_kind == self.TEMPLATE_KIND_DECISION_PACKET
+            else {}
+        )
 
         if template_kind == self.TEMPLATE_KIND_DECISION_PACKET:
             if body_text_content_length < self.MIN_RENDERED_TEXT_CHARS:
@@ -828,6 +971,10 @@ class ProfessionalPDFExportService:
                 problems.append("missing decision-packet page containers")
             elif visible_page_count == 0:
                 problems.append("page containers rendered with no visible pages")
+            if not pdf_structure.get("has_font_resources"):
+                problems.append("decision-packet PDF missing font resources")
+            if not pdf_structure.get("has_text_operators"):
+                problems.append("decision-packet PDF missing text operators")
         else:
             if body_text_length < self.MIN_RENDERED_TEXT_CHARS:
                 problems.append(f"body text too short ({body_text_length} chars)")
@@ -850,6 +997,7 @@ class ProfessionalPDFExportService:
                 pdf_bytes,
                 diagnostics,
                 screenshot_analysis,
+                pdf_structure,
             )
             logger.error("Chromium PDF render validation failed: %s; %s", "; ".join(problems), failure_context)
             raise PDFRenderError(
@@ -872,7 +1020,9 @@ class ProfessionalPDFExportService:
             self._log_render_input_summary(diagnostics)
             try:
                 with sync_playwright() as p:
-                    browser = p.chromium.launch(**launch_options)
+                    browser_type = p.chromium
+                    browser = browser_type.launch(**launch_options)
+                    self._capture_browser_runtime_details(diagnostics, browser, browser_type)
                     page = browser.new_page(**self._build_pdf_page_options())
                     self._attach_render_diagnostics(page, diagnostics)
                     self._wait_for_render_stability(page, html)
