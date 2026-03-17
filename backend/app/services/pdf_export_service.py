@@ -8,6 +8,7 @@ import threading
 import queue
 import re
 import html as html_module
+import json
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -53,6 +54,14 @@ class ProfessionalPDFExportService:
     MIN_PDF_BYTES = 2048
     RENDER_TIMEOUT_SECONDS = 60
     DIAGNOSTIC_EXCERPT_CHARS = 240
+    PROBE_EXCERPT_CHARS = 80
+    DEALSHIELD_RENDER_PROBES = (
+        {"name": "title", "selector": "header > h1"},
+        {"name": "subtitle", "selector": "header > .subtitle"},
+        {"name": "table_header", "selector": "section.table-wrap thead th:first-child"},
+        {"name": "context_note", "selector": "section.table-wrap > .context-note"},
+        {"name": "provenance_heading", "selector": "body > section:nth-of-type(2) > h2"},
+    )
     
     def __init__(self):
         self._init_styles()
@@ -312,12 +321,12 @@ class ProfessionalPDFExportService:
             "request_failures": [],
         }
 
-    def _trim_diagnostic_text(self, value: Any) -> str:
+    def _trim_diagnostic_text(self, value: Any, limit: Optional[int] = None) -> str:
         text = str(value or "").strip()
         if not text:
             return ""
         text = re.sub(r"\s+", " ", text)
-        return text[:self.DIAGNOSTIC_EXCERPT_CHARS]
+        return text[: limit or self.DIAGNOSTIC_EXCERPT_CHARS]
 
     def _summarize_html_text(self, html: str) -> Dict[str, Any]:
         source = str(html or "")
@@ -418,10 +427,19 @@ class ProfessionalPDFExportService:
             }"""
         )
 
-    def _capture_render_state(self, page: Any) -> Dict[str, Any]:
-        state = page.evaluate(
-            """() => {
-                const isVisible = (element) => {
+    def _build_render_state_script(self) -> str:
+        probe_definitions = json.dumps(list(self.DEALSHIELD_RENDER_PROBES))
+        return f"""() => {{
+                const excerptLimit = {self.DIAGNOSTIC_EXCERPT_CHARS};
+                const probeDefinitions = {probe_definitions};
+                const normalizeText = (value) => {{
+                    const text = (typeof value === 'string' ? value : '').replace(/\\s+/g, ' ').trim();
+                    return {{
+                        length: text.length,
+                        excerpt: text.slice(0, excerptLimit),
+                    }};
+                }};
+                const isVisible = (element) => {{
                     if (!element) return false;
                     const style = window.getComputedStyle(element);
                     const rect = element.getBoundingClientRect();
@@ -432,12 +450,60 @@ class ProfessionalPDFExportService:
                         rect.width > 0 &&
                         rect.height > 0
                     );
-                };
+                }};
+                const captureProbe = (probe) => {{
+                    try {{
+                        const element = document.querySelector(probe.selector);
+                        if (!element) {{
+                            return {{
+                                name: probe.name,
+                                selector: probe.selector,
+                                found: false,
+                            }};
+                        }}
+                        const style = window.getComputedStyle(element);
+                        const rect = element.getBoundingClientRect();
+                        const textContent = normalizeText(element.textContent || '');
+                        const innerText = normalizeText(
+                            typeof element.innerText === 'string' ? element.innerText : ''
+                        );
+                        return {{
+                            name: probe.name,
+                            selector: probe.selector,
+                            found: true,
+                            tag_name: String(element.tagName || '').toLowerCase(),
+                            text_content_length: textContent.length,
+                            text_content_excerpt: textContent.excerpt,
+                            inner_text_length: innerText.length,
+                            inner_text_excerpt: innerText.excerpt,
+                            display: style.display || '',
+                            visibility: style.visibility || '',
+                            opacity: style.opacity || '',
+                            color: style.color || '',
+                            font_size: style.fontSize || '',
+                            rect_width: Math.round(Number(rect.width || 0) * 100) / 100,
+                            rect_height: Math.round(Number(rect.height || 0) * 100) / 100,
+                            client_rect_count: typeof element.getClientRects === 'function'
+                                ? element.getClientRects().length
+                                : 0,
+                        }};
+                    }} catch (error) {{
+                        return {{
+                            name: probe.name,
+                            selector: probe.selector,
+                            found: false,
+                            error: normalizeText(String(error || 'unknown probe error')).excerpt,
+                        }};
+                    }}
+                }};
 
                 const body = document.body;
-                const bodyText = body && typeof body.innerText === 'string'
-                    ? body.innerText.replace(/\\s+/g, ' ').trim()
-                    : '';
+                const bodyText = normalizeText(
+                    body && typeof body.innerText === 'string' ? body.innerText : ''
+                );
+                const bodyTextContent = normalizeText(
+                    body && typeof body.textContent === 'string' ? body.textContent : ''
+                );
                 const bodyHtml = body && typeof body.innerHTML === 'string'
                     ? body.innerHTML.replace(/\\s+/g, ' ').trim()
                     : '';
@@ -447,12 +513,14 @@ class ProfessionalPDFExportService:
                     .filter((element) => isVisible(element) && ((element.innerText || '').trim().length > 0))
                     .length;
 
-                return {
+                return {{
                     title: document.title || '',
                     body_text_length: bodyText.length,
-                    body_text_excerpt: bodyText.slice(0, 240),
+                    body_text_excerpt: bodyText.excerpt,
+                    body_text_content_length: bodyTextContent.length,
+                    body_text_content_excerpt: bodyTextContent.excerpt,
                     body_html_length: bodyHtml.length,
-                    body_html_excerpt: bodyHtml.slice(0, 240),
+                    body_html_excerpt: bodyHtml.slice(0, excerptLimit),
                     body_child_count: body ? body.children.length : 0,
                     h1_count: document.querySelectorAll('h1').length,
                     section_count: sections.length,
@@ -469,9 +537,55 @@ class ProfessionalPDFExportService:
                         document.documentElement ? document.documentElement.scrollWidth : 0,
                         body ? body.scrollWidth : 0
                     ),
-                };
-            }"""
-        )
+                    anchor_probes: probeDefinitions.map(captureProbe),
+                }};
+            }}"""
+
+    def _format_anchor_probe_preview(self, probes: Any) -> str:
+        if not isinstance(probes, list) or not probes:
+            return "none"
+
+        preview_parts: List[str] = []
+        for probe in probes[: len(self.DEALSHIELD_RENDER_PROBES)]:
+            if not isinstance(probe, dict):
+                continue
+            name = self._trim_diagnostic_text(probe.get("name") or probe.get("selector") or "probe", limit=32)
+            selector = self._trim_diagnostic_text(probe.get("selector"), limit=60)
+            if not probe.get("found"):
+                error = self._trim_diagnostic_text(probe.get("error"), limit=self.PROBE_EXCERPT_CHARS)
+                if error:
+                    preview_parts.append(f"{name}[selector={selector!r}, error={error!r}]")
+                else:
+                    preview_parts.append(f"{name}[selector={selector!r}, missing]")
+                continue
+
+            tag_name = self._trim_diagnostic_text(probe.get("tag_name"), limit=16) or "unknown"
+            text_content_excerpt = self._trim_diagnostic_text(
+                probe.get("text_content_excerpt"),
+                limit=self.PROBE_EXCERPT_CHARS,
+            )
+            inner_text_excerpt = self._trim_diagnostic_text(
+                probe.get("inner_text_excerpt"),
+                limit=self.PROBE_EXCERPT_CHARS,
+            )
+            preview_parts.append(
+                f"{name}[selector={selector!r}, "
+                f"tag={tag_name}, "
+                f"tc={int(probe.get('text_content_length') or 0)}:{text_content_excerpt!r}, "
+                f"it={int(probe.get('inner_text_length') or 0)}:{inner_text_excerpt!r}, "
+                f"display={self._trim_diagnostic_text(probe.get('display'), limit=24)!r}, "
+                f"visibility={self._trim_diagnostic_text(probe.get('visibility'), limit=24)!r}, "
+                f"opacity={self._trim_diagnostic_text(probe.get('opacity'), limit=24)!r}, "
+                f"color={self._trim_diagnostic_text(probe.get('color'), limit=32)!r}, "
+                f"font={self._trim_diagnostic_text(probe.get('font_size'), limit=16)!r}, "
+                f"box={probe.get('rect_width', 0)}x{probe.get('rect_height', 0)}, "
+                f"client_rects={int(probe.get('client_rect_count') or 0)}]"
+            )
+
+        return " | ".join(preview_parts) if preview_parts else "none"
+
+    def _capture_render_state(self, page: Any) -> Dict[str, Any]:
+        state = page.evaluate(self._build_render_state_script())
         return state if isinstance(state, dict) else {}
 
     def _analyze_screenshot(self, screenshot_bytes: bytes) -> Dict[str, Any]:
@@ -519,7 +633,9 @@ class ProfessionalPDFExportService:
             else str(screenshot_analysis.get("error") or "unavailable")
         )
         excerpt = self._trim_diagnostic_text(render_state.get("body_text_excerpt"))
+        text_content_excerpt = self._trim_diagnostic_text(render_state.get("body_text_content_excerpt"))
         dom_html_excerpt = self._trim_diagnostic_text(render_state.get("body_html_excerpt"))
+        anchor_probe_preview = self._format_anchor_probe_preview(render_state.get("anchor_probes"))
         console_preview = "; ".join(
             f"{entry.get('type')}: {entry.get('text')}"
             for entry in diagnostics.get("console_messages", [])[:2]
@@ -538,6 +654,7 @@ class ProfessionalPDFExportService:
             f"excerpt={self._trim_diagnostic_text(diagnostics.get('html_text_excerpt'))!r}; "
             "render_state="
             f"text_length={render_state.get('body_text_length', 0)}, "
+            f"text_content_length={render_state.get('body_text_content_length', 0)}, "
             f"dom_html_length={render_state.get('body_html_length', 0)}, "
             f"visible_text_blocks={render_state.get('visible_text_block_count', 0)}, "
             f"sections={render_state.get('section_count', 0)}, "
@@ -548,7 +665,9 @@ class ProfessionalPDFExportService:
             f"pdf_size={len(pdf_bytes)} bytes, "
             f"first_page_non_white_ratio={non_white_text}, "
             f"dom_text_excerpt={excerpt!r}, "
+            f"dom_text_content_excerpt={text_content_excerpt!r}, "
             f"dom_html_excerpt={dom_html_excerpt!r}; "
+            f"anchor_probes={anchor_probe_preview}; "
             "diagnostics="
             f"console={console_preview}; "
             f"page_errors={page_error_preview}; "
