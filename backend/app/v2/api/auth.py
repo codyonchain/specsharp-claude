@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import AuthContext, get_auth_context
 from app.core.rate_limiter import limiter
-from app.core.run_limits import get_run_limit_snapshot
+from app.core.run_limits import get_effective_run_limit_snapshot
 from app.db.database import get_db
 
 
@@ -17,7 +17,7 @@ async def get_auth_me(
     auth: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ):
-    run_limits = get_run_limit_snapshot(db, org_id=auth.org_id, email=auth.email)
+    run_limits = get_effective_run_limit_snapshot(db, org_id=auth.org_id, email=auth.email)
     return {
         "success": True,
         "data": {

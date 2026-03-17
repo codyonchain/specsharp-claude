@@ -1152,13 +1152,8 @@ async def generate_scope(
     auth: AuthContext = Depends(get_auth_context),
 ):
     """Generate scope and save to database using V2 engine"""
-    if os.getenv("SKIP_AUTH", "").lower() == "true":
-        dev_mode = True
-    else:
-        dev_mode = False
     try:
-        if not dev_mode:
-            assert_run_available(db, org_id=auth.org_id, email=auth.email)
+        assert_run_available(db, org_id=auth.org_id, email=auth.email)
 
         # Parse the description using NLP
         parsed = nlp_service.extract_project_details(payload.description)
@@ -1376,11 +1371,7 @@ async def generate_scope(
                 owner_user_id=auth.user_id,
             )
         )
-        if not dev_mode:
-            run_limit_snapshot = consume_run(db, org_id=auth.org_id, email=auth.email)
-        else:
-            from app.core.run_limits import run_limit_snapshot_for
-            run_limit_snapshot = run_limit_snapshot_for(auth.email, None)
+        run_limit_snapshot = consume_run(db, org_id=auth.org_id, email=auth.email)
         db.commit()
         db.refresh(project)
         

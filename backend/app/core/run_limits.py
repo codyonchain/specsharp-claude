@@ -37,6 +37,25 @@ def is_unlimited_user(email: str | None) -> bool:
     return normalized in _parse_unlimited_access_emails(settings.unlimited_access_emails)
 
 
+def is_run_limit_enforcement_bypassed() -> bool:
+    return os.getenv("SKIP_AUTH", "").lower() == "true"
+
+
+def bypass_run_limit_snapshot() -> RunLimitSnapshot:
+    # When backend packet generation enforcement is explicitly bypassed in local/dev
+    # mode, proactive callers need a non-blocking effective state rather than the
+    # stored org quota row or they will render a fake exhausted state. This is not
+    # true unlimited entitlement, so `is_unlimited` remains false.
+    return RunLimitSnapshot(
+        is_unlimited=False,
+        included_runs=0,
+        bonus_runs=0,
+        used_runs=0,
+        remaining_runs=None,
+        total_runs=None,
+    )
+
+
 def _safe_non_negative(value: Any, fallback: int = 0) -> int:
     if isinstance(value, bool):
         return fallback
@@ -109,9 +128,15 @@ def get_run_limit_snapshot(db: Session, *, org_id: str, email: str) -> RunLimitS
     return run_limit_snapshot_for(email, quota)
 
 
+def get_effective_run_limit_snapshot(db: Session, *, org_id: str, email: str) -> RunLimitSnapshot:
+    if is_run_limit_enforcement_bypassed():
+        return bypass_run_limit_snapshot()
+    return get_run_limit_snapshot(db, org_id=org_id, email=email)
+
+
 def assert_run_available(db: Session, *, org_id: str, email: str) -> RunLimitSnapshot:
-    if os.getenv("SKIP_AUTH", "").lower() == "true":
-        return run_limit_snapshot_for(email, None)
+    if is_run_limit_enforcement_bypassed():
+        return bypass_run_limit_snapshot()
     if is_unlimited_user(email):
         return run_limit_snapshot_for(email, None)
 
@@ -130,6 +155,8 @@ def assert_run_available(db: Session, *, org_id: str, email: str) -> RunLimitSna
 
 
 def consume_run(db: Session, *, org_id: str, email: str) -> RunLimitSnapshot:
+    if is_run_limit_enforcement_bypassed():
+        return bypass_run_limit_snapshot()
     if is_unlimited_user(email):
         return run_limit_snapshot_for(email, None)
 
