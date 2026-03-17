@@ -85,16 +85,6 @@ jobs:
           cd backend
           pip install -r requirements.txt
 
-      - name: Preflight launch E2E secrets
-        env:
-          E2E_USER_TOKEN: ${{ secrets.E2E_USER_TOKEN }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: |
-          test -n "$E2E_USER_TOKEN"
-          test -n "$SUPABASE_URL"
-          test -n "$SUPABASE_SERVICE_ROLE_KEY"
-
       - name: Prepare backend env for launch E2E
         run: |
           cat > backend/.env <<'EOF'
@@ -107,8 +97,6 @@ jobs:
           ENVIRONMENT=development
           FRONTEND_URL=http://localhost:3000
           ALLOW_AUTO_ORG_PROVISIONING=true
-          SUPABASE_URL=${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           EOF
 
       - name: Install Playwright browser
@@ -118,7 +106,7 @@ jobs:
         run: |
           mkdir -p tests/reports
           cd backend
-          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 > ../tests/reports/backend-launch-e2e.log 2>&1 &
+          TESTING=true nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 > ../tests/reports/backend-launch-e2e.log 2>&1 &
 
       - name: Start frontend
         run: |
@@ -142,7 +130,6 @@ jobs:
         env:
           TEST_BASE_URL: http://localhost:3000
           E2E_API_BASE_URL: http://127.0.0.1:8001
-          E2E_USER_TOKEN: ${{ secrets.E2E_USER_TOKEN }}
         run: npm run test:e2e
 
       - name: Upload browser launch artifacts

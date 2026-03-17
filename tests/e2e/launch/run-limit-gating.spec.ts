@@ -1,14 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { E2E_USER_TOKEN, hasPrimaryToken } from "../support/env";
 import { createDraftPacket, confirmDecisionInputs } from "../support/new-project";
 import { seedAuthenticatedSession } from "../support/session";
 
 test.describe("Launch run-limit gating", () => {
   test("shows the run-limit blocker when save returns run_limit_reached", async ({ page }) => {
-    test.skip(!hasPrimaryToken, "Set E2E_USER_TOKEN to run authenticated launch tests");
     test.setTimeout(90_000);
 
-    await seedAuthenticatedSession(page, E2E_USER_TOKEN);
+    await seedAuthenticatedSession(page);
     await createDraftPacket(page, {
       description: "Launch run limit 80,000 sf neighborhood retail center in Nashville, TN",
       squareFootage: 80000,

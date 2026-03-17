@@ -1,4 +1,5 @@
 import { Page } from "@playwright/test";
+import { E2E_API_BASE_URL } from "./env";
 
 const ACCESS_TOKEN_KEY = "specsharp_access_token";
 const EXPIRES_AT_KEY = "specsharp_token_expires_at";
@@ -10,6 +11,19 @@ type SeededSession = {
   user: {
     id: string;
     email: string;
+  };
+};
+
+type TestingSessionResponse = {
+  success?: boolean;
+  data?: {
+    access_token?: string;
+    expires_at?: number;
+    expires_in?: number;
+    user?: {
+      id?: string;
+      email?: string;
+    };
   };
 };
 
@@ -44,8 +58,41 @@ export const buildSessionFromJwt = (accessToken: string): SeededSession => {
   };
 };
 
-export const seedAuthenticatedSession = async (page: Page, accessToken: string): Promise<void> => {
-  const session = buildSessionFromJwt(accessToken);
+const fetchTestingSession = async (): Promise<SeededSession> => {
+  const response = await fetch(`${E2E_API_BASE_URL}/api/v2/auth/testing/session`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    throw new Error(`E2E test session bootstrap failed (${response.status})`);
+  }
+
+  const payload = (await response.json()) as TestingSessionResponse;
+  const data = payload?.data;
+  if (!data?.access_token || !data?.user?.id || !data?.user?.email) {
+    throw new Error("E2E test session bootstrap returned an invalid payload");
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const expiresAt =
+    typeof data.expires_at === "number"
+      ? data.expires_at
+      : now + (typeof data.expires_in === "number" ? data.expires_in : 3600);
+
+  return {
+    accessToken: data.access_token,
+    expiresAt,
+    user: {
+      id: data.user.id,
+      email: data.user.email,
+    },
+  };
+};
+
+export const seedAuthenticatedSession = async (page: Page, accessToken?: string): Promise<void> => {
+  const session =
+    accessToken && accessToken.trim().length > 0
+      ? buildSessionFromJwt(accessToken)
+      : await fetchTestingSession();
 
   await page.addInitScript((seed: SeededSession) => {
     sessionStorage.setItem("specsharp_access_token", seed.accessToken);

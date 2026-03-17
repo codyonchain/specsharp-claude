@@ -19,6 +19,11 @@ from app.db.models import Organization, OrganizationMember
 
 bearer_scheme = HTTPBearer(auto_error=False)
 PENDING_USER_PREFIX = "pending:"
+TESTING_AUTH_ACCESS_TOKEN = "dev-bypass"
+TESTING_AUTH_USER_ID = "1"
+TESTING_AUTH_EMAIL = "local-dev@specsharp.dev"
+TESTING_AUTH_ORG_ID = "1"
+TESTING_AUTH_ROLE = "owner"
 
 
 @dataclass
@@ -32,6 +37,24 @@ class AuthContext:
     def __post_init__(self):
         self.user_id = str(self.user_id)
         self.org_id = str(self.org_id)
+
+
+def is_testing_auth_enabled() -> bool:
+    return os.getenv("TESTING", "false").lower() == "true"
+
+
+def is_auth_bypass_enabled() -> bool:
+    return is_testing_auth_enabled() or os.getenv("SKIP_AUTH", "false").lower() == "true"
+
+
+def build_testing_auth_context() -> AuthContext:
+    return AuthContext(
+        user_id=TESTING_AUTH_USER_ID,
+        email=TESTING_AUTH_EMAIL,
+        org_id=TESTING_AUTH_ORG_ID,
+        role=TESTING_AUTH_ROLE,
+        access_token=TESTING_AUTH_ACCESS_TOKEN,
+    )
 
 
 async def _fetch_supabase_user(access_token: str) -> Dict[str, Any]:
@@ -184,14 +207,8 @@ async def get_auth_context(
     db: Session = Depends(get_db),
 ) -> AuthContext:
     # DEV/TEST bypass: allow local usage without bearer token
-    if os.getenv("TESTING", "false").lower() == "true" or os.getenv("SKIP_AUTH", "false").lower() == "true":
-        return AuthContext(
-            user_id="1",
-            email="local-dev@specsharp.dev",
-            org_id="1",
-            role="owner",
-            access_token="dev-bypass",
-        )
+    if is_auth_bypass_enabled():
+        return build_testing_auth_context()
 
     if not credentials or not credentials.credentials:
         raise HTTPException(

@@ -1,5 +1,4 @@
 import { expect, test } from "@playwright/test";
-import { E2E_USER_TOKEN, hasPrimaryToken } from "../support/env";
 import { createDraftPacket, confirmDecisionInputs } from "../support/new-project";
 import { seedAuthenticatedSession } from "../support/session";
 
@@ -7,13 +6,12 @@ const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\
 
 test.describe("Launch project flow", () => {
   test("creates a project from /new, reopens it from the dashboard, and exports launch packets", async ({ page }) => {
-    test.skip(!hasPrimaryToken, "Set E2E_USER_TOKEN to run authenticated launch tests");
     test.setTimeout(120_000);
 
     const projectMarker = `LaunchFlow ${Date.now()}`;
     const description = `${projectMarker} 120,000 sf medical office building with imaging suite and structured parking in Nashville, TN`;
 
-    await seedAuthenticatedSession(page, E2E_USER_TOKEN);
+    await seedAuthenticatedSession(page);
     await createDraftPacket(page, {
       description,
       squareFootage: 120000,
