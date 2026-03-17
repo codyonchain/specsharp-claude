@@ -153,12 +153,13 @@ class V2APIClient {
           typeof detail === 'object' && detail !== null
             ? (detail.code || detail.error)
             : undefined;
-        const error: APIError = {
-          message: data.message || detailMessage || response.statusText,
-          status: response.status,
-          code: data.code || detailCode,
-          details: data
-        };
+        const error = new Error(
+          data.message || detailMessage || response.statusText
+        ) as Error & APIError;
+        error.name = 'APIError';
+        error.status = response.status;
+        error.code = data.code || detailCode;
+        error.details = data;
         throw error;
       }
 
