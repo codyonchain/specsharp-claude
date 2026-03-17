@@ -83,7 +83,7 @@ def test_resolve_membership_claims_email_preprovisioned_record_case_insensitive(
     db.add(
         OrganizationMember(
             org_id=org.id,
-            user_id="pending_user",
+            user_id="pending:casey.user@example.com",
             email="Casey.User@Example.com",
             role="owner",
             is_default=True,
@@ -99,6 +99,143 @@ def test_resolve_membership_claims_email_preprovisioned_record_case_insensitive(
     )
     assert claimed.org_id == "org_claim"
     assert claimed.user_id == "supabase_uid_1"
+
+
+def test_resolve_membership_claims_all_same_email_pending_memberships_and_returns_default():
+    db = _session()
+    db.add_all(
+        [
+            Organization(id="org_alpha", name="Alpha Org"),
+            Organization(id="org_beta", name="Beta Org"),
+        ]
+    )
+    db.flush()
+    db.add_all(
+        [
+            OrganizationMember(
+                org_id="org_alpha",
+                user_id="pending:multi.user@example.com",
+                email="multi.user@example.com",
+                role="member",
+                is_default=False,
+            ),
+            OrganizationMember(
+                org_id="org_beta",
+                user_id="pending:multi.user@example.com",
+                email="Multi.User@Example.com",
+                role="owner",
+                is_default=True,
+            ),
+        ]
+    )
+    db.commit()
+
+    claimed = _resolve_membership(
+        db,
+        user_id="supabase_uid_multi",
+        email="multi.user@example.com",
+        requested_org_id=None,
+    )
+
+    memberships = (
+        db.query(OrganizationMember)
+        .filter(OrganizationMember.user_id == "supabase_uid_multi")
+        .order_by(OrganizationMember.id.asc())
+        .all()
+    )
+    assert claimed.org_id == "org_beta"
+    assert [membership.org_id for membership in memberships] == ["org_alpha", "org_beta"]
+    assert all(membership.user_id == "supabase_uid_multi" for membership in memberships)
+    assert next(membership for membership in memberships if membership.org_id == "org_beta").is_default is True
+
+
+def test_requested_org_can_select_any_claimed_pending_membership_on_first_auth():
+    db = _session()
+    db.add_all(
+        [
+            Organization(id="org_alpha", name="Alpha Org"),
+            Organization(id="org_beta", name="Beta Org"),
+        ]
+    )
+    db.flush()
+    db.add_all(
+        [
+            OrganizationMember(
+                org_id="org_alpha",
+                user_id="pending:requested.user@example.com",
+                email="requested.user@example.com",
+                role="member",
+                is_default=False,
+            ),
+            OrganizationMember(
+                org_id="org_beta",
+                user_id="pending:requested.user@example.com",
+                email="requested.user@example.com",
+                role="owner",
+                is_default=True,
+            ),
+        ]
+    )
+    db.commit()
+
+    claimed = _resolve_membership(
+        db,
+        user_id="supabase_uid_requested",
+        email="requested.user@example.com",
+        requested_org_id="org_alpha",
+    )
+
+    memberships = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == "supabase_uid_requested"
+    ).all()
+    assert claimed.org_id == "org_alpha"
+    assert len(memberships) == 2
+
+
+def test_resolve_membership_does_not_claim_same_email_rows_owned_by_other_users():
+    db = _session()
+    db.add_all(
+        [
+            Organization(id="org_pending", name="Pending Org"),
+            Organization(id="org_other", name="Other Org"),
+        ]
+    )
+    db.flush()
+    db.add_all(
+        [
+            OrganizationMember(
+                org_id="org_pending",
+                user_id="pending:secure.user@example.com",
+                email="secure.user@example.com",
+                role="member",
+                is_default=True,
+            ),
+            OrganizationMember(
+                org_id="org_other",
+                user_id="existing_user",
+                email="secure.user@example.com",
+                role="owner",
+                is_default=False,
+            ),
+        ]
+    )
+    db.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        _resolve_membership(
+            db,
+            user_id="supabase_uid_secure",
+            email="secure.user@example.com",
+            requested_org_id="org_other",
+        )
+
+    pending_membership = db.query(OrganizationMember).filter(OrganizationMember.org_id == "org_pending").first()
+    other_membership = db.query(OrganizationMember).filter(OrganizationMember.org_id == "org_other").first()
+    assert exc.value.status_code == 403
+    assert pending_membership is not None
+    assert other_membership is not None
+    assert pending_membership.user_id == "supabase_uid_secure"
+    assert other_membership.user_id == "existing_user"
 
 
 def test_resolve_membership_blocks_unprovisioned_when_auto_provision_disabled(monkeypatch):
@@ -144,6 +281,7 @@ def test_scope_query_enforces_org_access_and_dev_backfill(monkeypatch):
     db.add(p3)
     db.commit()
     monkeypatch.setattr(settings, "environment", "development")
+    monkeypatch.setattr(settings, "database_url", "sqlite:///:memory:")
     _assign_unscoped_projects_for_dev(db, auth)
 
     mapped = db.query(ProjectAccess).filter(ProjectAccess.project_id == "proj_scope_3").first()

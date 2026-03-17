@@ -18,6 +18,7 @@ from app.db.models import Organization, OrganizationMember
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
+PENDING_USER_PREFIX = "pending:"
 
 
 @dataclass
@@ -107,29 +108,49 @@ def _upsert_default_membership(db: Session, user_id: str, email: str) -> Organiz
     return member
 
 
-def _resolve_membership(
-    db: Session, *, user_id: str, email: str, requested_org_id: Optional[str]
-) -> OrganizationMember:
-    memberships = (
+def _get_memberships_for_user(db: Session, user_id: str) -> list[OrganizationMember]:
+    return (
         db.query(OrganizationMember)
         .filter(OrganizationMember.user_id == user_id)
         .order_by(OrganizationMember.is_default.desc(), OrganizationMember.id.asc())
         .all()
     )
 
-    # If provisioned by email before first login, claim that membership for this user_id.
-    if not memberships and email:
-        email_membership = (
-            db.query(OrganizationMember)
-            .filter(func.lower(OrganizationMember.email) == email.lower())
-            .order_by(OrganizationMember.is_default.desc(), OrganizationMember.id.asc())
-            .first()
-        )
-        if email_membership:
-            email_membership.user_id = user_id
-            db.commit()
-            db.refresh(email_membership)
-            memberships = [email_membership]
+
+def _claim_pending_memberships_for_email(db: Session, *, user_id: str, email: str) -> bool:
+    normalized_email = str(email or "").strip().lower()
+    if not normalized_email:
+        return False
+
+    email_memberships = (
+        db.query(OrganizationMember)
+        .filter(func.lower(OrganizationMember.email) == normalized_email)
+        .filter(OrganizationMember.user_id != user_id)
+        .order_by(OrganizationMember.is_default.desc(), OrganizationMember.id.asc())
+        .all()
+    )
+    claimable_memberships = [
+        membership
+        for membership in email_memberships
+        if str(membership.user_id or "").startswith(PENDING_USER_PREFIX)
+    ]
+    if not claimable_memberships:
+        return False
+
+    for membership in claimable_memberships:
+        membership.user_id = user_id
+    db.commit()
+    return True
+
+
+def _resolve_membership(
+    db: Session, *, user_id: str, email: str, requested_org_id: Optional[str]
+) -> OrganizationMember:
+    memberships = _get_memberships_for_user(db, user_id)
+
+    # Claim all explicit pending memberships provisioned for this email before resolving org access.
+    if email and _claim_pending_memberships_for_email(db, user_id=user_id, email=email):
+        memberships = _get_memberships_for_user(db, user_id)
 
     if requested_org_id:
         membership = next((m for m in memberships if m.org_id == requested_org_id), None)
