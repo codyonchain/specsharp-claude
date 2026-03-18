@@ -544,7 +544,6 @@ const getPhaseTooltip = (
 export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) => {
   const [expandedTrade, setExpandedTrade] = useState<string | null>(null);
   const [showProvenanceModal, setShowProvenanceModal] = useState(false);
-  const [showTraceModal, setShowTraceModal] = useState(false);
   const [activeTradeFilter, setActiveTradeFilter] = useState<'all' | 'structural' | 'mechanical' | 'electrical' | 'plumbing' | 'finishes'>('all');
   const [isScenarioOpen, setIsScenarioOpen] = useState(false);
   
@@ -558,16 +557,6 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
   const displayData = BackendDataMapper.mapToDisplay(analysis);
   const isDev = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
   const constructionSchedule = calculations?.construction_schedule;
-
-  const calculationTraceRaw = Array.isArray(calculations.calculation_trace)
-    ? (calculations.calculation_trace as any[])
-    : [];
-
-  const calculationTrace = calculationTraceRaw.map((entry: any, index: number) => {
-    const step = typeof entry?.step === 'string' ? entry.step : `step_${index + 1}`;
-    const payload = entry?.payload ?? entry?.data ?? entry ?? {};
-    return { step, payload };
-  });
 
   const constructionRiskDrivers = Array.isArray(calculations.construction_risk_drivers)
     ? calculations.construction_risk_drivers
@@ -1154,19 +1143,6 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
       setExpandedTrade(null);
     }
   }, [activeTradeFilter, expandedTrade]);
-
-  useEffect(() => {
-    if (!showTraceModal) {
-      return;
-    }
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setShowTraceModal(false);
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [showTraceModal]);
 
   type BackendPhase = {
     id?: string;
@@ -1952,15 +1928,6 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
             <h3 className="text-2xl font-bold text-gray-900 mb-2">Cost Build-Up Analysis</h3>
             <p className="text-gray-600">Understanding how your price is calculated step by step</p>
           </div>
-          {calculationTrace.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowTraceModal(true)}
-              className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 underline underline-offset-2"
-            >
-              View Calculation Trace
-            </button>
-          )}
         </div>
         
         {/* Main calculation flow */}
@@ -2384,62 +2351,6 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
         dealShieldData={dealShieldData}
         displayData={displayData}
       />
-
-      {showTraceModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
-          <div className="max-h-[80vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-xl border border-gray-200">
-            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-              <div>
-                <h2 className="text-sm font-semibold text-gray-900">
-                  Calculation Trace
-                </h2>
-                <p className="text-[11px] text-gray-500">
-                  Raw steps recorded by the SpecSharp engine while pricing this project.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowTraceModal(false)}
-                className="text-xs font-medium text-gray-500 hover:text-gray-700"
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="max-h-[70vh] overflow-y-auto px-4 py-3 bg-gray-50">
-              {calculationTrace.length === 0 ? (
-                <p className="text-[11px] text-gray-500">
-                  No calculation trace is available for this project.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {calculationTrace.map((entry, idx) => (
-                    <div
-                      key={`${entry.step}-${idx}`}
-                      className="rounded-lg border border-gray-200 bg-white px-3 py-2"
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[11px] font-semibold text-gray-900">
-                          {idx + 1}. {entry.step}
-                        </span>
-                      </div>
-                      <pre className="max-h-40 overflow-auto rounded bg-gray-900/95 px-2 py-1 text-[10px] leading-snug text-gray-100">
-                        {JSON.stringify(entry.payload, null, 2)}
-                      </pre>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="border-t border-gray-100 px-4 py-2">
-              <p className="text-[10px] text-gray-500">
-                This trace is intended for internal review and debugging. Values shown are intermediate engine states and may not be fully normalized for presentation.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
       </div>
       <ScenarioModal
         open={isScenarioOpen}

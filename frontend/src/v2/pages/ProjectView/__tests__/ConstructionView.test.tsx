@@ -3687,4 +3687,23 @@ describe("ConstructionView", () => {
     expect(screen.getByText("Branch Circuit Monitoring + BMS Points")).toBeInTheDocument();
     expect(screen.getAllByRole("row").length).toBeGreaterThanOrEqual(6);
   });
+
+  it("does not render the internal calculation trace control on the launch view", () => {
+    const project = buildRestaurantProject("subtype");
+    project.analysis.calculations.calculation_trace = [
+      {
+        step: "internal_engine_step",
+        payload: { total_project_cost: 3700000 },
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+
+    expect(
+      screen.queryByRole("button", { name: /View Calculation Trace/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/This trace is intended for internal review and debugging/i)
+    ).not.toBeInTheDocument();
+  });
 });

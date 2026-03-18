@@ -38,7 +38,7 @@ class TraceSystem {
     }
     
     // Save to window for debugging
-    if (typeof window !== 'undefined') {
+    if (DEBUG_TRACE && typeof window !== 'undefined') {
       (window as any).__traces = this.traces;
     }
   }
@@ -92,6 +92,9 @@ class TraceSystem {
     this.traces = [];
     if (DEBUG_TRACE) {
       console.log('✅ Traces cleared');
+      if (typeof window !== 'undefined') {
+        (window as any).__traces = this.traces;
+      }
     }
   }
 }
@@ -99,6 +102,6 @@ class TraceSystem {
 export const tracer = new TraceSystem();
 
 // Add to window for console access
-if (typeof window !== 'undefined') {
+if (DEBUG_TRACE && typeof window !== 'undefined') {
   (window as any).tracer = tracer;
 }

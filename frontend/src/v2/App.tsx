@@ -6,7 +6,6 @@ import { LoadingSpinner } from './components/common/LoadingSpinner';
 import { Dashboard } from './pages/Dashboard/Dashboard';
 import { NewProject } from './pages/NewProject/NewProject';
 import { ProjectView } from './pages/ProjectView/ProjectView';
-import { Diagnostics } from './pages/Diagnostics';
 import { AuthCallback } from './pages/AuthCallback';
 // Removed ScenarioComparison - using ScenarioBuilder modal instead
 
@@ -24,9 +23,6 @@ import { SubprocessorList } from '../pages/SubprocessorList';
 // Import Login component from V1
 import Login from '../components/Login';
 import { isAuthenticatedSession } from './auth/session';
-
-// Import diagnostics (auto-loads into window.diagnose)
-import './utils/diagnostics';
 
 export const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -92,18 +88,7 @@ export const App: React.FC = () => {
               <Navigate to="/login" replace />
             } 
           />
-          
           {/* Removed Scenario Comparison route - using ScenarioBuilder modal instead */}
-          
-          {/* Diagnostics route - for debugging */}
-          <Route 
-            path="/diagnostics" 
-            element={
-              isAuthenticated ? 
-              <Diagnostics /> : 
-              <Navigate to="/login" replace />
-            } 
-          />
           
           {/* Signup route - same as login for now */}
           <Route 

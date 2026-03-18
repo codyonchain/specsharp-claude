@@ -113,6 +113,7 @@ const persistSession = (session: {
   expires_in?: number;
   user?: SessionUser;
 }) => {
+  clearV2FallbackCaches();
   const payload = parseJwtPayload(session.access_token);
   const exp = typeof payload?.exp === 'number'
     ? payload.exp

@@ -737,26 +737,7 @@ class V2APIClient {
       return v2Projects;
     } catch (error) {
       console.error('❌ Failed to fetch projects from backend:', error);
-      
-      // Fallback to localStorage if API fails
-      console.log('⚠️ Falling back to localStorage...');
-      const v1Projects = this.getStoredProjects();
-      console.log(`📦 Found ${v1Projects.length} projects in localStorage`);
-      
-      // Note: getStoredProjects now applies the adapter internally
-      console.log('=== DASHBOARD PROJECT LIST DEBUG (localStorage) ===');
-      v1Projects.forEach((project, index) => {
-        console.log(`Project ${index + 1} (${project.id}):`);
-        console.log('  - Has analysis:', !!project.analysis);
-        console.log('  - Has calculations:', !!project.analysis?.calculations);
-        console.log('  - Has totals:', !!project.analysis?.calculations?.totals);
-        console.log('  - Hard costs:', project.analysis?.calculations?.totals?.hard_costs);
-        console.log('  - Total cost:', project.analysis?.calculations?.totals?.total_project_cost);
-        console.log('  - Has ownership_analysis:', !!project.analysis?.calculations?.ownership_analysis);
-      });
-      console.log('=== END DASHBOARD DEBUG ===');
-      
-      return v1Projects;
+      throw error;
     }
   }
 
@@ -810,62 +791,7 @@ class V2APIClient {
       return mappedProject;
     } catch (error) {
       console.error('❌ Failed to fetch project from backend:', error);
-      
-      // Fallback to localStorage if API fails
-      if (DEBUG_API) {
-        console.log('⚠️ Falling back to localStorage...');
-      }
-      const projects = this.getStoredProjects();
-      const v1Project = projects.find(p => p.id === id) || null;
-      
-      if (v1Project) {
-        if (DEBUG_API) {
-          console.log('📦 Found project in localStorage');
-          console.log('Stored project summary:', summarizeProject(v1Project));
-          console.log('=== SEARCHING FOR COST VALUES ===');
-          const findCosts = (obj: any, path = '') => {
-            for (const key in obj) {
-              if (obj[key] && typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
-                findCosts(obj[key], path ? `${path}.${key}` : key);
-              } else if (typeof obj[key] === 'number' && obj[key] > 1000) {
-                console.log(`Found large number at ${path ? path + '.' : ''}${key}:`, obj[key]);
-              }
-              if (
-                key.toLowerCase().includes('cost') ||
-                key.toLowerCase().includes('total') ||
-                key.toLowerCase().includes('subtotal')
-              ) {
-                console.log(`Found cost-related field at ${path ? path + '.' : ''}${key}:`, obj[key]);
-              }
-            }
-          };
-          findCosts(v1Project);
-          console.log('=== END COST SEARCH ===');
-        }
-        
-        // Transform V1 structure to V2 if needed
-        const v2Project = this.adaptV1ToV2Structure(v1Project);
-        
-        if (DEBUG_API) {
-          console.log('=== LOCALSTORAGE PROJECT DATA TRACE ===');
-          console.log('1. Original V1 summary:', summarizeProject(v1Project));
-          console.log('2. Transformed V2 summary:', summarizeProject(v2Project));
-          console.log('3. Has analysis?', !!v2Project?.analysis);
-          console.log('4. Has calculations?', !!v2Project?.analysis?.calculations);
-          console.log('5. Has totals?', !!v2Project?.analysis?.calculations?.totals);
-          console.log('6. Hard costs value:', v2Project?.analysis?.calculations?.totals?.hard_costs);
-          console.log('7. Soft costs value:', v2Project?.analysis?.calculations?.totals?.soft_costs);
-          console.log('8. Total project cost:', v2Project?.analysis?.calculations?.totals?.total_project_cost);
-          console.log('=== END LOCALSTORAGE TRACE ===');
-        }
-        
-        return v2Project;
-      } else {
-        if (DEBUG_API) {
-          console.log('❌ Project not found in localStorage either');
-        }
-        return null;
-      }
+      throw error;
     }
   }
 
@@ -877,39 +803,32 @@ class V2APIClient {
       console.log('📡 Deleting project from backend:', id);
       await this.request(`/scope/projects/${id}`, {
         method: 'DELETE',
-      }, 'v1');
+      }, 'v2');
       console.log('✅ Project deleted from backend');
-      
-      // Also remove from localStorage
-      // Don't use getStoredProjects as it applies adapter unnecessarily
-      const stored = localStorage.getItem('specsharp_projects');
-      const projects = stored ? JSON.parse(stored) : [];
-      const filtered = projects.filter((p: any) => p.id !== id);
-      localStorage.setItem('specsharp_projects', JSON.stringify(filtered));
+      this.removeStoredProject(id);
     } catch (error) {
       console.error('❌ Failed to delete from backend:', error);
-      
-      // Still remove from localStorage
-      // Don't use getStoredProjects as it applies adapter unnecessarily
-      const stored = localStorage.getItem('specsharp_projects');
-      const projects = stored ? JSON.parse(stored) : [];
-      const filtered = projects.filter((p: any) => p.id !== id);
-      localStorage.setItem('specsharp_projects', JSON.stringify(filtered));
-      console.log('📦 Removed from localStorage');
+      throw error;
     }
   }
 
-  /**
-   * Helper to get projects from localStorage
-   */
-  private getStoredProjects(): Project[] {
-    const stored = localStorage.getItem('specsharp_projects');
-    if (!stored) return [];
-    
-    const projects = JSON.parse(stored);
-    // Apply adapter to each project to fix any structure issues
-    return projects.map(p => this.adaptV1ToV2Structure(p));
+  private removeStoredProject(id: string): void {
+    try {
+      const stored = localStorage.getItem('specsharp_projects');
+      const projects = stored ? JSON.parse(stored) : [];
+      if (!Array.isArray(projects)) {
+        return;
+      }
+      const filtered = projects.filter((project: any) => {
+        const projectId = project?.id ?? project?.project_id;
+        return projectId !== id;
+      });
+      localStorage.setItem('specsharp_projects', JSON.stringify(filtered));
+    } catch (error) {
+      console.warn('⚠️ Failed to update local project cache after delete:', error);
+    }
   }
+
 }
 
 // Export singleton instance
