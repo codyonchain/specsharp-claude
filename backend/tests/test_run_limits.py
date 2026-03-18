@@ -111,12 +111,14 @@ def test_effective_snapshot_reports_unlimited_internal_access_without_false_exha
     assert snapshot.remaining_runs is None
 
 
-def test_skip_auth_bypass_returns_non_blocking_effective_snapshot_while_preserving_stored_quota_truth(
+def test_local_dev_auth_bypass_returns_non_blocking_effective_snapshot_while_preserving_stored_quota_truth(
     monkeypatch,
 ):
     db = _session()
     org_id = _seed_org(db)
-    monkeypatch.setenv("SKIP_AUTH", "true")
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
+    monkeypatch.setenv("LOCAL_DEV_AUTH_BYPASS", "true")
     monkeypatch.setattr(settings, "default_deal_runs", 1)
     monkeypatch.setattr(settings, "unlimited_access_emails", "")
 
@@ -150,3 +152,23 @@ def test_skip_auth_bypass_returns_non_blocking_effective_snapshot_while_preservi
     assert after.is_unlimited is False
     assert after.remaining_runs is None
     assert after.used_runs == 0
+
+
+def test_skip_auth_no_longer_bypasses_run_limits(monkeypatch):
+    db = _session()
+    org_id = _seed_org(db)
+    monkeypatch.setenv("SKIP_AUTH", "true")
+    monkeypatch.delenv("LOCAL_DEV_AUTH_BYPASS", raising=False)
+    monkeypatch.delenv("TESTING", raising=False)
+    monkeypatch.setattr(settings, "default_deal_runs", 1)
+    monkeypatch.setattr(settings, "unlimited_access_emails", "")
+
+    consume_run(db, org_id=org_id, email="member@example.com")
+
+    snapshot = get_effective_run_limit_snapshot(db, org_id=org_id, email="member@example.com")
+    assert snapshot.is_unlimited is False
+    assert snapshot.remaining_runs == 0
+
+    with pytest.raises(HTTPException) as exc:
+        assert_run_available(db, org_id=org_id, email="member@example.com")
+    assert exc.value.status_code == 403

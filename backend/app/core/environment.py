@@ -3,6 +3,14 @@ import sys
 from typing import Dict, Any
 import logging
 
+from app.core.auth_bypass import (
+    LOCAL_DEV_AUTH_BYPASS_ENV_VAR,
+    get_auth_bypass_mode,
+    get_auth_bypass_startup_error,
+    get_runtime_environment,
+    is_testing_bypass_enabled,
+)
+
 logger = logging.getLogger(__name__)
 
 class EnvironmentChecker:
@@ -11,12 +19,12 @@ class EnvironmentChecker:
     @staticmethod
     def get_environment() -> str:
         """Get current environment (development/production)"""
-        return os.getenv("ENVIRONMENT", "production")
+        return get_runtime_environment()
     
     @staticmethod
     def is_testing_mode() -> bool:
         """Check if testing/auth bypass is enabled"""
-        return os.getenv("TESTING", "false").lower() == "true"
+        return is_testing_bypass_enabled()
     
     @staticmethod
     def check_required_vars() -> Dict[str, bool]:
@@ -24,9 +32,9 @@ class EnvironmentChecker:
         env = EnvironmentChecker.get_environment()
         
         # Different requirements for different environments
-        if env == "development":
+        if env in {"development", "dev", "local", "test", "testing"}:
             required = ["DATABASE_URL"]
-            optional = ["TESTING", "SKIP_AUTH"]
+            optional = ["TESTING", LOCAL_DEV_AUTH_BYPASS_ENV_VAR]
         else:
             required = [
                 "DATABASE_URL",
@@ -53,6 +61,7 @@ class EnvironmentChecker:
         """Log configuration at startup (safely)"""
         env = EnvironmentChecker.get_environment()
         is_testing = EnvironmentChecker.is_testing_mode()
+        bypass_mode = get_auth_bypass_mode()
         checks = EnvironmentChecker.check_required_vars()
         
         # Log safe information only
@@ -61,9 +70,15 @@ class EnvironmentChecker:
         logger.info("=" * 50)
         logger.info(f"Environment: {env}")
         logger.info(f"Testing Mode: {is_testing}")
-        
-        if env == "development" and is_testing:
-            logger.warning("⚠️  AUTH BYPASS ENABLED - DEV MODE ONLY")
+        logger.info(f"Auth Bypass Mode: {bypass_mode}")
+
+        bypass_error = get_auth_bypass_startup_error()
+        if bypass_error:
+            logger.error(f"🚨 INVALID AUTH BYPASS CONFIGURATION: {bypass_error}")
+            sys.exit(1)
+
+        if bypass_mode != "none":
+            logger.warning(f"⚠️  AUTH BYPASS ENABLED ({bypass_mode}) - LOCAL/TEST ONLY")
         
         # Log which vars are set (not their values!)
         missing = [k for k, v in checks.items() if not v and 'optional' not in k]
@@ -92,12 +107,6 @@ class EnvironmentChecker:
             logger.info(f"API URL: {api_url.split('//')[1].split('/')[0] if '//' in api_url else 'configured'}")
         
         logger.info("=" * 50)
-        
-        # Final safety check
-        if env == "production" and is_testing:
-            logger.error("🚨 CRITICAL: Testing mode enabled in production!")
-            logger.error("🚨 This is a security risk! Shutting down.")
-            sys.exit(1)
 
 # Run checker when module is imported
 EnvironmentChecker.log_startup_config()

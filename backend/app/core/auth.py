@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-import os
 from typing import Any, Dict, Optional
 import uuid
 
@@ -12,6 +11,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.auth_bypass import (
+    is_auth_bypass_enabled as is_runtime_auth_bypass_enabled,
+    is_testing_bypass_enabled,
+)
 from app.core.config import settings
 from app.db.database import get_db
 from app.db.models import Organization, OrganizationMember
@@ -40,11 +43,11 @@ class AuthContext:
 
 
 def is_testing_auth_enabled() -> bool:
-    return os.getenv("TESTING", "false").lower() == "true"
+    return is_testing_bypass_enabled()
 
 
 def is_auth_bypass_enabled() -> bool:
-    return is_testing_auth_enabled() or os.getenv("SKIP_AUTH", "false").lower() == "true"
+    return is_runtime_auth_bypass_enabled()
 
 
 def build_testing_auth_context() -> AuthContext:
@@ -206,7 +209,7 @@ async def get_auth_context(
     requested_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
     db: Session = Depends(get_db),
 ) -> AuthContext:
-    # DEV/TEST bypass: allow local usage without bearer token
+    # Local/test-only bypass: never enabled from generic production env flags.
     if is_auth_bypass_enabled():
         return build_testing_auth_context()
 

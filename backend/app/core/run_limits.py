@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-import os
 from typing import Any, Iterable, Set
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.auth_bypass import is_auth_bypass_enabled
 from app.core.config import settings
 from app.db.models import OrganizationRunQuota
 
@@ -38,7 +38,7 @@ def is_unlimited_user(email: str | None) -> bool:
 
 
 def is_run_limit_enforcement_bypassed() -> bool:
-    return os.getenv("SKIP_AUTH", "").lower() == "true"
+    return is_auth_bypass_enabled()
 
 
 def bypass_run_limit_snapshot() -> RunLimitSnapshot:

@@ -131,12 +131,14 @@ async def test_auth_me_reports_unlimited_internal_access_without_false_exhaustio
 
 
 @pytest.mark.asyncio
-async def test_auth_me_uses_non_blocking_effective_snapshot_when_skip_auth_bypasses_generation(
+async def test_auth_me_uses_non_blocking_effective_snapshot_when_local_dev_bypass_bypasses_generation(
     monkeypatch,
 ):
     db = _session()
     org_id = _seed_org(db)
-    monkeypatch.setenv("SKIP_AUTH", "true")
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
+    monkeypatch.setenv("LOCAL_DEV_AUTH_BYPASS", "true")
     monkeypatch.setattr(settings, "default_deal_runs", 1)
     monkeypatch.setattr(settings, "unlimited_access_emails", "")
 
