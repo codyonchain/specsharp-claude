@@ -13,8 +13,12 @@
 ## OAuth Configuration
 
 ### Google OAuth Credentials
-- **Client ID**: 1072123305615-n2inm0l8t62lp9n1gjb70hn2otb9b4u5.apps.googleusercontent.com
-- **Client Secret**: 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
+- **Client ID**: YOUR_GOOGLE_CLIENT_ID
+- **Client Secret**: YOUR_GOOGLE_CLIENT_SECRET
+
+Source these values from the Google Cloud Console or your secure secret manager. If any prior client
+secret was committed, shared, or pasted into docs, rotate it in Google Cloud Console and update your
+deployment environment variables before the next release.
 
 ### Required Redirect URIs in Google Console
 1. http://localhost:3000 (frontend local)
@@ -29,7 +33,7 @@
 Set these in Vercel dashboard:
 ```
 VITE_API_URL=https://api.specsharp.ai
-VITE_GOOGLE_CLIENT_ID=1072123305615-n2inm0l8t62lp9n1gjb70hn2otb9b4u5.apps.googleusercontent.com
+VITE_GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID
 VITE_ENVIRONMENT=production
 ```
 
@@ -50,8 +54,8 @@ VITE_ENVIRONMENT=production
 ### Environment Variables
 Ensure these are set in your backend deployment:
 ```
-GOOGLE_CLIENT_ID=1072123305615-n2inm0l8t62lp9n1gjb70hn2otb9b4u5.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=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
+GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET=YOUR_GOOGLE_CLIENT_SECRET
 FRONTEND_URL=https://specsharp.ai
 DATABASE_URL=<your-database-url>
 SECRET_KEY=<your-secret-key>

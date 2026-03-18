@@ -48,12 +48,14 @@ JSON.parse(sessionStorage.getItem('oauth_debug'))
 The backend should redirect to Google with these exact parameters:
 ```
 https://accounts.google.com/o/oauth2/v2/auth?
-  client_id=1072123305615-n2inm0l8t62lp9n1gjb70hn2otb9b4u5.apps.googleusercontent.com&
+  client_id=YOUR_GOOGLE_CLIENT_ID&
   redirect_uri=https://api.specsharp.ai/api/v1/oauth/callback/google&
   response_type=code&
   scope=openid email profile&
   access_type=offline
 ```
+
+Use the active value from Google Cloud Console or your secure environment store when testing locally.
 
 ### Step 4: Verify Google Console Settings
 

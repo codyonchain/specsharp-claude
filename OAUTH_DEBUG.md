@@ -36,10 +36,14 @@ The backend OAuth implementation must:
 
 2. **Environment variables needed**:
    ```
-   GOOGLE_CLIENT_ID=1072123305615-n2inm0l8t62lp9n1gjb70hn2otb9b4u5.apps.googleusercontent.com
-   GOOGLE_CLIENT_SECRET=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
+   GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID
+   GOOGLE_CLIENT_SECRET=YOUR_GOOGLE_CLIENT_SECRET
    FRONTEND_URL=https://specsharp.ai
    ```
+
+   Source these values from the Google Cloud Console or your secure secret manager. If any previous
+   client secret was exposed in docs, commits, or screenshots, rotate it in Google Cloud Console
+   before re-testing OAuth.
 
 3. **CORS configuration must allow**:
    - https://specsharp.ai
@@ -50,7 +54,7 @@ The backend OAuth implementation must:
 1. **Environment Variables (in Vercel)**:
    ```
    VITE_API_URL=https://api.specsharp.ai
-   VITE_GOOGLE_CLIENT_ID=1072123305615-n2inm0l8t62lp9n1gjb70hn2otb9b4u5.apps.googleusercontent.com
+   VITE_GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID
    VITE_ENVIRONMENT=production
    ```
 
@@ -77,7 +81,7 @@ The backend OAuth implementation must:
    The backend's `/api/v1/oauth/login/google` endpoint should construct the Google OAuth URL like:
    ```
    https://accounts.google.com/o/oauth2/v2/auth?
-   client_id=1072123305615-n2inm0l8t62lp9n1gjb70hn2otb9b4u5.apps.googleusercontent.com&
+   client_id=YOUR_GOOGLE_CLIENT_ID&
    redirect_uri=https://api.specsharp.ai/api/v1/oauth/callback/google&
    response_type=code&
    scope=openid email profile&

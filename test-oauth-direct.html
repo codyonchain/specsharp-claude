@@ -9,9 +9,12 @@
     
     <h2>Current Configuration:</h2>
     <ul>
-        <li>Client ID: 1072123305615-n2inm0l8t62lp9n1gjb70hn2otb9b4u5.apps.googleusercontent.com</li>
+        <li>Client ID: YOUR_GOOGLE_CLIENT_ID</li>
         <li>Redirect URI: http://localhost:8001/api/v1/oauth/callback/google</li>
     </ul>
+
+    <p>Before using this helper, replace <code>YOUR_GOOGLE_CLIENT_ID</code> with the current value from
+    Google Cloud Console or your secure local environment.</p>
     
     <h2>Test Links:</h2>
     <ol>
@@ -21,7 +24,7 @@
     
     <h2>Manual OAuth URL:</h2>
     <p>Try this direct Google OAuth URL:</p>
-    <a href="https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=1072123305615-n2inm0l8t62lp9n1gjb70hn2otb9b4u5.apps.googleusercontent.com&redirect_uri=http://localhost:8001/api/v1/oauth/callback/google&scope=openid+email+profile&state=test123&access_type=offline&prompt=consent" target="_blank">
+    <a href="https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=YOUR_GOOGLE_CLIENT_ID&redirect_uri=http://localhost:8001/api/v1/oauth/callback/google&scope=openid+email+profile&state=test123&access_type=offline&prompt=consent" target="_blank">
         Direct Google OAuth (with prompt=consent)
     </a>
     
