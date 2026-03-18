@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectAnalysis } from '../../hooks/useProjectAnalysis';
-import { api, createProject } from '../../api/client';
+import { api, createProject, toUserSafeApiErrorMessage } from '../../api/client';
 import { tracer } from '../../utils/traceSystem';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { authService } from '../../../services/api';
@@ -1049,7 +1049,12 @@ export const NewProject: React.FC = () => {
     
     setDecisionInputsConfirmed(false);
     setActiveStep('analyzing');
-    tracer.trace('ANALYZE_START', 'Starting analysis', { description: descriptionForAnalysis });
+    tracer.trace('ANALYZE_START', 'Starting analysis', {
+      description_present: !!descriptionForAnalysis.trim(),
+      description_length: descriptionForAnalysis.trim().length,
+      has_location: !!normalizedLocationInput,
+      square_footage_input_present: !!squareFootageInput.trim(),
+    });
     
     const squareValue = parseSquareFootageValue(squareFootageInput);
     const unitCountValue = showUnitCountInput ? parseCountValue(unitCountInput) : undefined;
@@ -1100,7 +1105,11 @@ export const NewProject: React.FC = () => {
       }
       
       setActiveStep('results');
-      tracer.trace('ANALYZE_SUCCESS', 'Analysis complete', analysis);
+      tracer.trace('ANALYZE_SUCCESS', 'Analysis complete', {
+        building_type: analysis.parsed_input?.building_type,
+        subtype: analysis.parsed_input?.subtype || analysis.parsed_input?.building_subtype,
+        square_footage: analysis.parsed_input?.square_footage,
+      });
       
       // Smooth scroll to results after a brief delay
       setTimeout(() => {
@@ -1111,7 +1120,11 @@ export const NewProject: React.FC = () => {
       }, 100);
     } else {
       setActiveStep('input');
-      tracer.trace('ANALYZE_ERROR', 'Analysis failed', { error });
+      tracer.trace('ANALYZE_ERROR', 'Analysis failed', {
+        message: error?.message || "We couldn't analyze this project.",
+        code: error?.code,
+        status: error?.status,
+      });
     }
   };
   
@@ -1130,7 +1143,13 @@ export const NewProject: React.FC = () => {
     
     setSaving(true);
     setSaveError(null);
-    tracer.trace('SAVE_START', 'Saving project', result);
+    tracer.trace('SAVE_START', 'Saving project', {
+      building_type: result.parsed_input?.building_type,
+      subtype: result.parsed_input?.subtype || result.parsed_input?.building_subtype,
+      square_footage: result.parsed_input?.square_footage,
+      project_class:
+        result.parsed_input?.project_classification || result.parsed_input?.project_class,
+    });
     
     try {
       // ---- Project Class: UI selection must win on SAVE ----
@@ -1180,7 +1199,11 @@ export const NewProject: React.FC = () => {
       navigate(`/project/${id}`);
     } catch (err) {
       console.error('Failed to save project:', err);
-      tracer.trace('SAVE_ERROR', 'Save failed', err);
+      tracer.trace('SAVE_ERROR', 'Save failed', {
+        message: err instanceof Error ? err.message : "We couldn't generate this decision packet.",
+        code: (err as any)?.code,
+        status: (err as any)?.status,
+      });
 
       if (isRunLimitReachedError(err)) {
         setIsBackendRunLimitExhausted(true);
@@ -1191,8 +1214,13 @@ export const NewProject: React.FC = () => {
 
       const message =
         typeof (err as any)?.message === 'string' && (err as any).message.trim()
-          ? (err as any).message
-          : 'Failed to save project';
+          ? toUserSafeApiErrorMessage({
+              endpoint: '/scope/generate',
+              message: (err as any).message,
+              status: (err as any)?.status,
+              code: (err as any)?.code,
+            })
+          : "We couldn't generate this decision packet. Please try again.";
       setSaveError(message);
     } finally {
       setSaving(false);

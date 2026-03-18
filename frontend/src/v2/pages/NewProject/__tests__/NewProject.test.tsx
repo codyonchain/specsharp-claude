@@ -12,12 +12,17 @@ vi.mock('../../../hooks/useProjectAnalysis', () => ({
   useProjectAnalysis: vi.fn(),
 }));
 
-vi.mock('../../../api/client', () => ({
-  api: {
-    analyzeProject: vi.fn(),
-  },
-  createProject: vi.fn(),
-}));
+vi.mock('../../../api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../api/client')>();
+  return {
+    ...actual,
+    api: {
+      ...actual.api,
+      analyzeProject: vi.fn(),
+    },
+    createProject: vi.fn(),
+  };
+});
 
 vi.mock('../../../../services/api', () => ({
   authService: {
@@ -502,9 +507,9 @@ describe('NewProject special feature pricing parity', () => {
     ).toHaveAttribute('href', expect.stringContaining('mailto:cody@specsharp.ai'));
   });
 
-  it('keeps generic errors generic and does not show the exhaustion blocker for unrelated failures', async () => {
+  it('bounds unrelated internal save failures and does not show the exhaustion blocker', async () => {
     mockCreateProject.mockRejectedValueOnce({
-      message: 'Forbidden for another reason',
+      message: 'sqlalchemy.exc.StatementError: confidential deal packet failed to persist',
       code: 'forbidden',
       status: 403,
     } as any);
@@ -523,7 +528,7 @@ describe('NewProject special feature pricing parity', () => {
     fireEvent.click(screen.getByRole('button', { name: /Generate Decision Packet/i }));
 
     expect(
-      await screen.findByText('Forbidden for another reason')
+      await screen.findByText("We couldn't generate this decision packet. Please try again.")
     ).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(

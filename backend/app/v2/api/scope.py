@@ -53,6 +53,79 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["v2"])
 DEBUG_TRACE_ENABLED = os.getenv("SPECSHARP_DEBUG_TRACE", "0").lower() in {"1", "true", "yes", "on"}
 
+ANALYZE_ERROR_MESSAGE = "We couldn't analyze this project. Please review the description and inputs and try again."
+CALCULATE_ERROR_MESSAGE = "We couldn't calculate this project. Please review the project inputs and try again."
+COMPARE_ERROR_MESSAGE = "We couldn't compare these scenarios right now. Please try again."
+BUILDING_TYPES_ERROR_MESSAGE = "We couldn't load building types right now. Please try again."
+BUILDING_DETAILS_ERROR_MESSAGE = "We couldn't load building details right now. Please try again."
+HEALTH_ERROR_MESSAGE = "Service unavailable."
+TEST_NLP_ERROR_MESSAGE = "We couldn't parse this description right now. Please try again."
+DEALSHIELD_CONTROLS_ERROR_MESSAGE = "We couldn't save DealShield assumptions right now. Please try again."
+DEALSHIELD_VIEW_ERROR_MESSAGE = "We couldn't load DealShield for this project right now."
+GENERATE_ERROR_MESSAGE = "We couldn't generate this decision packet. Please try again."
+PROJECT_EXPORT_PREP_ERROR_MESSAGE = "We couldn't prepare this project for export. Please try again."
+DEALSHIELD_EXPORT_PREP_ERROR_MESSAGE = "We couldn't prepare DealShield for export. Please try again."
+OWNER_VIEW_ERROR_MESSAGE = "We couldn't load the owner view for this project right now."
+
+
+def _get_request_id(request: Optional[Request]) -> str:
+    if request is None:
+        return "unknown"
+    headers = getattr(request, "headers", None) or {}
+    if hasattr(headers, "get"):
+        return headers.get("x-request-id") or headers.get("x-correlation-id") or "unknown"
+    return "unknown"
+
+
+def _log_route_exception(
+    route_name: str,
+    exc: Exception,
+    request: Optional[Request] = None,
+    **safe_context: Any,
+) -> None:
+    request_id = _get_request_id(request)
+    if safe_context:
+        logger.error(
+            "[%s][ERROR] request_id=%s exception_type=%s context=%s",
+            route_name,
+            request_id,
+            exc.__class__.__name__,
+            safe_context,
+        )
+        return
+    logger.error(
+        "[%s][ERROR] request_id=%s exception_type=%s",
+        route_name,
+        request_id,
+        exc.__class__.__name__,
+    )
+
+
+def _project_response_error(message: str) -> "ProjectResponse":
+    return ProjectResponse(
+        success=False,
+        data={},
+        errors=[message],
+    )
+
+
+def _summarize_analyze_request(payload: "AnalyzeRequest") -> Dict[str, Any]:
+    description = (getattr(payload, "description", None) or "").strip()
+    special_features = getattr(payload, "special_features", None) or []
+    return {
+        "description_present": bool(description),
+        "description_length": len(description),
+        "project_class": getattr(payload, "project_class", None)
+        or getattr(payload, "project_classification", None),
+        "has_location_override": bool(getattr(payload, "location", None) or getattr(payload, "default_location", None)),
+        "has_square_footage_override": bool(
+            getattr(payload, "square_footage", None) or getattr(payload, "default_square_footage", None)
+        ),
+        "unit_count_present": getattr(payload, "unit_count", None) is not None,
+        "key_count_present": getattr(payload, "key_count", None) is not None,
+        "special_features_count": len(special_features) if isinstance(special_features, list) else 0,
+    }
+
 
 def _attach_financing_summary(
     calculation_data: Dict[str, Any], parsed_input: Optional[Dict[str, Any]] = None
@@ -383,10 +456,9 @@ async def analyze_project(
     """
     try:
         logger.info(
-            "[scope.analyze][REQ] project_class=%s project_classification=%s raw=%s",
-            getattr(payload, "project_class", None),
-            getattr(payload, "project_classification", None),
-            payload.model_dump() if hasattr(payload, "model_dump") else payload.dict(),
+            "[scope.analyze][REQ] request_id=%s meta=%s",
+            _get_request_id(request),
+            _summarize_analyze_request(payload),
         )
         # Parse the description using phrase-first parser
         parsed = nlp_service.extract_project_details(payload.description)
@@ -501,12 +573,12 @@ async def analyze_project(
         parsed['location'] = final_location
 
         logger.info(
-            "[SUBTYPE_TRACE][scope_api] building_type=%s subtype=%s building_subtype=%s location=%s raw_prompt=%s",
+            "[scope.analyze][RESOLVED] request_id=%s building_type=%s subtype=%s building_subtype=%s finish_level_source=%s",
+            _get_request_id(request),
             parsed.get('building_type'),
             parsed.get('subtype'),
             parsed.get('building_subtype'),
-            parsed.get('location'),
-            payload.description,
+            finish_level_source,
         )
         result = unified_engine.calculate_project(
             building_type=building_type,
@@ -550,12 +622,8 @@ async def analyze_project(
         )
         
     except Exception as e:
-        logger.error(f"Error in analyze_project: {str(e)}")
-        return ProjectResponse(
-            success=False,
-            data={},
-            errors=[str(e)]
-        )
+        _log_route_exception("scope.analyze", e, request)
+        return _project_response_error(ANALYZE_ERROR_MESSAGE)
 
 @router.post("/calculate", response_model=ProjectResponse)
 @limiter.limit("30/minute")
@@ -621,18 +689,11 @@ async def calculate_project(
         )
         
     except ValueError as e:
-        return ProjectResponse(
-            success=False,
-            data={},
-            errors=[f"Invalid input: {str(e)}"]
-        )
+        _log_route_exception("scope.calculate.invalid_input", e, request)
+        return _project_response_error(CALCULATE_ERROR_MESSAGE)
     except Exception as e:
-        logger.error(f"Error in calculate_project: {str(e)}")
-        return ProjectResponse(
-            success=False,
-            data={},
-            errors=[str(e)]
-        )
+        _log_route_exception("scope.calculate", e, request)
+        return _project_response_error(CALCULATE_ERROR_MESSAGE)
 
 @router.post("/compare", response_model=ProjectResponse)
 @limiter.limit("20/minute")
@@ -673,12 +734,8 @@ async def compare_scenarios(
         )
         
     except Exception as e:
-        logger.error(f"Error in compare_scenarios: {str(e)}")
-        return ProjectResponse(
-            success=False,
-            data={},
-            errors=[str(e)]
-        )
+        _log_route_exception("scope.compare", e, request)
+        return _project_response_error(COMPARE_ERROR_MESSAGE)
 
 @router.get("/building-types", response_model=ProjectResponse)
 async def get_building_types():
@@ -711,12 +768,8 @@ async def get_building_types():
         )
         
     except Exception as e:
-        logger.error(f"Error in get_building_types: {str(e)}")
-        return ProjectResponse(
-            success=False,
-            data={},
-            errors=[str(e)]
-        )
+        _log_route_exception("scope.building_types", e)
+        return _project_response_error(BUILDING_TYPES_ERROR_MESSAGE)
 
 @router.get("/building-details/{building_type}/{subtype}", response_model=ProjectResponse)
 async def get_building_details(building_type: str, subtype: str):
@@ -740,18 +793,11 @@ async def get_building_details(building_type: str, subtype: str):
         )
         
     except ValueError as e:
-        return ProjectResponse(
-            success=False,
-            data={},
-            errors=[f"Invalid building type: {str(e)}"]
-        )
+        _log_route_exception("scope.building_details.invalid_input", e)
+        return _project_response_error(BUILDING_DETAILS_ERROR_MESSAGE)
     except Exception as e:
-        logger.error(f"Error in get_building_details: {str(e)}")
-        return ProjectResponse(
-            success=False,
-            data={},
-            errors=[str(e)]
-        )
+        _log_route_exception("scope.building_details", e)
+        return _project_response_error(BUILDING_DETAILS_ERROR_MESSAGE)
 
 @router.get("/health", response_model=ProjectResponse)
 async def health_check():
@@ -782,10 +828,11 @@ async def health_check():
         )
         
     except Exception as e:
+        _log_route_exception("scope.health", e)
         return ProjectResponse(
             success=False,
             data={'status': 'unhealthy'},
-            errors=[str(e)]
+            errors=[HEALTH_ERROR_MESSAGE]
         )
 
 @router.get("/test-nlp")
@@ -807,11 +854,8 @@ async def test_nlp(
         )
         
     except Exception as e:
-        return ProjectResponse(
-            success=False,
-            data={},
-            errors=[str(e)]
-        )
+        _log_route_exception("scope.test_nlp", e, request)
+        return _project_response_error(TEST_NLP_ERROR_MESSAGE)
 
 # ============================================================================
 # CRUD OPERATIONS - Complete V2 API
@@ -882,13 +926,18 @@ async def get_all_projects(
             try:
                 formatted_projects.append(format_project_response(p))
             except Exception as format_error:
-                logger.error(f"Error formatting project {p.project_id}: {str(format_error)}")
+                _log_route_exception(
+                    "scope.projects.format_project",
+                    format_error,
+                    None,
+                    project_id=p.project_id,
+                )
                 # Skip projects that can't be formatted
                 continue
         return formatted_projects
         
     except Exception as e:
-        logger.error(f"Error fetching projects: {str(e)}")
+        _log_route_exception("scope.projects.list", e, None, org_id=auth.org_id)
         # Return empty array instead of raising error
         return []
 
@@ -1050,13 +1099,14 @@ async def update_dealshield_controls(
         db.commit()
         db.refresh(project)
     except Exception as exc:
-        logger.error("Failed to persist DealShield controls for project %s: %s", project_id, str(exc))
-        db.rollback()
-        return ProjectResponse(
-            success=False,
-            data={},
-            errors=[str(exc)],
+        _log_route_exception(
+            "scope.dealshield.controls",
+            exc,
+            None,
+            project_id=project_id,
         )
+        db.rollback()
+        return _project_response_error(DEALSHIELD_CONTROLS_ERROR_MESSAGE)
 
     return ProjectResponse(
         success=True,
@@ -1100,20 +1150,24 @@ async def get_dealshield_view(
         payload = _refresh_dealshield_payload_for_project(project, payload)
         profile = get_dealshield_profile(profile_id)
     except Exception as exc:
-        return ProjectResponse(
-            success=False,
-            data={},
-            errors=[str(exc)]
+        _log_route_exception(
+            "scope.dealshield.view.refresh",
+            exc,
+            None,
+            project_id=project_id,
         )
+        return _project_response_error(DEALSHIELD_VIEW_ERROR_MESSAGE)
 
     try:
         view_model = build_dealshield_view_model(project.project_id or project_id, payload, profile)
     except DealShieldResolutionError as exc:
-        return ProjectResponse(
-            success=False,
-            data={},
-            errors=[str(exc)]
+        _log_route_exception(
+            "scope.dealshield.view.resolve",
+            exc,
+            None,
+            project_id=project_id,
         )
+        return _project_response_error(DEALSHIELD_VIEW_ERROR_MESSAGE)
 
     return ProjectResponse(
         success=True,
@@ -1389,13 +1443,15 @@ async def generate_scope(
         db.rollback()
         raise
     except Exception as e:
-        logger.error(f"Error generating scope: {str(e)}")
-        db.rollback()
-        return ProjectResponse(
-            success=False,
-            data={},
-            errors=[str(e)]
+        _log_route_exception(
+            "scope.generate",
+            e,
+            request,
+            project_class=getattr(payload, "project_class", None)
+            or getattr(payload, "project_classification", None),
         )
+        db.rollback()
+        return _project_response_error(GENERATE_ERROR_MESSAGE)
 
 async def _get_owner_view_impl(project_id: str, db: Session, auth: AuthContext):
     """Implementation of owner view logic"""
@@ -1471,12 +1527,24 @@ async def export_project_pdf(
         payload = _refresh_dealshield_payload_for_project(project, payload)
         profile = get_dealshield_profile(profile_id)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _log_route_exception(
+            "scope.project_pdf.refresh",
+            exc,
+            None,
+            project_id=project_id,
+        )
+        raise HTTPException(status_code=400, detail=PROJECT_EXPORT_PREP_ERROR_MESSAGE) from exc
 
     try:
         canonical_dealshield_view_model = build_dealshield_view_model(project.project_id or project_id, payload, profile)
     except DealShieldResolutionError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _log_route_exception(
+            "scope.project_pdf.resolve_dealshield",
+            exc,
+            None,
+            project_id=project_id,
+        )
+        raise HTTPException(status_code=400, detail=PROJECT_EXPORT_PREP_ERROR_MESSAGE) from exc
 
     packet = compose_decision_packet_input(
         project=project,
@@ -1489,7 +1557,12 @@ async def export_project_pdf(
     try:
         pdf_buffer = pdf_export_service.generate_decision_packet_pdf(packet)
     except Exception as exc:
-        logger.error(f"Failed to generate PDF for project {project_id}: {exc}")
+        _log_route_exception(
+            "scope.project_pdf.generate",
+            exc,
+            None,
+            project_id=project_id,
+        )
         raise HTTPException(status_code=500, detail="Failed to generate PDF report")
 
     safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in project_name).strip() or "SpecSharp_Project"
@@ -1524,17 +1597,34 @@ async def export_dealshield_pdf(
         payload = _refresh_dealshield_payload_for_project(project, payload)
         profile = get_dealshield_profile(profile_id)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _log_route_exception(
+            "scope.dealshield_pdf.refresh",
+            exc,
+            None,
+            project_id=project_id,
+        )
+        raise HTTPException(status_code=400, detail=DEALSHIELD_EXPORT_PREP_ERROR_MESSAGE) from exc
 
     try:
         view_model = build_dealshield_view_model(project.project_id or project_id, payload, profile)
     except DealShieldResolutionError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _log_route_exception(
+            "scope.dealshield_pdf.resolve",
+            exc,
+            None,
+            project_id=project_id,
+        )
+        raise HTTPException(status_code=400, detail=DEALSHIELD_EXPORT_PREP_ERROR_MESSAGE) from exc
 
     try:
         pdf_buffer = pdf_export_service.generate_dealshield_pdf(view_model)
     except Exception as exc:
-        logger.error(f"Failed to generate DealShield PDF for project {project_id}: {exc}")
+        _log_route_exception(
+            "scope.dealshield_pdf.generate",
+            exc,
+            None,
+            project_id=project_id,
+        )
         raise HTTPException(status_code=500, detail="Failed to generate DealShield PDF report") from exc
 
     filename = f"DealShield_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
@@ -1649,12 +1739,13 @@ async def _process_owner_view_data(project):
         )
         
     except Exception as e:
-        logger.error(f"Error in get_owner_view: {str(e)}")
-        return ProjectResponse(
-            success=False,
-            data={},
-            errors=[str(e)]
+        _log_route_exception(
+            "scope.owner_view",
+            e,
+            None,
+            project_id=getattr(project, "project_id", None),
         )
+        return _project_response_error(OWNER_VIEW_ERROR_MESSAGE)
 
 
 def _resolve_project_payload(project: Project) -> Dict[str, Any]:

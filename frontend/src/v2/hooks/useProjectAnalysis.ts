@@ -36,7 +36,12 @@ export function useProjectAnalysis() {
     try {
       setAnalyzing(true);
       setError(null);
-      console.log('Starting analysis for:', description);
+      console.log('Starting analysis', {
+        description_present: !!description.trim(),
+        description_length: description.trim().length,
+        has_square_footage_override: typeof overrides?.squareFootage === 'number',
+        has_location_override: !!overrides?.location,
+      });
       const finishLevel = overrides?.finishLevel
         ? (overrides.finishLevel.charAt(0).toUpperCase() + overrides.finishLevel.slice(1)) as
             'Standard' | 'Premium' | 'Luxury'
@@ -51,7 +56,11 @@ export function useProjectAnalysis() {
         signal: overrides?.signal,
         special_features: overrides?.specialFeatures,
       });
-      console.log('Setting result in hook:', analysis);
+      console.log('Analysis completed', {
+        building_type: analysis?.parsed_input?.building_type,
+        subtype: analysis?.parsed_input?.subtype || analysis?.parsed_input?.building_subtype,
+        square_footage: analysis?.parsed_input?.square_footage,
+      });
       setResult(analysis);
       return analysis;
     } catch (err) {

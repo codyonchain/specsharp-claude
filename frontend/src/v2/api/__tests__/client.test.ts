@@ -60,6 +60,23 @@ describe('V2APIClient authenticated reads', () => {
 
     await expect(client.getProject('cached-project')).rejects.toThrow('Access denied');
   });
+
+  it('bounds raw backend analyze failures before they reach the UI', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        success: false,
+        data: {},
+        errors: ['Traceback: confidential deal memo exploded in parser'],
+      })
+    );
+
+    const client = new V2APIClient();
+
+    await expect(client.analyzeProject('Confidential deal memo')).rejects.toMatchObject({
+      name: 'APIError',
+      message: "We couldn't analyze this project. Please review the description and inputs and try again.",
+    });
+  });
 });
 
 describe('V2APIClient deleteProject', () => {
@@ -123,5 +140,33 @@ describe('V2APIClient deleteProject', () => {
     expect(JSON.parse(localStorage.getItem('specsharp_projects') || '[]')).toEqual(
       cachedProjects
     );
+  });
+
+  it('preserves the safe run-limit contract for decision-packet generation', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        {
+          detail: {
+            code: 'run_limit_reached',
+            message: 'Run limit reached. Contact support for more runs.',
+            remaining_runs: 0,
+          },
+        },
+        { status: 403, statusText: 'Forbidden' }
+      )
+    );
+
+    const client = new V2APIClient();
+
+    await expect(
+      client.createProject({
+        description: 'Hotel in Nashville, TN',
+      })
+    ).rejects.toMatchObject({
+      name: 'APIError',
+      status: 403,
+      code: 'run_limit_reached',
+      message: 'Run limit reached. Contact support for more runs.',
+    });
   });
 });

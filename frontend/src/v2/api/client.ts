@@ -24,6 +24,74 @@ const DEBUG_API =
   typeof window !== 'undefined' &&
   (window as any).__SPECSHARP_DEBUG_FLAGS__?.includes('api') === true;
 
+const DEFAULT_USER_SAFE_ERROR_MESSAGE = 'Something went wrong. Please try again.';
+
+const isSafeUserFacingMessage = (message: string): boolean => {
+  const normalized = message.trim();
+  if (!normalized) return false;
+  return (
+    normalized === 'Project not found' ||
+    normalized === 'DealShield not available for this project' ||
+    normalized === 'Access denied' ||
+    normalized === 'Could not determine square footage from description' ||
+    normalized === 'Please enter a project description' ||
+    normalized === 'Service unavailable.' ||
+    normalized.startsWith("We couldn't ")
+  );
+};
+
+export const toUserSafeApiErrorMessage = (params: {
+  endpoint: string;
+  message?: string;
+  status?: number;
+  code?: string;
+}): string => {
+  const { endpoint, message, status, code } = params;
+  const normalizedMessage = typeof message === 'string' ? message.trim() : '';
+
+  if (code === 'run_limit_reached') {
+    return normalizedMessage || "You've used all included runs.";
+  }
+
+  if (normalizedMessage && isSafeUserFacingMessage(normalizedMessage)) {
+    return normalizedMessage;
+  }
+
+  if (status === 404 && endpoint.startsWith('/scope/projects/')) {
+    return 'Project not found';
+  }
+
+  if (endpoint === '/analyze') {
+    return "We couldn't analyze this project. Please review the description and inputs and try again.";
+  }
+
+  if (endpoint === '/scope/generate') {
+    return "We couldn't generate this decision packet. Please try again.";
+  }
+
+  if (endpoint === '/calculate') {
+    return "We couldn't calculate this project. Please review the project inputs and try again.";
+  }
+
+  if (endpoint === '/compare') {
+    return "We couldn't compare these scenarios right now. Please try again.";
+  }
+
+  if (endpoint.includes('/dealshield/controls')) {
+    return "We couldn't save DealShield assumptions right now. Please try again.";
+  }
+
+  if (endpoint.endsWith('/dealshield')) {
+    return "We couldn't load DealShield for this project right now.";
+  }
+
+  if (endpoint.endsWith('/owner-view')) {
+    return "We couldn't load the owner view for this project right now.";
+  }
+
+  return DEFAULT_USER_SAFE_ERROR_MESSAGE;
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const summarizeProject = (project: any) => {
   if (!project || typeof project !== 'object') {
@@ -136,7 +204,16 @@ class V2APIClient {
       const contentType = response.headers.get('content-type');
       if (!contentType?.includes('application/json')) {
         if (!response.ok) {
-          throw new Error(`API Error: ${response.status} ${response.statusText}`);
+          const error = new Error(
+            toUserSafeApiErrorMessage({
+              endpoint,
+              status: response.status,
+              message: response.statusText,
+            })
+          ) as Error & APIError;
+          error.name = 'APIError';
+          error.status = response.status;
+          throw error;
         }
         return {} as T;
       }
@@ -154,7 +231,12 @@ class V2APIClient {
             ? (detail.code || detail.error)
             : undefined;
         const error = new Error(
-          data.message || detailMessage || response.statusText
+          toUserSafeApiErrorMessage({
+            endpoint,
+            status: response.status,
+            code: data.code || detailCode,
+            message: data.message || detailMessage || response.statusText,
+          })
         ) as Error & APIError;
         error.name = 'APIError';
         error.status = response.status;
@@ -166,7 +248,15 @@ class V2APIClient {
       // Handle V2 API wrapper format
       if ('success' in data && 'data' in data) {
         if (!data.success) {
-          throw new Error(data.errors?.[0] || 'Request failed');
+          const error = new Error(
+            toUserSafeApiErrorMessage({
+              endpoint,
+              message: data.errors?.[0] || 'Request failed',
+            })
+          ) as Error & APIError;
+          error.name = 'APIError';
+          error.details = data;
+          throw error;
         }
         return data.data;
       }
@@ -232,9 +322,10 @@ class V2APIClient {
     } = options;
 
     tracer.trace('API_REQUEST', 'Sending analysis request', {
-      description: text,
+      description_present: !!text.trim(),
+      description_length: text.trim().length,
       square_footage,
-      location,
+      has_location: !!location?.trim(),
       unit_count,
       key_count,
       finishLevel,
@@ -268,7 +359,17 @@ class V2APIClient {
       payload.special_features = special_features;
     }
     
-    console.log('[analyze payload]', payload);
+    if (DEBUG_API) {
+      console.log('[analyze payload]', {
+        description_length: text.trim().length,
+        has_location: !!payload.location,
+        has_square_footage: !!payload.square_footage,
+        unit_count: payload.unit_count,
+        key_count: payload.key_count,
+        project_class: payload.project_class,
+        special_features_count: special_features?.length ?? 0,
+      });
+    }
     
     const result = await this.request<ProjectAnalysis>('/analyze', {
       method: 'POST',
@@ -280,7 +381,9 @@ class V2APIClient {
       building_type: result?.parsed_input?.building_type,
       subtype: result?.parsed_input?.building_subtype,
       square_footage: result?.parsed_input?.square_footage,
-      full_result: result
+      trace_count: Array.isArray(result?.calculations?.calculation_trace)
+        ? result.calculations.calculation_trace.length
+        : 0,
     });
     
     return result;
@@ -577,7 +680,16 @@ class V2APIClient {
       payload.projectClassification = params.projectClass;
     }
     
-    console.log('[scope.generate payload]', payload);
+    if (DEBUG_API) {
+      console.log('[scope.generate payload]', {
+        description_length: String(params.description || '').trim().length,
+        has_location: !!payload.location,
+        has_square_footage: !!payload.square_footage,
+        finishLevel: payload.finishLevel,
+        project_class: payload.project_class,
+        special_features_count: (payload.special_features as string[])?.length ?? 0,
+      });
+    }
 
     tracer.trace('API_CREATE_PROJECT_V2', 'Creating project via V2 endpoint', {
       has_location: !!payload.location,
