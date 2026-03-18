@@ -37,8 +37,9 @@ export const SecurityTrust: React.FC = () => {
               <h2 className="text-2xl font-semibold mb-4">2. Data Protection</h2>
               <ul className="list-disc pl-6 mb-4">
                 <li><strong>Encryption in transit:</strong> All traffic uses TLS.</li>
-                <li><strong>Access controls:</strong> Role-based access and least-privilege policies.</li>
-                <li><strong>Tenant isolation:</strong> Backend authorization + database row-level security.</li>
+                <li><strong>Access controls:</strong> Authenticated access with role-based permissions and least-privilege administrative handling.</li>
+                <li><strong>Tenant isolation:</strong> Backend-enforced organization scoping for project access and generated outputs.</li>
+                <li><strong>Controlled document access:</strong> Decision packets and exports are served through authenticated, scoped backend routes.</li>
                 <li><strong>Secrets management:</strong> Keys are stored in secured environment variables.</li>
               </ul>
             </section>
@@ -46,8 +47,8 @@ export const SecurityTrust: React.FC = () => {
             <section className="mb-8">
               <h2 className="text-2xl font-semibold mb-4">3. Authentication</h2>
               <p className="mb-4">
-                We use Google OAuth for login. Sessions are validated server-side and access is scoped to
-                the user and organization that owns the data.
+                We use Google OAuth for login. Sessions are validated server-side, and backend authorization
+                scopes project and document access to the organization that owns the data.
               </p>
             </section>
 

@@ -111,7 +111,7 @@ const faqSections: FAQSection[] = [
       {
         question: 'How is data secured?',
         answer:
-          'We use secure OAuth authentication, encrypted connections, strict access controls, and database row-level security for tenant isolation.'
+          'We use secure OAuth authentication, encrypted connections, backend-enforced access controls, and organization-scoped authorization for project access and generated documents.'
       },
       {
         question: 'Do you sell or share my data?',
