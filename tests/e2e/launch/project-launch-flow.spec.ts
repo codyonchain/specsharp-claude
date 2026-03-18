@@ -41,10 +41,33 @@ test.describe("Launch project flow", () => {
     const stressBandSelect = page.getByLabel("Downside Stress Level");
     const currentStressBand = await stressBandSelect.inputValue();
     const nextStressBand = currentStressBand === "7" ? "5" : "7";
-    await stressBandSelect.selectOption(nextStressBand);
+    const dealShieldControlsUpdateResponsePromise = page.waitForResponse((response) => {
+      return (
+        response.request().method() === "POST" &&
+        response.url().includes(`/api/v2/scope/projects/${projectId}/dealshield/controls`)
+      );
+    });
+    const dealShieldRefreshResponsePromise = page.waitForResponse((response) => {
+      return (
+        response.request().method() === "GET" &&
+        response.url().includes(`/api/v2/scope/projects/${projectId}/dealshield`) &&
+        !response.url().includes("/pdf")
+      );
+    });
+    const [dealShieldControlsUpdateResponse, dealShieldRefreshResponse] = await Promise.all([
+      dealShieldControlsUpdateResponsePromise,
+      dealShieldRefreshResponsePromise,
+      stressBandSelect.selectOption(nextStressBand),
+    ]);
     await expect(stressBandSelect).toHaveValue(nextStressBand);
-    await expect(page.getByText("Updating DealShield scenarios...")).toBeVisible();
-    await expect(page.getByText("Updating DealShield scenarios...")).not.toBeVisible({ timeout: 20_000 });
+    expect(dealShieldControlsUpdateResponse.ok()).toBeTruthy();
+    expect(dealShieldRefreshResponse.ok()).toBeTruthy();
+
+    const dealShieldControlsUpdatePayload = await dealShieldControlsUpdateResponse.json();
+    expect(dealShieldControlsUpdatePayload?.success).toBeTruthy();
+    expect(dealShieldControlsUpdatePayload?.data?.dealshield_controls?.stress_band_pct).toBe(
+      Number(nextStressBand)
+    );
 
     await page.reload();
     await expect(page.getByRole("heading", { name: "DealShield" })).toBeVisible();
