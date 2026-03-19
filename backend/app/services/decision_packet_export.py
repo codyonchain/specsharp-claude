@@ -29,6 +29,17 @@ def _escape(value: Any) -> str:
     return html_module.escape(_sanitize_text(value))
 
 
+def _format_export_primary_control_label(label: Any, profile_id: Any) -> str:
+    cleaned_label = _sanitize_text(label)
+    cleaned_profile_id = _sanitize_text(profile_id)
+    if (
+        cleaned_profile_id.startswith("multifamily_market_rate_apartments")
+        and cleaned_label.lower() == "structural base carry proxy +5%"
+    ):
+        return "Cost Basis Drift + Carry Risk"
+    return cleaned_label
+
+
 def _to_number(value: Any) -> float | None:
     if value is None or isinstance(value, bool):
         return None
@@ -791,7 +802,7 @@ def _render_decision_banner(banner: Dict[str, Any]) -> str:
     )
 
 
-def _render_decision_insurance(insurance: Dict[str, Any]) -> str:
+def _render_decision_insurance(insurance: Dict[str, Any], provenance: Dict[str, Any]) -> str:
     primary = _as_dict(insurance.get("primary_control_variable"))
     first_break = _as_dict(insurance.get("first_break_condition"))
     break_risk = _as_dict(insurance.get("break_risk"))
@@ -818,11 +829,16 @@ def _render_decision_insurance(insurance: Dict[str, Any]) -> str:
     else:
         exposure_detail = "Primary control variable share of modeled downside sensitivity."
 
+    primary_label = _format_export_primary_control_label(
+        primary.get("label") or primary.get("id") or "Unavailable",
+        provenance.get("profile_id"),
+    )
+
     cards = [
         (
             "<div class=\"subcard\">"
             "<div class=\"subcard-title\">Primary Control Variable</div>"
-            f"<div class=\"subcard-value\">{_escape(primary.get('label') or primary.get('id') or 'Unavailable')}</div>"
+            f"<div class=\"subcard-value\">{html_module.escape(primary_label)}</div>"
             "<div class=\"subcard-detail\">"
             f"Impact: {html_module.escape(_format_percent(primary.get('impact_pct')))}"
             f" | Severity: {html_module.escape(_sanitize_text(primary.get('severity')) or '—')}"
@@ -1839,7 +1855,7 @@ def render_decision_packet_html(packet: Dict[str, Any]) -> str:
       <h2>Key Metrics Strip</h2>
       {_render_metric_grid(metric_cards)}
     </section>
-    {_render_decision_insurance(decision_insurance)}
+    {_render_decision_insurance(decision_insurance, provenance)}
     {_render_decision_metrics_table(decision_metrics_table)}
   </div>
 

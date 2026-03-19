@@ -214,6 +214,43 @@ def test_packet_renders_structured_financing_assumptions_from_canonical_contract
     assert "Structured financing assumptions such as term, amortization, IO, and layered debt are not yet modeled." not in html
 
 
+def test_packet_remaps_market_rate_multifamily_primary_control_label_for_export():
+    project = SimpleNamespace(
+        name="Sunset Residences",
+        location="Dallas, TX",
+        building_type="multifamily",
+        square_footage=12_000,
+        total_cost=3_700_000,
+        cost_per_sqft=308.33,
+        project_id="proj-export-market-rate-label",
+    )
+    project_payload = _build_project_payload(include_financing_summary=True)
+    dealshield_view_model = _build_dealshield_view_model()
+    dealshield_view_model["tile_profile_id"] = "multifamily_market_rate_apartments_v1"
+    dealshield_view_model["primary_control_variable"] = {
+        "label": "Structural Base Carry Proxy +5%",
+        "impact_pct": 1.36,
+        "severity": "Med",
+    }
+    dealshield_view_model["break_risk"] = {"level": "Medium"}
+    dealshield_view_model["provenance"] = {
+        "profile_id": "multifamily_market_rate_apartments_v1",
+    }
+
+    packet = compose_decision_packet_input(
+        project,
+        project_payload,
+        {"subtype": "market_rate_apartments"},
+        dealshield_view_model,
+        "SpecSharp Capital",
+    )
+
+    html = render_decision_packet_html(packet)
+
+    assert "Cost Basis Drift + Carry Risk" in html
+    assert "Structural Base Carry Proxy +5%" not in html
+
+
 def test_packet_renders_status_aware_special_feature_rows_for_mixed_selected_features():
     project = SimpleNamespace(
         name="Sunset Residences",
