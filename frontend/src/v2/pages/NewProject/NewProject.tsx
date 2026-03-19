@@ -449,6 +449,144 @@ export const resolveNewProjectAutoDetection = ({
 
 
 
+export const NEW_PROJECT_EXAMPLE_PROMPTS = [
+  {
+    icon: <Building className="h-6 w-6" />,
+    text: '220,000 SF market rate apartments with 240 units in Nashville, TN',
+    highlights: ['220,000 SF', 'market rate apartments', '240 units', 'Nashville, TN'],
+    type: 'multifamily',
+    color: 'text-purple-600 bg-purple-50',
+    squareFootage: 220000,
+    location: 'Nashville, TN'
+  },
+  {
+    icon: <Building className="h-6 w-6" />,
+    text: '250,000 SF luxury apartments with 260 units and rooftop amenity deck in Nashville, TN',
+    highlights: ['250,000 SF', 'luxury apartments', '260 units', 'rooftop amenity deck', 'Nashville, TN'],
+    type: 'multifamily',
+    color: 'text-purple-600 bg-purple-50',
+    squareFootage: 250000,
+    location: 'Nashville, TN'
+  },
+  {
+    icon: <Warehouse className="h-6 w-6" />,
+    text: '140,000 SF warehouse with 24 dock doors in Nashville, TN',
+    highlights: ['140,000 SF', 'warehouse', '24 dock doors', 'Nashville, TN'],
+    type: 'industrial',
+    color: 'text-gray-600 bg-gray-50',
+    squareFootage: 140000,
+    location: 'Nashville, TN'
+  },
+  {
+    icon: <Warehouse className="h-6 w-6" />,
+    text: '180,000 SF distribution center with automated sorting in Nashville, TN',
+    highlights: ['180,000 SF', 'distribution center', 'automated sorting', 'Nashville, TN'],
+    type: 'industrial',
+    color: 'text-gray-600 bg-gray-50',
+    squareFootage: 180000,
+    location: 'Nashville, TN'
+  },
+  {
+    icon: <Box className="h-6 w-6" />,
+    text: '95,000 SF cold storage facility with blast freezer in Manchester, NH',
+    highlights: ['95,000 SF', 'cold storage', 'blast freezer', 'Manchester, NH'],
+    type: 'industrial',
+    color: 'text-stone-600 bg-stone-50',
+    squareFootage: 95000,
+    location: 'Manchester, NH'
+  },
+  {
+    icon: <UtensilsCrossed className="h-6 w-6" />,
+    text: '6,500 SF full service restaurant with private dining in Nashville, TN',
+    highlights: ['6,500 SF', 'full service restaurant', 'private dining', 'Nashville, TN'],
+    type: 'restaurant',
+    color: 'text-orange-600 bg-orange-50',
+    squareFootage: 6500,
+    location: 'Nashville, TN'
+  },
+  {
+    icon: <UtensilsCrossed className="h-6 w-6" />,
+    text: '5,200 SF bar tavern with patio seating in Manchester, NH',
+    highlights: ['5,200 SF', 'bar tavern', 'patio seating', 'Manchester, NH'],
+    type: 'restaurant',
+    color: 'text-orange-600 bg-orange-50',
+    squareFootage: 5200,
+    location: 'Manchester, NH'
+  },
+  {
+    icon: <Hotel className="h-6 w-6" />,
+    text: '130,000 SF full service hotel with 220 keys in Nashville, TN',
+    highlights: ['130,000 SF', 'full service hotel', '220 keys', 'Nashville, TN'],
+    type: 'hospitality',
+    color: 'text-indigo-600 bg-indigo-50',
+    squareFootage: 130000,
+    location: 'Nashville, TN'
+  },
+  {
+    icon: <Box className="h-6 w-6" />,
+    text: '320,000 SF data center with backup generators in Nashville, TN',
+    highlights: ['320,000 SF', 'data center', 'backup generators', 'Nashville, TN'],
+    type: 'specialty',
+    color: 'text-stone-600 bg-stone-50',
+    squareFootage: 320000,
+    location: 'Nashville, TN'
+  },
+  {
+    icon: <Heart className="h-6 w-6" />,
+    text: '34,000 SF ambulatory surgery center with 8 operating rooms in Nashville, TN',
+    highlights: ['34,000 SF', 'ambulatory surgery center', '8 operating rooms', 'Nashville, TN'],
+    type: 'healthcare',
+    color: 'text-red-600 bg-red-50',
+    squareFootage: 34000,
+    location: 'Nashville, TN'
+  },
+  {
+    icon: <Heart className="h-6 w-6" />,
+    text: '18,000 SF urgent care center with x-ray in Manchester, NH',
+    highlights: ['18,000 SF', 'urgent care center', 'x-ray', 'Manchester, NH'],
+    type: 'healthcare',
+    color: 'text-red-600 bg-red-50',
+    squareFootage: 18000,
+    location: 'Manchester, NH'
+  },
+  {
+    icon: <Heart className="h-6 w-6" />,
+    text: '92,000 SF acute care hospital with emergency department in Nashville, TN',
+    highlights: ['92,000 SF', 'acute care hospital', 'emergency department', 'Nashville, TN'],
+    type: 'healthcare',
+    color: 'text-red-600 bg-red-50',
+    squareFootage: 92000,
+    location: 'Nashville, TN'
+  },
+  {
+    icon: <Briefcase className="h-6 w-6" />,
+    text: '58,000 SF class A office tower with conference center in Manchester, NH',
+    highlights: ['58,000 SF', 'class A office', 'conference center', 'Manchester, NH'],
+    type: 'office',
+    color: 'text-blue-600 bg-blue-50',
+    squareFootage: 58000,
+    location: 'Manchester, NH'
+  },
+  {
+    icon: <ShoppingCart className="h-6 w-6" />,
+    text: '42,000 SF shopping center with covered walkway in Nashville, TN',
+    highlights: ['42,000 SF', 'shopping center', 'covered walkway', 'Nashville, TN'],
+    type: 'retail',
+    color: 'text-pink-600 bg-pink-50',
+    squareFootage: 42000,
+    location: 'Nashville, TN'
+  },
+  {
+    icon: <GraduationCap className="h-6 w-6" />,
+    text: '68,000 SF middle school for 900 students in Manchester, NH',
+    highlights: ['68,000 SF', 'middle school', '900 students', 'Manchester, NH'],
+    type: 'educational',
+    color: 'text-green-600 bg-green-50',
+    squareFootage: 68000,
+    location: 'Manchester, NH'
+  }
+] as const;
+
 export const NewProject: React.FC = () => {
   const navigate = useNavigate();
   const resultsRef = useRef<HTMLDivElement>(null);
@@ -572,143 +710,7 @@ export const NewProject: React.FC = () => {
   }, []);
   
   // Example prompts focused on core launch subtypes (15 cards for a clean 3x5 layout)
-  const examplePrompts = [
-    {
-      icon: <Building className="h-6 w-6" />,
-      text: '220,000 SF market rate apartments with 240 units in Nashville, TN',
-      highlights: ['220,000 SF', 'market rate apartments', '240 units', 'Nashville, TN'],
-      type: 'multifamily',
-      color: 'text-purple-600 bg-purple-50',
-      squareFootage: 220000,
-      location: 'Nashville, TN'
-    },
-    {
-      icon: <Building className="h-6 w-6" />,
-      text: '250,000 SF luxury apartments with 260 units and amenity deck in Nashville, TN',
-      highlights: ['250,000 SF', 'luxury apartments', '260 units', 'Nashville, TN'],
-      type: 'multifamily',
-      color: 'text-purple-600 bg-purple-50',
-      squareFootage: 250000,
-      location: 'Nashville, TN'
-    },
-    {
-      icon: <Warehouse className="h-6 w-6" />,
-      text: '140,000 SF warehouse with 24 dock doors in Nashville, TN',
-      highlights: ['140,000 SF', 'warehouse', '24 dock doors', 'Nashville, TN'],
-      type: 'industrial',
-      color: 'text-gray-600 bg-gray-50',
-      squareFootage: 140000,
-      location: 'Nashville, TN'
-    },
-    {
-      icon: <Warehouse className="h-6 w-6" />,
-      text: '180,000 SF distribution center with high-bay racking in Nashville, TN',
-      highlights: ['180,000 SF', 'distribution center', 'high-bay racking', 'Nashville, TN'],
-      type: 'industrial',
-      color: 'text-gray-600 bg-gray-50',
-      squareFootage: 180000,
-      location: 'Nashville, TN'
-    },
-    {
-      icon: <Box className="h-6 w-6" />,
-      text: '95,000 SF cold storage facility with freezer zones in Manchester, NH',
-      highlights: ['95,000 SF', 'cold storage', 'freezer zones', 'Manchester, NH'],
-      type: 'industrial',
-      color: 'text-stone-600 bg-stone-50',
-      squareFootage: 95000,
-      location: 'Manchester, NH'
-    },
-    {
-      icon: <UtensilsCrossed className="h-6 w-6" />,
-      text: '6,500 SF full service restaurant with private dining in Nashville, TN',
-      highlights: ['6,500 SF', 'full service restaurant', 'private dining', 'Nashville, TN'],
-      type: 'restaurant',
-      color: 'text-orange-600 bg-orange-50',
-      squareFootage: 6500,
-      location: 'Nashville, TN'
-    },
-    {
-      icon: <UtensilsCrossed className="h-6 w-6" />,
-      text: '5,200 SF bar tavern with patio seating in Manchester, NH',
-      highlights: ['5,200 SF', 'bar tavern', 'patio seating', 'Manchester, NH'],
-      type: 'restaurant',
-      color: 'text-orange-600 bg-orange-50',
-      squareFootage: 5200,
-      location: 'Manchester, NH'
-    },
-    {
-      icon: <Hotel className="h-6 w-6" />,
-      text: '130,000 SF full service hotel with 220 keys in Nashville, TN',
-      highlights: ['130,000 SF', 'full service hotel', '220 keys', 'Nashville, TN'],
-      type: 'hospitality',
-      color: 'text-indigo-600 bg-indigo-50',
-      squareFootage: 130000,
-      location: 'Nashville, TN'
-    },
-    {
-      icon: <Box className="h-6 w-6" />,
-      text: '320,000 SF data center with dual power trains in Nashville, TN',
-      highlights: ['320,000 SF', 'data center', 'dual power trains', 'Nashville, TN'],
-      type: 'specialty',
-      color: 'text-stone-600 bg-stone-50',
-      squareFootage: 320000,
-      location: 'Nashville, TN'
-    },
-    {
-      icon: <Heart className="h-6 w-6" />,
-      text: '34,000 SF ambulatory surgery center with 8 OR suites in Nashville, TN',
-      highlights: ['34,000 SF', 'ambulatory surgery center', '8 OR suites', 'Nashville, TN'],
-      type: 'healthcare',
-      color: 'text-red-600 bg-red-50',
-      squareFootage: 34000,
-      location: 'Nashville, TN'
-    },
-    {
-      icon: <Heart className="h-6 w-6" />,
-      text: '18,000 SF urgent care center with imaging suites in Manchester, NH',
-      highlights: ['18,000 SF', 'urgent care center', 'imaging suites', 'Manchester, NH'],
-      type: 'healthcare',
-      color: 'text-red-600 bg-red-50',
-      squareFootage: 18000,
-      location: 'Manchester, NH'
-    },
-    {
-      icon: <Heart className="h-6 w-6" />,
-      text: '92,000 SF acute care hospital with emergency department in Nashville, TN',
-      highlights: ['92,000 SF', 'acute care hospital', 'emergency department', 'Nashville, TN'],
-      type: 'healthcare',
-      color: 'text-red-600 bg-red-50',
-      squareFootage: 92000,
-      location: 'Nashville, TN'
-    },
-    {
-      icon: <Briefcase className="h-6 w-6" />,
-      text: '58,000 SF class A office tower with tenant lounge in Manchester, NH',
-      highlights: ['58,000 SF', 'class A office', 'tenant lounge', 'Manchester, NH'],
-      type: 'office',
-      color: 'text-blue-600 bg-blue-50',
-      squareFootage: 58000,
-      location: 'Manchester, NH'
-    },
-    {
-      icon: <ShoppingCart className="h-6 w-6" />,
-      text: '42,000 SF shopping center with grocery anchor in Nashville, TN',
-      highlights: ['42,000 SF', 'shopping center', 'grocery anchor', 'Nashville, TN'],
-      type: 'retail',
-      color: 'text-pink-600 bg-pink-50',
-      squareFootage: 42000,
-      location: 'Nashville, TN'
-    },
-    {
-      icon: <GraduationCap className="h-6 w-6" />,
-      text: '68,000 SF middle school for 900 students in Manchester, NH',
-      highlights: ['68,000 SF', 'middle school', '900 students', 'Manchester, NH'],
-      type: 'educational',
-      color: 'text-green-600 bg-green-50',
-      squareFootage: 68000,
-      location: 'Manchester, NH'
-    }
-  ];
+  const examplePrompts = NEW_PROJECT_EXAMPLE_PROMPTS;
   
   const parseSquareFootageValue = (value: string): number | undefined => {
     if (!value) return undefined;

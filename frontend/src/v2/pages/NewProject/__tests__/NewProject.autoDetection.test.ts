@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveNewProjectAutoDetection } from '../NewProject';
+import { NEW_PROJECT_EXAMPLE_PROMPTS, resolveNewProjectAutoDetection } from '../NewProject';
 
 describe('NewProject auto-detection path', () => {
   it('does not emit the orphaned food_court feature id', () => {
@@ -216,6 +216,84 @@ describe('NewProject auto-detection path', () => {
       if (unexpectedFilteredId) {
         expect(result.filteredFeatureIds).not.toContain(unexpectedFilteredId);
       }
+    }
+  );
+
+  it.each([
+    {
+      index: 1,
+      expectedText:
+        '250,000 SF luxury apartments with 260 units and rooftop amenity deck in Nashville, TN',
+      parsedBuildingType: 'multifamily',
+      parsedSubtype: 'luxury_apartments',
+      expectedFiltered: ['rooftop_amenity'],
+    },
+    {
+      index: 3,
+      expectedText: '180,000 SF distribution center with automated sorting in Nashville, TN',
+      parsedBuildingType: 'industrial',
+      parsedSubtype: 'distribution_center',
+      expectedFiltered: ['automated_sorting'],
+    },
+    {
+      index: 4,
+      expectedText: '95,000 SF cold storage facility with blast freezer in Manchester, NH',
+      parsedBuildingType: 'industrial',
+      parsedSubtype: 'cold_storage',
+      expectedFiltered: ['blast_freezer'],
+    },
+    {
+      index: 8,
+      expectedText: '320,000 SF data center with backup generators in Nashville, TN',
+      parsedBuildingType: 'specialty',
+      parsedSubtype: 'data_center',
+      expectedFiltered: ['generator_plant'],
+    },
+    {
+      index: 9,
+      expectedText:
+        '34,000 SF ambulatory surgery center with 8 operating rooms in Nashville, TN',
+      parsedBuildingType: 'healthcare',
+      parsedSubtype: 'surgical_center',
+      expectedFiltered: ['operating_room'],
+    },
+    {
+      index: 10,
+      expectedText: '18,000 SF urgent care center with x-ray in Manchester, NH',
+      parsedBuildingType: 'healthcare',
+      parsedSubtype: 'urgent_care',
+      expectedFiltered: ['x_ray'],
+    },
+    {
+      index: 12,
+      expectedText: '58,000 SF class A office tower with conference center in Manchester, NH',
+      parsedBuildingType: 'office',
+      parsedSubtype: 'class_a',
+      expectedFiltered: ['conference_center', 'executive_floor'],
+    },
+    {
+      index: 13,
+      expectedText: '42,000 SF shopping center with covered walkway in Nashville, TN',
+      parsedBuildingType: 'retail',
+      parsedSubtype: 'shopping_center',
+      expectedFiltered: ['covered_walkway'],
+    },
+  ])(
+    'keeps mounted /new sample card $index aligned to parser-supported feature ids',
+    ({ index, expectedText, parsedBuildingType, parsedSubtype, expectedFiltered }) => {
+      const prompt = NEW_PROJECT_EXAMPLE_PROMPTS[index];
+
+      expect(prompt.text).toBe(expectedText);
+
+      const result = resolveNewProjectAutoDetection({
+        description: prompt.text,
+        parsedBuildingType,
+        parsedSubtype,
+      });
+
+      expect(result.effectiveBuildingType).toBe(parsedBuildingType);
+      expect(result.resolvedSubtype).toBe(parsedSubtype);
+      expect(result.filteredFeatureIds.sort()).toEqual(expectedFiltered.sort());
     }
   );
 });
