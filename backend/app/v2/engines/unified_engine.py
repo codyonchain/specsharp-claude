@@ -69,6 +69,11 @@ MIXED_USE_REVENUE_COMPONENT_MULTIPLIERS: Dict[str, float] = {
     "hotel": 1.12,
     "transit": 0.93,
 }
+TENANT_IMPROVEMENT_DESCRIPTION_PATTERNS = (
+    re.compile(r"\btenant[\s-]+improvements?\b"),
+    re.compile(r"\bti\b"),
+    re.compile(r"\bt\.i\.\b"),
+)
 
 
 def _humanize_special_feature_label(feature_id: str) -> str:
@@ -844,6 +849,18 @@ class UnifiedEngine:
         if s in ("tenant_improvement", "tenant", "ti"):
             return "tenant_improvement"
         return "ground_up"
+
+    def _infer_project_class_from_description(self, description: str) -> ProjectClass:
+        """Infer the project class from description keywords without substring collisions."""
+        description_lower = description.lower()
+
+        if 'renovation' in description_lower or 'remodel' in description_lower:
+            return ProjectClass.RENOVATION
+        if 'addition' in description_lower or 'expansion' in description_lower:
+            return ProjectClass.ADDITION
+        if any(pattern.search(description_lower) for pattern in TENANT_IMPROVEMENT_DESCRIPTION_PATTERNS):
+            return ProjectClass.TENANT_IMPROVEMENT
+        return ProjectClass.GROUND_UP
 
     @staticmethod
     def _normalize_special_feature_key(value: Any) -> str:
@@ -3769,7 +3786,11 @@ class UnifiedEngine:
         if hospitality_financials and hospitality_expense_pct is not None:
             total_expenses = round(annual_revenue * hospitality_expense_pct, 2)
         elif office_financials:
-            annual_revenue = office_financials.get('egi', annual_revenue) * revenue_factor
+            office_cam_recovery = float(office_financials.get('recoverable_cam', 0.0) or 0.0)
+            rent_only_egi = float(
+                office_financials.get('rent_egi', office_financials.get('egi', annual_revenue)) or 0.0
+            )
+            annual_revenue = (rent_only_egi * revenue_factor) + office_cam_recovery
             total_expenses = round(
                 (
                     office_financials.get('opex', 0.0)
@@ -3778,10 +3799,7 @@ class UnifiedEngine:
                 ) * revenue_factor,
                 2
             )
-            derived_margin = office_financials.get('noi_margin')
-            if isinstance(derived_margin, (int, float)):
-                margin_pct = float(derived_margin)
-            elif annual_revenue > 0:
+            if annual_revenue > 0:
                 margin_pct = max(0.05, min(0.65, 1 - (total_expenses / annual_revenue)))
         elif office_operating_expense_override is not None:
             total_expenses = round(office_operating_expense_override, 2)
@@ -3834,7 +3852,14 @@ class UnifiedEngine:
                     calculations[dest_key] = float(hosp_value)
                 except (TypeError, ValueError):
                     calculations[dest_key] = hosp_value
-        cam_charges_value = round(office_cam_charges, 2) if office_cam_charges is not None else round(float(calculations.get('cam_charges', 0) or 0), 2)
+        office_financials_cam = calculations.get('office_financials') if building_enum == BuildingType.OFFICE else None
+        if office_financials_cam:
+            cam_charges_source = office_financials_cam.get('recoverable_cam')
+        elif office_cam_charges is not None:
+            cam_charges_source = office_cam_charges
+        else:
+            cam_charges_source = calculations.get('cam_charges', 0)
+        cam_charges_value = round(float(cam_charges_source or 0), 2)
         market_cap_rate_config = getattr(subtype_config, 'market_cap_rate', None)
         yield_on_cost = net_income / total_cost if total_cost > 0 else 0
         cap_rate_spread_bps = None
@@ -4405,12 +4430,19 @@ class UnifiedEngine:
         # Office - leverage Class A profile for PGI/EGI/NOI
         elif building_enum == BuildingType.OFFICE:
             office_profile = {}
+            recoverable_cam = 0.0
             profile_source = getattr(config, 'financial_metrics', None)
             if isinstance(profile_source, dict):
                 office_profile = dict(profile_source)
+            cam_charges_per_sf = getattr(config, 'cam_charges_per_sf', None)
+            if isinstance(cam_charges_per_sf, (int, float)) and cam_charges_per_sf > 0 and square_footage > 0:
+                recoverable_cam = float(cam_charges_per_sf) * float(square_footage)
             if office_profile:
-                base_rent = office_profile.get('base_rent_per_sf')
-                office_financials = self._build_office_financials(square_footage, office_profile)
+                office_financials = self._build_office_financials(
+                    square_footage,
+                    office_profile,
+                    recoverable_cam=recoverable_cam,
+                )
             else:
                 office_financials = {}
             if office_financials:
@@ -4426,6 +4458,8 @@ class UnifiedEngine:
                     + office_financials.get('lc_amort', 0.0)
                 )
                 context['office_pgi'] = office_financials.get('pgi')
+                context['office_rent_egi'] = office_financials.get('rent_egi')
+                context['office_cam_recovery'] = office_financials.get('recoverable_cam')
                 context['office_vacancy_and_credit_loss'] = office_financials.get('vacancy_and_credit_loss')
             base_revenue = office_financials.get('egi', square_footage * getattr(config, 'base_revenue_per_sf_annual', 0))
             quality_factor = 1.0
@@ -4592,9 +4626,15 @@ class UnifiedEngine:
         
         return adjusted_revenue
 
-    def _build_office_financials(self, square_footage: float, office_profile: Optional[Dict[str, float]]) -> Dict[str, float]:
+    def _build_office_financials(
+        self,
+        square_footage: float,
+        office_profile: Optional[Dict[str, float]],
+        *,
+        recoverable_cam: float = 0.0,
+    ) -> Dict[str, float]:
         """
-        Build a simple Class A office underwriting model using configured profile inputs.
+        Build a simple office underwriting model using configured profile inputs.
         Returns PGI/EGI/NOI plus the major expense components so downstream callers
         can keep NOI, rent-per-SF, and margin in sync with the UI.
         """
@@ -4607,6 +4647,10 @@ class UnifiedEngine:
             return {}
         if sf <= 0:
             return {}
+        try:
+            recoverable_cam_value = max(0.0, float(recoverable_cam or 0.0))
+        except (TypeError, ValueError):
+            recoverable_cam_value = 0.0
 
         def _to_float(name: str, default: float = 0.0) -> float:
             value = office_profile.get(name, default)
@@ -4625,11 +4669,15 @@ class UnifiedEngine:
         lc_pct_of_lease_value = _to_float("lc_pct_of_lease_value")
         lc_amort_years = int(office_profile.get("lc_amort_years", 10) or 10)
 
-        pgi = base_rent_per_sf * sf * stabilized_occupancy
-        vacancy_and_credit_loss = vacancy_credit_pct * pgi
-        egi = pgi - vacancy_and_credit_loss
+        rent_pgi = base_rent_per_sf * sf * stabilized_occupancy
+        vacancy_and_credit_loss = vacancy_credit_pct * rent_pgi
+        rent_egi = rent_pgi - vacancy_and_credit_loss
+        pgi = rent_pgi + recoverable_cam_value
+        egi = rent_egi + recoverable_cam_value
 
-        opex = opex_pct * egi
+        # Keep recoverable CAM as a pass-through recovery rather than inflating
+        # the modeled operating expense burden.
+        opex = opex_pct * rent_egi
         ti_amort = 0.0
         if ti_per_sf > 0 and ti_amort_years > 0:
             ti_amort = (ti_per_sf * sf) / ti_amort_years
@@ -4637,20 +4685,23 @@ class UnifiedEngine:
         lc_amort = 0.0
         if lc_pct_of_lease_value > 0 and lc_amort_years > 0:
             assumed_lease_term_years = 10
-            total_commissions = lc_pct_of_lease_value * pgi * assumed_lease_term_years
+            total_commissions = lc_pct_of_lease_value * rent_pgi * assumed_lease_term_years
             lc_amort = total_commissions / lc_amort_years
 
         total_expenses = opex + ti_amort + lc_amort
         noi = egi - total_expenses
         noi_margin = (noi / egi) if egi > 0 else 0.0
 
-        rent_per_sf = (pgi / sf) if sf > 0 else 0.0
+        rent_per_sf = (rent_pgi / sf) if sf > 0 else 0.0
         noi_per_sf = (noi / sf) if sf > 0 else 0.0
 
         return {
             "pgi": pgi,
+            "rent_pgi": rent_pgi,
+            "rent_egi": rent_egi,
             "vacancy_and_credit_loss": vacancy_and_credit_loss,
             "egi": egi,
+            "recoverable_cam": recoverable_cam_value,
             "opex": opex,
             "ti_amort": ti_amort,
             "lc_amort": lc_amort,
@@ -6383,6 +6434,7 @@ class UnifiedEngine:
         parsed_detection_conflict = (
             parsed_details.get("detection_conflict_resolution") if isinstance(parsed_details, dict) else None
         )
+        parsed_floors = parsed_details.get("floors") if isinstance(parsed_details, dict) else None
 
         building_type = None
         subtype = parsed_subtype if isinstance(parsed_subtype, str) and parsed_subtype.strip() else None
@@ -6432,16 +6484,13 @@ class UnifiedEngine:
                 'description': description
             }
 
-        # Detect project class from keywords
-        description_lower = description.lower()
-        if 'renovation' in description_lower or 'remodel' in description_lower:
-            project_class = ProjectClass.RENOVATION
-        elif 'addition' in description_lower or 'expansion' in description_lower:
-            project_class = ProjectClass.ADDITION
-        elif 'tenant improvement' in description_lower or 'ti' in description_lower:
-            project_class = ProjectClass.TENANT_IMPROVEMENT
-        else:
-            project_class = ProjectClass.GROUND_UP
+        project_class = self._infer_project_class_from_description(description)
+        try:
+            resolved_floors = int(parsed_floors or 1)
+        except (TypeError, ValueError):
+            resolved_floors = 1
+        if resolved_floors < 1:
+            resolved_floors = 1
         
         inferred_finish_level, explicit_factor = infer_finish_level(description)
         finish_source = 'default'
@@ -6456,6 +6505,7 @@ class UnifiedEngine:
 
         parsed_input_overrides: Dict[str, Any] = {
             "description": description,
+            "floors": resolved_floors,
         }
         if isinstance(parsed_split_hint, dict):
             parsed_input_overrides["mixed_use_split_hint"] = parsed_split_hint
@@ -6472,6 +6522,7 @@ class UnifiedEngine:
             square_footage=square_footage,
             location=location,
             project_class=project_class,
+            floors=resolved_floors,
             finish_level=finish_for_calculation,
             finish_level_source=finish_source,
             parsed_input_overrides=parsed_input_overrides,
