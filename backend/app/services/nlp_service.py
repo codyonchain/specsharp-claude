@@ -410,6 +410,23 @@ class NLPService:
                             self.building_patterns[building_type]['subtypes'][subtype]
                         ))
 
+    def _has_explicit_urgent_care_intent(self, text_lower: str) -> bool:
+        """Keep explicit urgent-care identities from being rerouted by supporting imaging language."""
+        if not isinstance(text_lower, str) or not text_lower.strip():
+            return False
+
+        urgent_care_keywords = (
+            self.building_patterns
+            .get('healthcare', {})
+            .get('subtypes', {})
+            .get('urgent_care', [])
+        )
+        for keyword in sorted(urgent_care_keywords, key=len, reverse=True):
+            if keyword in text_lower:
+                return True
+
+        return False
+
     def _has_strong_office_intent(self, text_lower: str) -> bool:
         """Detect high-confidence office language that should not be rerouted by generic amenities."""
         if not isinstance(text_lower, str) or not text_lower.strip():
@@ -1027,6 +1044,13 @@ class NLPService:
         ]
         if any(keyword in text_lower for keyword in mob_keywords):
             return 'healthcare', 'medical_office_building', classification
+
+        if self._has_explicit_urgent_care_intent(text_lower):
+            self._last_detection_metadata = {
+                "detection_source": "nlp_service.healthcare_primary_intent",
+                "conflict_resolution": "explicit_urgent_care_identity_beats_supporting_imaging_language",
+            }
+            return 'healthcare', 'urgent_care', classification
 
         recreation_subtype = self._resolve_recreation_subtype_from_intent(text_lower)
         multifamily_subtype = self._resolve_multifamily_subtype_from_intent(text_lower)
