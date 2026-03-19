@@ -562,11 +562,12 @@ def test_description_infers_finish_level():
 
 
 def test_special_features_unit_math():
-    """Unmigrated special features should still reflect the legacy square-footage surcharge model."""
+    """Migrated special features should reconcile to their resolved structured pricing rows."""
+    square_footage = 5_000
     base_result = unified_engine.calculate_project(
         building_type=BuildingType.HEALTHCARE,
         subtype="surgical_center",
-        square_footage=5_000,
+        square_footage=square_footage,
         location="Nashville, TN",
         project_class=ProjectClass.GROUND_UP,
         special_features=[],
@@ -574,22 +575,42 @@ def test_special_features_unit_math():
     feature_result = unified_engine.calculate_project(
         building_type=BuildingType.HEALTHCARE,
         subtype="surgical_center",
-        square_footage=5_000,
+        square_footage=square_footage,
         location="Nashville, TN",
         project_class=ProjectClass.GROUND_UP,
         special_features=["hc_asc_pain_management_suite"],
     )
 
     config = get_building_config(BuildingType.HEALTHCARE, "surgical_center")
-    expected_increment = (
-        config.special_features["hc_asc_pain_management_suite"] * base_result["project_info"]["square_footage"]
-    )
+    assert config is not None
+    feature_rule = config.special_features["hc_asc_pain_management_suite"]
+    assert isinstance(feature_rule, dict)
+
+    breakdown_by_id = {
+        row["id"]: row
+        for row in feature_result["construction_costs"]["special_features_breakdown"]
+        if isinstance(row, dict) and row.get("id")
+    }
+    feature_row = breakdown_by_id["hc_asc_pain_management_suite"]
+
+    expected_quantity = square_footage * feature_rule["area_share_of_gsf"]
+    expected_increment = expected_quantity * feature_rule["value"]
 
     delta = feature_result["construction_costs"]["special_features_total"] - base_result["construction_costs"]["special_features_total"]
+    assert feature_row["pricing_status"] == "incremental"
+    assert feature_row["pricing_basis"] == "AREA_SHARE_GSF"
+    assert feature_row["configured_value"] == pytest.approx(feature_rule["value"])
+    assert feature_row["configured_area_share_of_gsf"] == pytest.approx(
+        feature_rule["area_share_of_gsf"]
+    )
+    assert feature_row["applied_quantity"] == pytest.approx(expected_quantity)
+    assert feature_row["applied_value"] == pytest.approx(feature_rule["value"])
+    assert feature_row["quantity_source"] == "area_share_of_gsf"
+    assert feature_row["total_cost"] == pytest.approx(expected_increment)
     assert delta == pytest.approx(
         expected_increment,
         rel=1e-3,
-    ), "Unmigrated special feature surcharge should still scale with square footage"
+    ), "Structured special feature pricing should reconcile to the resolved engine output"
 
 
 def test_special_feature_pricing_status_maps_reference_known_features_and_valid_statuses():

@@ -151,6 +151,10 @@ def test_medium_shopping_center_prices_only_incremental_features_and_preserves_s
 
 def test_medium_medical_office_building_statuses_zero_ready_shell_but_price_buildout():
     square_footage = 36_000
+    config = get_building_config(BuildingType.HEALTHCARE, "medical_office_building")
+    assert config is not None
+    shell_rule = _area_share_rule(config, "mob_imaging_ready_shell")
+    buildout_rule = _area_share_rule(config, "ambulatory_buildout")
     result = _calculate_project(
         building_type=BuildingType.HEALTHCARE,
         subtype="medical_office_building",
@@ -161,7 +165,11 @@ def test_medium_medical_office_building_statuses_zero_ready_shell_but_price_buil
     )
 
     construction_costs = result.get("construction_costs") or {}
-    assert construction_costs.get("special_features_total") == 60 * square_footage
+    expected_buildout_quantity = square_footage * buildout_rule["area_share_of_gsf"]
+    expected_buildout_total = buildout_rule["value"] * expected_buildout_quantity
+    assert construction_costs.get("special_features_total") == pytest.approx(
+        expected_buildout_total
+    )
 
     breakdown = construction_costs.get("special_features_breakdown") or []
     breakdown_by_id = {
@@ -172,15 +180,29 @@ def test_medium_medical_office_building_statuses_zero_ready_shell_but_price_buil
 
     shell_row = breakdown_by_id["mob_imaging_ready_shell"]
     assert shell_row.get("pricing_status") == "included_in_baseline"
-    assert shell_row.get("configured_cost_per_sf") == 40
-    assert shell_row.get("cost_per_sf") == 0
+    assert shell_row.get("pricing_basis") == "AREA_SHARE_GSF"
+    assert shell_row.get("configured_value") == pytest.approx(shell_rule["value"])
+    assert shell_row.get("configured_area_share_of_gsf") == pytest.approx(
+        shell_rule["area_share_of_gsf"]
+    )
+    assert shell_row.get("applied_quantity") == pytest.approx(
+        square_footage * shell_rule["area_share_of_gsf"]
+    )
+    assert shell_row.get("applied_value") == 0
+    assert shell_row.get("quantity_source") == "area_share_of_gsf"
     assert shell_row.get("total_cost") == 0
 
     buildout_row = breakdown_by_id["ambulatory_buildout"]
     assert buildout_row.get("pricing_status") == "incremental"
-    assert buildout_row.get("configured_cost_per_sf") == 60
-    assert buildout_row.get("cost_per_sf") == 60
-    assert buildout_row.get("total_cost") == 60 * square_footage
+    assert buildout_row.get("pricing_basis") == "AREA_SHARE_GSF"
+    assert buildout_row.get("configured_value") == pytest.approx(buildout_rule["value"])
+    assert buildout_row.get("configured_area_share_of_gsf") == pytest.approx(
+        buildout_rule["area_share_of_gsf"]
+    )
+    assert buildout_row.get("applied_quantity") == pytest.approx(expected_buildout_quantity)
+    assert buildout_row.get("applied_value") == pytest.approx(buildout_rule["value"])
+    assert buildout_row.get("quantity_source") == "area_share_of_gsf"
+    assert buildout_row.get("total_cost") == pytest.approx(expected_buildout_total)
 
 
 def test_project_info_exposes_available_special_feature_pricing_for_medium_subtype():
