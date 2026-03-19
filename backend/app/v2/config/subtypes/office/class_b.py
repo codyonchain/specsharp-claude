@@ -68,12 +68,55 @@ CONFIG = (
             "San Francisco": 1.45,
         },
         special_features={
-            "fitness_center": 30,
-            "cafeteria": 25,
-            "conference_room": 20,
-            "surface_parking": 15,
-            "storage_space": 10,
-            "security_desk": 15,
+            "fitness_center": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 30,
+                "area_share_of_gsf": 0.015,
+            },
+            "cafeteria": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.03,
+            },
+            "conference_room": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.012,
+            },
+            "surface_parking": {
+                "basis": "COUNT_BASED",
+                "value": 5000,
+                "count_override_keys": [
+                    "surface_parking_space_count",
+                    "parking_space_count",
+                    "parking_stall_count",
+                    "stall_count",
+                    "space_count",
+                ],
+                "default_count_bands": [
+                    {"label": "small_office", "max_square_footage": 50000, "count": 150},
+                    {"label": "mid_office", "max_square_footage": 100000, "count": 300},
+                    {"label": "large_office", "max_square_footage": 200000, "count": 500},
+                    {"label": "campus_office", "count": 700},
+                ],
+                "unit_label": "space",
+            },
+            "storage_space": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 10,
+                "area_share_of_gsf": 0.05,
+            },
+            "security_desk": {
+                "basis": "COUNT_BASED",
+                "value": 15000,
+                "count": 1,
+                "count_override_keys": [
+                    "security_desk_count",
+                    "security_station_count",
+                    "desk_count",
+                ],
+                "unit_label": "desk",
+            },
         },
         special_feature_pricing_statuses={
             "fitness_center": "incremental",

@@ -76,36 +76,291 @@ def test_whole_project_sf_rule_application_preserves_status_zeroing(
     assert applied.total_cost == pytest.approx(expected_total_cost)
 
 
-def test_legacy_float_engine_breakdown_still_uses_normalized_whole_project_sf_for_unmigrated_feature():
+def test_legacy_float_engine_breakdown_still_uses_normalized_whole_project_sf_for_deferred_feature():
     square_footage = 64_000
     result = unified_engine.calculate_project(
-        building_type=BuildingType.MULTIFAMILY,
-        subtype="luxury_apartments",
+        building_type=BuildingType.EDUCATIONAL,
+        subtype="middle_school",
         square_footage=square_footage,
         location="Nashville, TN",
         project_class=ProjectClass.GROUND_UP,
-        special_features=["concierge"],
+        special_features=["cafeteria"],
     )
 
     construction_costs = result["construction_costs"]
     breakdown = construction_costs["special_features_breakdown"]
     breakdown_by_id = _special_feature_breakdown_by_id(result)
-    concierge_row = breakdown_by_id["concierge"]
+    cafeteria_row = breakdown_by_id["cafeteria"]
 
-    assert construction_costs["special_features_total"] == pytest.approx(15.0 * square_footage)
-    assert concierge_row["pricing_basis"] == SpecialFeaturePricingBasis.WHOLE_PROJECT_SF.value
-    assert concierge_row["configured_value"] == pytest.approx(15.0)
-    assert concierge_row["applied_value"] == pytest.approx(15.0)
-    assert concierge_row["applied_quantity"] == pytest.approx(square_footage)
-    assert concierge_row["configured_cost_per_sf"] == pytest.approx(15.0)
-    assert concierge_row["cost_per_sf"] == pytest.approx(15.0)
-    assert concierge_row["assumption_source"] == LEGACY_FLOAT_NORMALIZATION_SOURCE
-    assert concierge_row["total_cost"] == pytest.approx(15.0 * square_footage)
+    assert construction_costs["special_features_total"] == pytest.approx(30.0 * square_footage)
+    assert cafeteria_row["pricing_basis"] == SpecialFeaturePricingBasis.WHOLE_PROJECT_SF.value
+    assert cafeteria_row["configured_value"] == pytest.approx(30.0)
+    assert cafeteria_row["applied_value"] == pytest.approx(30.0)
+    assert cafeteria_row["applied_quantity"] == pytest.approx(square_footage)
+    assert cafeteria_row["configured_cost_per_sf"] == pytest.approx(30.0)
+    assert cafeteria_row["cost_per_sf"] == pytest.approx(30.0)
+    assert cafeteria_row["assumption_source"] == LEGACY_FLOAT_NORMALIZATION_SOURCE
+    assert cafeteria_row["total_cost"] == pytest.approx(30.0 * square_footage)
     assert sum(
         float(item.get("total_cost", 0.0) or 0.0)
         for item in breakdown
         if isinstance(item, dict)
     ) == pytest.approx(construction_costs["special_features_total"])
+
+
+@pytest.mark.parametrize(
+    ("building_type", "subtype", "expected_bases"),
+    (
+        (
+            BuildingType.HOSPITALITY,
+            "limited_service_hotel",
+            {
+                "breakfast_area": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "fitness_center": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "business_center": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "pool": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+            },
+        ),
+        (
+            BuildingType.MULTIFAMILY,
+            "luxury_apartments",
+            {"concierge": SpecialFeaturePricingBasis.COUNT_BASED},
+        ),
+        (
+            BuildingType.RESTAURANT,
+            "quick_service",
+            {
+                "outdoor_seating": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "play_area": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "digital_menu_boards": SpecialFeaturePricingBasis.COUNT_BASED,
+            },
+        ),
+        (
+            BuildingType.RESTAURANT,
+            "cafe",
+            {
+                "outdoor_seating": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "bakery_display": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "lounge_area": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "meeting_room": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+            },
+        ),
+        (
+            BuildingType.OFFICE,
+            "class_a",
+            {
+                "fitness_center": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "cafeteria": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "conference_center": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "green_roof": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "outdoor_terrace": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "executive_floor": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "data_center": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "concierge": SpecialFeaturePricingBasis.COUNT_BASED,
+            },
+        ),
+        (
+            BuildingType.OFFICE,
+            "class_b",
+            {
+                "fitness_center": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "cafeteria": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "conference_room": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "surface_parking": SpecialFeaturePricingBasis.COUNT_BASED,
+                "storage_space": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "security_desk": SpecialFeaturePricingBasis.COUNT_BASED,
+            },
+        ),
+        (
+            BuildingType.RETAIL,
+            "shopping_center",
+            {
+                "covered_walkway": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "loading_dock": SpecialFeaturePricingBasis.COUNT_BASED,
+                "monument_signage": SpecialFeaturePricingBasis.COUNT_BASED,
+                "outdoor_seating": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "drive_thru": SpecialFeaturePricingBasis.COUNT_BASED,
+                "storage_units": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+            },
+        ),
+        (
+            BuildingType.RETAIL,
+            "big_box",
+            {
+                "loading_dock": SpecialFeaturePricingBasis.COUNT_BASED,
+                "mezzanine": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "auto_center": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "garden_center": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "warehouse_racking": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "refrigerated_storage": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "curbside_pickup": SpecialFeaturePricingBasis.COUNT_BASED,
+            },
+        ),
+        (
+            BuildingType.MIXED_USE,
+            "office_residential",
+            {
+                "amenity_deck": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "business_center": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "conference_facility": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+            },
+        ),
+        (
+            BuildingType.MIXED_USE,
+            "hotel_retail",
+            {
+                "conference_center": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "restaurant": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "spa": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+                "retail_arcade": SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+            },
+        ),
+    ),
+)
+def test_launch_relevant_subtypes_use_structured_non_whole_project_pricing_for_migrated_features(
+    building_type,
+    subtype,
+    expected_bases,
+):
+    config = get_building_config(building_type, subtype)
+    assert config is not None
+
+    for feature_id, expected_basis in expected_bases.items():
+        raw_rule = config.special_features[feature_id]
+        normalized_rule = normalize_special_feature_pricing_rule(feature_id, raw_rule)
+
+        assert normalized_rule.assumption_source == STRUCTURED_RULE_SOURCE
+        assert normalized_rule.basis == expected_basis
+        assert normalized_rule.basis != SpecialFeaturePricingBasis.WHOLE_PROJECT_SF
+
+
+@pytest.mark.parametrize(
+    (
+        "building_type",
+        "subtype",
+        "square_footage",
+        "feature_id",
+        "parsed_input_overrides",
+        "expected_basis",
+    ),
+    (
+        (
+            BuildingType.HOSPITALITY,
+            "limited_service_hotel",
+            52_000,
+            "breakfast_area",
+            None,
+            SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+        ),
+        (
+            BuildingType.MULTIFAMILY,
+            "luxury_apartments",
+            64_000,
+            "concierge",
+            None,
+            SpecialFeaturePricingBasis.COUNT_BASED,
+        ),
+        (
+            BuildingType.RESTAURANT,
+            "quick_service",
+            3_200,
+            "digital_menu_boards",
+            None,
+            SpecialFeaturePricingBasis.COUNT_BASED,
+        ),
+        (
+            BuildingType.RESTAURANT,
+            "cafe",
+            3_200,
+            "meeting_room",
+            None,
+            SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+        ),
+        (
+            BuildingType.OFFICE,
+            "class_a",
+            300_000,
+            "executive_floor",
+            None,
+            SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+        ),
+        (
+            BuildingType.OFFICE,
+            "class_b",
+            100_000,
+            "surface_parking",
+            None,
+            SpecialFeaturePricingBasis.COUNT_BASED,
+        ),
+        (
+            BuildingType.RETAIL,
+            "shopping_center",
+            95_000,
+            "drive_thru",
+            None,
+            SpecialFeaturePricingBasis.COUNT_BASED,
+        ),
+        (
+            BuildingType.RETAIL,
+            "big_box",
+            180_000,
+            "warehouse_racking",
+            None,
+            SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+        ),
+        (
+            BuildingType.MIXED_USE,
+            "office_residential",
+            125_000,
+            "amenity_deck",
+            None,
+            SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+        ),
+        (
+            BuildingType.MIXED_USE,
+            "hotel_retail",
+            125_000,
+            "retail_arcade",
+            None,
+            SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+        ),
+    ),
+)
+def test_launch_relevant_engine_breakdown_uses_structured_basis_after_config_migration(
+    building_type,
+    subtype,
+    square_footage,
+    feature_id,
+    parsed_input_overrides,
+    expected_basis,
+):
+    result = unified_engine.calculate_project(
+        building_type=building_type,
+        subtype=subtype,
+        square_footage=square_footage,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=[feature_id],
+        parsed_input_overrides=parsed_input_overrides,
+    )
+
+    breakdown_row = _special_feature_breakdown_by_id(result)[feature_id]
+    pricing_row = _available_special_feature_pricing_by_id(result)[feature_id]
+
+    assert breakdown_row["pricing_basis"] == expected_basis.value
+    assert pricing_row["pricing_basis"] == expected_basis.value
+    assert breakdown_row["assumption_source"] == STRUCTURED_RULE_SOURCE
+    assert pricing_row["assumption_source"] == STRUCTURED_RULE_SOURCE
+    assert breakdown_row["pricing_basis"] != SpecialFeaturePricingBasis.WHOLE_PROJECT_SF.value
+
+    if expected_basis == SpecialFeaturePricingBasis.AREA_SHARE_GSF:
+        assert breakdown_row["configured_area_share_of_gsf"] > 0.0
+        assert breakdown_row["applied_quantity"] <= square_footage
+        assert "configured_cost_per_sf" not in breakdown_row
+    if expected_basis == SpecialFeaturePricingBasis.COUNT_BASED:
+        assert breakdown_row["configured_cost_per_count"] > 0.0
+        assert pricing_row["configured_cost_per_count"] > 0.0
+        assert "configured_cost_per_sf" not in breakdown_row
 
 
 @pytest.mark.parametrize(

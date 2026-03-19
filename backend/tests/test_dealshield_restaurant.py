@@ -51,8 +51,20 @@ def _expected_special_feature_total(configured_feature, square_footage: float, p
                 * float(configured_feature["area_share_of_gsf"])
                 * square_footage
             )
+        if configured_feature.get("basis") == "COUNT_BASED":
+            return float(configured_feature["value"]) * _default_count_for_feature(configured_feature)
         raise AssertionError(f"Unsupported structured restaurant feature config: {configured_feature}")
     return float(configured_feature) * square_footage
+
+
+def _default_count_for_feature(configured_feature) -> float:
+    count = configured_feature.get("count")
+    if isinstance(count, (int, float)):
+        return float(count)
+    default_count_bands = configured_feature.get("default_count_bands") or []
+    if default_count_bands:
+        return float(default_count_bands[0]["count"])
+    raise AssertionError(f"Count-based restaurant feature missing default count: {configured_feature}")
 
 
 def _profile_item_keys(profile_id: str):
@@ -721,15 +733,36 @@ def test_restaurant_special_features_math_and_breakdown_reconcile_for_all_subtyp
         feature_entry = breakdown_map[feature_key]
         assert feature_entry.get("pricing_status") == expected_status
         if isinstance(configured_feature, dict):
-            assert feature_entry.get("pricing_basis") == "AREA_SHARE_GSF"
+            assert feature_entry.get("pricing_basis") == configured_feature.get("basis")
             assert float(feature_entry.get("configured_value", 0.0) or 0.0) == pytest.approx(
                 float(configured_feature["value"]),
                 rel=1e-3,
             )
-            assert float(feature_entry.get("configured_area_share_of_gsf", 0.0) or 0.0) == pytest.approx(
-                float(configured_feature["area_share_of_gsf"]),
-                rel=1e-3,
-            )
+            if configured_feature.get("basis") == "AREA_SHARE_GSF":
+                assert float(
+                    feature_entry.get("configured_area_share_of_gsf", 0.0) or 0.0
+                ) == pytest.approx(
+                    float(configured_feature["area_share_of_gsf"]),
+                    rel=1e-3,
+                )
+            elif configured_feature.get("basis") == "COUNT_BASED":
+                assert float(
+                    feature_entry.get("configured_cost_per_count", 0.0) or 0.0
+                ) == pytest.approx(
+                    float(configured_feature["value"]),
+                    rel=1e-3,
+                )
+                assert float(feature_entry.get("applied_quantity", 0.0) or 0.0) == pytest.approx(
+                    _default_count_for_feature(configured_feature),
+                    rel=1e-3,
+                )
+                assert feature_entry.get("quantity_source") in {
+                    "configured_default_count",
+                    "size_band_default",
+                }
+                assert feature_entry.get("unit_label") == configured_feature.get("unit_label")
+            else:
+                raise AssertionError(f"Unsupported structured restaurant feature config: {configured_feature}")
         else:
             assert float(feature_entry.get("configured_cost_per_sf", 0.0) or 0.0) == pytest.approx(
                 float(configured_feature),
@@ -743,13 +776,22 @@ def test_restaurant_special_features_math_and_breakdown_reconcile_for_all_subtyp
                 rel=1e-3,
             )
         if isinstance(configured_feature, dict):
-            expected_applied_value = (
-                0.0 if expected_status == "included_in_baseline" else float(configured_feature["value"])
-            )
-            assert float(feature_entry.get("applied_value", 0.0) or 0.0) == pytest.approx(
-                expected_applied_value,
-                rel=1e-3,
-            )
+            if configured_feature.get("basis") == "AREA_SHARE_GSF":
+                expected_applied_value = (
+                    0.0 if expected_status == "included_in_baseline" else float(configured_feature["value"])
+                )
+                assert float(feature_entry.get("applied_value", 0.0) or 0.0) == pytest.approx(
+                    expected_applied_value,
+                    rel=1e-3,
+                )
+            elif configured_feature.get("basis") == "COUNT_BASED":
+                expected_cost_per_count = (
+                    0.0 if expected_status == "included_in_baseline" else float(configured_feature["value"])
+                )
+                assert float(feature_entry.get("cost_per_count", 0.0) or 0.0) == pytest.approx(
+                    expected_cost_per_count,
+                    rel=1e-3,
+                )
         assert float(feature_entry.get("total_cost", 0.0) or 0.0) == pytest.approx(expected_delta, rel=1e-3)
         assert sum(
             float(item.get("total_cost", 0.0) or 0.0)

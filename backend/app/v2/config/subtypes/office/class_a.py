@@ -69,19 +69,57 @@ CONFIG = (
             "Chicago": 1.25,
         },
         special_features={
-            "fitness_center": 35,
-            "cafeteria": 30,
-            "conference_center": 40,
+            "fitness_center": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.02,
+            },
+            "cafeteria": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 30,
+                "area_share_of_gsf": 0.05,
+            },
+            "conference_center": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.03,
+            },
             "structured_parking": {
                 "basis": "AREA_SHARE_GSF",
                 "value": 45,
                 "area_share_of_gsf": 0.24,
             },
-            "green_roof": 35,
-            "outdoor_terrace": 25,
-            "executive_floor": 45,
-            "data_center": 55,
-            "concierge": 20,
+            "green_roof": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.03,
+            },
+            "outdoor_terrace": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.02,
+            },
+            "executive_floor": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 45,
+                "area_share_of_gsf": 0.10,
+            },
+            "data_center": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 55,
+                "area_share_of_gsf": 0.015,
+            },
+            "concierge": {
+                "basis": "COUNT_BASED",
+                "value": 20000,
+                "count": 1,
+                "count_override_keys": [
+                    "concierge_desk_count",
+                    "concierge_count",
+                    "lobby_desk_count",
+                ],
+                "unit_label": "desk",
+            },
         },
         special_feature_pricing_statuses={
             "fitness_center": "incremental",

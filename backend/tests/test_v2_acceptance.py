@@ -102,6 +102,11 @@ def test_project_info_exposes_available_special_feature_pricing_for_current_subt
 
 def test_medium_shopping_center_prices_only_incremental_features_and_preserves_statuses():
     square_footage = 48_000
+    config = get_building_config(BuildingType.RETAIL, "shopping_center")
+    assert config is not None
+    covered_walkway_rule = _area_share_rule(config, "covered_walkway")
+    drive_thru_rule = config.special_features["drive_thru"]
+    assert isinstance(drive_thru_rule, dict)
     result = _calculate_project(
         building_type=BuildingType.RETAIL,
         subtype="shopping_center",
@@ -112,7 +117,9 @@ def test_medium_shopping_center_prices_only_incremental_features_and_preserves_s
     )
 
     construction_costs = result.get("construction_costs") or {}
-    assert construction_costs.get("special_features_total") == 40 * square_footage
+    assert construction_costs.get("special_features_total") == pytest.approx(
+        drive_thru_rule["value"] * drive_thru_rule["count"]
+    )
 
     breakdown = construction_costs.get("special_features_breakdown") or []
     breakdown_by_id = {
@@ -123,15 +130,23 @@ def test_medium_shopping_center_prices_only_incremental_features_and_preserves_s
 
     included_row = breakdown_by_id["covered_walkway"]
     assert included_row.get("pricing_status") == "included_in_baseline"
-    assert included_row.get("configured_cost_per_sf") == 20
-    assert included_row.get("cost_per_sf") == 0
+    assert included_row.get("pricing_basis") == "AREA_SHARE_GSF"
+    assert included_row.get("configured_value") == pytest.approx(covered_walkway_rule["value"])
+    assert included_row.get("configured_area_share_of_gsf") == pytest.approx(
+        covered_walkway_rule["area_share_of_gsf"]
+    )
+    assert included_row.get("applied_value") == 0
     assert included_row.get("total_cost") == 0
 
     incremental_row = breakdown_by_id["drive_thru"]
     assert incremental_row.get("pricing_status") == "incremental"
-    assert incremental_row.get("configured_cost_per_sf") == 40
-    assert incremental_row.get("cost_per_sf") == 40
-    assert incremental_row.get("total_cost") == 40 * square_footage
+    assert incremental_row.get("pricing_basis") == "COUNT_BASED"
+    assert incremental_row.get("configured_cost_per_count") == drive_thru_rule["value"]
+    assert incremental_row.get("applied_quantity") == drive_thru_rule["count"]
+    assert incremental_row.get("quantity_source") == "configured_default_count"
+    assert incremental_row.get("total_cost") == pytest.approx(
+        drive_thru_rule["value"] * drive_thru_rule["count"]
+    )
 
 
 def test_medium_medical_office_building_statuses_zero_ready_shell_but_price_buildout():
@@ -169,6 +184,8 @@ def test_medium_medical_office_building_statuses_zero_ready_shell_but_price_buil
 
 
 def test_project_info_exposes_available_special_feature_pricing_for_medium_subtype():
+    config = get_building_config(BuildingType.RETAIL, "shopping_center")
+    assert config is not None
     result = _calculate_project(
         building_type=BuildingType.RETAIL,
         subtype="shopping_center",
@@ -187,9 +204,21 @@ def test_project_info_exposes_available_special_feature_pricing_for_medium_subty
     }
 
     assert pricing_by_id["covered_walkway"].get("pricing_status") == "included_in_baseline"
-    assert pricing_by_id["covered_walkway"].get("configured_cost_per_sf") == 20
+    assert pricing_by_id["covered_walkway"].get("pricing_basis") == "AREA_SHARE_GSF"
+    assert pricing_by_id["covered_walkway"].get("configured_value") == pytest.approx(
+        _area_share_rule(config, "covered_walkway")["value"]
+    )
+    assert pricing_by_id["covered_walkway"].get("configured_area_share_of_gsf") == pytest.approx(
+        _area_share_rule(config, "covered_walkway")["area_share_of_gsf"]
+    )
     assert pricing_by_id["drive_thru"].get("pricing_status") == "incremental"
-    assert pricing_by_id["drive_thru"].get("configured_cost_per_sf") == 40
+    assert pricing_by_id["drive_thru"].get("pricing_basis") == "COUNT_BASED"
+    assert pricing_by_id["drive_thru"].get("configured_cost_per_count") == pytest.approx(
+        config.special_features["drive_thru"]["value"]
+    )
+    assert pricing_by_id["drive_thru"].get("configured_count") == pytest.approx(
+        config.special_features["drive_thru"]["count"]
+    )
 
 
 def test_low_market_rate_apartments_features_remain_visible_and_price_as_incremental():
@@ -244,6 +273,10 @@ def test_low_market_rate_apartments_features_remain_visible_and_price_as_increme
 
 def test_low_limited_service_hotel_features_remain_incremental():
     square_footage = 52_000
+    config = get_building_config(BuildingType.HOSPITALITY, "limited_service_hotel")
+    assert config is not None
+    breakfast_rule = _area_share_rule(config, "breakfast_area")
+    pool_rule = _area_share_rule(config, "pool")
     result = _calculate_project(
         building_type=BuildingType.HOSPITALITY,
         subtype="limited_service_hotel",
@@ -254,7 +287,11 @@ def test_low_limited_service_hotel_features_remain_incremental():
     )
 
     construction_costs = result.get("construction_costs") or {}
-    assert construction_costs.get("special_features_total") == 45 * square_footage
+    expected_total = (
+        breakfast_rule["value"] * (breakfast_rule["area_share_of_gsf"] * square_footage)
+        + pool_rule["value"] * (pool_rule["area_share_of_gsf"] * square_footage)
+    )
+    assert construction_costs.get("special_features_total") == pytest.approx(expected_total)
 
     breakdown = construction_costs.get("special_features_breakdown") or []
     breakdown_by_id = {
@@ -265,15 +302,27 @@ def test_low_limited_service_hotel_features_remain_incremental():
 
     breakfast_row = breakdown_by_id["breakfast_area"]
     assert breakfast_row.get("pricing_status") == "incremental"
-    assert breakfast_row.get("configured_cost_per_sf") == 20
-    assert breakfast_row.get("cost_per_sf") == 20
-    assert breakfast_row.get("total_cost") == 20 * square_footage
+    assert breakfast_row.get("pricing_basis") == "AREA_SHARE_GSF"
+    assert breakfast_row.get("configured_value") == pytest.approx(breakfast_rule["value"])
+    assert breakfast_row.get("configured_area_share_of_gsf") == pytest.approx(
+        breakfast_rule["area_share_of_gsf"]
+    )
+    assert breakfast_row.get("applied_quantity") == pytest.approx(
+        breakfast_rule["area_share_of_gsf"] * square_footage
+    )
+    assert breakfast_row.get("total_cost") == pytest.approx(
+        breakfast_rule["value"] * (breakfast_rule["area_share_of_gsf"] * square_footage)
+    )
 
     pool_row = breakdown_by_id["pool"]
     assert pool_row.get("pricing_status") == "incremental"
-    assert pool_row.get("configured_cost_per_sf") == 25
-    assert pool_row.get("cost_per_sf") == 25
-    assert pool_row.get("total_cost") == 25 * square_footage
+    assert pool_row.get("pricing_basis") == "AREA_SHARE_GSF"
+    assert pool_row.get("configured_value") == pytest.approx(pool_rule["value"])
+    assert pool_row.get("configured_area_share_of_gsf") == pytest.approx(pool_rule["area_share_of_gsf"])
+    assert pool_row.get("applied_quantity") == pytest.approx(pool_rule["area_share_of_gsf"] * square_footage)
+    assert pool_row.get("total_cost") == pytest.approx(
+        pool_rule["value"] * (pool_rule["area_share_of_gsf"] * square_footage)
+    )
 
 
 def test_project_info_exposes_available_special_feature_pricing_for_low_subtype():

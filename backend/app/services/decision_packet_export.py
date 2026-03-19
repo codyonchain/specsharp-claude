@@ -390,17 +390,191 @@ def _normalize_special_feature_breakdown_rows(value: Any) -> List[Dict[str, Any]
         pricing_status = _sanitize_text(item.get("pricing_status"))
         if pricing_status not in {"included_in_baseline", "incremental"}:
             pricing_status = ""
-        rows.append(
-            {
-                "id": feature_id,
-                "label": label,
-                "pricing_status": pricing_status,
-                "configured_cost_per_sf": _to_number(item.get("configured_cost_per_sf")),
-                "cost_per_sf": _to_number(item.get("cost_per_sf")),
-                "total_cost": _to_number(item.get("total_cost")),
-            }
-        )
+        row = {
+            "id": feature_id,
+            "label": label,
+            "pricing_status": pricing_status,
+            "pricing_basis": _sanitize_text(item.get("pricing_basis")),
+            "count_pricing_mode": _sanitize_text(item.get("count_pricing_mode")),
+            "configured_value": _to_number(item.get("configured_value")),
+            "applied_quantity": _to_number(item.get("applied_quantity")),
+            "configured_cost_per_sf": _to_number(item.get("configured_cost_per_sf")),
+            "cost_per_sf": _to_number(item.get("cost_per_sf")),
+            "configured_cost_per_count": _to_number(item.get("configured_cost_per_count")),
+            "cost_per_count": _to_number(item.get("cost_per_count")),
+            "configured_area_share_of_gsf": _to_number(item.get("configured_area_share_of_gsf")),
+            "unit_label": _sanitize_text(item.get("unit_label")),
+            "requested_quantity": _to_number(item.get("requested_quantity")),
+            "requested_quantity_source": _sanitize_text(item.get("requested_quantity_source")),
+            "included_baseline_quantity": _to_number(item.get("included_baseline_quantity")),
+            "billed_quantity": _to_number(item.get("billed_quantity")),
+            "total_cost": _to_number(item.get("total_cost")),
+        }
+        row["display_pricing_status"] = _resolve_special_feature_display_status(row)
+        rows.append(row)
     return rows
+
+
+def _format_quantity(value: Any) -> str:
+    parsed = _to_number(value)
+    if parsed is None:
+        return "—"
+    if float(parsed).is_integer():
+        return f"{int(parsed):,d}"
+    return f"{parsed:,.1f}"
+
+
+def _pluralize_unit_label(unit_label: Any, quantity: Any) -> str:
+    normalized_unit_label = _sanitize_text(unit_label) or "item"
+    parsed_quantity = _to_number(quantity)
+    if parsed_quantity == 1:
+        return normalized_unit_label
+    lower_label = normalized_unit_label.lower()
+    if len(lower_label) > 1 and lower_label.endswith("y") and lower_label[-2] not in {"a", "e", "i", "o", "u"}:
+        return f"{normalized_unit_label[:-1]}ies"
+    if lower_label.endswith(("s", "x", "z", "ch", "sh")):
+        return f"{normalized_unit_label}es"
+    return f"{normalized_unit_label}s"
+
+
+def _format_area_share_percent(value: Any) -> str:
+    parsed = _to_number(value)
+    if parsed is None:
+        return "—"
+    pct = parsed * 100.0
+    if float(pct).is_integer():
+        return f"{int(pct)}%"
+    return f"{pct:,.1f}%"
+
+
+def _has_explicit_special_feature_requested_quantity(item: Dict[str, Any]) -> bool:
+    requested_quantity_source = _sanitize_text(item.get("requested_quantity_source"))
+    return requested_quantity_source.startswith("explicit_override:")
+
+
+def _resolve_special_feature_display_status(item: Dict[str, Any]) -> str:
+    pricing_status = _sanitize_text(item.get("pricing_status"))
+    billed_quantity = _to_number(item.get("billed_quantity"))
+    if (
+        _sanitize_text(item.get("count_pricing_mode")) == "overage_above_default"
+        and _has_explicit_special_feature_requested_quantity(item)
+        and billed_quantity is not None
+        and billed_quantity > 0
+    ):
+        return "incremental"
+    if pricing_status in {"included_in_baseline", "incremental"}:
+        return pricing_status
+    total_cost = _to_number(item.get("total_cost"))
+    if total_cost not in (None, 0.0):
+        return "incremental"
+    return ""
+
+
+def _format_special_feature_basis_label(pricing_basis: str) -> str:
+    if pricing_basis == "AREA_SHARE_GSF":
+        return "Area-share of project GSF"
+    if pricing_basis == "COUNT_BASED":
+        return "Count-based"
+    if pricing_basis == "WHOLE_PROJECT_SF":
+        return "Whole-project SF"
+    return _titleize_label(pricing_basis) or "Configured pricing basis"
+
+
+def _resolve_special_feature_detail_lines(item: Dict[str, Any]) -> List[str]:
+    pricing_basis = _sanitize_text(item.get("pricing_basis"))
+    pricing_status = _sanitize_text(item.get("display_pricing_status") or item.get("pricing_status"))
+    applied_quantity = _to_number(item.get("applied_quantity"))
+    lines: List[str] = []
+
+    if pricing_basis:
+        lines.append(f"Basis: {_format_special_feature_basis_label(pricing_basis)}")
+
+    if pricing_basis == "AREA_SHARE_GSF":
+        configured_value = _to_number(item.get("configured_value"))
+        if applied_quantity is not None:
+            if pricing_status == "incremental" and configured_value is not None:
+                lines.append(
+                    f"{_format_money(configured_value)} per feature-area SF × "
+                    f"{_format_quantity(applied_quantity)} SF assumed feature area"
+                )
+            else:
+                lines.append(
+                    f"Applied quantity: {_format_quantity(applied_quantity)} SF assumed feature area"
+                )
+        configured_area_share = _to_number(item.get("configured_area_share_of_gsf"))
+        if configured_area_share is not None:
+            lines.append(
+                f"Assumed feature area = {_format_area_share_percent(configured_area_share)} of project GSF"
+            )
+        return lines
+
+    if pricing_basis == "COUNT_BASED":
+        configured_cost_per_count = _to_number(item.get("configured_cost_per_count"))
+        unit_label = _sanitize_text(item.get("unit_label")) or "item"
+        if applied_quantity is not None:
+            if pricing_status == "incremental" and configured_cost_per_count is not None:
+                lines.append(
+                    f"{_format_money(configured_cost_per_count)} per {unit_label} × "
+                    f"{_format_quantity(applied_quantity)} {_pluralize_unit_label(unit_label, applied_quantity)}"
+                )
+            else:
+                lines.append(
+                    f"Applied quantity: {_format_quantity(applied_quantity)} "
+                    f"{_pluralize_unit_label(unit_label, applied_quantity)}"
+                )
+
+        if (
+            _sanitize_text(item.get("count_pricing_mode")) == "overage_above_default"
+            and _has_explicit_special_feature_requested_quantity(item)
+        ):
+            requested_quantity = _to_number(item.get("requested_quantity"))
+            included_baseline_quantity = _to_number(item.get("included_baseline_quantity"))
+            billed_quantity = _to_number(item.get("billed_quantity"))
+            if requested_quantity is not None and included_baseline_quantity is not None and billed_quantity is not None:
+                lines.extend(
+                    [
+                        f"Baseline includes {_format_quantity(included_baseline_quantity)} "
+                        f"{_pluralize_unit_label(unit_label, included_baseline_quantity)}",
+                        f"You specified {_format_quantity(requested_quantity)} "
+                        f"{_pluralize_unit_label(unit_label, requested_quantity)}",
+                        (
+                            f"Pricing includes {_format_quantity(billed_quantity)} additional "
+                            f"{_pluralize_unit_label(unit_label, billed_quantity)}"
+                            if billed_quantity > 0
+                            else f"No additional {_pluralize_unit_label(unit_label, 2)} priced"
+                        ),
+                    ]
+                )
+        return lines
+
+    if pricing_basis == "WHOLE_PROJECT_SF":
+        configured_cost_per_sf = _to_number(item.get("configured_cost_per_sf"))
+        if applied_quantity is not None:
+            if pricing_status == "incremental" and configured_cost_per_sf is not None:
+                lines.append(
+                    f"{_format_money(configured_cost_per_sf)}/SF × {_format_quantity(applied_quantity)} SF"
+                )
+            else:
+                lines.append(f"Applied quantity: {_format_quantity(applied_quantity)} SF")
+    return lines
+
+
+def _resolve_special_feature_treatment(item: Dict[str, Any]) -> str:
+    pricing_status = _sanitize_text(item.get("display_pricing_status") or item.get("pricing_status"))
+    billed_quantity = _to_number(item.get("billed_quantity"))
+    if pricing_status == "included_in_baseline":
+        return "Included in baseline"
+    if pricing_status == "incremental":
+        if (
+            _sanitize_text(item.get("count_pricing_mode")) == "overage_above_default"
+            and _has_explicit_special_feature_requested_quantity(item)
+            and billed_quantity == 0
+        ):
+            return "No additional premium"
+        return "Incremental premium applied"
+    if _to_number(item.get("total_cost")) not in (None, 0.0):
+        return "Applied premium"
+    return "Selected feature"
 
 
 def compose_decision_packet_input(
@@ -1153,27 +1327,29 @@ def _render_construction_summary(section: Dict[str, Any]) -> str:
         for item in special_features_rows:
             label = _sanitize_text(item.get("label")) or "Special Feature"
             amount = _format_money(item.get("total_cost"))
-            pricing_status = _sanitize_text(item.get("pricing_status"))
-            if pricing_status == "included_in_baseline":
-                treatment = "Included in baseline"
-            elif pricing_status == "incremental":
-                treatment = "Incremental premium applied"
-            elif _to_number(item.get("total_cost")) not in (None, 0.0):
-                treatment = "Applied premium"
-            else:
-                treatment = "Selected feature"
+            treatment = _resolve_special_feature_treatment(item)
+            detail_lines = _resolve_special_feature_detail_lines(item)
+            detail_html = (
+                "".join(
+                    f"<div class=\"list-detail\">{html_module.escape(line)}</div>"
+                    for line in detail_lines
+                )
+                if detail_lines
+                else "—"
+            )
             rows.append(
                 "<tr>"
                 f"<td>{html_module.escape(label)}</td>"
                 f"<td>{html_module.escape(amount)}</td>"
                 f"<td>{html_module.escape(treatment)}</td>"
+                f"<td>{detail_html}</td>"
                 "</tr>"
             )
         special_features_html = (
             "<div class=\"subsection\">"
             "<h3>Selected Special Features</h3>"
             "<table class=\"simple-table\">"
-            "<thead><tr><th>Feature</th><th>Applied Amount</th><th>Treatment</th></tr></thead>"
+            "<thead><tr><th>Feature</th><th>Applied Amount</th><th>Treatment</th><th>Pricing Detail</th></tr></thead>"
             "<tbody>"
             + "".join(rows)
             + "</tbody></table>"

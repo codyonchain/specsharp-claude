@@ -72,9 +72,21 @@ CONFIG = (
         dealshield_tile_profile="mixed_use_office_residential_v1",
         scope_items_profile="mixed_use_office_residential_structural_v1",
         special_features={
-            "amenity_deck": 35,
-            "business_center": 20,
-            "conference_facility": 30,
+            "amenity_deck": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.04,
+            },
+            "business_center": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.01,
+            },
+            "conference_facility": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 30,
+                "area_share_of_gsf": 0.02,
+            },
         },
         special_feature_pricing_statuses={
             "amenity_deck": "included_in_baseline",

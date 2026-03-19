@@ -72,10 +72,26 @@ CONFIG = (
             "Miami": 1.15,
         },
         special_features={
-            "breakfast_area": 20,
-            "fitness_center": 15,
-            "business_center": 10,
-            "pool": 25,
+            "breakfast_area": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.05,
+            },
+            "fitness_center": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 15,
+                "area_share_of_gsf": 0.012,
+            },
+            "business_center": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 10,
+                "area_share_of_gsf": 0.006,
+            },
+            "pool": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.03,
+            },
         },
         special_feature_pricing_statuses={
             "breakfast_area": "incremental",

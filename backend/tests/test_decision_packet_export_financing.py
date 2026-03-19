@@ -353,6 +353,177 @@ def test_packet_keeps_all_included_special_features_visible_when_applied_total_i
     assert "$0" in html
 
 
+def test_packet_preserves_structured_special_feature_metadata_for_launch_migration_rows():
+    project = SimpleNamespace(
+        name="Sunset Residences",
+        location="Dallas, TX",
+        building_type="multifamily",
+        square_footage=52_000,
+        total_cost=3_700_000,
+        cost_per_sqft=308.33,
+        project_id="proj-structured-special-feature-metadata",
+    )
+    project_payload = _build_project_payload(
+        include_financing_summary=True,
+        special_features_total=67_000,
+        special_features_breakdown=[
+            {
+                "id": "breakfast_area",
+                "label": "Breakfast Area",
+                "pricing_basis": "AREA_SHARE_GSF",
+                "pricing_status": "incremental",
+                "configured_value": 20,
+                "configured_area_share_of_gsf": 0.05,
+                "applied_quantity": 2_600,
+                "total_cost": 52_000,
+            },
+            {
+                "id": "concierge",
+                "label": "Concierge",
+                "pricing_basis": "COUNT_BASED",
+                "pricing_status": "incremental",
+                "configured_value": 15_000,
+                "configured_cost_per_count": 15_000,
+                "applied_quantity": 1,
+                "unit_label": "desk",
+                "total_cost": 15_000,
+            },
+        ],
+    )
+
+    packet = compose_decision_packet_input(
+        project,
+        project_payload,
+        {"subtype": "limited_service_hotel"},
+        _build_dealshield_view_model(),
+        "SpecSharp Capital",
+    )
+
+    rows = packet["construction_summary"]["special_features_breakdown"]
+    rows_by_id = {row["id"]: row for row in rows}
+
+    breakfast_area = rows_by_id["breakfast_area"]
+    assert breakfast_area["pricing_basis"] == "AREA_SHARE_GSF"
+    assert breakfast_area["applied_quantity"] == 2_600
+    assert breakfast_area["configured_area_share_of_gsf"] == 0.05
+    assert breakfast_area["display_pricing_status"] == "incremental"
+
+    concierge = rows_by_id["concierge"]
+    assert concierge["pricing_basis"] == "COUNT_BASED"
+    assert concierge["applied_quantity"] == 1
+    assert concierge["configured_cost_per_count"] == 15_000
+    assert concierge["unit_label"] == "desk"
+    assert concierge["display_pricing_status"] == "incremental"
+
+
+def test_packet_renders_structured_special_feature_details_for_area_share_and_count_based_rows():
+    project = SimpleNamespace(
+        name="Sunset Residences",
+        location="Dallas, TX",
+        building_type="multifamily",
+        square_footage=52_000,
+        total_cost=3_700_000,
+        cost_per_sqft=308.33,
+        project_id="proj-structured-special-feature-html",
+    )
+    project_payload = _build_project_payload(
+        include_financing_summary=True,
+        special_features_total=82_000,
+        special_features_breakdown=[
+            {
+                "id": "breakfast_area",
+                "label": "Breakfast Area",
+                "pricing_basis": "AREA_SHARE_GSF",
+                "pricing_status": "incremental",
+                "configured_value": 20,
+                "configured_area_share_of_gsf": 0.05,
+                "applied_quantity": 2_600,
+                "total_cost": 52_000,
+            },
+            {
+                "id": "digital_menu_boards",
+                "label": "Digital Menu Boards",
+                "pricing_basis": "COUNT_BASED",
+                "pricing_status": "incremental",
+                "configured_value": 15_000,
+                "configured_cost_per_count": 15_000,
+                "applied_quantity": 2,
+                "unit_label": "board",
+                "total_cost": 30_000,
+            },
+        ],
+    )
+
+    packet = compose_decision_packet_input(
+        project,
+        project_payload,
+        {"subtype": "quick_service"},
+        _build_dealshield_view_model(),
+        "SpecSharp Capital",
+    )
+
+    html = render_decision_packet_html(packet)
+    assert "Pricing Detail" in html
+    assert "Basis: Area-share of project GSF" in html
+    assert "$20.00 per feature-area SF × 2,600 SF assumed feature area" in html
+    assert "Assumed feature area = 5% of project GSF" in html
+    assert "Basis: Count-based" in html
+    assert "$15,000 per board × 2 boards" in html
+
+
+def test_packet_renders_count_overage_features_as_incremental_premiums_when_billed_quantity_exists():
+    project = SimpleNamespace(
+        name="Sunset Residences",
+        location="Dallas, TX",
+        building_type="retail",
+        square_footage=95_000,
+        total_cost=3_700_000,
+        cost_per_sqft=308.33,
+        project_id="proj-special-feature-overage-display",
+    )
+    project_payload = _build_project_payload(
+        include_financing_summary=True,
+        special_features_total=130_000,
+        special_features_breakdown=[
+            {
+                "id": "loading_dock",
+                "label": "Loading Dock",
+                "pricing_basis": "COUNT_BASED",
+                "pricing_status": "included_in_baseline",
+                "count_pricing_mode": "overage_above_default",
+                "configured_value": 65_000,
+                "configured_cost_per_count": 65_000,
+                "applied_quantity": 2,
+                "requested_quantity": 4,
+                "requested_quantity_source": "explicit_override:loading_dock_count",
+                "included_baseline_quantity": 2,
+                "billed_quantity": 2,
+                "unit_label": "dock",
+                "total_cost": 130_000,
+            },
+        ],
+    )
+
+    packet = compose_decision_packet_input(
+        project,
+        project_payload,
+        {"subtype": "shopping_center"},
+        _build_dealshield_view_model(),
+        "SpecSharp Capital",
+    )
+
+    rows = packet["construction_summary"]["special_features_breakdown"]
+    assert rows[0]["pricing_status"] == "included_in_baseline"
+    assert rows[0]["display_pricing_status"] == "incremental"
+
+    html = render_decision_packet_html(packet)
+    assert "Incremental premium applied" in html
+    assert "$65,000 per dock × 2 docks" in html
+    assert "Baseline includes 2 docks" in html
+    assert "You specified 4 docks" in html
+    assert "Pricing includes 2 additional docks" in html
+
+
 def test_packet_html_includes_shared_spacing_tokens_and_splits_packet_into_realistic_page_buckets():
     project = SimpleNamespace(
         name="Sunset Residences",

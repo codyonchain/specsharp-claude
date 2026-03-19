@@ -92,7 +92,13 @@ CONFIG = (
                 "value": 45,
                 "area_share_of_gsf": 0.32,
             },
-            "concierge": 15,
+            "concierge": {
+                "basis": "COUNT_BASED",
+                "value": 15000,
+                "count": 1,
+                "count_override_keys": ["concierge_desk_count", "concierge_count"],
+                "unit_label": "desk",
+            },
         },
         special_feature_pricing_statuses={
             "rooftop_amenity": "incremental",

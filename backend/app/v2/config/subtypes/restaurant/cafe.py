@@ -69,7 +69,11 @@ CONFIG = (
             "San Francisco": 1.40,
         },
         special_features={
-            "outdoor_seating": 20,  # Sidewalk/patio seating
+            "outdoor_seating": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.08,
+            },  # Sidewalk/patio seating
             "drive_thru": {
                 "basis": "COUNT_BASED",
                 "value": 75000,
@@ -77,9 +81,21 @@ CONFIG = (
                 "count_override_keys": ["drive_thru_lane_count", "drive_thru_count", "lane_count"],
                 "unit_label": "lane",
             },  # Coffee drive-thru
-            "bakery_display": 15,  # Display cases
-            "lounge_area": 20,  # Comfortable seating area
-            "meeting_room": 25,  # Small meeting space
+            "bakery_display": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 15,
+                "area_share_of_gsf": 0.04,
+            },  # Display cases
+            "lounge_area": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.12,
+            },  # Comfortable seating area
+            "meeting_room": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.08,
+            },  # Small meeting space
         },
         special_feature_pricing_statuses={
             "outdoor_seating": "included_in_baseline",

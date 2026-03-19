@@ -69,10 +69,26 @@ CONFIG = (
         dealshield_tile_profile="mixed_use_hotel_retail_v1",
         scope_items_profile="mixed_use_hotel_retail_structural_v1",
         special_features={
-            "conference_center": 45,
-            "restaurant": 50,
-            "spa": 55,
-            "retail_arcade": 30,
+            "conference_center": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 45,
+                "area_share_of_gsf": 0.06,
+            },
+            "restaurant": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 50,
+                "area_share_of_gsf": 0.05,
+            },
+            "spa": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 55,
+                "area_share_of_gsf": 0.03,
+            },
+            "retail_arcade": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 30,
+                "area_share_of_gsf": 0.12,
+            },
         },
         special_feature_pricing_statuses={
             "conference_center": "included_in_baseline",

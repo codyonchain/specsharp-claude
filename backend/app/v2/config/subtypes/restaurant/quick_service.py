@@ -75,8 +75,16 @@ CONFIG = (
                 "count_override_keys": ["drive_thru_lane_count", "drive_thru_count", "lane_count"],
                 "unit_label": "lane",
             },  # Drive-thru lane and window
-            "outdoor_seating": 20,  # Patio seating area
-            "play_area": 35,  # Children's playground
+            "outdoor_seating": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.06,
+            },  # Patio seating area
+            "play_area": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.08,
+            },  # Children's playground
             "double_drive_thru": {
                 "basis": "COUNT_BASED",
                 "value": 80000,
@@ -89,7 +97,17 @@ CONFIG = (
                 ],
                 "unit_label": "lane",
             },  # Dual drive-thru lanes
-            "digital_menu_boards": 15,  # Digital ordering displays
+            "digital_menu_boards": {
+                "basis": "COUNT_BASED",
+                "value": 15000,
+                "count": 2,
+                "count_override_keys": [
+                    "digital_menu_board_count",
+                    "menu_board_count",
+                    "board_count",
+                ],
+                "unit_label": "board",
+            },  # Digital ordering displays
         },
         special_feature_pricing_statuses={
             "drive_thru": "included_in_baseline",
