@@ -80,11 +80,35 @@ CONFIG = (
             "Miami": 1.20,
         },
         special_features={
-            "luxury_boxes": 75,
-            "club_level": 50,
-            "press_box": 40,
-            "video_board": 100,
-            "retractable_roof": 200,
+            "luxury_boxes": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 75,
+                "area_share_of_gsf": 0.05,
+            },
+            "club_level": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 50,
+                "area_share_of_gsf": 0.12,
+            },
+            "press_box": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.02,
+            },
+            "video_board": {
+                "basis": "COUNT_BASED",
+                "value": 2500000,
+                "count": 1,
+                "count_override_keys": ["video_board_count", "scoreboard_count"],
+                "unit_label": "board",
+            },
+            "retractable_roof": {
+                "basis": "COUNT_BASED",
+                "value": 35000000,
+                "count": 1,
+                "count_override_keys": ["retractable_roof_count", "roof_system_count"],
+                "unit_label": "roof",
+            },
         },
         special_feature_pricing_statuses={
             "luxury_boxes": "included_in_baseline",

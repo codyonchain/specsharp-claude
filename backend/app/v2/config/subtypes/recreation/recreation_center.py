@@ -80,11 +80,31 @@ CONFIG = (
             "Miami": 1.08,
         },
         special_features={
-            "gymnasium": 30,
-            "game_room": 15,
-            "craft_room": 12,
-            "dance_studio": 20,
-            "outdoor_courts": 25,
+            "gymnasium": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 30,
+                "area_share_of_gsf": 0.18,
+            },
+            "game_room": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 15,
+                "area_share_of_gsf": 0.05,
+            },
+            "craft_room": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 12,
+                "area_share_of_gsf": 0.04,
+            },
+            "dance_studio": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.06,
+            },
+            "outdoor_courts": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.15,
+            },
         },
         special_feature_pricing_statuses={
             "gymnasium": "included_in_baseline",

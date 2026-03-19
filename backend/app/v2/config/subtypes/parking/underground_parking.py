@@ -67,11 +67,43 @@ CONFIG = (
             "Miami": 1.05,  # Water table issues
         },
         special_features={
-            "waterproofing": 35,
-            "sump_pumps": 20,
-            "vehicle_lifts": 30,
-            "security_booth": 15,
-            "ventilation_upgrade": 25,
+            "waterproofing": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.90,
+            },
+            "sump_pumps": {
+                "basis": "COUNT_BASED",
+                "value": 45000,
+                "default_count_bands": [
+                    {"label": "single_level", "max_square_footage": 60000, "count": 2},
+                    {"label": "dual_level", "max_square_footage": 120000, "count": 4},
+                    {"label": "deep_basin", "count": 6},
+                ],
+                "count_override_keys": ["sump_pump_count", "pump_count"],
+                "unit_label": "pump",
+            },
+            "vehicle_lifts": {
+                "basis": "COUNT_BASED",
+                "value": 350000,
+                "count": 1,
+                "count_override_keys": ["vehicle_lift_count", "lift_count"],
+                "unit_label": "lift",
+            },
+            "security_booth": {
+                "basis": "COUNT_BASED",
+                "value": 80000,
+                "count": 1,
+                "count_override_keys": ["security_booth_count", "booth_count"],
+                "unit_label": "booth",
+            },
+            "ventilation_upgrade": {
+                "basis": "COUNT_BASED",
+                "value": 500000,
+                "count": 1,
+                "count_override_keys": ["ventilation_upgrade_count", "ventilation_system_count"],
+                "unit_label": "upgrade",
+            },
         },
         special_feature_pricing_statuses={
             "waterproofing": "included_in_baseline",

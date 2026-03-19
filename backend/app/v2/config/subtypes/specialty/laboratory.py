@@ -80,10 +80,28 @@ CONFIG = (
         dealshield_tile_profile="specialty_laboratory_v1",
         scope_items_profile="specialty_laboratory_structural_v1",
         special_features={
-            "cleanroom_suite": 95,
-            "vivarium_support": 70,
-            "process_gas_distribution": 65,
-            "redundancy_exhaust_stack": 50,
+            "cleanroom_suite": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 95,
+                "area_share_of_gsf": 0.08,
+            },
+            "vivarium_support": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 70,
+                "area_share_of_gsf": 0.06,
+            },
+            "process_gas_distribution": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 65,
+                "area_share_of_gsf": 0.15,
+            },
+            "redundancy_exhaust_stack": {
+                "basis": "COUNT_BASED",
+                "value": 400000,
+                "count": 1,
+                "count_override_keys": ["exhaust_stack_count", "redundancy_stack_count"],
+                "unit_label": "stack",
+            },
         },
         special_feature_pricing_statuses={
             "cleanroom_suite": "incremental",

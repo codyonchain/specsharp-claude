@@ -78,11 +78,31 @@ CONFIG = (
             "Miami": 1.10,
         },
         special_features={
-            "emergency": 45,
-            "surgery": 60,
-            "imaging": 35,
-            "laboratory": 25,
-            "specialty_clinic": 30,
+            "emergency": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 45,
+                "area_share_of_gsf": 0.08,
+            },
+            "surgery": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 60,
+                "area_share_of_gsf": 0.10,
+            },
+            "imaging": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.04,
+            },
+            "laboratory": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.03,
+            },
+            "specialty_clinic": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 30,
+                "area_share_of_gsf": 0.12,
+            },
         },
         special_feature_pricing_statuses={
             "emergency": "incremental",

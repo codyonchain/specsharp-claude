@@ -79,11 +79,33 @@ CONFIG = (
             "Miami": 1.10,  # Outdoor pools more common
         },
         special_features={
-            "competition_pool": 60,
-            "diving_well": 50,
-            "lazy_river": 40,
-            "water_slides": 45,
-            "therapy_pool": 35,
+            "competition_pool": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 60,
+                "area_share_of_gsf": 0.35,
+            },
+            "diving_well": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 50,
+                "area_share_of_gsf": 0.12,
+            },
+            "lazy_river": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.20,
+            },
+            "water_slides": {
+                "basis": "COUNT_BASED",
+                "value": 175000,
+                "count": 2,
+                "count_override_keys": ["water_slide_count", "slide_count"],
+                "unit_label": "slide",
+            },
+            "therapy_pool": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.10,
+            },
         },
         special_feature_pricing_statuses={
             "competition_pool": "included_in_baseline",

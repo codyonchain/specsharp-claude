@@ -71,11 +71,31 @@ CONFIG = (
         dealshield_tile_profile="educational_elementary_school_v1",
         scope_items_profile="educational_elementary_school_structural_v1",
         special_features={
-            "gymnasium": 35,
-            "cafeteria": 30,
-            "playground": 20,
-            "computer_lab": 25,
-            "library": 25,
+            "gymnasium": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.15,
+            },
+            "cafeteria": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 30,
+                "area_share_of_gsf": 0.10,
+            },
+            "playground": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.10,
+            },
+            "computer_lab": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.03,
+            },
+            "library": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.08,
+            },
         },
         special_feature_pricing_statuses={
             "gymnasium": "included_in_baseline",

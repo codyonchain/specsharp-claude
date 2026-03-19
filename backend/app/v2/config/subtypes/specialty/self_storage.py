@@ -70,10 +70,36 @@ CONFIG = (
         dealshield_tile_profile="specialty_self_storage_v1",
         scope_items_profile="specialty_self_storage_structural_v1",
         special_features={
-            "climate_control_zones": 18,
-            "biometric_access_control": 12,
-            "high_density_cctv": 10,
-            "rv_power_pedestals": 9,
+            "climate_control_zones": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 18,
+                "area_share_of_gsf": 0.40,
+            },
+            "biometric_access_control": {
+                "basis": "COUNT_BASED",
+                "value": 60000,
+                "count": 1,
+                "count_override_keys": ["biometric_access_point_count", "access_control_count"],
+                "unit_label": "package",
+            },
+            "high_density_cctv": {
+                "basis": "COUNT_BASED",
+                "value": 85000,
+                "count": 1,
+                "count_override_keys": ["cctv_package_count", "camera_system_count"],
+                "unit_label": "package",
+            },
+            "rv_power_pedestals": {
+                "basis": "COUNT_BASED",
+                "value": 3500,
+                "count_override_keys": ["rv_power_pedestal_count", "power_pedestal_count", "pedestal_count"],
+                "default_count_bands": [
+                    {"label": "small_rv_mix", "max_square_footage": 60000, "count": 8},
+                    {"label": "mid_rv_mix", "max_square_footage": 120000, "count": 16},
+                    {"label": "large_rv_mix", "count": 24},
+                ],
+                "unit_label": "pedestal",
+            },
         },
         special_feature_pricing_statuses={
             "climate_control_zones": "included_in_baseline",

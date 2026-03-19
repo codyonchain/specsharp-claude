@@ -70,12 +70,36 @@ CONFIG = (
         dealshield_tile_profile="educational_high_school_v1",
         scope_items_profile="educational_high_school_structural_v1",
         special_features={
-            "stadium": 60,
-            "field_house": 50,
-            "performing_arts_center": 55,
-            "science_labs": 40,
-            "vocational_shops": 45,
-            "media_center": 30,
+            "stadium": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 60,
+                "area_share_of_gsf": 0.20,
+            },
+            "field_house": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 50,
+                "area_share_of_gsf": 0.10,
+            },
+            "performing_arts_center": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 55,
+                "area_share_of_gsf": 0.08,
+            },
+            "science_labs": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.08,
+            },
+            "vocational_shops": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 45,
+                "area_share_of_gsf": 0.10,
+            },
+            "media_center": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 30,
+                "area_share_of_gsf": 0.06,
+            },
         },
         special_feature_pricing_statuses={
             "stadium": "included_in_baseline",

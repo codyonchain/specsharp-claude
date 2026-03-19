@@ -70,10 +70,30 @@ CONFIG = (
         dealshield_tile_profile="specialty_broadcast_facility_v1",
         scope_items_profile="specialty_broadcast_facility_structural_v1",
         special_features={
-            "floating_studio_floors": 40,
-            "control_room_signal_core": 35,
-            "acoustic_shell_upgrade": 30,
-            "satellite_uplink_pad": 16,
+            "floating_studio_floors": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.10,
+            },
+            "control_room_signal_core": {
+                "basis": "COUNT_BASED",
+                "value": 350000,
+                "count": 1,
+                "count_override_keys": ["control_room_count", "signal_core_count"],
+                "unit_label": "room",
+            },
+            "acoustic_shell_upgrade": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 30,
+                "area_share_of_gsf": 0.20,
+            },
+            "satellite_uplink_pad": {
+                "basis": "COUNT_BASED",
+                "value": 250000,
+                "count": 1,
+                "count_override_keys": ["uplink_pad_count", "satellite_pad_count"],
+                "unit_label": "pad",
+            },
         },
         special_feature_pricing_statuses={
             "floating_studio_floors": "incremental",

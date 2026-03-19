@@ -77,10 +77,26 @@ CONFIG = (
             "Miami": 1.06,
         },
         special_features={
-            "therapy_gym": 40,
-            "hydrotherapy": 50,
-            "treatment_rooms": 20,
-            "assessment_suite": 25,
+            "therapy_gym": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.18,
+            },
+            "hydrotherapy": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 50,
+                "area_share_of_gsf": 0.08,
+            },
+            "treatment_rooms": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.12,
+            },
+            "assessment_suite": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.06,
+            },
         },
         special_feature_pricing_statuses={
             "therapy_gym": "included_in_baseline",

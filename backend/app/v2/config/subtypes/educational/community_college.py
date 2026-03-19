@@ -70,10 +70,26 @@ CONFIG = (
         dealshield_tile_profile="educational_community_college_v1",
         scope_items_profile="educational_community_college_structural_v1",
         special_features={
-            "vocational_lab": 40,
-            "computer_lab": 25,
-            "library": 20,
-            "student_services": 15,
+            "vocational_lab": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.10,
+            },
+            "computer_lab": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.04,
+            },
+            "library": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.08,
+            },
+            "student_services": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 15,
+                "area_share_of_gsf": 0.06,
+            },
         },
         special_feature_pricing_statuses={
             "vocational_lab": "included_in_baseline",

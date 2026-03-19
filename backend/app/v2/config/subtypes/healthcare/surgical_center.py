@@ -88,12 +88,36 @@ CONFIG = (
                 ],
                 "unit_label": "room",
             },  # Per OR
-            "recovery_room": 40,
-            "pre_op": 35,
-            "sterile_processing": 60,
-            "hc_asc_expanded_pacu": 75,
-            "hc_asc_sterile_core_upgrade": 50,
-            "hc_asc_pain_management_suite": 60,
+            "recovery_room": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.12,
+            },
+            "pre_op": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.10,
+            },
+            "sterile_processing": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 60,
+                "area_share_of_gsf": 0.08,
+            },
+            "hc_asc_expanded_pacu": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 75,
+                "area_share_of_gsf": 0.10,
+            },
+            "hc_asc_sterile_core_upgrade": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 50,
+                "area_share_of_gsf": 0.06,
+            },
+            "hc_asc_pain_management_suite": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 60,
+                "area_share_of_gsf": 0.05,
+            },
             "hc_asc_hybrid_or_cath_lab": {
                 "basis": "COUNT_BASED",
                 "value": 950000,

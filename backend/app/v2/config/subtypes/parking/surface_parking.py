@@ -67,10 +67,36 @@ CONFIG = (
             "Miami": 1.05,
         },
         special_features={
-            "covered_parking": 25,
-            "valet_booth": 15,
-            "ev_charging": 10,
-            "security_system": 8,
+            "covered_parking": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.12,
+            },
+            "valet_booth": {
+                "basis": "COUNT_BASED",
+                "value": 75000,
+                "count": 1,
+                "count_override_keys": ["valet_booth_count", "booth_count"],
+                "unit_label": "booth",
+            },
+            "ev_charging": {
+                "basis": "COUNT_BASED",
+                "value": 9000,
+                "count_override_keys": ["ev_charger_count", "ev_charging_stall_count", "charging_port_count"],
+                "default_count_bands": [
+                    {"label": "small_lot", "max_square_footage": 40000, "count": 4},
+                    {"label": "mid_lot", "max_square_footage": 80000, "count": 8},
+                    {"label": "large_lot", "count": 12},
+                ],
+                "unit_label": "charger",
+            },
+            "security_system": {
+                "basis": "COUNT_BASED",
+                "value": 120000,
+                "count": 1,
+                "count_override_keys": ["security_system_count", "surveillance_package_count"],
+                "unit_label": "system",
+            },
         },
         special_feature_pricing_statuses={
             "covered_parking": "incremental",

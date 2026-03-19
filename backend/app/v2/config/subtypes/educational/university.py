@@ -80,11 +80,31 @@ CONFIG = (
         dealshield_tile_profile="educational_university_v1",
         scope_items_profile="educational_university_structural_v1",
         special_features={
-            "lecture_hall": 45,
-            "research_lab": 75,
-            "clean_room": 100,
-            "library": 40,
-            "student_center": 35,
+            "lecture_hall": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 45,
+                "area_share_of_gsf": 0.08,
+            },
+            "research_lab": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 75,
+                "area_share_of_gsf": 0.15,
+            },
+            "clean_room": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 100,
+                "area_share_of_gsf": 0.05,
+            },
+            "library": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.10,
+            },
+            "student_center": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.08,
+            },
         },
         special_feature_pricing_statuses={
             "lecture_hall": "included_in_baseline",

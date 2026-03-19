@@ -72,11 +72,37 @@ CONFIG = (
             "Miami": 1.15,
         },
         special_features={
-            "apparatus_bay": 45,
-            "dispatch_center": 50,
-            "training_tower": 40,
-            "emergency_generator": 35,
-            "sally_port": 30,
+            "apparatus_bay": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 45,
+                "area_share_of_gsf": 0.24,
+            },
+            "dispatch_center": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 50,
+                "area_share_of_gsf": 0.08,
+            },
+            "training_tower": {
+                "basis": "COUNT_BASED",
+                "value": 450000,
+                "count": 1,
+                "count_override_keys": ["training_tower_count", "tower_count"],
+                "unit_label": "tower",
+            },
+            "emergency_generator": {
+                "basis": "COUNT_BASED",
+                "value": 300000,
+                "count": 1,
+                "count_override_keys": ["emergency_generator_count", "generator_count"],
+                "unit_label": "generator",
+            },
+            "sally_port": {
+                "basis": "COUNT_BASED",
+                "value": 250000,
+                "count": 1,
+                "count_override_keys": ["sally_port_count", "sallyport_count"],
+                "unit_label": "port",
+            },
         },
         special_feature_pricing_statuses={
             "apparatus_bay": "included_in_baseline",

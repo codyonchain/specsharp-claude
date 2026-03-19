@@ -77,11 +77,31 @@ CONFIG = (
             "Miami": 1.15,
         },
         special_features={
-            "indoor_track": 35,
-            "multiple_courts": 40,
-            "weight_room": 25,
-            "locker_complex": 30,
-            "concessions": 20,
+            "indoor_track": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.18,
+            },
+            "multiple_courts": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.20,
+            },
+            "weight_room": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.08,
+            },
+            "locker_complex": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 30,
+                "area_share_of_gsf": 0.06,
+            },
+            "concessions": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.03,
+            },
         },
         special_feature_pricing_statuses={
             "indoor_track": "incremental",

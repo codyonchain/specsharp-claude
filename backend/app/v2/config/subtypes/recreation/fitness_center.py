@@ -72,11 +72,31 @@ CONFIG = (
             "Miami": 1.12,
         },
         special_features={
-            "pool": 45,
-            "basketball_court": 30,
-            "group_fitness": 20,
-            "spa_area": 35,
-            "juice_bar": 15,
+            "pool": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 45,
+                "area_share_of_gsf": 0.20,
+            },
+            "basketball_court": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 30,
+                "area_share_of_gsf": 0.15,
+            },
+            "group_fitness": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.10,
+            },
+            "spa_area": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.05,
+            },
+            "juice_bar": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 15,
+                "area_share_of_gsf": 0.02,
+            },
         },
         special_feature_pricing_statuses={
             "pool": "incremental",

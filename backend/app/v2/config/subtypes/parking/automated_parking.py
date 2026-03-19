@@ -68,10 +68,38 @@ CONFIG = (
             "Miami": 1.15,
         },
         special_features={
-            "retrieval_speed": 40,
-            "redundant_systems": 35,
-            "valet_interface": 20,
-            "ev_charging_integration": 15,
+            "retrieval_speed": {
+                "basis": "COUNT_BASED",
+                "value": 650000,
+                "count": 1,
+                "count_override_keys": ["retrieval_upgrade_count", "retrieval_speed_count"],
+                "unit_label": "upgrade",
+            },
+            "redundant_systems": {
+                "basis": "COUNT_BASED",
+                "value": 900000,
+                "count": 1,
+                "count_override_keys": ["redundant_system_count", "backup_system_count"],
+                "unit_label": "system",
+            },
+            "valet_interface": {
+                "basis": "COUNT_BASED",
+                "value": 180000,
+                "count": 1,
+                "count_override_keys": ["valet_interface_count", "interface_count"],
+                "unit_label": "interface",
+            },
+            "ev_charging_integration": {
+                "basis": "COUNT_BASED",
+                "value": 10000,
+                "count_override_keys": ["ev_charger_count", "ev_charging_stall_count", "charging_port_count"],
+                "default_count_bands": [
+                    {"label": "compact_robotic", "max_square_footage": 60000, "count": 6},
+                    {"label": "tower_robotic", "max_square_footage": 120000, "count": 12},
+                    {"label": "high_density_robotic", "count": 18},
+                ],
+                "unit_label": "charger",
+            },
         },
         special_feature_pricing_statuses={
             "retrieval_speed": "incremental",

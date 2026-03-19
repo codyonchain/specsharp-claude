@@ -74,11 +74,41 @@ CONFIG = (
             "Miami": 1.10,
         },
         special_features={
-            "automated_system": 45,
-            "ev_charging": 12,
-            "car_wash": 25,
-            "retail_space": 30,
-            "green_roof": 20,
+            "automated_system": {
+                "basis": "COUNT_BASED",
+                "value": 2400000,
+                "count": 1,
+                "count_override_keys": ["automated_system_count", "parking_automation_count"],
+                "unit_label": "system",
+            },
+            "ev_charging": {
+                "basis": "COUNT_BASED",
+                "value": 12000,
+                "count_override_keys": ["ev_charger_count", "ev_charging_stall_count", "charging_port_count"],
+                "default_count_bands": [
+                    {"label": "compact_garage", "max_square_footage": 75000, "count": 8},
+                    {"label": "urban_garage", "max_square_footage": 150000, "count": 16},
+                    {"label": "destination_garage", "count": 24},
+                ],
+                "unit_label": "charger",
+            },
+            "car_wash": {
+                "basis": "COUNT_BASED",
+                "value": 450000,
+                "count": 1,
+                "count_override_keys": ["car_wash_count", "wash_tunnel_count"],
+                "unit_label": "wash",
+            },
+            "retail_space": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 30,
+                "area_share_of_gsf": 0.04,
+            },
+            "green_roof": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.20,
+            },
         },
         special_feature_pricing_statuses={
             "automated_system": "incremental",

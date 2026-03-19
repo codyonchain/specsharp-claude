@@ -76,14 +76,48 @@ CONFIG = (
             "Miami": 1.08,
         },
         special_features={
-            "tenant_improvements": 40,
-            "ambulatory_buildout": 60,
-            "ambulatory_imaging": 35,
-            "mob_imaging_ready_shell": 40,
-            "mob_enhanced_mep": 20,
-            "mob_procedure_suite": 30,
-            "mob_pharmacy_shell": 15,
-            "mob_covered_dropoff": 15,
+            "tenant_improvements": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.75,
+            },
+            "ambulatory_buildout": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 60,
+                "area_share_of_gsf": 0.18,
+            },
+            "ambulatory_imaging": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.05,
+            },
+            "mob_imaging_ready_shell": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.05,
+            },
+            "mob_enhanced_mep": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.20,
+            },
+            "mob_procedure_suite": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 30,
+                "area_share_of_gsf": 0.07,
+            },
+            "mob_pharmacy_shell": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 15,
+                "area_share_of_gsf": 0.03,
+            },
+            "mob_covered_dropoff": {
+                "basis": "COUNT_BASED",
+                "value": 225000,
+                "count": 1,
+                "count_override_keys": ["covered_dropoff_count", "dropoff_canopy_count"],
+                "unit_label": "canopy",
+            },
         },
         special_feature_pricing_statuses={
             "tenant_improvements": "incremental",

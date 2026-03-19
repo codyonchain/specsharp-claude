@@ -133,11 +133,25 @@ def test_special_features_increase_hard_costs_for_hospital():
         special_features=["emergency_department", "cathlab"],
     )
 
-    expected_feature_cost = square_footage * (50 + 90)
+    expected_feature_cost = (square_footage * 50 * 0.10) + 950000.0
 
     assert with_features["construction_costs"]["special_features_total"] == pytest.approx(
         expected_feature_cost, rel=0, abs=1e-6
     )
+    breakdown = {
+        item["id"]: item
+        for item in with_features["construction_costs"]["special_features_breakdown"]
+        if isinstance(item, dict) and item.get("id")
+    }
+    emergency_row = breakdown["emergency_department"]
+    cathlab_row = breakdown["cathlab"]
+
+    assert emergency_row["pricing_basis"] == "AREA_SHARE_GSF"
+    assert float(emergency_row.get("configured_area_share_of_gsf", 0.0) or 0.0) == pytest.approx(0.10)
+    assert float(emergency_row.get("total_cost", 0.0) or 0.0) == pytest.approx(50000.0)
+    assert cathlab_row["pricing_basis"] == "COUNT_BASED"
+    assert float(cathlab_row.get("configured_cost_per_count", 0.0) or 0.0) == pytest.approx(950000.0)
+    assert float(cathlab_row.get("total_cost", 0.0) or 0.0) == pytest.approx(950000.0)
     assert with_features["totals"]["hard_costs"] > no_features["totals"]["hard_costs"]
     assert with_features["totals"]["total_project_cost"] > no_features["totals"]["total_project_cost"]
 

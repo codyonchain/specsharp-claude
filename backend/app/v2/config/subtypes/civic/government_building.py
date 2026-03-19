@@ -82,10 +82,26 @@ CONFIG = (
             "Miami": 1.12,
         },
         special_features={
-            "council_chambers": 40,
-            "secure_area": 35,
-            "public_plaza": 25,
-            "records_vault": 30,
+            "council_chambers": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.08,
+            },
+            "secure_area": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.20,
+            },
+            "public_plaza": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.10,
+            },
+            "records_vault": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 30,
+                "area_share_of_gsf": 0.03,
+            },
         },
         special_feature_pricing_statuses={
             "council_chambers": "included_in_baseline",

@@ -70,12 +70,36 @@ CONFIG = (
         dealshield_tile_profile="educational_middle_school_v1",
         scope_items_profile="educational_middle_school_structural_v1",
         special_features={
-            "gymnasium": 40,
-            "cafeteria": 30,
-            "science_labs": 35,
-            "computer_lab": 25,
-            "auditorium": 45,
-            "athletic_field": 30,
+            "gymnasium": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.14,
+            },
+            "cafeteria": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 30,
+                "area_share_of_gsf": 0.08,
+            },
+            "science_labs": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.08,
+            },
+            "computer_lab": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.03,
+            },
+            "auditorium": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 45,
+                "area_share_of_gsf": 0.08,
+            },
+            "athletic_field": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 30,
+                "area_share_of_gsf": 0.25,
+            },
         },
         special_feature_pricing_statuses={
             "gymnasium": "included_in_baseline",

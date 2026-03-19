@@ -96,13 +96,47 @@ CONFIG = (
             "Miami": 1.10,
         },
         special_features={
-            "emergency_department": 50,  # $/SF additional
-            "surgical_suite": 75,
-            "imaging_suite": 40,
-            "icu": 60,
-            "laboratory": 25,
-            "cathlab": 90,
-            "pharmacy": 40,
+            "emergency_department": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 50,
+                "area_share_of_gsf": 0.10,
+            },
+            "surgical_suite": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 75,
+                "area_share_of_gsf": 0.12,
+            },
+            "imaging_suite": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.04,
+            },
+            "icu": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 60,
+                "area_share_of_gsf": 0.08,
+            },
+            "laboratory": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.03,
+            },
+            "cathlab": {
+                "basis": "COUNT_BASED",
+                "value": 950000,
+                "count": 1,
+                "count_override_keys": [
+                    "cath_lab_count",
+                    "cathlab_count",
+                    "interventional_lab_count",
+                ],
+                "unit_label": "lab",
+            },
+            "pharmacy": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.02,
+            },
         },
         special_feature_pricing_statuses={
             "emergency_department": "incremental",

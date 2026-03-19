@@ -78,10 +78,26 @@ CONFIG = (
             "Miami": 1.08,
         },
         special_features={
-            "memory_care": 30,
-            "therapy_room": 20,
-            "dining_hall": 15,
-            "activity_room": 12,
+            "memory_care": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 30,
+                "area_share_of_gsf": 0.15,
+            },
+            "therapy_room": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.06,
+            },
+            "dining_hall": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 15,
+                "area_share_of_gsf": 0.10,
+            },
+            "activity_room": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 12,
+                "area_share_of_gsf": 0.08,
+            },
         },
         special_feature_pricing_statuses={
             "memory_care": "incremental",

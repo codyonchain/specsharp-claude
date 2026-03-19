@@ -33,6 +33,44 @@ def _available_special_feature_pricing_by_id(result):
     }
 
 
+STAGE3_REMAINING_ACTIVE_SUBTYPES = (
+    (BuildingType.HEALTHCARE, "hospital"),
+    (BuildingType.HEALTHCARE, "medical_center"),
+    (BuildingType.HEALTHCARE, "outpatient_clinic"),
+    (BuildingType.HEALTHCARE, "urgent_care"),
+    (BuildingType.HEALTHCARE, "surgical_center"),
+    (BuildingType.HEALTHCARE, "imaging_center"),
+    (BuildingType.HEALTHCARE, "medical_office_building"),
+    (BuildingType.HEALTHCARE, "dental_office"),
+    (BuildingType.HEALTHCARE, "rehabilitation"),
+    (BuildingType.HEALTHCARE, "nursing_home"),
+    (BuildingType.PARKING, "parking_garage"),
+    (BuildingType.PARKING, "surface_parking"),
+    (BuildingType.PARKING, "automated_parking"),
+    (BuildingType.PARKING, "underground_parking"),
+    (BuildingType.SPECIALTY, "data_center"),
+    (BuildingType.SPECIALTY, "laboratory"),
+    (BuildingType.SPECIALTY, "broadcast_facility"),
+    (BuildingType.SPECIALTY, "car_dealership"),
+    (BuildingType.SPECIALTY, "self_storage"),
+    (BuildingType.EDUCATIONAL, "elementary_school"),
+    (BuildingType.EDUCATIONAL, "middle_school"),
+    (BuildingType.EDUCATIONAL, "high_school"),
+    (BuildingType.EDUCATIONAL, "community_college"),
+    (BuildingType.EDUCATIONAL, "university"),
+    (BuildingType.RECREATION, "fitness_center"),
+    (BuildingType.RECREATION, "recreation_center"),
+    (BuildingType.RECREATION, "aquatic_center"),
+    (BuildingType.RECREATION, "sports_complex"),
+    (BuildingType.RECREATION, "stadium"),
+    (BuildingType.CIVIC, "library"),
+    (BuildingType.CIVIC, "community_center"),
+    (BuildingType.CIVIC, "government_building"),
+    (BuildingType.CIVIC, "public_safety"),
+    (BuildingType.CIVIC, "courthouse"),
+)
+
+
 def test_legacy_float_rule_normalizes_to_whole_project_sf():
     rule = normalize_special_feature_pricing_rule("pool", 18)
 
@@ -79,28 +117,28 @@ def test_whole_project_sf_rule_application_preserves_status_zeroing(
 def test_legacy_float_engine_breakdown_still_uses_normalized_whole_project_sf_for_deferred_feature():
     square_footage = 64_000
     result = unified_engine.calculate_project(
-        building_type=BuildingType.EDUCATIONAL,
-        subtype="middle_school",
+        building_type=BuildingType.INDUSTRIAL,
+        subtype="flex_space",
         square_footage=square_footage,
         location="Nashville, TN",
         project_class=ProjectClass.GROUND_UP,
-        special_features=["cafeteria"],
+        special_features=["heavy_power"],
     )
 
     construction_costs = result["construction_costs"]
     breakdown = construction_costs["special_features_breakdown"]
     breakdown_by_id = _special_feature_breakdown_by_id(result)
-    cafeteria_row = breakdown_by_id["cafeteria"]
+    heavy_power_row = breakdown_by_id["heavy_power"]
 
-    assert construction_costs["special_features_total"] == pytest.approx(30.0 * square_footage)
-    assert cafeteria_row["pricing_basis"] == SpecialFeaturePricingBasis.WHOLE_PROJECT_SF.value
-    assert cafeteria_row["configured_value"] == pytest.approx(30.0)
-    assert cafeteria_row["applied_value"] == pytest.approx(30.0)
-    assert cafeteria_row["applied_quantity"] == pytest.approx(square_footage)
-    assert cafeteria_row["configured_cost_per_sf"] == pytest.approx(30.0)
-    assert cafeteria_row["cost_per_sf"] == pytest.approx(30.0)
-    assert cafeteria_row["assumption_source"] == LEGACY_FLOAT_NORMALIZATION_SOURCE
-    assert cafeteria_row["total_cost"] == pytest.approx(30.0 * square_footage)
+    assert construction_costs["special_features_total"] == pytest.approx(20.0 * square_footage)
+    assert heavy_power_row["pricing_basis"] == SpecialFeaturePricingBasis.WHOLE_PROJECT_SF.value
+    assert heavy_power_row["configured_value"] == pytest.approx(20.0)
+    assert heavy_power_row["applied_value"] == pytest.approx(20.0)
+    assert heavy_power_row["applied_quantity"] == pytest.approx(square_footage)
+    assert heavy_power_row["configured_cost_per_sf"] == pytest.approx(20.0)
+    assert heavy_power_row["cost_per_sf"] == pytest.approx(20.0)
+    assert heavy_power_row["assumption_source"] == LEGACY_FLOAT_NORMALIZATION_SOURCE
+    assert heavy_power_row["total_cost"] == pytest.approx(20.0 * square_footage)
     assert sum(
         float(item.get("total_cost", 0.0) or 0.0)
         for item in breakdown
@@ -232,6 +270,156 @@ def test_launch_relevant_subtypes_use_structured_non_whole_project_pricing_for_m
         assert normalized_rule.assumption_source == STRUCTURED_RULE_SOURCE
         assert normalized_rule.basis == expected_basis
         assert normalized_rule.basis != SpecialFeaturePricingBasis.WHOLE_PROJECT_SF
+
+
+@pytest.mark.parametrize(("building_type", "subtype"), STAGE3_REMAINING_ACTIVE_SUBTYPES)
+def test_stage3_remaining_active_subtypes_have_no_legacy_whole_project_sf_special_feature_rules(
+    building_type,
+    subtype,
+):
+    config = get_building_config(building_type, subtype)
+    assert config is not None
+    assert config.special_features
+
+    for feature_id, raw_rule in config.special_features.items():
+        normalized_rule = normalize_special_feature_pricing_rule(feature_id, raw_rule)
+
+        assert normalized_rule.assumption_source == STRUCTURED_RULE_SOURCE
+        assert normalized_rule.basis != SpecialFeaturePricingBasis.WHOLE_PROJECT_SF
+
+
+@pytest.mark.parametrize(
+    (
+        "building_type",
+        "subtype",
+        "square_footage",
+        "feature_id",
+        "expected_basis",
+        "expected_quantity",
+        "expected_total_cost",
+        "expected_area_share",
+        "expected_cost_per_count",
+    ),
+    (
+        (
+            BuildingType.HEALTHCARE,
+            "hospital",
+            220_000,
+            "emergency_department",
+            SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+            22_000.0,
+            1_100_000.0,
+            0.10,
+            None,
+        ),
+        (
+            BuildingType.EDUCATIONAL,
+            "elementary_school",
+            70_000,
+            "playground",
+            SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+            7_000.0,
+            140_000.0,
+            0.10,
+            None,
+        ),
+        (
+            BuildingType.PARKING,
+            "parking_garage",
+            180_000,
+            "ev_charging",
+            SpecialFeaturePricingBasis.COUNT_BASED,
+            24.0,
+            288_000.0,
+            None,
+            12_000.0,
+        ),
+        (
+            BuildingType.PARKING,
+            "surface_parking",
+            120_000,
+            "valet_booth",
+            SpecialFeaturePricingBasis.COUNT_BASED,
+            1.0,
+            75_000.0,
+            None,
+            75_000.0,
+        ),
+        (
+            BuildingType.SPECIALTY,
+            "data_center",
+            120_000,
+            "dual_fiber_meet_me_room",
+            SpecialFeaturePricingBasis.COUNT_BASED,
+            1.0,
+            650_000.0,
+            None,
+            650_000.0,
+        ),
+        (
+            BuildingType.RECREATION,
+            "fitness_center",
+            60_000,
+            "pool",
+            SpecialFeaturePricingBasis.AREA_SHARE_GSF,
+            12_000.0,
+            540_000.0,
+            0.20,
+            None,
+        ),
+        (
+            BuildingType.CIVIC,
+            "public_safety",
+            45_000,
+            "training_tower",
+            SpecialFeaturePricingBasis.COUNT_BASED,
+            1.0,
+            450_000.0,
+            None,
+            450_000.0,
+        ),
+    ),
+)
+def test_stage3_remaining_active_example_features_use_localized_structured_pricing(
+    building_type,
+    subtype,
+    square_footage,
+    feature_id,
+    expected_basis,
+    expected_quantity,
+    expected_total_cost,
+    expected_area_share,
+    expected_cost_per_count,
+):
+    result = unified_engine.calculate_project(
+        building_type=building_type,
+        subtype=subtype,
+        square_footage=square_footage,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=[feature_id],
+    )
+
+    breakdown_row = _special_feature_breakdown_by_id(result)[feature_id]
+    pricing_row = _available_special_feature_pricing_by_id(result)[feature_id]
+
+    assert breakdown_row["pricing_basis"] == expected_basis.value
+    assert pricing_row["pricing_basis"] == expected_basis.value
+    assert breakdown_row["assumption_source"] == STRUCTURED_RULE_SOURCE
+    assert pricing_row["assumption_source"] == STRUCTURED_RULE_SOURCE
+    assert breakdown_row["applied_quantity"] == pytest.approx(expected_quantity)
+    assert breakdown_row["total_cost"] == pytest.approx(expected_total_cost)
+    assert result["construction_costs"]["special_features_total"] == pytest.approx(expected_total_cost)
+
+    if expected_basis == SpecialFeaturePricingBasis.AREA_SHARE_GSF:
+        assert breakdown_row["configured_area_share_of_gsf"] == pytest.approx(expected_area_share)
+        assert pricing_row["configured_area_share_of_gsf"] == pytest.approx(expected_area_share)
+        assert "configured_cost_per_count" not in breakdown_row
+
+    if expected_basis == SpecialFeaturePricingBasis.COUNT_BASED:
+        assert breakdown_row["configured_cost_per_count"] == pytest.approx(expected_cost_per_count)
+        assert pricing_row["configured_cost_per_count"] == pytest.approx(expected_cost_per_count)
+        assert "configured_area_share_of_gsf" not in breakdown_row
 
 
 @pytest.mark.parametrize(

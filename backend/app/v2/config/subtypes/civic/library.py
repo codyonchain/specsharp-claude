@@ -82,11 +82,31 @@ CONFIG = (
             "Miami": 1.10,
         },
         special_features={
-            "stacks_load_reinforcement": 35,
-            "acoustic_treatment": 25,
-            "daylighting_controls": 20,
-            "community_rooms": 20,
-            "maker_space_mep": 40,
+            "stacks_load_reinforcement": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 35,
+                "area_share_of_gsf": 0.18,
+            },
+            "acoustic_treatment": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 25,
+                "area_share_of_gsf": 0.40,
+            },
+            "daylighting_controls": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.35,
+            },
+            "community_rooms": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 20,
+                "area_share_of_gsf": 0.10,
+            },
+            "maker_space_mep": {
+                "basis": "AREA_SHARE_GSF",
+                "value": 40,
+                "area_share_of_gsf": 0.08,
+            },
         },
         special_feature_pricing_statuses={
             "stacks_load_reinforcement": "included_in_baseline",
