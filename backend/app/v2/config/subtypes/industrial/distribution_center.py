@@ -73,6 +73,13 @@ CONFIG = (
                 "basis": "AREA_SHARE_GSF",
                 "value": 35,
                 "area_share_of_gsf": 0.12,
+                "trade_allocation": {
+                    "mechanical": 0.35,
+                    "electrical": 0.28,
+                    "plumbing": 0.08,
+                    "finishes": 0.25,
+                    "structural": 0.04,
+                },
             },
             "loading_docks": 15,
             "extra_loading_docks": {

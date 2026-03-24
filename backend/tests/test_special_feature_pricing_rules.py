@@ -1223,6 +1223,128 @@ def test_area_share_industrial_zones_reconcile_with_included_and_incremental_sta
     assert refrigerated_row["total_cost"] == pytest.approx(924_000.0)
 
 
+def test_distribution_center_refrigerated_area_allocation_composes_construction_view_trade_basis_without_double_counting():
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.INDUSTRIAL,
+        subtype="distribution_center",
+        square_footage=220_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["office_buildout", "refrigerated_area"],
+    )
+
+    construction_costs = result["construction_costs"]
+    breakdown_by_id = _special_feature_breakdown_by_id(result)
+    office_row = breakdown_by_id["office_buildout"]
+    refrigerated_row = breakdown_by_id["refrigerated_area"]
+    base_trade_breakdown = result["trade_breakdown"]
+    construction_view_trade_breakdown = result["construction_view_trade_breakdown"]
+    construction_view_scope_items = result["construction_view_scope_items"]
+    refrigerated_total = refrigerated_row["total_cost"]
+    expected_trade_allocation_weights = {
+        "mechanical": 0.35,
+        "electrical": 0.28,
+        "plumbing": 0.08,
+        "finishes": 0.25,
+        "structural": 0.04,
+    }
+    expected_trade_allocation_amounts = {
+        "mechanical": 323_400.0,
+        "electrical": 258_720.0,
+        "plumbing": 73_920.0,
+        "finishes": 231_000.0,
+        "structural": 36_960.0,
+    }
+
+    assert office_row["pricing_status"] == INCLUDED_IN_BASELINE
+    assert office_row["trade_composition_mode"] == "included_in_baseline"
+    assert "trade_allocation_applied" not in office_row
+
+    assert refrigerated_row["pricing_status"] == INCREMENTAL
+    assert refrigerated_total == pytest.approx(924_000.0)
+    assert refrigerated_row["trade_composition_mode"] == "incremental_premium_with_trade_allocation"
+    assert refrigerated_row["trade_allocation_applied"] is True
+    assert refrigerated_row["trade_allocation_note"] == SPECIAL_FEATURE_TRADE_ALLOCATION_NOTE
+    assert refrigerated_row["trade_allocation_weights"] == pytest.approx(
+        expected_trade_allocation_weights
+    )
+    assert refrigerated_row["trade_allocation_amounts"] == pytest.approx(
+        expected_trade_allocation_amounts
+    )
+
+    assert construction_costs["special_features_total"] == pytest.approx(refrigerated_total)
+    assert construction_costs["construction_view_allocated_special_features_total"] == pytest.approx(
+        refrigerated_total
+    )
+    assert construction_costs["construction_view_trade_total"] == pytest.approx(
+        construction_costs["construction_total"] + refrigerated_total
+    )
+    assert sum(base_trade_breakdown.values()) == pytest.approx(construction_costs["construction_total"])
+    assert sum(construction_view_trade_breakdown.values()) == pytest.approx(
+        construction_costs["construction_view_trade_total"]
+    )
+
+    for trade_key, allocated_amount in expected_trade_allocation_amounts.items():
+        assert construction_view_trade_breakdown[trade_key] == pytest.approx(
+            base_trade_breakdown[trade_key] + allocated_amount
+        )
+        assert construction_view_trade_breakdown[trade_key] > base_trade_breakdown[trade_key]
+
+    allocated_scope_systems = [
+        system
+        for item in construction_view_scope_items
+        if isinstance(item, dict)
+        for system in item.get("systems", [])
+        if isinstance(system, dict)
+        and system.get("source") == "special_feature_trade_allocation"
+        and system.get("feature_id") == "refrigerated_area"
+    ]
+    assert len(allocated_scope_systems) == len(expected_trade_allocation_amounts)
+    assert all(
+        system.get("name") == "Refrigerated Area allocated premium"
+        for system in allocated_scope_systems
+    )
+    assert _scope_item_totals_by_trade(construction_view_scope_items) == pytest.approx(
+        construction_view_trade_breakdown
+    )
+    assert result["totals"]["hard_costs"] == pytest.approx(
+        construction_costs["construction_total"]
+        + construction_costs["equipment_total"]
+        + construction_costs["special_features_total"]
+    )
+
+
+def test_distribution_center_without_refrigerated_area_preserves_legacy_construction_view_trade_basis():
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.INDUSTRIAL,
+        subtype="distribution_center",
+        square_footage=220_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["extra_loading_docks"],
+        parsed_input_overrides={"loading_dock_count": 10},
+    )
+
+    construction_costs = result["construction_costs"]
+    extra_loading_docks_row = _special_feature_breakdown_by_id(result)["extra_loading_docks"]
+
+    assert extra_loading_docks_row["pricing_status"] == INCREMENTAL
+    assert extra_loading_docks_row["trade_composition_mode"] == "incremental_premium_only"
+    assert "trade_allocation_applied" not in extra_loading_docks_row
+    assert construction_costs["special_features_total"] == pytest.approx(130_000.0)
+    assert construction_costs["construction_view_allocated_special_features_total"] == pytest.approx(0.0)
+    assert construction_costs["construction_view_trade_total"] == pytest.approx(
+        construction_costs["construction_total"]
+    )
+    assert result["construction_view_trade_breakdown"] == pytest.approx(result["trade_breakdown"])
+    assert result["construction_view_scope_items"] == result["scope_items"]
+    assert result["totals"]["hard_costs"] == pytest.approx(
+        construction_costs["construction_total"]
+        + construction_costs["equipment_total"]
+        + construction_costs["special_features_total"]
+    )
+
+
 def test_structured_whole_project_sf_rules_flow_through_engine_without_repricing(monkeypatch):
     square_footage = 48_000
     config = get_building_config(BuildingType.RETAIL, "shopping_center")
