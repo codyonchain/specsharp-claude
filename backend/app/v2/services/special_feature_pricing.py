@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from app.v2.config.master_config import (
@@ -15,6 +15,21 @@ VALID_SPECIAL_FEATURE_PRICING_STATUSES = {
 }
 LEGACY_FLOAT_NORMALIZATION_SOURCE = "legacy_float_normalized"
 STRUCTURED_RULE_SOURCE = "structured_rule"
+SPECIAL_FEATURE_TRADE_COMPOSITION_MODE_INCLUDED_IN_BASELINE = "included_in_baseline"
+SPECIAL_FEATURE_TRADE_COMPOSITION_MODE_INCREMENTAL_PREMIUM_ONLY = "incremental_premium_only"
+SPECIAL_FEATURE_TRADE_COMPOSITION_MODE_INCREMENTAL_PREMIUM_WITH_TRADE_ALLOCATION = (
+    "incremental_premium_with_trade_allocation"
+)
+SPECIAL_FEATURE_TRADE_ALLOCATION_NOTE = (
+    "Counted once in hard costs; distributed across the Trade Summary above."
+)
+VALID_TRADE_ALLOCATION_KEYS = (
+    "structural",
+    "mechanical",
+    "electrical",
+    "plumbing",
+    "finishes",
+)
 
 
 @dataclass(frozen=True)
@@ -45,6 +60,7 @@ class NormalizedSpecialFeaturePricingRule:
     default_count_bands: Tuple[NormalizedSpecialFeatureCountBand, ...] = ()
     area_share_of_gsf: Optional[float] = None
     size_band: Optional[str] = None
+    trade_allocation_weights: Tuple[Tuple[str, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -91,6 +107,17 @@ class AppliedSpecialFeaturePricing:
     included_baseline_quantity_source: Optional[str] = None
     billed_quantity: Optional[float] = None
     billed_quantity_source: Optional[str] = None
+    trade_composition_mode: str = SPECIAL_FEATURE_TRADE_COMPOSITION_MODE_INCREMENTAL_PREMIUM_ONLY
+    trade_allocation_weights: Dict[str, float] = field(default_factory=dict)
+    trade_allocation_amounts: Dict[str, float] = field(default_factory=dict)
+    trade_allocation_note: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ComposedTradeBreakdown:
+    trade_breakdown: Dict[str, float]
+    allocated_special_features_total: float
+    allocated_feature_ids: List[str]
 
 
 def _coerce_special_feature_pricing_basis(
@@ -242,6 +269,56 @@ def _normalize_default_count_bands(
             )
         )
     return tuple(normalized_bands)
+
+
+def _normalize_trade_allocation_weights(
+    feature_id: str,
+    raw_allocation: Any,
+) -> Tuple[Tuple[str, float], ...]:
+    if raw_allocation is None:
+        return ()
+    if not isinstance(raw_allocation, Mapping):
+        raise ValueError(
+            f"Special feature pricing field 'trade_allocation' for feature '{feature_id}' "
+            "must be a dictionary"
+        )
+
+    normalized: Dict[str, float] = {}
+    for raw_trade_key, raw_share in raw_allocation.items():
+        trade_key = str(raw_trade_key or "").strip().lower()
+        if trade_key not in VALID_TRADE_ALLOCATION_KEYS:
+            raise ValueError(
+                f"Invalid trade allocation key '{raw_trade_key}' for feature '{feature_id}'"
+            )
+        share = _coerce_optional_float(
+            feature_id=feature_id,
+            field_name=f"trade_allocation.{trade_key}",
+            raw_value=raw_share,
+            required=True,
+        )
+        if share is None or share < 0:
+            raise ValueError(
+                f"Special feature trade allocation '{trade_key}' for feature '{feature_id}' "
+                "must be non-negative"
+            )
+        if share > 0:
+            normalized[trade_key] = float(share)
+
+    if not normalized:
+        return ()
+
+    total_share = sum(normalized.values())
+    if abs(total_share - 1.0) > 0.01:
+        raise ValueError(
+            f"Special feature trade allocation for feature '{feature_id}' must sum to 1.0, "
+            f"got {total_share:.4f}"
+        )
+
+    return tuple(
+        (trade_key, normalized[trade_key])
+        for trade_key in VALID_TRADE_ALLOCATION_KEYS
+        if trade_key in normalized
+    )
 
 
 def _normalize_count_quantity(raw_value: Any) -> Optional[float]:
@@ -450,6 +527,10 @@ def normalize_special_feature_pricing_rule(
         default_count_bands=normalized_default_count_bands,
         area_share_of_gsf=normalized_area_share_of_gsf,
         size_band=raw_size_band,
+        trade_allocation_weights=_normalize_trade_allocation_weights(
+            feature_id=feature_id,
+            raw_allocation=raw_rule.get("trade_allocation"),
+        ),
         assumption_source=STRUCTURED_RULE_SOURCE,
     )
 
@@ -557,6 +638,51 @@ def serialize_resolved_special_feature_pricing_rule_preview(
     return preview
 
 
+def _resolve_trade_composition_mode(
+    *,
+    pricing_status: str,
+    trade_allocation_weights: Mapping[str, float],
+    total_cost: float,
+) -> str:
+    if pricing_status == INCLUDED_IN_BASELINE:
+        return SPECIAL_FEATURE_TRADE_COMPOSITION_MODE_INCLUDED_IN_BASELINE
+    if trade_allocation_weights and float(total_cost or 0.0) > 0:
+        return SPECIAL_FEATURE_TRADE_COMPOSITION_MODE_INCREMENTAL_PREMIUM_WITH_TRADE_ALLOCATION
+    return SPECIAL_FEATURE_TRADE_COMPOSITION_MODE_INCREMENTAL_PREMIUM_ONLY
+
+
+def _build_trade_allocation_payload(
+    *,
+    rule: NormalizedSpecialFeaturePricingRule,
+    pricing_status: str,
+    total_cost: float,
+) -> Tuple[str, Dict[str, float], Dict[str, float], Optional[str]]:
+    trade_allocation_weights = {
+        trade_key: float(weight)
+        for trade_key, weight in rule.trade_allocation_weights
+    }
+    trade_composition_mode = _resolve_trade_composition_mode(
+        pricing_status=pricing_status,
+        trade_allocation_weights=trade_allocation_weights,
+        total_cost=total_cost,
+    )
+
+    if trade_composition_mode != SPECIAL_FEATURE_TRADE_COMPOSITION_MODE_INCREMENTAL_PREMIUM_WITH_TRADE_ALLOCATION:
+        return trade_composition_mode, trade_allocation_weights, {}, None
+
+    trade_allocation_amounts = {
+        trade_key: float(total_cost) * float(weight)
+        for trade_key, weight in trade_allocation_weights.items()
+        if float(weight) > 0
+    }
+    return (
+        trade_composition_mode,
+        trade_allocation_weights,
+        trade_allocation_amounts,
+        SPECIAL_FEATURE_TRADE_ALLOCATION_NOTE,
+    )
+
+
 def apply_special_feature_pricing_rule(
     *,
     rule: NormalizedSpecialFeaturePricingRule,
@@ -575,6 +701,17 @@ def apply_special_feature_pricing_rule(
             0.0 if pricing_status == INCLUDED_IN_BASELINE else configured_cost_per_sf
         )
         applied_quantity = float(square_footage)
+        total_cost = applied_cost_per_sf * applied_quantity
+        (
+            trade_composition_mode,
+            trade_allocation_weights,
+            trade_allocation_amounts,
+            trade_allocation_note,
+        ) = _build_trade_allocation_payload(
+            rule=rule,
+            pricing_status=pricing_status,
+            total_cost=total_cost,
+        )
         return AppliedSpecialFeaturePricing(
             feature_id=rule.feature_id,
             pricing_status=pricing_status,
@@ -583,10 +720,14 @@ def apply_special_feature_pricing_rule(
             applied_value=applied_cost_per_sf,
             applied_quantity=applied_quantity,
             quantity_source="whole_project_sf",
-            total_cost=applied_cost_per_sf * applied_quantity,
+            total_cost=total_cost,
             configured_cost_per_sf=configured_cost_per_sf,
             cost_per_sf=applied_cost_per_sf,
             assumption_source=rule.assumption_source,
+            trade_composition_mode=trade_composition_mode,
+            trade_allocation_weights=trade_allocation_weights,
+            trade_allocation_amounts=trade_allocation_amounts,
+            trade_allocation_note=trade_allocation_note,
         )
 
     if rule.basis == SpecialFeaturePricingBasis.COUNT_BASED:
@@ -614,6 +755,17 @@ def apply_special_feature_pricing_rule(
                     else 0.0
                 )
             )
+        total_cost = applied_cost_per_count * resolved_quantities.billed_quantity
+        (
+            trade_composition_mode,
+            trade_allocation_weights,
+            trade_allocation_amounts,
+            trade_allocation_note,
+        ) = _build_trade_allocation_payload(
+            rule=rule,
+            pricing_status=pricing_status,
+            total_cost=total_cost,
+        )
         return AppliedSpecialFeaturePricing(
             feature_id=rule.feature_id,
             pricing_status=pricing_status,
@@ -622,7 +774,7 @@ def apply_special_feature_pricing_rule(
             applied_value=applied_cost_per_count,
             applied_quantity=resolved_quantities.billed_quantity,
             quantity_source=resolved_quantities.billed_quantity_source,
-            total_cost=applied_cost_per_count * resolved_quantities.billed_quantity,
+            total_cost=total_cost,
             configured_cost_per_count=configured_cost_per_count,
             cost_per_count=applied_cost_per_count,
             count_pricing_mode=rule.count_pricing_mode,
@@ -637,6 +789,10 @@ def apply_special_feature_pricing_rule(
             billed_quantity=resolved_quantities.billed_quantity,
             billed_quantity_source=resolved_quantities.billed_quantity_source,
             assumption_source=rule.assumption_source,
+            trade_composition_mode=trade_composition_mode,
+            trade_allocation_weights=trade_allocation_weights,
+            trade_allocation_amounts=trade_allocation_amounts,
+            trade_allocation_note=trade_allocation_note,
         )
 
     if rule.basis == SpecialFeaturePricingBasis.AREA_SHARE_GSF:
@@ -651,6 +807,17 @@ def apply_special_feature_pricing_rule(
             else configured_cost_per_feature_area_sf
         )
         applied_quantity = float(square_footage or 0.0) * float(rule.area_share_of_gsf)
+        total_cost = applied_cost_per_feature_area_sf * applied_quantity
+        (
+            trade_composition_mode,
+            trade_allocation_weights,
+            trade_allocation_amounts,
+            trade_allocation_note,
+        ) = _build_trade_allocation_payload(
+            rule=rule,
+            pricing_status=pricing_status,
+            total_cost=total_cost,
+        )
         return AppliedSpecialFeaturePricing(
             feature_id=rule.feature_id,
             pricing_status=pricing_status,
@@ -659,9 +826,13 @@ def apply_special_feature_pricing_rule(
             applied_value=applied_cost_per_feature_area_sf,
             applied_quantity=applied_quantity,
             quantity_source="area_share_of_gsf",
-            total_cost=applied_cost_per_feature_area_sf * applied_quantity,
+            total_cost=total_cost,
             configured_area_share_of_gsf=rule.area_share_of_gsf,
             assumption_source=rule.assumption_source,
+            trade_composition_mode=trade_composition_mode,
+            trade_allocation_weights=trade_allocation_weights,
+            trade_allocation_amounts=trade_allocation_amounts,
+            trade_allocation_note=trade_allocation_note,
         )
 
     raise NotImplementedError(
@@ -682,6 +853,7 @@ def serialize_applied_special_feature_pricing(
         "quantity_source": applied_pricing.quantity_source,
         "total_cost": applied_pricing.total_cost,
         "assumption_source": applied_pricing.assumption_source,
+        "trade_composition_mode": applied_pricing.trade_composition_mode,
     }
     if applied_pricing.configured_cost_per_sf is not None:
         row["configured_cost_per_sf"] = applied_pricing.configured_cost_per_sf
@@ -713,7 +885,48 @@ def serialize_applied_special_feature_pricing(
         row["billed_quantity"] = applied_pricing.billed_quantity
     if applied_pricing.billed_quantity_source is not None:
         row["billed_quantity_source"] = applied_pricing.billed_quantity_source
+    if applied_pricing.trade_allocation_weights:
+        row["trade_allocation_weights"] = dict(applied_pricing.trade_allocation_weights)
+    if applied_pricing.trade_allocation_amounts:
+        row["trade_allocation_amounts"] = dict(applied_pricing.trade_allocation_amounts)
+        row["trade_allocation_applied"] = True
+    if applied_pricing.trade_allocation_note is not None:
+        row["trade_allocation_note"] = applied_pricing.trade_allocation_note
     return row
+
+
+def compose_trade_breakdown_with_special_feature_allocations(
+    base_trades: Mapping[str, Any],
+    applied_special_feature_pricing: Optional[Iterable[AppliedSpecialFeaturePricing]],
+) -> ComposedTradeBreakdown:
+    composed_trades: Dict[str, float] = {
+        str(trade_key): float(amount or 0.0)
+        for trade_key, amount in (base_trades or {}).items()
+    }
+    allocated_special_features_total = 0.0
+    allocated_feature_ids: List[str] = []
+
+    for applied_pricing in applied_special_feature_pricing or []:
+        trade_allocation_amounts = applied_pricing.trade_allocation_amounts or {}
+        if not trade_allocation_amounts:
+            continue
+        allocated_feature_ids.append(applied_pricing.feature_id)
+        for trade_key, amount in trade_allocation_amounts.items():
+            normalized_trade_key = str(trade_key).strip().lower()
+            amount_value = float(amount or 0.0)
+            if normalized_trade_key not in VALID_TRADE_ALLOCATION_KEYS or amount_value <= 0:
+                continue
+            composed_trades[normalized_trade_key] = (
+                float(composed_trades.get(normalized_trade_key, 0.0) or 0.0)
+                + amount_value
+            )
+            allocated_special_features_total += amount_value
+
+    return ComposedTradeBreakdown(
+        trade_breakdown=composed_trades,
+        allocated_special_features_total=allocated_special_features_total,
+        allocated_feature_ids=allocated_feature_ids,
+    )
 
 
 def resolve_special_feature_pricing(

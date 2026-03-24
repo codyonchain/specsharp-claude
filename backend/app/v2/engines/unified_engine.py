@@ -28,8 +28,10 @@ from app.v2.config.construction_schedule import (
 )
 from app.v2.config.type_profiles import scope_items
 from app.v2.services.special_feature_pricing import (
+    AppliedSpecialFeaturePricing,
     INCLUDED_IN_BASELINE,
     apply_special_feature_pricing_rule,
+    compose_trade_breakdown_with_special_feature_allocations,
     resolve_special_feature_pricing,
     resolve_normalized_special_feature_pricing_rules,
     serialize_applied_special_feature_pricing,
@@ -38,7 +40,7 @@ from app.v2.services.special_feature_pricing import (
 from app.v2.services.construction_risk_drivers import build_construction_risk_drivers
 from app.services.nlp_service import NLPService
 # from app.v2.services.financial_analyzer import FinancialAnalyzer  # TODO: Implement this
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, Iterable, List, Tuple
 from copy import deepcopy
 from dataclasses import asdict, replace
 import math
@@ -1194,6 +1196,7 @@ class UnifiedEngine:
         # Add special features if any
         special_features_cost = 0
         special_features_breakdown: List[Dict[str, Any]] = []
+        applied_special_feature_pricings: List[AppliedSpecialFeaturePricing] = []
         resolved_special_feature_ids: List[str] = []
         available_special_feature_pricing: List[Dict[str, Any]] = []
         if special_features and building_config.special_features:
@@ -1267,6 +1270,7 @@ class UnifiedEngine:
                     pricing_status=pricing_status,
                     pricing_override_sources=pricing_override_sources,
                 )
+                applied_special_feature_pricings.append(applied_pricing)
                 breakdown_row = serialize_applied_special_feature_pricing(applied_pricing)
                 breakdown_row['label'] = _humanize_special_feature_label(normalized_rule.feature_id)
                 special_features_breakdown.append(breakdown_row)
@@ -1391,6 +1395,27 @@ class UnifiedEngine:
                     construction_cost += delta
                     if square_footage > 0:
                         final_cost_per_sf = construction_cost / square_footage
+
+        construction_view_trade_composition = compose_trade_breakdown_with_special_feature_allocations(
+            base_trades=trades,
+            applied_special_feature_pricing=applied_special_feature_pricings,
+        )
+        construction_view_trade_breakdown = construction_view_trade_composition.trade_breakdown
+        construction_view_allocated_special_features_total = (
+            construction_view_trade_composition.allocated_special_features_total
+        )
+        construction_view_trade_total = sum(
+            float(amount or 0.0) for amount in construction_view_trade_breakdown.values()
+        )
+        construction_view_scope_items = self._build_construction_view_scope_items(
+            base_scope_items=scope_items,
+            applied_special_feature_pricing=applied_special_feature_pricings,
+        )
+        self._log_trace("construction_view_trade_breakdown_composed", {
+            "allocated_features": construction_view_trade_composition.allocated_feature_ids,
+            "allocated_special_features_total": construction_view_allocated_special_features_total,
+            "trade_total": construction_view_trade_total,
+        })
 
         # Calculate soft costs (after any flex adjustments)
         soft_costs = self._calculate_soft_costs(construction_cost, building_config.soft_costs)
@@ -1628,11 +1653,17 @@ class UnifiedEngine:
                 'equipment_total': equipment_cost,
                 'special_features_total': special_features_cost,
                 'special_features_breakdown': special_features_breakdown,
+                'construction_view_trade_total': construction_view_trade_total,
+                'construction_view_allocated_special_features_total': (
+                    construction_view_allocated_special_features_total
+                ),
                 'cost_build_up': fallback_cost_build_up
             },
             'cost_dna': cost_dna,  # Add cost DNA for transparency
             'trade_breakdown': trades,
+            'construction_view_trade_breakdown': construction_view_trade_breakdown,
             'scope_items': scope_items,
+            'construction_view_scope_items': construction_view_scope_items,
             'soft_costs': soft_costs,
             'totals': totals_payload,
             'ownership_analysis': ownership_analysis,
@@ -1979,6 +2010,94 @@ class UnifiedEngine:
             return float(total) / float(qty)
         except (TypeError, ValueError, ZeroDivisionError):
             return 0.0
+
+    @staticmethod
+    def _resolve_special_feature_allocation_display_quantity_and_unit(
+        applied_pricing: AppliedSpecialFeaturePricing,
+    ) -> Tuple[float, str]:
+        pricing_basis = (
+            applied_pricing.pricing_basis.value
+            if hasattr(applied_pricing.pricing_basis, "value")
+            else str(applied_pricing.pricing_basis)
+        )
+        applied_quantity = float(applied_pricing.applied_quantity or 0.0)
+
+        if pricing_basis in {"AREA_SHARE_GSF", "WHOLE_PROJECT_SF"}:
+            return (applied_quantity if applied_quantity > 0 else 1.0, "SF")
+
+        if pricing_basis == "COUNT_BASED":
+            unit_label = (
+                str(applied_pricing.unit_label).strip()
+                if isinstance(applied_pricing.unit_label, str)
+                else ""
+            )
+            return (applied_quantity if applied_quantity > 0 else 1.0, unit_label or "item")
+
+        return (1.0, "LS")
+
+    def _build_construction_view_scope_items(
+        self,
+        base_scope_items: Optional[List[Dict[str, Any]]],
+        applied_special_feature_pricing: Optional[Iterable[AppliedSpecialFeaturePricing]],
+    ) -> List[Dict[str, Any]]:
+        composed_scope_items = (
+            deepcopy(base_scope_items)
+            if isinstance(base_scope_items, list)
+            else []
+        )
+        trade_items_by_key: Dict[str, Dict[str, Any]] = {}
+
+        for item in composed_scope_items:
+            if not isinstance(item, dict):
+                continue
+            trade_key = str(item.get("trade") or "").strip().lower()
+            if not trade_key:
+                continue
+            trade_items_by_key[trade_key] = item
+
+        for applied_pricing in applied_special_feature_pricing or []:
+            trade_allocation_amounts = applied_pricing.trade_allocation_amounts or {}
+            if not trade_allocation_amounts:
+                continue
+
+            quantity, unit = self._resolve_special_feature_allocation_display_quantity_and_unit(
+                applied_pricing
+            )
+            feature_label = _humanize_special_feature_label(applied_pricing.feature_id)
+
+            for raw_trade_key, raw_amount in trade_allocation_amounts.items():
+                trade_key = str(raw_trade_key or "").strip().lower()
+                trade_amount = float(raw_amount or 0.0)
+                if not trade_key or trade_amount <= 0:
+                    continue
+
+                trade_item = trade_items_by_key.get(trade_key)
+                if trade_item is None:
+                    trade_item = {
+                        "trade": trade_key.replace("_", " ").title(),
+                        "systems": [],
+                    }
+                    composed_scope_items.append(trade_item)
+                    trade_items_by_key[trade_key] = trade_item
+
+                systems = trade_item.get("systems")
+                if not isinstance(systems, list):
+                    systems = []
+                    trade_item["systems"] = systems
+
+                systems.append(
+                    {
+                        "name": f"{feature_label} allocated premium",
+                        "quantity": quantity,
+                        "unit": unit,
+                        "unit_cost": self._safe_unit_cost(trade_amount, quantity),
+                        "total_cost": trade_amount,
+                        "source": "special_feature_trade_allocation",
+                        "feature_id": applied_pricing.feature_id,
+                    }
+                )
+
+        return composed_scope_items
 
     def _collect_scope_override_sources(
         self, scope_context: Optional[Dict[str, Any]]

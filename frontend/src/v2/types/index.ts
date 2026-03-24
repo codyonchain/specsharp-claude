@@ -143,10 +143,16 @@ export interface ConstructionCosts {
   construction_total: number;
   equipment_total: number;
   special_features_total: number;
+  construction_view_trade_total?: number;
+  construction_view_allocated_special_features_total?: number;
   special_features_breakdown?: SpecialFeatureBreakdownRow[];
 }
 
 export type SpecialFeaturePricingStatus = 'included_in_baseline' | 'incremental';
+export type SpecialFeatureTradeCompositionMode =
+  | 'included_in_baseline'
+  | 'incremental_premium_only'
+  | 'incremental_premium_with_trade_allocation';
 
 export type SpecialFeaturePricingBasis =
   | 'WHOLE_PROJECT_SF'
@@ -170,6 +176,7 @@ export interface SpecialFeatureBreakdownRow {
   label: string;
   total_cost: number;
   pricing_status?: SpecialFeaturePricingStatus;
+  trade_composition_mode?: SpecialFeatureTradeCompositionMode;
   pricing_basis?: SpecialFeaturePricingBasis;
   count_pricing_mode?: SpecialFeatureCountPricingMode;
   configured_value?: number;
@@ -192,6 +199,10 @@ export interface SpecialFeatureBreakdownRow {
   included_baseline_quantity_source?: string;
   billed_quantity?: number;
   billed_quantity_source?: string;
+  trade_allocation_applied?: boolean;
+  trade_allocation_note?: string;
+  trade_allocation_weights?: Record<string, number>;
+  trade_allocation_amounts?: Record<string, number>;
 }
 
 export interface AvailableSpecialFeaturePricing {
@@ -327,6 +338,7 @@ export interface CalculationResult {
   construction_costs: ConstructionCosts;
   construction_risk_drivers?: ConstructionRiskDriver[];
   trade_breakdown: Record<string, number>;
+  construction_view_trade_breakdown?: Record<string, number>;
   scope_items?: Array<{
     trade: string;
     systems: Array<{
@@ -336,6 +348,19 @@ export interface CalculationResult {
       unit?: string;
       unit_cost?: number;
       total_cost?: number;
+    }>;
+  }>;
+  construction_view_scope_items?: Array<{
+    trade: string;
+    systems: Array<{
+      name?: string;
+      description?: string;
+      quantity?: number;
+      unit?: string;
+      unit_cost?: number;
+      total_cost?: number;
+      source?: string;
+      feature_id?: string;
     }>;
   }>;
   soft_costs: Record<string, number>;

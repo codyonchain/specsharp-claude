@@ -91,6 +91,13 @@ CONFIG = (
                 "basis": "AREA_SHARE_GSF",
                 "value": 45,
                 "area_share_of_gsf": 0.32,
+                "trade_allocation": {
+                    "structural": 0.70,
+                    "mechanical": 0.08,
+                    "electrical": 0.10,
+                    "plumbing": 0.04,
+                    "finishes": 0.08,
+                },
             },
             "concierge": {
                 "basis": "COUNT_BASED",

@@ -103,6 +103,7 @@ class SpecialFeaturePricingRule(TypedDict, total=False):
     default_count_bands: List["SpecialFeaturePricingCountBand"]
     area_share_of_gsf: float
     size_band: str
+    trade_allocation: "SpecialFeatureTradeAllocationRule"
 
 
 class SpecialFeaturePricingCountBand(TypedDict, total=False):
@@ -110,6 +111,15 @@ class SpecialFeaturePricingCountBand(TypedDict, total=False):
     label: str
     max_square_footage: float
     count: float
+
+
+class SpecialFeatureTradeAllocationRule(TypedDict, total=False):
+    """Optional ConstructionView trade-allocation shares for incremental premiums."""
+    structural: float
+    mechanical: float
+    electrical: float
+    plumbing: float
+    finishes: float
 
 
 SpecialFeaturePricingConfigValue = Union[float, SpecialFeaturePricingRule]

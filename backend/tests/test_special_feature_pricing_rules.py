@@ -11,6 +11,7 @@ from app.v2.services.special_feature_pricing import (
     INCLUDED_IN_BASELINE,
     INCREMENTAL,
     LEGACY_FLOAT_NORMALIZATION_SOURCE,
+    SPECIAL_FEATURE_TRADE_ALLOCATION_NOTE,
     STRUCTURED_RULE_SOURCE,
     apply_special_feature_pricing_rule,
     normalize_special_feature_pricing_rule,
@@ -31,6 +32,22 @@ def _available_special_feature_pricing_by_id(result):
         for row in result["project_info"]["available_special_feature_pricing"]
         if isinstance(row, dict) and row.get("id")
     }
+
+
+def _scope_item_totals_by_trade(scope_items):
+    totals = {}
+    for item in scope_items or []:
+        if not isinstance(item, dict):
+            continue
+        trade_key = str(item.get("trade") or "").strip().lower()
+        if not trade_key:
+            continue
+        totals[trade_key] = sum(
+            float(system.get("total_cost", 0.0) or 0.0)
+            for system in item.get("systems", [])
+            if isinstance(system, dict)
+        )
+    return totals
 
 
 STAGE3_REMAINING_ACTIVE_SUBTYPES = (
@@ -761,6 +778,152 @@ def test_garage_style_incremental_features_now_price_from_area_share_of_gsf(
     assert available_pricing_row["pricing_basis"] == SpecialFeaturePricingBasis.AREA_SHARE_GSF.value
     assert available_pricing_row["configured_value"] == pytest.approx(expected_value)
     assert available_pricing_row["configured_area_share_of_gsf"] == pytest.approx(expected_share)
+
+
+def test_market_rate_parking_garage_allocation_composes_construction_view_trade_basis_without_double_counting():
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.MULTIFAMILY,
+        subtype="market_rate_apartments",
+        square_footage=250_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["parking_garage", "rooftop_amenity"],
+        parsed_input_overrides={"unit_count": 220},
+    )
+
+    construction_costs = result["construction_costs"]
+    breakdown_by_id = _special_feature_breakdown_by_id(result)
+    parking_row = breakdown_by_id["parking_garage"]
+    rooftop_row = breakdown_by_id["rooftop_amenity"]
+    base_trade_breakdown = result["trade_breakdown"]
+    construction_view_trade_breakdown = result["construction_view_trade_breakdown"]
+    construction_view_scope_items = result["construction_view_scope_items"]
+    parking_total = parking_row["total_cost"]
+
+    assert construction_costs["construction_total"] == pytest.approx(37_337_500.0)
+    assert construction_costs["equipment_total"] == pytest.approx(3_750_000.0)
+    assert construction_costs["special_features_total"] == pytest.approx(2_420_000.0)
+    assert result["totals"]["hard_costs"] == pytest.approx(43_507_500.0)
+
+    assert parking_row["pricing_status"] == INCREMENTAL
+    assert parking_row["trade_composition_mode"] == "incremental_premium_with_trade_allocation"
+    assert parking_row["trade_allocation_applied"] is True
+    assert parking_row["trade_allocation_note"] == SPECIAL_FEATURE_TRADE_ALLOCATION_NOTE
+    assert parking_row["trade_allocation_amounts"]["structural"] == pytest.approx(1_568_000.0)
+    assert parking_total == pytest.approx(2_240_000.0)
+
+    assert rooftop_row["pricing_status"] == INCREMENTAL
+    assert rooftop_row["trade_composition_mode"] == "incremental_premium_only"
+    assert "trade_allocation_applied" not in rooftop_row
+    assert "trade_allocation_note" not in rooftop_row
+    assert rooftop_row["total_cost"] == pytest.approx(180_000.0)
+
+    assert sum(base_trade_breakdown.values()) == pytest.approx(construction_costs["construction_total"])
+    assert construction_costs["construction_view_allocated_special_features_total"] == pytest.approx(parking_total)
+    assert construction_costs["construction_view_trade_total"] == pytest.approx(
+        construction_costs["construction_total"] + parking_total
+    )
+    assert sum(construction_view_trade_breakdown.values()) == pytest.approx(
+        construction_costs["construction_view_trade_total"]
+    )
+    assert construction_view_trade_breakdown["structural"] == pytest.approx(12_769_250.0)
+    assert construction_view_trade_breakdown["structural"] > base_trade_breakdown["structural"]
+    assert result["totals"]["hard_costs"] == pytest.approx(
+        construction_costs["construction_total"]
+        + construction_costs["equipment_total"]
+        + construction_costs["special_features_total"]
+    )
+    assert _scope_item_totals_by_trade(construction_view_scope_items) == pytest.approx(
+        construction_view_trade_breakdown
+    )
+
+
+@pytest.mark.parametrize(
+    ("subtype", "expected_parking_total"),
+    (
+        ("luxury_apartments", 3_600_000.0),
+        ("affordable_housing", 1_430_000.0),
+    ),
+)
+def test_multifamily_launch_subtype_parking_garage_allocation_spot_checks(
+    subtype,
+    expected_parking_total,
+):
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.MULTIFAMILY,
+        subtype=subtype,
+        square_footage=250_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["parking_garage"],
+    )
+
+    construction_costs = result["construction_costs"]
+    parking_row = _special_feature_breakdown_by_id(result)["parking_garage"]
+
+    assert parking_row["trade_allocation_applied"] is True
+    assert construction_costs["construction_view_allocated_special_features_total"] == pytest.approx(
+        expected_parking_total
+    )
+    assert construction_costs["construction_view_trade_total"] == pytest.approx(
+        construction_costs["construction_total"] + expected_parking_total
+    )
+    assert result["totals"]["hard_costs"] == pytest.approx(
+        construction_costs["construction_total"]
+        + construction_costs["equipment_total"]
+        + construction_costs["special_features_total"]
+    )
+    assert sum(result["construction_view_trade_breakdown"].values()) == pytest.approx(
+        construction_costs["construction_view_trade_total"]
+    )
+
+
+def test_non_allocated_incremental_features_preserve_prior_trade_basis_behavior():
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.MULTIFAMILY,
+        subtype="market_rate_apartments",
+        square_footage=100_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["rooftop_amenity"],
+    )
+
+    construction_costs = result["construction_costs"]
+    rooftop_row = _special_feature_breakdown_by_id(result)["rooftop_amenity"]
+
+    assert rooftop_row["trade_composition_mode"] == "incremental_premium_only"
+    assert "trade_allocation_applied" not in rooftop_row
+    assert construction_costs["construction_view_allocated_special_features_total"] == pytest.approx(0.0)
+    assert construction_costs["construction_view_trade_total"] == pytest.approx(
+        construction_costs["construction_total"]
+    )
+    assert result["construction_view_trade_breakdown"] == pytest.approx(result["trade_breakdown"])
+    assert result["construction_view_scope_items"] == result["scope_items"]
+
+
+def test_included_in_baseline_features_remain_zero_cost_and_do_not_allocate_without_metadata():
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.RESTAURANT,
+        subtype="full_service",
+        square_footage=8_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["valet_parking"],
+    )
+
+    construction_costs = result["construction_costs"]
+    valet_row = _special_feature_breakdown_by_id(result)["valet_parking"]
+
+    assert valet_row["pricing_status"] == INCLUDED_IN_BASELINE
+    assert valet_row["trade_composition_mode"] == "included_in_baseline"
+    assert valet_row["total_cost"] == pytest.approx(0.0)
+    assert "trade_allocation_applied" not in valet_row
+    assert construction_costs["special_features_total"] == pytest.approx(0.0)
+    assert construction_costs["construction_view_allocated_special_features_total"] == pytest.approx(0.0)
+    assert construction_costs["construction_view_trade_total"] == pytest.approx(
+        construction_costs["construction_total"]
+    )
+    assert result["construction_view_trade_breakdown"] == pytest.approx(result["trade_breakdown"])
 
 
 def test_area_share_industrial_zones_reconcile_with_included_and_incremental_statuses():

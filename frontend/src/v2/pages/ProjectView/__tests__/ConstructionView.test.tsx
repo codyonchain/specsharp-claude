@@ -2450,6 +2450,91 @@ describe("ConstructionView", () => {
     expect(within(incrementalRow as HTMLElement).getByText("$35/SF × 8,000 SF")).toBeInTheDocument();
   });
 
+  it("prefers backend-composed trade allocation fields for parking garage premiums", () => {
+    const project = buildCrossTypeScheduleProject("multifamily", "market_rate_apartments", "subtype");
+    project.analysis.calculations.trade_breakdown = {
+      structural: 3000000,
+      mechanical: 2000000,
+      electrical: 1200000,
+      plumbing: 1800000,
+      finishes: 2000000,
+    };
+    project.analysis.calculations.construction_view_trade_breakdown = {
+      structural: 4568000,
+      mechanical: 2179200,
+      electrical: 1424000,
+      plumbing: 1889600,
+      finishes: 2179200,
+    };
+    project.analysis.calculations.scope_items = [
+      {
+        trade: "Structural",
+        systems: [
+          { name: "Podium + Frame", quantity: 50000, unit: "SF", unit_cost: 60, total_cost: 3000000 },
+        ],
+      },
+    ];
+    project.analysis.calculations.construction_view_scope_items = [
+      {
+        trade: "Structural",
+        systems: [
+          { name: "Podium + Frame", quantity: 50000, unit: "SF", unit_cost: 60, total_cost: 3000000 },
+          { name: "Parking Garage allocated premium", quantity: 70000, unit: "SF", unit_cost: 22.4, total_cost: 1568000 },
+        ],
+      },
+    ];
+    project.analysis.calculations.construction_costs.construction_total = 10000000;
+    project.analysis.calculations.construction_costs.equipment_total = 800000;
+    project.analysis.calculations.construction_costs.special_features_total = 2420000;
+    project.analysis.calculations.construction_costs.construction_view_trade_total = 12240000;
+    project.analysis.calculations.construction_costs.construction_view_allocated_special_features_total = 2240000;
+    project.analysis.calculations.construction_costs.special_features_breakdown = [
+      {
+        id: "parking_garage",
+        label: "Parking Garage",
+        pricing_basis: "AREA_SHARE_GSF",
+        pricing_status: "incremental",
+        configured_value: 32,
+        configured_area_share_of_gsf: 0.28,
+        applied_value: 32,
+        applied_quantity: 70000,
+        total_cost: 2240000,
+        trade_composition_mode: "incremental_premium_with_trade_allocation",
+        trade_allocation_applied: true,
+        trade_allocation_note: "Counted once in hard costs; distributed across the Trade Summary above.",
+      },
+      {
+        id: "rooftop_amenity",
+        label: "Rooftop Amenity",
+        pricing_basis: "AREA_SHARE_GSF",
+        pricing_status: "incremental",
+        configured_value: 24,
+        configured_area_share_of_gsf: 0.03,
+        applied_value: 24,
+        applied_quantity: 7500,
+        total_cost: 180000,
+        trade_composition_mode: "incremental_premium_only",
+      },
+    ];
+
+    render(<ConstructionView project={project} />);
+
+    expect(
+      screen.getByText("Counted once in hard costs; distributed across the Trade Summary above.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("37% of trade basis")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Trade percentages shown are based on a trade basis of \$12,240,000\./)
+    ).toBeInTheDocument();
+
+    const structuralTrade = screen.getByText("Structural", { selector: "h4" }).closest('[role="button"]');
+    expect(structuralTrade).not.toBeNull();
+    fireEvent.click(structuralTrade as HTMLElement);
+
+    expect(screen.getByText("Parking Garage allocated premium")).toBeInTheDocument();
+    expect(screen.getByText("2 systems")).toBeInTheDocument();
+  });
+
   it("keeps included-in-baseline special features visible when the applied aggregate is zero", () => {
     const project = buildHospitalityProject("hospitality_full_service_hotel_v1", "subtype");
     project.analysis.calculations.construction_costs.special_features_total = 0;

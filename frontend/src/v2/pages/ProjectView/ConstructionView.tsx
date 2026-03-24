@@ -35,6 +35,9 @@ type NormalizedSpecialFeatureBreakdownRow = {
   totalCost: number;
   pricingStatus: SpecialFeaturePricingStatus;
   pricingBasis: SpecialFeaturePricingBasis;
+  tradeCompositionMode?: string;
+  tradeAllocationApplied?: boolean;
+  tradeAllocationNote?: string;
   countPricingMode?: SpecialFeatureCountPricingMode;
   configuredValue?: number;
   appliedValue?: number;
@@ -806,6 +809,15 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
     typeof calculations.construction_costs?.special_features_total === 'number'
       ? calculations.construction_costs.special_features_total
       : 0;
+  const constructionViewAllocatedSpecialFeaturesTotal =
+    typeof calculations.construction_costs?.construction_view_allocated_special_features_total === 'number'
+      ? calculations.construction_costs.construction_view_allocated_special_features_total
+      : 0;
+  const constructionViewTradeTotal =
+    typeof calculations.construction_costs?.construction_view_trade_total === 'number'
+      ? calculations.construction_costs.construction_view_trade_total
+      : baseConstructionTotal + constructionViewAllocatedSpecialFeaturesTotal;
+  const hasAllocatedTradeFeaturePremiums = constructionViewAllocatedSpecialFeaturesTotal > 0;
 
   const specialFeaturesBreakdownRaw = calculations.construction_costs?.special_features_breakdown;
   const specialFeaturesBreakdown = Array.isArray(specialFeaturesBreakdownRaw)
@@ -843,6 +855,15 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
             pricingStatus:
               item.pricing_status === 'included_in_baseline' ? 'included_in_baseline' : 'incremental',
             pricingBasis: resolveSpecialFeaturePricingBasis(item, hasCountPricing, hasAreaSharePricing),
+            tradeCompositionMode:
+              typeof item.trade_composition_mode === 'string' && item.trade_composition_mode.trim()
+                ? item.trade_composition_mode.trim()
+                : undefined,
+            tradeAllocationApplied: item.trade_allocation_applied === true,
+            tradeAllocationNote:
+              typeof item.trade_allocation_note === 'string' && item.trade_allocation_note.trim()
+                ? item.trade_allocation_note.trim()
+                : undefined,
             countPricingMode:
               item.count_pricing_mode === 'overage_above_default'
                 ? 'overage_above_default'
@@ -895,7 +916,10 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
   // Trade breakdown from calculations – backend is the source of truth.
   // Normalize to a { [tradeName]: amount } map so this works whether
   // trade_breakdown is a dict or an array of { name, amount, percent_of_construction }.
-  const rawTradeBreakdown: any = calculations.trade_breakdown || {};
+  const rawTradeBreakdown: any =
+    calculations.construction_view_trade_breakdown ||
+    calculations.trade_breakdown ||
+    {};
 
   const actualTradeBreakdown: Record<string, number> = Array.isArray(rawTradeBreakdown)
     ? rawTradeBreakdown.reduce((acc: Record<string, number>, item: any) => {
@@ -934,11 +958,17 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
         }, {})
       : {};
 
-  const tradeBaseTotal =
+  const calculatedTradeBaseTotal =
     Object.values(actualTradeBreakdown).reduce(
       (sum: number, val: any) => sum + (val || 0),
       0
     ) || baseConstructionTotal;
+  const tradeBaseTotal = hasAllocatedTradeFeaturePremiums
+    ? constructionViewTradeTotal
+    : calculatedTradeBaseTotal;
+  const tradePercentBasisLabel = hasAllocatedTradeFeaturePremiums
+    ? 'of trade basis'
+    : 'of construction cost';
 
   const getTradeAmount = (key: string, fallbackPct: number) => {
     const value = actualTradeBreakdown[key];
@@ -1033,6 +1063,7 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
   // Scope items by trade (from backend payload)
   // ========================================
   const scopeItemsRaw: any =
+    (calculations as any).construction_view_scope_items ||
     (calculations as any).scope_items ||
     (analysis as any).scope_items ||
     (project as any).scope_items ||
@@ -1762,7 +1793,7 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
                       </div>
                       <div>
                         <h4 className="font-semibold text-gray-900">{trade.name}</h4>
-                        <p className="text-sm text-gray-500">{trade.percent}% of construction cost</p>
+                        <p className="text-sm text-gray-500">{trade.percent}% {tradePercentBasisLabel}</p>
                       </div>
                     </div>
                     
@@ -1908,13 +1939,24 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
         </div>
         
         {/* Note about equipment */}
-        {equipmentTotal > 0 && (
+        {(equipmentTotal > 0 || hasAllocatedTradeFeaturePremiums) && (
           <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
             <div className="flex items-start gap-2">
               <Info className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
               <div className="text-sm text-amber-800">
-                <strong>Note:</strong> Trade percentages shown are based on base construction cost of {formatCurrency(baseConstructionTotal)}. 
-                Equipment/FF&E of {formatCurrency(equipmentTotal)} is handled separately and shown in the Cost Build-Up Analysis above.
+                <strong>Note:</strong>{' '}
+                {hasAllocatedTradeFeaturePremiums ? (
+                  <>
+                    Trade percentages shown are based on a trade basis of {formatCurrency(constructionViewTradeTotal)}.
+                    This includes base construction cost of {formatCurrency(baseConstructionTotal)} plus allocated selected-feature premiums of {formatCurrency(constructionViewAllocatedSpecialFeaturesTotal)}.
+                    {equipmentTotal > 0 ? ` Equipment/FF&E of ${formatCurrency(equipmentTotal)} is handled separately and not double counted.` : ' Allocated feature premiums are counted once in hard costs.'}
+                  </>
+                ) : (
+                  <>
+                    Trade percentages shown are based on base construction cost of {formatCurrency(baseConstructionTotal)}.
+                    Equipment/FF&E of {formatCurrency(equipmentTotal)} is handled separately and shown in the Cost Build-Up Analysis above.
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -2089,6 +2131,11 @@ export const ConstructionView: React.FC<Props> = ({ project, dealShieldData }) =
                                     </p>
                                   ))}
                                 </div>
+                              )}
+                              {feature.tradeAllocationNote && (
+                                <p className="text-xs text-blue-700 mt-1">
+                                  {feature.tradeAllocationNote}
+                                </p>
                               )}
 	                            </div>
 	                          );
