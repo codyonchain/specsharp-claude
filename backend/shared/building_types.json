@@ -208,7 +208,7 @@
             "medical complex"
           ]
         },
-        "medical_office": {
+        "medical_office_building": {
           "base_cost_per_sf": 270,
           "display_name": "Medical Office Building",
           "keywords": [

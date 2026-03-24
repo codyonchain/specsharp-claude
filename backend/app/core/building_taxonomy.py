@@ -29,7 +29,7 @@ with open(TAXONOMY_PATH) as f:
 
 CUSTOM_SUBTYPE_KEYWORDS = {
     'healthcare': {
-        'medical_office': [
+        'medical_office_building': [
             'medical office',
             'medical office building',
             'mob',
@@ -43,6 +43,12 @@ CUSTOM_SUBTYPE_KEYWORDS = {
             'orthodontic office',
             'pediatric dental office'
         ]
+    }
+}
+
+SUBTYPE_CANONICAL_ALIASES = {
+    'healthcare': {
+        'medical_office': 'medical_office_building',
     }
 }
 
@@ -150,19 +156,23 @@ class BuildingTaxonomy:
     def normalize_subtype(building_type: str, subtype: str) -> Optional[str]:
         """
         Normalize a subtype string to canonical form.
-        
+
         Examples:
-            ('healthcare', 'MOB') -> 'medical_office'
+            ('healthcare', 'MOB') -> 'medical_office_building'
             ('residential', 'luxury') -> 'luxury_apartments'
         """
         if not subtype:
             return None
-            
+
         canonical_type = BuildingTaxonomy.normalize_type(building_type)
         valid_subtypes = BuildingTaxonomy.get_subtypes(canonical_type)
-        
+
         subtype_lower = subtype.lower().replace('-', '_').replace(' ', '_')
-        
+        subtype_lower = SUBTYPE_CANONICAL_ALIASES.get(canonical_type, {}).get(
+            subtype_lower,
+            subtype_lower,
+        )
+
         # Direct match
         if subtype_lower in valid_subtypes:
             return subtype_lower

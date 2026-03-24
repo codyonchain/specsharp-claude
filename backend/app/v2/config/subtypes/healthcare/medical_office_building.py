@@ -80,6 +80,12 @@ CONFIG = (
                 "basis": "AREA_SHARE_GSF",
                 "value": 40,
                 "area_share_of_gsf": 0.75,
+                "trade_allocation": {
+                    "mechanical": 0.24,
+                    "electrical": 0.24,
+                    "plumbing": 0.16,
+                    "finishes": 0.36,
+                },
             },
             "ambulatory_buildout": {
                 "basis": "AREA_SHARE_GSF",

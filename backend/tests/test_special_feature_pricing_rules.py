@@ -780,6 +780,125 @@ def test_garage_style_incremental_features_now_price_from_area_share_of_gsf(
     assert available_pricing_row["configured_area_share_of_gsf"] == pytest.approx(expected_share)
 
 
+def test_medical_office_building_tenant_improvements_allocation_composes_construction_view_trade_basis_without_double_counting():
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.HEALTHCARE,
+        subtype="medical_office_building",
+        square_footage=120_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["tenant_improvements"],
+    )
+
+    construction_costs = result["construction_costs"]
+    tenant_improvements_row = _special_feature_breakdown_by_id(result)["tenant_improvements"]
+    base_trade_breakdown = result["trade_breakdown"]
+    construction_view_trade_breakdown = result["construction_view_trade_breakdown"]
+    construction_view_scope_items = result["construction_view_scope_items"]
+    tenant_improvements_total = tenant_improvements_row["total_cost"]
+    expected_trade_allocation_weights = {
+        "mechanical": 0.24,
+        "electrical": 0.24,
+        "plumbing": 0.16,
+        "finishes": 0.36,
+    }
+    expected_trade_allocation_amounts = {
+        "mechanical": 864_000.0,
+        "electrical": 864_000.0,
+        "plumbing": 576_000.0,
+        "finishes": 1_296_000.0,
+    }
+
+    assert tenant_improvements_row["pricing_status"] == INCREMENTAL
+    assert tenant_improvements_row["pricing_basis"] == SpecialFeaturePricingBasis.AREA_SHARE_GSF.value
+    assert tenant_improvements_row["configured_area_share_of_gsf"] == pytest.approx(0.75)
+    assert tenant_improvements_row["applied_quantity"] == pytest.approx(90_000.0)
+    assert tenant_improvements_row["total_cost"] == pytest.approx(3_600_000.0)
+    assert tenant_improvements_row["trade_composition_mode"] == "incremental_premium_with_trade_allocation"
+    assert tenant_improvements_row["trade_allocation_applied"] is True
+    assert tenant_improvements_row["trade_allocation_note"] == SPECIAL_FEATURE_TRADE_ALLOCATION_NOTE
+    assert tenant_improvements_row["trade_allocation_weights"] == pytest.approx(
+        expected_trade_allocation_weights
+    )
+    assert tenant_improvements_row["trade_allocation_amounts"] == pytest.approx(
+        expected_trade_allocation_amounts
+    )
+
+    assert construction_costs["special_features_total"] == pytest.approx(tenant_improvements_total)
+    assert construction_costs["construction_view_allocated_special_features_total"] == pytest.approx(
+        tenant_improvements_total
+    )
+    assert construction_costs["construction_view_trade_total"] == pytest.approx(
+        construction_costs["construction_total"] + tenant_improvements_total
+    )
+    assert sum(base_trade_breakdown.values()) == pytest.approx(construction_costs["construction_total"])
+    assert sum(construction_view_trade_breakdown.values()) == pytest.approx(
+        construction_costs["construction_view_trade_total"]
+    )
+    assert construction_view_trade_breakdown["structural"] == pytest.approx(
+        base_trade_breakdown["structural"]
+    )
+
+    for trade_key, allocated_amount in expected_trade_allocation_amounts.items():
+        assert construction_view_trade_breakdown[trade_key] == pytest.approx(
+            base_trade_breakdown[trade_key] + allocated_amount
+        )
+        assert construction_view_trade_breakdown[trade_key] > base_trade_breakdown[trade_key]
+
+    allocated_scope_systems = [
+        system
+        for item in construction_view_scope_items
+        if isinstance(item, dict)
+        for system in item.get("systems", [])
+        if isinstance(system, dict)
+        and system.get("source") == "special_feature_trade_allocation"
+        and system.get("feature_id") == "tenant_improvements"
+    ]
+    assert len(allocated_scope_systems) == len(expected_trade_allocation_amounts)
+    assert all(
+        system.get("name") == "Tenant Improvements allocated premium"
+        for system in allocated_scope_systems
+    )
+    assert _scope_item_totals_by_trade(construction_view_scope_items) == pytest.approx(
+        construction_view_trade_breakdown
+    )
+    assert result["totals"]["hard_costs"] == pytest.approx(
+        construction_costs["construction_total"]
+        + construction_costs["equipment_total"]
+        + construction_costs["special_features_total"]
+    )
+
+
+def test_medical_office_building_without_tenant_improvements_preserves_legacy_construction_view_trade_basis():
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.HEALTHCARE,
+        subtype="medical_office_building",
+        square_footage=120_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["ambulatory_buildout"],
+    )
+
+    construction_costs = result["construction_costs"]
+    ambulatory_buildout_row = _special_feature_breakdown_by_id(result)["ambulatory_buildout"]
+
+    assert ambulatory_buildout_row["pricing_status"] == INCREMENTAL
+    assert ambulatory_buildout_row["trade_composition_mode"] == "incremental_premium_only"
+    assert "trade_allocation_applied" not in ambulatory_buildout_row
+    assert construction_costs["special_features_total"] == pytest.approx(1_296_000.0)
+    assert construction_costs["construction_view_allocated_special_features_total"] == pytest.approx(0.0)
+    assert construction_costs["construction_view_trade_total"] == pytest.approx(
+        construction_costs["construction_total"]
+    )
+    assert result["construction_view_trade_breakdown"] == pytest.approx(result["trade_breakdown"])
+    assert result["construction_view_scope_items"] == result["scope_items"]
+    assert result["totals"]["hard_costs"] == pytest.approx(
+        construction_costs["construction_total"]
+        + construction_costs["equipment_total"]
+        + construction_costs["special_features_total"]
+    )
+
+
 def test_market_rate_parking_garage_allocation_composes_construction_view_trade_basis_without_double_counting():
     result = unified_engine.calculate_project(
         building_type=BuildingType.MULTIFAMILY,

@@ -73,7 +73,7 @@ print("-" * 40)
 subtype_tests = [
     # (type, subtype, expected_type, expected_subtype)
     ('multifamily', 'luxury', 'residential', 'luxury_apartments'),
-    ('healthcare', 'MOB', 'healthcare', 'medical_office'),
+    ('healthcare', 'MOB', 'healthcare', 'medical_office_building'),
     ('educational', 'elementary', 'educational', 'elementary_school'),
     ('office', 'class a', 'commercial', 'class_a'),
     ('warehouse', None, 'industrial', None),
