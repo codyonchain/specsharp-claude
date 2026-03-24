@@ -878,6 +878,83 @@ def test_multifamily_launch_subtype_parking_garage_allocation_spot_checks(
     )
 
 
+def test_class_a_structured_parking_allocation_composes_construction_view_trade_basis_without_double_counting():
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.OFFICE,
+        subtype="class_a",
+        square_footage=300_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["structured_parking", "conference_center"],
+    )
+
+    construction_costs = result["construction_costs"]
+    breakdown_by_id = _special_feature_breakdown_by_id(result)
+    structured_parking_row = breakdown_by_id["structured_parking"]
+    conference_center_row = breakdown_by_id["conference_center"]
+    base_trade_breakdown = result["trade_breakdown"]
+    construction_view_trade_breakdown = result["construction_view_trade_breakdown"]
+    construction_view_scope_items = result["construction_view_scope_items"]
+    structured_parking_total = structured_parking_row["total_cost"]
+
+    assert structured_parking_row["pricing_status"] == INCREMENTAL
+    assert structured_parking_row["trade_composition_mode"] == "incremental_premium_with_trade_allocation"
+    assert structured_parking_row["trade_allocation_applied"] is True
+    assert structured_parking_row["trade_allocation_note"] == SPECIAL_FEATURE_TRADE_ALLOCATION_NOTE
+    assert structured_parking_row["trade_allocation_amounts"]["structural"] == pytest.approx(2_268_000.0)
+    assert structured_parking_total == pytest.approx(3_240_000.0)
+
+    assert conference_center_row["pricing_status"] == INCREMENTAL
+    assert conference_center_row["trade_composition_mode"] == "incremental_premium_only"
+    assert "trade_allocation_applied" not in conference_center_row
+    assert conference_center_row["total_cost"] == pytest.approx(360_000.0)
+
+    assert construction_costs["special_features_total"] == pytest.approx(3_600_000.0)
+    assert construction_costs["construction_view_allocated_special_features_total"] == pytest.approx(
+        structured_parking_total
+    )
+    assert construction_costs["construction_view_trade_total"] == pytest.approx(
+        construction_costs["construction_total"] + structured_parking_total
+    )
+    assert sum(base_trade_breakdown.values()) == pytest.approx(construction_costs["construction_total"])
+    assert sum(construction_view_trade_breakdown.values()) == pytest.approx(
+        construction_costs["construction_view_trade_total"]
+    )
+    assert construction_view_trade_breakdown["structural"] > base_trade_breakdown["structural"]
+    assert result["totals"]["hard_costs"] == pytest.approx(
+        construction_costs["construction_total"]
+        + construction_costs["equipment_total"]
+        + construction_costs["special_features_total"]
+    )
+    assert _scope_item_totals_by_trade(construction_view_scope_items) == pytest.approx(
+        construction_view_trade_breakdown
+    )
+
+
+def test_class_a_without_structured_parking_preserves_legacy_construction_view_trade_basis():
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.OFFICE,
+        subtype="class_a",
+        square_footage=300_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["conference_center"],
+    )
+
+    construction_costs = result["construction_costs"]
+    conference_center_row = _special_feature_breakdown_by_id(result)["conference_center"]
+
+    assert conference_center_row["trade_composition_mode"] == "incremental_premium_only"
+    assert "trade_allocation_applied" not in conference_center_row
+    assert construction_costs["special_features_total"] == pytest.approx(360_000.0)
+    assert construction_costs["construction_view_allocated_special_features_total"] == pytest.approx(0.0)
+    assert construction_costs["construction_view_trade_total"] == pytest.approx(
+        construction_costs["construction_total"]
+    )
+    assert result["construction_view_trade_breakdown"] == pytest.approx(result["trade_breakdown"])
+    assert result["construction_view_scope_items"] == result["scope_items"]
+
+
 def test_non_allocated_incremental_features_preserve_prior_trade_basis_behavior():
     result = unified_engine.calculate_project(
         building_type=BuildingType.MULTIFAMILY,
