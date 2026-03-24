@@ -955,6 +955,75 @@ def test_class_a_without_structured_parking_preserves_legacy_construction_view_t
     assert result["construction_view_scope_items"] == result["scope_items"]
 
 
+def test_mixed_use_parking_podium_allocation_composes_construction_view_trade_basis_without_double_counting():
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.MIXED_USE,
+        subtype="retail_residential",
+        square_footage=250_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["parking_podium"],
+    )
+
+    construction_costs = result["construction_costs"]
+    parking_podium_row = _special_feature_breakdown_by_id(result)["parking_podium"]
+    base_trade_breakdown = result["trade_breakdown"]
+    construction_view_trade_breakdown = result["construction_view_trade_breakdown"]
+    construction_view_scope_items = result["construction_view_scope_items"]
+    parking_podium_total = parking_podium_row["total_cost"]
+
+    assert parking_podium_row["pricing_status"] == INCREMENTAL
+    assert parking_podium_row["trade_composition_mode"] == "incremental_premium_with_trade_allocation"
+    assert parking_podium_row["trade_allocation_applied"] is True
+    assert parking_podium_row["trade_allocation_note"] == SPECIAL_FEATURE_TRADE_ALLOCATION_NOTE
+    assert parking_podium_row["trade_allocation_amounts"]["structural"] == pytest.approx(1_540_000.0)
+    assert parking_podium_total == pytest.approx(2_200_000.0)
+
+    assert construction_costs["construction_view_allocated_special_features_total"] == pytest.approx(
+        parking_podium_total
+    )
+    assert construction_costs["construction_view_trade_total"] == pytest.approx(
+        construction_costs["construction_total"] + parking_podium_total
+    )
+    assert sum(base_trade_breakdown.values()) == pytest.approx(construction_costs["construction_total"])
+    assert sum(construction_view_trade_breakdown.values()) == pytest.approx(
+        construction_costs["construction_view_trade_total"]
+    )
+    assert construction_view_trade_breakdown["structural"] > base_trade_breakdown["structural"]
+    assert result["totals"]["hard_costs"] == pytest.approx(
+        construction_costs["construction_total"]
+        + construction_costs["equipment_total"]
+        + construction_costs["special_features_total"]
+    )
+    assert _scope_item_totals_by_trade(construction_view_scope_items) == pytest.approx(
+        construction_view_trade_breakdown
+    )
+
+
+def test_mixed_use_without_parking_podium_preserves_legacy_construction_view_trade_basis():
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.MIXED_USE,
+        subtype="retail_residential",
+        square_footage=250_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=["rooftop_deck"],
+    )
+
+    construction_costs = result["construction_costs"]
+    rooftop_row = _special_feature_breakdown_by_id(result)["rooftop_deck"]
+
+    assert rooftop_row["trade_composition_mode"] == "included_in_baseline"
+    assert "trade_allocation_applied" not in rooftop_row
+    assert construction_costs["special_features_total"] == pytest.approx(0.0)
+    assert construction_costs["construction_view_allocated_special_features_total"] == pytest.approx(0.0)
+    assert construction_costs["construction_view_trade_total"] == pytest.approx(
+        construction_costs["construction_total"]
+    )
+    assert result["construction_view_trade_breakdown"] == pytest.approx(result["trade_breakdown"])
+    assert result["construction_view_scope_items"] == result["scope_items"]
+
+
 def test_non_allocated_incremental_features_preserve_prior_trade_basis_behavior():
     result = unified_engine.calculate_project(
         building_type=BuildingType.MULTIFAMILY,
