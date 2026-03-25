@@ -81,11 +81,13 @@ CONFIG = (
                 "value": 450000,
                 "count_pricing_mode": "overage_above_default",
                 "count_override_keys": ["operating_room_count", "or_count"],
-                "default_count_bands": [
-                    {"label": "small_asc", "max_square_footage": 12000, "count": 2},
-                    {"label": "mid_asc", "max_square_footage": 20000, "count": 4},
-                    {"label": "large_asc", "count": 6},
-                ],
+                "default_count_rule": {
+                    "type": "count_per_sf_ceil",
+                    "params": {
+                        "default_min": 1,
+                        "sf_per_count": 5000,
+                    },
+                },
                 "unit_label": "room",
             },  # Per OR
             "recovery_room": {
@@ -142,7 +144,7 @@ CONFIG = (
         },
         financial_metrics={
             "primary_unit": "operating rooms",
-            "units_per_sf": 1.0 / 950.0,
+            "units_per_sf": 1.0 / 5000.0,
             "revenue_per_unit_annual": 1200000,
             "display_name": "Per OR Requirements",
             "operational_metrics": {

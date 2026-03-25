@@ -32,6 +32,7 @@ from app.v2.services.special_feature_pricing import (
     INCLUDED_IN_BASELINE,
     apply_special_feature_pricing_rule,
     compose_trade_breakdown_with_special_feature_allocations,
+    resolve_default_count_quantity_for_rule,
     resolve_special_feature_pricing,
     resolve_normalized_special_feature_pricing_rules,
     serialize_applied_special_feature_pricing,
@@ -1334,6 +1335,33 @@ class UnifiedEngine:
                     },
                 )
 
+            surgical_center_operating_room_count = (
+                self._resolve_surgical_center_auto_pricing_operating_room_count(
+                    building_type=building_type,
+                    subtype=subtype,
+                    scope_context=scope_context,
+                )
+            )
+            if (
+                surgical_center_operating_room_count is not None
+                and "operating_room" in available_feature_keys
+                and "operating_room" not in resolved_special_feature_ids
+            ):
+                resolved_special_feature_ids.append("operating_room")
+                self._log_trace(
+                    "special_feature_auto_activated_from_parsed_input",
+                    {
+                        "feature": "operating_room",
+                        "building_type": (
+                            building_type.value
+                            if hasattr(building_type, "value")
+                            else str(building_type)
+                        ),
+                        "subtype": subtype,
+                        "operating_room_count": surgical_center_operating_room_count,
+                    },
+                )
+
         available_feature_ids = list(building_config.special_features.keys()) if building_config.special_features else []
         available_special_feature_resolution = resolve_special_feature_pricing(
             building_config=building_config,
@@ -1590,6 +1618,7 @@ class UnifiedEngine:
                 'unit_count': explicit_unit_count,
                 'key_count': explicit_key_count,
                 'ownership_type': ownership_type.value if hasattr(ownership_type, 'value') else ownership_type,
+                'parsed_input': deepcopy(parsed_input_overrides) if isinstance(parsed_input_overrides, dict) else {},
             },
         )
         ownership_analysis = ownership_bundle['ownership_analysis']
@@ -1950,7 +1979,12 @@ class UnifiedEngine:
             financial_metrics_cfg = self._get_healthcare_financial_metrics(building_config)
             primary_unit_label = financial_metrics_cfg.get('primary_unit', 'Units')
             facility_profile = getattr(building_config, "facility_metrics_profile", None)
-            computed_units = self._resolve_healthcare_units(building_config, square_footage)
+            computed_units = self._resolve_healthcare_units(
+                building_config,
+                square_footage,
+                subtype_key=subtype,
+                override_sources=unit_override_sources,
+            )
             cost_per_unit = total_project_cost / computed_units if computed_units else 0
             annual_revenue_value = self._coerce_number((result.get('revenue_analysis') or {}).get('annual_revenue')) or 0.0
 
@@ -2297,6 +2331,22 @@ class UnifiedEngine:
 
         return self._resolve_explicit_dock_count_override(scope_context)
 
+    def _resolve_surgical_center_auto_pricing_operating_room_count(
+        self,
+        building_type: BuildingType,
+        subtype: Any,
+        scope_context: Optional[Dict[str, Any]],
+    ) -> Optional[int]:
+        if building_type != BuildingType.HEALTHCARE:
+            return None
+
+        subtype_value = subtype.value if hasattr(subtype, "value") else subtype
+        subtype_key = str(subtype_value or "").strip().lower()
+        if subtype_key != "surgical_center":
+            return None
+
+        return self._resolve_explicit_operating_room_count_override(scope_context)
+
     def _resolve_explicit_dock_count_override(
         self,
         scope_context: Optional[Dict[str, Any]],
@@ -2322,6 +2372,28 @@ class UnifiedEngine:
             return None
 
         return max(1, int(round(dock_count)))
+
+    def _resolve_explicit_operating_room_count_override(
+        self,
+        scope_context: Optional[Dict[str, Any]],
+    ) -> Optional[int]:
+        override_sources = self._collect_scope_override_sources(scope_context)
+        if not override_sources:
+            return None
+
+        operating_room_count = self._get_override_number(
+            override_sources,
+            [
+                "operating_room_count",
+                "or_count",
+                "operatingRoomCount",
+                "orCount",
+            ],
+        )
+        if operating_room_count is None or operating_room_count <= 0:
+            return None
+
+        return max(1, int(round(operating_room_count)))
 
     @staticmethod
     def _coerce_number(value: Any) -> Optional[float]:
@@ -2783,8 +2855,26 @@ class UnifiedEngine:
         subtype_config: Any,
         square_footage: float,
         *,
+        subtype_key: Optional[str] = None,
         fallback_units: Optional[int] = None,
+        override_sources: Optional[List[Dict[str, Any]]] = None,
     ) -> int:
+        explicit_override = self._resolve_explicit_healthcare_unit_override(
+            subtype_key=subtype_key,
+            override_sources=override_sources,
+        )
+        if explicit_override is not None:
+            return explicit_override
+
+        subtype_normalized = str(subtype_key or "").strip().lower()
+        if subtype_normalized == "surgical_center":
+            surgical_center_baseline = self._resolve_surgical_center_default_operating_room_baseline(
+                subtype_config=subtype_config,
+                square_footage=square_footage,
+            )
+            if surgical_center_baseline is not None:
+                return surgical_center_baseline
+
         if isinstance(fallback_units, int) and fallback_units > 0:
             return fallback_units
 
@@ -2803,6 +2893,61 @@ class UnifiedEngine:
 
         derived_units = int(round(sf_value * float(units_per_sf)))
         return max(1, derived_units)
+
+    def _resolve_explicit_healthcare_unit_override(
+        self,
+        *,
+        subtype_key: Optional[str],
+        override_sources: Optional[List[Dict[str, Any]]],
+    ) -> Optional[int]:
+        subtype_normalized = str(subtype_key or "").strip().lower()
+        if subtype_normalized != "surgical_center":
+            return None
+        if not override_sources:
+            return None
+
+        operating_room_count = self._get_override_number(
+            override_sources,
+            [
+                "operating_room_count",
+                "or_count",
+                "operatingRoomCount",
+                "orCount",
+            ],
+        )
+        if operating_room_count is None or operating_room_count <= 0:
+            return None
+
+        return max(1, int(round(operating_room_count)))
+
+    def _resolve_surgical_center_default_operating_room_baseline(
+        self,
+        *,
+        subtype_config: Any,
+        square_footage: float,
+    ) -> Optional[int]:
+        if subtype_config is None:
+            return None
+
+        operating_room_rules = resolve_normalized_special_feature_pricing_rules(
+            building_config=subtype_config,
+            selected_feature_ids=["operating_room"],
+        )
+        operating_room_rule = next(
+            (rule for rule in operating_room_rules if rule.feature_id == "operating_room"),
+            None,
+        )
+        if operating_room_rule is None:
+            return None
+
+        default_quantity = resolve_default_count_quantity_for_rule(
+            operating_room_rule,
+            square_footage=square_footage,
+        )
+        if default_quantity is None:
+            return None
+
+        return max(1, int(round(default_quantity.quantity)))
 
     def _resolve_healthcare_operational_profile(
         self,
@@ -4033,6 +4178,13 @@ class UnifiedEngine:
         if not subtype_config:
             return self._empty_ownership_analysis()
 
+        unit_override_sources: List[Dict[str, Any]] = []
+        if isinstance(calculations, dict):
+            unit_override_sources.append(calculations)
+            parsed_input = calculations.get("parsed_input")
+            if isinstance(parsed_input, dict):
+                unit_override_sources.append(parsed_input)
+
         ownership_type_value = calculations.get('ownership_type')
         resolved_ownership_type = OwnershipType.FOR_PROFIT
         if isinstance(ownership_type_value, OwnershipType):
@@ -4370,7 +4522,9 @@ class UnifiedEngine:
                 units = self._resolve_healthcare_units(
                     subtype_config,
                     square_footage,
+                    subtype_key=subtype,
                     fallback_units=None,
+                    override_sources=unit_override_sources,
                 )
                 if units:
                     calculations['units'] = units
@@ -4406,7 +4560,8 @@ class UnifiedEngine:
             operational_efficiency=operational_efficiency,
             square_footage=square_footage,
             annual_revenue=annual_revenue,
-            units=units
+            units=units,
+            unit_override_sources=unit_override_sources,
         )
         
         # Surface per-unit data for downstream cards (MF heavy).
@@ -4415,7 +4570,9 @@ class UnifiedEngine:
             units = self._resolve_healthcare_units(
                 subtype_config,
                 square_footage,
+                subtype_key=subtype,
                 fallback_units=None,
+                override_sources=unit_override_sources,
             )
         derived_units_value = self._coerce_number(operational_metrics['per_unit'].get('units'))
         if derived_units_value is not None and derived_units_value > 0:
@@ -4677,10 +4834,21 @@ class UnifiedEngine:
             financial_metrics_cfg = self._get_healthcare_financial_metrics(config)
             facility_profile = getattr(config, "facility_metrics_profile", None)
             market_rate_type = str(financial_metrics_cfg.get("market_rate_type") or "").strip().lower()
+            override_sources: List[Dict[str, Any]] = []
+            parsed_input = context.get("parsed_input")
+            if isinstance(parsed_input, dict):
+                override_sources.append(parsed_input)
+            if isinstance(context, dict):
+                override_sources.append(context)
 
             outpatient_capacity_revenue = None
             if facility_profile == "healthcare_outpatient" and market_rate_type == "revenue_per_visit":
-                units = self._resolve_healthcare_units(config, square_footage)
+                units = self._resolve_healthcare_units(
+                    config,
+                    square_footage,
+                    subtype_key=subtype_key,
+                    override_sources=override_sources,
+                )
                 throughput_profile = self._resolve_healthcare_operational_profile(subtype_key, config)
                 throughput_per_unit_day = self._coerce_number(throughput_profile.get("throughput_per_unit_day"))
                 operating_days = self._coerce_number(throughput_profile.get("operating_days_per_year"))
@@ -5521,7 +5689,8 @@ class UnifiedEngine:
                                                  operational_efficiency: dict, 
                                                  square_footage: float, 
                                                  annual_revenue: float, 
-                                                 units: int = 0) -> dict:
+                                                 units: int = 0,
+                                                 unit_override_sources: Optional[List[Dict[str, Any]]] = None) -> dict:
         """
         Calculate display-ready operational metrics based on building type.
         Returns formatted metrics ready for frontend display.
@@ -5612,7 +5781,9 @@ class UnifiedEngine:
             resolved_units = self._resolve_healthcare_units(
                 subtype_config,
                 square_footage,
+                subtype_key=subtype_normalized,
                 fallback_units=units if units > 0 else None,
+                override_sources=unit_override_sources,
             )
             unit_label = str(financial_metrics_cfg.get("primary_unit") or "units")
             revenue_per_unit_cfg = self._coerce_number(financial_metrics_cfg.get("revenue_per_unit_annual"))

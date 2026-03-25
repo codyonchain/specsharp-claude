@@ -1442,10 +1442,13 @@ def test_operating_room_count_override_bills_only_overage_above_included_baselin
     assert operating_room_row["requested_quantity"] == pytest.approx(5.0)
     assert operating_room_row["requested_quantity_source"] == "explicit_override:operating_room_count"
     assert operating_room_row["included_baseline_quantity"] == pytest.approx(4.0)
-    assert operating_room_row["included_baseline_quantity_source"] == "size_band_default"
+    assert (
+        operating_room_row["included_baseline_quantity_source"]
+        == "default_count_rule:count_per_sf_ceil"
+    )
     assert operating_room_row["billed_quantity"] == pytest.approx(1.0)
     assert operating_room_row["billed_quantity_source"] == "overage_above_default"
-    assert operating_room_row["resolved_size_band"] == "mid_asc"
+    assert "resolved_size_band" not in operating_room_row
     assert operating_room_row["unit_label"] == "room"
     assert operating_room_row["total_cost"] == pytest.approx(450000.0)
 
@@ -1529,7 +1532,7 @@ def test_mri_suite_count_override_bills_only_overage_above_included_baseline():
             "operating_room",
             {"operating_room_count": 4},
             4.0,
-            "size_band_default",
+            "default_count_rule:count_per_sf_ceil",
         ),
         (
             BuildingType.HEALTHCARE,
@@ -1756,14 +1759,15 @@ def test_count_based_features_apply_explicit_quantities_according_to_configured_
 
 
 @pytest.mark.parametrize(
-    ("square_footage", "expected_quantity", "expected_band"),
+    ("square_footage", "expected_quantity"),
     (
-        (10_000, 2.0, "small_asc"),
-        (18_000, 4.0, "mid_asc"),
-        (24_000, 6.0, "large_asc"),
+        (10_000, 2.0),
+        (18_000, 4.0),
+        (24_000, 5.0),
+        (32_000, 7.0),
     ),
 )
-def test_operating_room_defaults_use_deterministic_size_bands(square_footage, expected_quantity, expected_band):
+def test_operating_room_defaults_use_banded_five_thousand_sf_baseline(square_footage, expected_quantity):
     result = unified_engine.calculate_project(
         building_type=BuildingType.HEALTHCARE,
         subtype="surgical_center",
@@ -1778,12 +1782,35 @@ def test_operating_room_defaults_use_deterministic_size_bands(square_footage, ex
     assert row["pricing_basis"] == SpecialFeaturePricingBasis.COUNT_BASED.value
     assert row["count_pricing_mode"] == "overage_above_default"
     assert row["applied_quantity"] == pytest.approx(expected_quantity)
-    assert row["quantity_source"] == "size_band_default"
+    assert row["quantity_source"] == "default_count_rule:count_per_sf_ceil"
     assert row["requested_quantity"] == pytest.approx(expected_quantity)
     assert row["included_baseline_quantity"] == pytest.approx(expected_quantity)
     assert row["billed_quantity"] == pytest.approx(expected_quantity)
-    assert row["resolved_size_band"] == expected_band
+    assert "resolved_size_band" not in row
     assert row["total_cost"] == 0.0
+
+
+def test_operating_room_without_square_footage_preserves_explicit_count_only_behavior():
+    config = get_building_config(BuildingType.HEALTHCARE, "surgical_center")
+    assert config is not None
+
+    rule = normalize_special_feature_pricing_rule(
+        "operating_room",
+        config.special_features["operating_room"],
+    )
+    applied = apply_special_feature_pricing_rule(
+        rule=rule,
+        square_footage=0,
+        pricing_status=INCLUDED_IN_BASELINE,
+        pricing_override_sources=[{"operating_room_count": 6}],
+    )
+
+    assert applied.requested_quantity == pytest.approx(6.0)
+    assert applied.requested_quantity_source == "explicit_override:operating_room_count"
+    assert applied.included_baseline_quantity is None
+    assert applied.billed_quantity == pytest.approx(6.0)
+    assert applied.billed_quantity_source == "explicit_override:operating_room_count"
+    assert applied.total_cost == pytest.approx(2_700_000.0)
 
 
 def test_overage_mode_incremental_features_preserve_safe_default_behavior_without_explicit_count():

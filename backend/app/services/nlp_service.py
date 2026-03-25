@@ -1309,6 +1309,7 @@ class NLPService:
                 [
                     r'\b(\d{1,3})\s*operating\s+rooms?\b',
                     r'\b(\d{1,2})\s*o\.?r\.?s?\b',
+                    r'\b(\d{1,2})\s*[-–]\s*o\.?r\.?s?\b',
                 ],
                 50,
             ),

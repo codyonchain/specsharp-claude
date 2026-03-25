@@ -44,6 +44,10 @@ def _calculate_from_description(description: str, *, special_features: list[str]
             {"operating_room_count": 8},
         ),
         (
+            "6-OR ASC with pre-op and recovery space in Nashville, TN",
+            {"operating_room_count": 6},
+        ),
+        (
             "New 4,500 SF dental office with 9 operatories in Nashville, TN",
             {"operatory_count": 9},
         ),
@@ -115,12 +119,14 @@ def test_explicit_operating_room_count_from_prompt_changes_requested_and_billed_
     assert parsed_six["operating_room_count"] == 6
     assert parsed_eight["operating_room_count"] == 8
     assert six_row["requested_quantity"] == pytest.approx(6.0)
-    assert six_row["billed_quantity"] == pytest.approx(0.0)
-    assert six_row["total_cost"] == pytest.approx(0.0)
+    assert six_row["included_baseline_quantity"] == pytest.approx(5.0)
+    assert six_row["billed_quantity"] == pytest.approx(1.0)
+    assert six_row["total_cost"] == pytest.approx(450000.0)
     assert eight_row["requested_quantity"] == pytest.approx(8.0)
-    assert eight_row["billed_quantity"] == pytest.approx(2.0)
+    assert eight_row["included_baseline_quantity"] == pytest.approx(5.0)
+    assert eight_row["billed_quantity"] == pytest.approx(3.0)
     assert eight_row["requested_quantity_source"] == "explicit_override:operating_room_count"
-    assert eight_row["total_cost"] == pytest.approx(900000.0)
+    assert eight_row["total_cost"] == pytest.approx(1350000.0)
     assert (
         result_six["construction_costs"]["special_features_total"]
         < result_eight["construction_costs"]["special_features_total"]
@@ -224,8 +230,9 @@ def test_no_explicit_count_prompt_preserves_current_default_behavior():
     row = _special_feature_breakdown_by_id(result)["operating_room"]
 
     assert "operating_room_count" not in parsed
-    assert row["requested_quantity"] == pytest.approx(6.0)
-    assert row["requested_quantity_source"] == "size_band_default"
-    assert row["included_baseline_quantity"] == pytest.approx(6.0)
-    assert row["billed_quantity"] == pytest.approx(6.0)
+    assert row["requested_quantity"] == pytest.approx(5.0)
+    assert row["requested_quantity_source"] == "default_count_rule:count_per_sf_ceil"
+    assert row["included_baseline_quantity"] == pytest.approx(5.0)
+    assert row["included_baseline_quantity_source"] == "default_count_rule:count_per_sf_ceil"
+    assert row["billed_quantity"] == pytest.approx(5.0)
     assert row["total_cost"] == pytest.approx(0.0)

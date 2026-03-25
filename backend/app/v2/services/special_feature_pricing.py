@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+import math
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from app.v2.config.master_config import (
@@ -302,7 +303,7 @@ def _normalize_default_count_rule(
         )
 
     rule_type = raw_rule_type.strip().lower()
-    if rule_type not in {"dock_count"}:
+    if rule_type not in {"dock_count", "count_per_sf_ceil"}:
         raise ValueError(
             f"Unsupported special feature default count rule '{raw_rule_type}' for feature '{feature_id}'"
         )
@@ -447,6 +448,38 @@ def _resolve_default_count_quantity(
                     quantity=resolved_quantity,
                     source="default_count_rule:dock_count",
                 )
+        if default_count_rule.rule_type == "count_per_sf_ceil":
+            if sf_value <= 0:
+                return None
+            default_min = _coerce_optional_float(
+                feature_id=rule.feature_id,
+                field_name="default_count_rule.params.default_min",
+                raw_value=default_count_rule.params.get("default_min"),
+            )
+            sf_per_count = _coerce_optional_float(
+                feature_id=rule.feature_id,
+                field_name="default_count_rule.params.sf_per_count",
+                raw_value=default_count_rule.params.get("sf_per_count"),
+                required=True,
+            )
+            default_min_count = max(
+                0,
+                int(round(default_min if default_min is not None else 1.0)),
+            )
+            sf_per_count_value = float(sf_per_count if sf_per_count is not None else 5000.0)
+            if sf_per_count_value <= 0:
+                raise ValueError(
+                    f"Special feature default count rule 'count_per_sf_ceil' for feature '{rule.feature_id}' "
+                    "must define a positive 'sf_per_count'"
+                )
+            resolved_quantity = _normalize_count_quantity(
+                max(default_min_count, int(math.ceil(sf_value / sf_per_count_value)))
+            )
+            if resolved_quantity is not None:
+                return ResolvedSpecialFeatureCountQuantity(
+                    quantity=resolved_quantity,
+                    source="default_count_rule:count_per_sf_ceil",
+                )
 
     configured_count = _normalize_count_quantity(rule.count)
     if configured_count is not None:
@@ -490,6 +523,17 @@ def _resolve_count_based_pricing_quantities(
 
     if explicit_quantity is not None:
         if default_quantity is None:
+            if (
+                rule.default_count_rule is not None
+                and rule.default_count_rule.rule_type == "count_per_sf_ceil"
+            ):
+                return ResolvedCountBasedPricingQuantities(
+                    requested_quantity=explicit_quantity.quantity,
+                    requested_quantity_source=explicit_quantity.source,
+                    billed_quantity=explicit_quantity.quantity,
+                    billed_quantity_source=explicit_quantity.source,
+                    has_explicit_requested_quantity=True,
+                )
             raise ValueError(
                 f"Count-based overage feature '{rule.feature_id}' is missing a usable baseline default"
             )
@@ -619,6 +663,17 @@ def normalize_special_feature_pricing_rule(
             raw_allocation=raw_rule.get("trade_allocation"),
         ),
         assumption_source=STRUCTURED_RULE_SOURCE,
+    )
+
+
+def resolve_default_count_quantity_for_rule(
+    rule: NormalizedSpecialFeaturePricingRule,
+    *,
+    square_footage: float,
+) -> Optional[ResolvedSpecialFeatureCountQuantity]:
+    return _resolve_default_count_quantity(
+        rule=rule,
+        square_footage=square_footage,
     )
 
 
