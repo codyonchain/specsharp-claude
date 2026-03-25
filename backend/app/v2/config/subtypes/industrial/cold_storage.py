@@ -79,6 +79,25 @@ CONFIG = (
             "automated_retrieval": 40,
             "under_slab_heating_protection": 18,
             "high_r_value_panel_upgrade": 12,
+            "loading_docks": {
+                "basis": "COUNT_BASED",
+                "value": 100000,
+                "count_pricing_mode": "overage_above_default",
+                "count_override_keys": [
+                    "loading_dock_count",
+                    "dock_door_count",
+                    "dock_count",
+                    "dock_doors",
+                ],
+                "default_count_rule": {
+                    "type": "dock_count",
+                    "params": {
+                        "default_min": 4,
+                        "default_sf_per_dock": 10000.0,
+                    },
+                },
+                "unit_label": "dock",
+            },
         },
         special_feature_pricing_statuses={
             "blast_freezer": "incremental",
@@ -86,6 +105,7 @@ CONFIG = (
             "automated_retrieval": "incremental",
             "under_slab_heating_protection": "incremental",
             "high_r_value_panel_upgrade": "incremental",
+            "loading_docks": "included_in_baseline",
         },
         # Revenue metrics
         base_revenue_per_sf_annual=18.5,

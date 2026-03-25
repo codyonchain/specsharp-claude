@@ -1309,6 +1309,31 @@ class UnifiedEngine:
                     },
                 )
 
+            cold_storage_auto_pricing_dock_count = self._resolve_cold_storage_auto_pricing_dock_count(
+                building_type=building_type,
+                subtype=subtype,
+                scope_context=scope_context,
+            )
+            if (
+                cold_storage_auto_pricing_dock_count is not None
+                and "loading_docks" in available_feature_keys
+                and "loading_docks" not in resolved_special_feature_ids
+            ):
+                resolved_special_feature_ids.append("loading_docks")
+                self._log_trace(
+                    "special_feature_auto_activated_from_parsed_input",
+                    {
+                        "feature": "loading_docks",
+                        "building_type": (
+                            building_type.value
+                            if hasattr(building_type, "value")
+                            else str(building_type)
+                        ),
+                        "subtype": subtype,
+                        "dock_count": cold_storage_auto_pricing_dock_count,
+                    },
+                )
+
         available_feature_ids = list(building_config.special_features.keys()) if building_config.special_features else []
         available_special_feature_resolution = resolve_special_feature_pricing(
             building_config=building_config,
@@ -2252,6 +2277,22 @@ class UnifiedEngine:
         subtype_value = subtype.value if hasattr(subtype, "value") else subtype
         subtype_key = str(subtype_value or "").strip().lower()
         if subtype_key != "warehouse":
+            return None
+
+        return self._resolve_explicit_dock_count_override(scope_context)
+
+    def _resolve_cold_storage_auto_pricing_dock_count(
+        self,
+        building_type: BuildingType,
+        subtype: Any,
+        scope_context: Optional[Dict[str, Any]],
+    ) -> Optional[int]:
+        if building_type != BuildingType.INDUSTRIAL:
+            return None
+
+        subtype_value = subtype.value if hasattr(subtype, "value") else subtype
+        subtype_key = str(subtype_value or "").strip().lower()
+        if subtype_key != "cold_storage":
             return None
 
         return self._resolve_explicit_dock_count_override(scope_context)

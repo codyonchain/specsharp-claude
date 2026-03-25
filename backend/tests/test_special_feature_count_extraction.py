@@ -64,6 +64,10 @@ def _calculate_from_description(description: str, *, special_features: list[str]
             {"loading_dock_count": 8, "dock_door_count": 8, "dock_count": 8},
         ),
         (
+            "New 120,000 SF cold storage facility with 12 dock doors in Nashville, TN",
+            {"loading_dock_count": 12, "dock_door_count": 12, "dock_count": 12},
+        ),
+        (
             "New 40,000 SF car dealership with 7 service bays in Nashville, TN",
             {"service_bay_count": 7},
         ),
@@ -158,6 +162,25 @@ def test_explicit_warehouse_loading_dock_count_bills_overage_through_loading_doc
     assert row["included_baseline_quantity_source"] == "default_count_rule:dock_count"
     assert row["billed_quantity"] == pytest.approx(4.0)
     assert row["total_cost"] == pytest.approx(260000.0)
+
+
+def test_explicit_cold_storage_loading_dock_count_bills_overage_through_loading_docks():
+    parsed, result = _calculate_from_description(
+        "150,000 SF refrigerated warehouse with 20 loading docks in Nashville, TN",
+        special_features=["loading_docks"],
+    )
+
+    row = _special_feature_breakdown_by_id(result)["loading_docks"]
+
+    assert parsed["building_type"] == "industrial"
+    assert parsed["subtype"] == "cold_storage"
+    assert parsed["loading_dock_count"] == 20
+    assert row["requested_quantity"] == pytest.approx(20.0)
+    assert row["requested_quantity_source"] == "explicit_override:loading_dock_count"
+    assert row["included_baseline_quantity"] == pytest.approx(15.0)
+    assert row["included_baseline_quantity_source"] == "default_count_rule:dock_count"
+    assert row["billed_quantity"] == pytest.approx(5.0)
+    assert row["total_cost"] == pytest.approx(500000.0)
 
 
 def test_explicit_service_bay_count_from_prompt_reaches_overage_pricing():
