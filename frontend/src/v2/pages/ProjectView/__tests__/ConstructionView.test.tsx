@@ -1738,6 +1738,78 @@ describe("ConstructionView", () => {
     }
   });
 
+  it("renders the hospital construction schedule from the emitted subtype contract instead of the fallback timeline", () => {
+    const project = buildCrossTypeScheduleProject("healthcare", "hospital", "subtype");
+    project.analysis.parsed_input.square_footage = 240000;
+    project.analysis.calculations.project_info.square_footage = 240000;
+    project.analysis.calculations.construction_schedule = {
+      building_type: "healthcare",
+      subtype: "hospital",
+      schedule_source: "subtype",
+      total_months: 30,
+      phases: [
+        {
+          id: "design_licensing",
+          label: "Planning, Licensing + Program Approvals",
+          start_month: 0,
+          duration_months: 6,
+          end_month: 6,
+        },
+        {
+          id: "shell_mep_rough",
+          label: "Tower/Shell + Critical MEP Rough-In",
+          start_month: 4,
+          duration_months: 10,
+          end_month: 14,
+        },
+        {
+          id: "interior_buildout",
+          label: "Inpatient + Procedural Interior Buildout",
+          start_month: 11,
+          duration_months: 9,
+          end_month: 20,
+        },
+        {
+          id: "equipment_low_voltage",
+          label: "Clinical Equipment + Integrated Low Voltage",
+          start_month: 17,
+          duration_months: 8,
+          end_month: 25,
+        },
+        {
+          id: "inspections_commissioning",
+          label: "Integrated Systems Commissioning",
+          start_month: 23,
+          duration_months: 4,
+          end_month: 27,
+        },
+        {
+          id: "staff_onboarding",
+          label: "Operational Readiness + Service Activation",
+          start_month: 25,
+          duration_months: 5,
+          end_month: 30,
+        },
+      ],
+    };
+
+    render(<ConstructionView project={project} />);
+
+    expect(screen.getAllByText("30 Months Timeline").length).toBeGreaterThan(0);
+    expect(screen.getByText("Subtype schedule")).toBeInTheDocument();
+    expect(
+      screen.getByTitle("Subtype schedule • type: healthcare • subtype: hospital")
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Planning, Licensing + Program Approvals").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Tower/Shell + Critical MEP Rough-In").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Inpatient + Procedural Interior Buildout").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Clinical Equipment + Integrated Low Voltage").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Integrated Systems Commissioning").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Operational Readiness + Service Activation").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Site & Podium Work")).not.toBeInTheDocument();
+    expect(screen.queryByText("Structure & Garage")).not.toBeInTheDocument();
+  });
+
   it("renders educational schedule-source parity for all five subtypes with explicit unknown-subtype fallback messaging", () => {
     const { rerender } = render(
       <ConstructionView

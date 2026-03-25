@@ -2026,6 +2026,11 @@ class UnifiedEngine:
             'calculation_trace': self.calculation_trace,
             'timestamp': datetime.now().isoformat()
         }
+        result['project_timeline'] = build_project_timeline(building_type, None)
+        result['construction_schedule'] = build_construction_schedule(
+            building_type,
+            subtype=subtype,
+        )
         if project_imaging_visible_unit_contract is not None:
             result['project_info']['imaging_modality_program'] = project_imaging_visible_unit_contract
             result['project_info']['unit_label'] = project_imaging_visible_unit_contract.get('unit_label')
