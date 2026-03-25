@@ -1362,6 +1362,32 @@ class UnifiedEngine:
                     },
                 )
 
+            dental_office_operatory_count = self._resolve_dental_office_auto_pricing_operatory_count(
+                building_type=building_type,
+                subtype=subtype,
+                subtype_config=building_config,
+                scope_context=scope_context,
+            )
+            if (
+                dental_office_operatory_count is not None
+                and "operatory" in available_feature_keys
+                and "operatory" not in resolved_special_feature_ids
+            ):
+                resolved_special_feature_ids.append("operatory")
+                self._log_trace(
+                    "special_feature_auto_activated_from_parsed_input",
+                    {
+                        "feature": "operatory",
+                        "building_type": (
+                            building_type.value
+                            if hasattr(building_type, "value")
+                            else str(building_type)
+                        ),
+                        "subtype": subtype,
+                        "operatory_count": dental_office_operatory_count,
+                    },
+                )
+
         available_feature_ids = list(building_config.special_features.keys()) if building_config.special_features else []
         available_special_feature_resolution = resolve_special_feature_pricing(
             building_config=building_config,
@@ -2347,6 +2373,27 @@ class UnifiedEngine:
 
         return self._resolve_explicit_operating_room_count_override(scope_context)
 
+    def _resolve_dental_office_auto_pricing_operatory_count(
+        self,
+        building_type: BuildingType,
+        subtype: Any,
+        subtype_config: Any,
+        scope_context: Optional[Dict[str, Any]],
+    ) -> Optional[int]:
+        if building_type != BuildingType.HEALTHCARE:
+            return None
+
+        subtype_value = subtype.value if hasattr(subtype, "value") else subtype
+        subtype_key = str(subtype_value or "").strip().lower()
+        if subtype_key != "dental_office":
+            return None
+
+        override_sources = self._collect_scope_override_sources(scope_context)
+        return self._resolve_explicit_dental_operatory_count_override(
+            subtype_config=subtype_config,
+            override_sources=override_sources,
+        )
+
     def _resolve_explicit_dock_count_override(
         self,
         scope_context: Optional[Dict[str, Any]],
@@ -2394,6 +2441,18 @@ class UnifiedEngine:
             return None
 
         return max(1, int(round(operating_room_count)))
+
+    def _resolve_explicit_dental_operatory_count_override(
+        self,
+        *,
+        subtype_config: Any,
+        override_sources: Optional[List[Dict[str, Any]]],
+    ) -> Optional[int]:
+        return self._resolve_explicit_count_override_for_special_feature(
+            subtype_config=subtype_config,
+            feature_id="operatory",
+            override_sources=override_sources,
+        )
 
     @staticmethod
     def _coerce_number(value: Any) -> Optional[float]:
@@ -2850,6 +2909,73 @@ class UnifiedEngine:
         financial_metrics = getattr(subtype_config, "financial_metrics", None)
         return dict(financial_metrics) if isinstance(financial_metrics, dict) else {}
 
+    def _resolve_special_feature_count_rule(
+        self,
+        *,
+        subtype_config: Any,
+        feature_id: str,
+    ):
+        if subtype_config is None or not isinstance(feature_id, str) or not feature_id.strip():
+            return None
+
+        normalized_rules = resolve_normalized_special_feature_pricing_rules(
+            building_config=subtype_config,
+            selected_feature_ids=[feature_id],
+        )
+        return next(
+            (rule for rule in normalized_rules if rule.feature_id == feature_id),
+            None,
+        )
+
+    def _resolve_explicit_count_override_for_special_feature(
+        self,
+        *,
+        subtype_config: Any,
+        feature_id: str,
+        override_sources: Optional[List[Dict[str, Any]]],
+    ) -> Optional[int]:
+        if subtype_config is None or not override_sources:
+            return None
+
+        count_rule = self._resolve_special_feature_count_rule(
+            subtype_config=subtype_config,
+            feature_id=feature_id,
+        )
+        if count_rule is None or not count_rule.count_override_keys:
+            return None
+
+        explicit_count = self._get_override_number(
+            override_sources,
+            list(count_rule.count_override_keys),
+        )
+        if explicit_count is None or explicit_count <= 0:
+            return None
+
+        return max(1, int(round(explicit_count)))
+
+    def _resolve_default_count_baseline_for_special_feature(
+        self,
+        *,
+        subtype_config: Any,
+        feature_id: str,
+        square_footage: float,
+    ) -> Optional[int]:
+        count_rule = self._resolve_special_feature_count_rule(
+            subtype_config=subtype_config,
+            feature_id=feature_id,
+        )
+        if count_rule is None:
+            return None
+
+        default_quantity = resolve_default_count_quantity_for_rule(
+            count_rule,
+            square_footage=square_footage,
+        )
+        if default_quantity is None:
+            return None
+
+        return max(1, int(round(default_quantity.quantity)))
+
     def _resolve_healthcare_units(
         self,
         subtype_config: Any,
@@ -2860,6 +2986,7 @@ class UnifiedEngine:
         override_sources: Optional[List[Dict[str, Any]]] = None,
     ) -> int:
         explicit_override = self._resolve_explicit_healthcare_unit_override(
+            subtype_config=subtype_config,
             subtype_key=subtype_key,
             override_sources=override_sources,
         )
@@ -2874,6 +3001,13 @@ class UnifiedEngine:
             )
             if surgical_center_baseline is not None:
                 return surgical_center_baseline
+        elif subtype_normalized == "dental_office":
+            dental_office_baseline = self._resolve_dental_office_default_operatory_baseline(
+                subtype_config=subtype_config,
+                square_footage=square_footage,
+            )
+            if dental_office_baseline is not None:
+                return dental_office_baseline
 
         if isinstance(fallback_units, int) and fallback_units > 0:
             return fallback_units
@@ -2897,28 +3031,32 @@ class UnifiedEngine:
     def _resolve_explicit_healthcare_unit_override(
         self,
         *,
+        subtype_config: Any,
         subtype_key: Optional[str],
         override_sources: Optional[List[Dict[str, Any]]],
     ) -> Optional[int]:
         subtype_normalized = str(subtype_key or "").strip().lower()
-        if subtype_normalized != "surgical_center":
-            return None
-        if not override_sources:
-            return None
-
-        operating_room_count = self._get_override_number(
-            override_sources,
-            [
-                "operating_room_count",
-                "or_count",
-                "operatingRoomCount",
-                "orCount",
-            ],
-        )
-        if operating_room_count is None or operating_room_count <= 0:
-            return None
-
-        return max(1, int(round(operating_room_count)))
+        if subtype_normalized == "surgical_center":
+            if not override_sources:
+                return None
+            operating_room_count = self._get_override_number(
+                override_sources,
+                [
+                    "operating_room_count",
+                    "or_count",
+                    "operatingRoomCount",
+                    "orCount",
+                ],
+            )
+            if operating_room_count is None or operating_room_count <= 0:
+                return None
+            return max(1, int(round(operating_room_count)))
+        if subtype_normalized == "dental_office":
+            return self._resolve_explicit_dental_operatory_count_override(
+                subtype_config=subtype_config,
+                override_sources=override_sources,
+            )
+        return None
 
     def _resolve_surgical_center_default_operating_room_baseline(
         self,
@@ -2926,28 +3064,23 @@ class UnifiedEngine:
         subtype_config: Any,
         square_footage: float,
     ) -> Optional[int]:
-        if subtype_config is None:
-            return None
-
-        operating_room_rules = resolve_normalized_special_feature_pricing_rules(
-            building_config=subtype_config,
-            selected_feature_ids=["operating_room"],
-        )
-        operating_room_rule = next(
-            (rule for rule in operating_room_rules if rule.feature_id == "operating_room"),
-            None,
-        )
-        if operating_room_rule is None:
-            return None
-
-        default_quantity = resolve_default_count_quantity_for_rule(
-            operating_room_rule,
+        return self._resolve_default_count_baseline_for_special_feature(
+            subtype_config=subtype_config,
+            feature_id="operating_room",
             square_footage=square_footage,
         )
-        if default_quantity is None:
-            return None
 
-        return max(1, int(round(default_quantity.quantity)))
+    def _resolve_dental_office_default_operatory_baseline(
+        self,
+        *,
+        subtype_config: Any,
+        square_footage: float,
+    ) -> Optional[int]:
+        return self._resolve_default_count_baseline_for_special_feature(
+            subtype_config=subtype_config,
+            feature_id="operatory",
+            square_footage=square_footage,
+        )
 
     def _resolve_healthcare_operational_profile(
         self,

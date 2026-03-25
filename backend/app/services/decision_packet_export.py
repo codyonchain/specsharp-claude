@@ -16,6 +16,25 @@ def _as_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
 
 
+def _resolve_packet_construction_trade_breakdown(
+    calculation_data: Dict[str, Any],
+    project_payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    construction_view_trade_breakdown = _as_dict(calculation_data.get("construction_view_trade_breakdown"))
+    if construction_view_trade_breakdown:
+        return construction_view_trade_breakdown
+
+    construction_view_trade_breakdown = _as_dict(project_payload.get("construction_view_trade_breakdown"))
+    if construction_view_trade_breakdown:
+        return construction_view_trade_breakdown
+
+    canonical_trade_breakdown = _as_dict(calculation_data.get("trade_breakdown"))
+    if canonical_trade_breakdown:
+        return canonical_trade_breakdown
+
+    return _as_dict(project_payload.get("trade_breakdown"))
+
+
 def _sanitize_text(value: Any) -> str:
     if value is None:
         return ""
@@ -624,9 +643,11 @@ def compose_decision_packet_input(
     if not isinstance(construction_costs, dict):
         construction_costs = {}
 
-    trade_breakdown = calculation_data.get("trade_breakdown") or project_payload.get("trade_breakdown") or {}
-    if not isinstance(trade_breakdown, dict):
-        trade_breakdown = {}
+    # Only the packet's construction subsection follows ConstructionView presentation truth.
+    construction_trade_breakdown = _resolve_packet_construction_trade_breakdown(
+        calculation_data,
+        project_payload,
+    )
 
     construction_schedule = calculation_data.get("construction_schedule") or {}
     if not isinstance(construction_schedule, dict):
@@ -749,8 +770,10 @@ def compose_decision_packet_input(
     )
 
     trade_items: List[Dict[str, Any]] = []
-    total_trade_cost = sum(amount for amount in (_to_number(value) for value in trade_breakdown.values()) if amount is not None)
-    for trade_name, amount_raw in trade_breakdown.items():
+    total_trade_cost = sum(
+        amount for amount in (_to_number(value) for value in construction_trade_breakdown.values()) if amount is not None
+    )
+    for trade_name, amount_raw in construction_trade_breakdown.items():
         amount = _to_number(amount_raw)
         if amount is None:
             continue

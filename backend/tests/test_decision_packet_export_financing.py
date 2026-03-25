@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from typing import Optional
 
+import pytest
+
 from app.services.decision_packet_export import (
     compose_decision_packet_input,
     render_decision_packet_html,
@@ -107,6 +109,55 @@ def _build_dealshield_view_model() -> dict:
             "Not modeled: financing assumptions missing",
             "DealShield scenarios stress cost/revenue assumptions only; schedule slippage or acceleration impacts (carry, debt timing, lease-up timing) are not modeled here.",
         ],
+    }
+
+
+def _build_project(project_id: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        name="Sunset Residences",
+        location="Dallas, TX",
+        building_type="multifamily",
+        square_footage=12_000,
+        total_cost=3_700_000,
+        cost_per_sqft=308.33,
+        project_id=project_id,
+    )
+
+
+def _build_trade_basis_packet(
+    *,
+    project_id: str,
+    canonical_trade_breakdown: dict[str, float],
+    construction_view_trade_breakdown: Optional[dict[str, float]] = None,
+    special_features_total: Optional[float] = None,
+) -> tuple[dict, str]:
+    project_payload = _build_project_payload(
+        include_financing_summary=True,
+        special_features_total=special_features_total,
+    )
+    project_payload["calculation_data"]["trade_breakdown"] = canonical_trade_breakdown
+    if construction_view_trade_breakdown is not None:
+        project_payload["calculation_data"]["construction_view_trade_breakdown"] = (
+            construction_view_trade_breakdown
+        )
+
+    packet = compose_decision_packet_input(
+        _build_project(project_id),
+        project_payload,
+        {"subtype": "market_rate_apartments"},
+        _build_dealshield_view_model(),
+        "SpecSharp Capital",
+    )
+    return packet, render_decision_packet_html(packet)
+
+
+def _trade_distribution_by_label(packet: dict) -> dict[str, dict[str, float]]:
+    return {
+        item["label"]: {
+            "amount": item["amount"],
+            "percent": item["percent"],
+        }
+        for item in packet["trade_distribution"]["items"]
     }
 
 
@@ -612,3 +663,133 @@ def test_packet_html_includes_shared_spacing_tokens_and_splits_packet_into_reali
 
     assert "Provenance" in page_6
     assert "Most Likely Wrong" not in page_6
+
+
+def test_packet_construction_trade_distribution_prefers_construction_view_trade_breakdown_when_present():
+    canonical_trade_breakdown = {
+        "structural": 1_100_000.0,
+        "mechanical": 640_000.0,
+        "electrical": 420_000.0,
+        "plumbing": 500_000.0,
+        "finishes": 440_000.0,
+    }
+    construction_view_trade_breakdown = {
+        "structural": 1_100_000.0,
+        "mechanical": 840_000.0,
+        "electrical": 620_000.0,
+        "plumbing": 620_000.0,
+        "finishes": 520_000.0,
+    }
+
+    packet, html = _build_trade_basis_packet(
+        project_id="proj-trade-basis-preferred",
+        canonical_trade_breakdown=canonical_trade_breakdown,
+        construction_view_trade_breakdown=construction_view_trade_breakdown,
+        special_features_total=600_000.0,
+    )
+
+    trade_distribution = _trade_distribution_by_label(packet)
+
+    assert trade_distribution["Mechanical"]["amount"] == pytest.approx(840_000.0)
+    assert trade_distribution["Mechanical"]["percent"] == pytest.approx(840_000.0 / 3_700_000.0)
+    assert trade_distribution["Finishes"]["amount"] == pytest.approx(520_000.0)
+    assert sum(item["amount"] for item in packet["trade_distribution"]["items"]) == pytest.approx(3_700_000.0)
+    assert "$840,000" in html
+    assert "$640,000" not in html
+
+
+def test_packet_construction_trade_distribution_falls_back_to_canonical_trade_breakdown_when_absent():
+    canonical_trade_breakdown = {
+        "structural": 1_100_000.0,
+        "mechanical": 640_000.0,
+        "electrical": 420_000.0,
+        "plumbing": 500_000.0,
+        "finishes": 440_000.0,
+    }
+
+    packet, html = _build_trade_basis_packet(
+        project_id="proj-trade-basis-fallback",
+        canonical_trade_breakdown=canonical_trade_breakdown,
+    )
+
+    trade_distribution = _trade_distribution_by_label(packet)
+
+    assert trade_distribution["Mechanical"]["amount"] == pytest.approx(640_000.0)
+    assert trade_distribution["Mechanical"]["percent"] == pytest.approx(640_000.0 / 3_100_000.0)
+    assert sum(item["amount"] for item in packet["trade_distribution"]["items"]) == pytest.approx(3_100_000.0)
+    assert "$640,000" in html
+
+
+def test_packet_construction_trade_source_switch_preserves_canonical_decision_and_execview_sections():
+    canonical_trade_breakdown = {
+        "structural": 1_100_000.0,
+        "mechanical": 640_000.0,
+        "electrical": 420_000.0,
+        "plumbing": 500_000.0,
+        "finishes": 440_000.0,
+    }
+    construction_view_trade_breakdown = {
+        "structural": 1_100_000.0,
+        "mechanical": 840_000.0,
+        "electrical": 620_000.0,
+        "plumbing": 620_000.0,
+        "finishes": 520_000.0,
+    }
+
+    canonical_packet, _ = _build_trade_basis_packet(
+        project_id="proj-trade-basis-canonical",
+        canonical_trade_breakdown=canonical_trade_breakdown,
+        special_features_total=600_000.0,
+    )
+    construction_view_packet, _ = _build_trade_basis_packet(
+        project_id="proj-trade-basis-construction-view",
+        canonical_trade_breakdown=canonical_trade_breakdown,
+        construction_view_trade_breakdown=construction_view_trade_breakdown,
+        special_features_total=600_000.0,
+    )
+
+    assert construction_view_packet["decision_banner"] == canonical_packet["decision_banner"]
+    assert construction_view_packet["decision_insurance"] == canonical_packet["decision_insurance"]
+    assert construction_view_packet["decision_metrics_table"] == canonical_packet["decision_metrics_table"]
+    assert construction_view_packet["assumptions_not_modeled"] == canonical_packet["assumptions_not_modeled"]
+    assert construction_view_packet["economics_snapshot"] == canonical_packet["economics_snapshot"]
+    assert construction_view_packet["revenue_required"] == canonical_packet["revenue_required"]
+    assert construction_view_packet["construction_summary"] == canonical_packet["construction_summary"]
+    assert construction_view_packet["trade_distribution"] != canonical_packet["trade_distribution"]
+
+
+def test_packet_construction_trade_source_switch_keeps_totals_coherent():
+    canonical_trade_breakdown = {
+        "structural": 1_100_000.0,
+        "mechanical": 640_000.0,
+        "electrical": 420_000.0,
+        "plumbing": 500_000.0,
+        "finishes": 440_000.0,
+    }
+    construction_view_trade_breakdown = {
+        "structural": 1_100_000.0,
+        "mechanical": 840_000.0,
+        "electrical": 620_000.0,
+        "plumbing": 620_000.0,
+        "finishes": 520_000.0,
+    }
+
+    packet, _ = _build_trade_basis_packet(
+        project_id="proj-trade-basis-totals",
+        canonical_trade_breakdown=canonical_trade_breakdown,
+        construction_view_trade_breakdown=construction_view_trade_breakdown,
+        special_features_total=600_000.0,
+    )
+
+    trade_distribution_total = sum(item["amount"] for item in packet["trade_distribution"]["items"])
+    construction_summary = packet["construction_summary"]
+
+    assert construction_summary["construction_total"] == pytest.approx(3_100_000.0)
+    assert construction_summary["special_features_total"] == pytest.approx(600_000.0)
+    assert construction_summary["total_project_cost"] == pytest.approx(3_700_000.0)
+    assert trade_distribution_total == pytest.approx(
+        construction_summary["construction_total"] + construction_summary["special_features_total"]
+    )
+    assert packet["economics_snapshot"]["total_project_cost"] == pytest.approx(
+        construction_summary["total_project_cost"]
+    )
