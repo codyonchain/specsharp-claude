@@ -2033,6 +2033,63 @@ describe("ExecutiveViewComplete", () => {
     expect(screen.getByText("INVESTMENT PER UNIT")).toBeInTheDocument();
   });
 
+  it("renders office facility metrics from the backend facility_metrics contract instead of stale office keys", () => {
+    const project = buildCrossTypeProject("office", "class_a", "office_class_a_v1");
+    project.analysis.parsed_input.square_footage = 160000;
+    project.analysis.calculations.project_info.square_footage = 160000;
+    project.analysis.calculations.totals = {
+      ...project.analysis.calculations.totals,
+      total_project_cost: 74440000,
+      cost_per_sf: 465.25,
+    };
+    project.analysis.calculations.revenue_analysis = {
+      ...project.analysis.calculations.revenue_analysis,
+      annual_revenue: 6692800,
+      net_income: 2955200,
+    };
+    project.analysis.calculations.return_metrics = {
+      ...project.analysis.calculations.return_metrics,
+      estimated_annual_noi: 2955200,
+    };
+    project.analysis.calculations.facility_metrics = {
+      type: "office",
+      total_square_feet: 160000,
+      metrics: [
+        { id: "cost_per_sf", label: "All-in Cost per SF", value: 465.25, unit: "$/SF" },
+        { id: "revenue_per_sf", label: "Revenue per SF", value: 41.83, unit: "$/SF" },
+        { id: "noi_per_sf", label: "NOI per SF", value: 18.47, unit: "$/SF" },
+      ],
+    };
+    project.analysis.calculations.total_gross_sf = 123456;
+    project.analysis.calculations.total_building_area = 123456;
+    project.analysis.calculations.total_project_cost = 12345678;
+    project.analysis.calculations.rent_per_sf = 9.99;
+    project.analysis.calculations.office_rent_per_sf = 8.88;
+    project.analysis.calculations.noi_per_sf = 7.77;
+    project.analysis.calculations.office_noi_per_sf = 6.66;
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={project}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "office_class_a_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("160,000 SF")).toBeInTheDocument();
+    expect(screen.getByText("$465.25")).toBeInTheDocument();
+    expect(screen.getByText("$41.83")).toBeInTheDocument();
+    expect(screen.getByText("$18.47")).toBeInTheDocument();
+    expect(screen.queryByText("123,456 SF")).not.toBeInTheDocument();
+    expect(screen.queryByText("$9.99")).not.toBeInTheDocument();
+    expect(screen.queryByText("$7.77")).not.toBeInTheDocument();
+  });
+
   it("keeps canonical decision status/reason/provenance contract parity across restaurant, hospitality, multifamily, and industrial", () => {
     const { rerender } = render(
       <MemoryRouter>

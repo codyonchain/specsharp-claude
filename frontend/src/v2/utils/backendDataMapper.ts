@@ -696,35 +696,76 @@ export class BackendDataMapper {
           costPerKey: hotelCostPerKey,
         }
       : undefined;
-    const officeBuildingSize =
-      toFiniteNumber(calculations?.total_gross_sf) ??
-      toFiniteNumber(calculations?.total_building_area) ??
-      toFiniteNumber(calculations?.square_footage) ??
-      toFiniteNumber(parsedInput?.square_footage) ??
-      toFiniteNumber(projectInfo?.square_footage) ??
-      undefined;
+    const facilityMetricsPayload = calculations?.facility_metrics;
+    const officeFacilityMetricEntries = Array.isArray(facilityMetricsPayload?.metrics)
+      ? facilityMetricsPayload.metrics
+      : [];
+    const officeFacilityMetricValues =
+      officeFacilityMetricEntries.reduce<Record<string, number | undefined>>((acc, entry) => {
+        const id = typeof entry?.id === 'string' ? entry.id : '';
+        if (!id) {
+          return acc;
+        }
+        const numericValue = toFiniteNumber(entry?.value);
+        if (numericValue !== undefined) {
+          acc[id] = numericValue;
+        }
+        return acc;
+      }, {});
+    const hasActiveOfficeFacilityMetricsPayload =
+      isOfficeFacility &&
+      (
+        facilityMetricsPayload?.type === 'office' ||
+        officeFacilityMetricEntries.some((entry) =>
+          entry?.id === 'cost_per_sf' ||
+          entry?.id === 'revenue_per_sf' ||
+          entry?.id === 'noi_per_sf'
+        )
+      );
+    const officeBuildingSize = hasActiveOfficeFacilityMetricsPayload
+      ? toFiniteNumber(
+          facilityMetricsPayload?.total_square_feet ??
+          facilityMetricsPayload?.totalSquareFeet
+        )
+      : (
+          toFiniteNumber(calculations?.total_gross_sf) ??
+          toFiniteNumber(calculations?.total_building_area) ??
+          toFiniteNumber(calculations?.square_footage) ??
+          toFiniteNumber(parsedInput?.square_footage) ??
+          toFiniteNumber(projectInfo?.square_footage) ??
+          undefined
+        );
     const officeTotalCost =
       toFiniteNumber(calculations?.total_project_cost) ??
       toFiniteNumber(calculations?.total_cost) ??
       toFiniteNumber(calculations?.investment_required) ??
       undefined;
-    const officeRentPerSf =
-      toFiniteNumber(calculations?.rent_per_sf) ??
-      toFiniteNumber(calculations?.office_rent_per_sf) ??
-      toFiniteNumber(ownership?.rent_per_sf) ??
-      undefined;
-    const officeNoiPerSf =
-      toFiniteNumber(calculations?.noi_per_sf) ??
-      toFiniteNumber(calculations?.office_noi_per_sf) ??
-      toFiniteNumber(ownership?.noi_per_sf) ??
-      undefined;
-    const officeCostPerSf =
-      typeof officeBuildingSize === 'number' &&
-      officeBuildingSize > 0 &&
-      typeof officeTotalCost === 'number' &&
-      officeTotalCost > 0
-        ? officeTotalCost / officeBuildingSize
-        : undefined;
+    const officeRentPerSf = hasActiveOfficeFacilityMetricsPayload
+      ? officeFacilityMetricValues['revenue_per_sf']
+      : (
+          toFiniteNumber(calculations?.rent_per_sf) ??
+          toFiniteNumber(calculations?.office_rent_per_sf) ??
+          toFiniteNumber(ownership?.rent_per_sf) ??
+          undefined
+        );
+    const officeNoiPerSf = hasActiveOfficeFacilityMetricsPayload
+      ? officeFacilityMetricValues['noi_per_sf']
+      : (
+          toFiniteNumber(calculations?.noi_per_sf) ??
+          toFiniteNumber(calculations?.office_noi_per_sf) ??
+          toFiniteNumber(ownership?.noi_per_sf) ??
+          undefined
+        );
+    const officeCostPerSf = hasActiveOfficeFacilityMetricsPayload
+      ? officeFacilityMetricValues['cost_per_sf']
+      : (
+          typeof officeBuildingSize === 'number' &&
+          officeBuildingSize > 0 &&
+          typeof officeTotalCost === 'number' &&
+          officeTotalCost > 0
+            ? officeTotalCost / officeBuildingSize
+            : undefined
+        );
     const officeFacilityMetrics: FacilityMetrics | undefined = isOfficeFacility
       ? {
           buildingSize: officeBuildingSize,
@@ -732,7 +773,11 @@ export class BackendDataMapper {
           revenuePerSf: officeRentPerSf,
           noiPerSf: officeNoiPerSf,
           officeRentPerSf,
-          officeNoiPerSf
+          officeNoiPerSf,
+          entries:
+            hasActiveOfficeFacilityMetricsPayload && officeFacilityMetricEntries.length > 0
+              ? officeFacilityMetricEntries
+              : undefined,
         }
       : undefined;
 
@@ -802,7 +847,6 @@ export class BackendDataMapper {
         }
       : undefined;
 
-    const facilityMetricsPayload = calculations?.facility_metrics;
     const payloadUnits = toFiniteNumber(
       facilityMetricsPayload?.units ??
       facilityMetricsPayload?.scan_rooms ??
