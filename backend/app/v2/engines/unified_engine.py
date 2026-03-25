@@ -1711,6 +1711,8 @@ class UnifiedEngine:
             float(amount or 0.0) for amount in construction_view_trade_breakdown.values()
         )
         construction_view_scope_items = self._build_construction_view_scope_items(
+            building_type=building_type,
+            subtype=subtype,
             base_scope_items=scope_items,
             applied_special_feature_pricing=applied_special_feature_pricings,
         )
@@ -2503,6 +2505,186 @@ class UnifiedEngine:
             return 0.0
 
     @staticmethod
+    def _join_scope_story_labels(labels: Iterable[Optional[str]]) -> str:
+        resolved_labels = [str(label).strip() for label in labels if isinstance(label, str) and label.strip()]
+        if not resolved_labels:
+            return ""
+        if len(resolved_labels) == 1:
+            return resolved_labels[0]
+        if len(resolved_labels) == 2:
+            return f"{resolved_labels[0]} and {resolved_labels[1]}"
+        return f"{', '.join(resolved_labels[:-1])}, and {resolved_labels[-1]}"
+
+    @staticmethod
+    def _rename_trade_scope_system(
+        scope_items: List[Dict[str, Any]],
+        *,
+        trade_key: str,
+        current_label: str,
+        replacement_label: str,
+    ) -> None:
+        normalized_trade_key = str(trade_key or "").strip().lower()
+        normalized_current_label = str(current_label or "").strip().lower()
+        normalized_replacement_label = str(replacement_label or "").strip()
+        if not normalized_trade_key or not normalized_current_label or not normalized_replacement_label:
+            return
+
+        for trade_item in scope_items:
+            if not isinstance(trade_item, dict):
+                continue
+            if str(trade_item.get("trade") or "").strip().lower() != normalized_trade_key:
+                continue
+            systems = trade_item.get("systems")
+            if not isinstance(systems, list):
+                return
+            for system in systems:
+                if not isinstance(system, dict):
+                    continue
+                if str(system.get("name") or "").strip().lower() != normalized_current_label:
+                    continue
+                system["name"] = normalized_replacement_label
+                return
+
+    def _apply_hospital_construction_view_scope_story(
+        self,
+        scope_items: List[Dict[str, Any]],
+        applied_special_feature_pricing: Optional[Iterable[AppliedSpecialFeaturePricing]],
+    ) -> List[Dict[str, Any]]:
+        included_feature_ids = {
+            str(applied_pricing.feature_id).strip().lower()
+            for applied_pricing in applied_special_feature_pricing or []
+            if isinstance(applied_pricing, AppliedSpecialFeaturePricing)
+            and applied_pricing.pricing_status == INCLUDED_IN_BASELINE
+        }
+        if not included_feature_ids.intersection({"surgical_suite", "imaging_suite", "icu", "laboratory"}):
+            return scope_items
+
+        surgical_selected = "surgical_suite" in included_feature_ids
+        imaging_selected = "imaging_suite" in included_feature_ids
+        icu_selected = "icu" in included_feature_ids
+        laboratory_selected = "laboratory" in included_feature_ids
+
+        surgical_imaging_label = self._join_scope_story_labels(
+            [
+                "Surgical Suite" if surgical_selected else None,
+                "Imaging Suite" if imaging_selected else None,
+            ]
+        )
+        if surgical_imaging_label:
+            self._rename_trade_scope_system(
+                scope_items,
+                trade_key="structural",
+                current_label="OR/imaging vibration-isolation framing zones",
+                replacement_label=f"{surgical_imaging_label} vibration-isolation framing zones",
+            )
+            self._rename_trade_scope_system(
+                scope_items,
+                trade_key="electrical",
+                current_label="Imaging/OR power conditioning and isolation transformers",
+                replacement_label=f"{surgical_imaging_label} power conditioning and isolation transformers",
+            )
+
+        surgical_laboratory_label = self._join_scope_story_labels(
+            [
+                "Surgical Suite" if surgical_selected else None,
+                "Laboratory" if laboratory_selected else None,
+            ]
+        )
+        if surgical_laboratory_label:
+            self._rename_trade_scope_system(
+                scope_items,
+                trade_key="mechanical",
+                current_label="Isolation, lab, and OR exhaust systems",
+                replacement_label=f"{surgical_laboratory_label} exhaust, relief air, and pressure control",
+            )
+
+        critical_gas_label = self._join_scope_story_labels(
+            [
+                "Surgical Suite" if surgical_selected else None,
+                "ICU" if icu_selected else None,
+            ]
+        )
+        if critical_gas_label:
+            self._rename_trade_scope_system(
+                scope_items,
+                trade_key="plumbing",
+                current_label="Medical gas, vacuum, and alarm panels",
+                replacement_label=f"{critical_gas_label} medical gas, vacuum, and alarm panels",
+            )
+            self._rename_trade_scope_system(
+                scope_items,
+                trade_key="plumbing",
+                current_label="Heavy fixture groups and drainage allowances",
+                replacement_label=f"{critical_gas_label} scrub/fixture groups and drainage allowances",
+            )
+
+        cleanable_finish_label = self._join_scope_story_labels(
+            [
+                "ICU" if icu_selected else None,
+                "Laboratory" if laboratory_selected else None,
+            ]
+        )
+        if cleanable_finish_label:
+            self._rename_trade_scope_system(
+                scope_items,
+                trade_key="finishes",
+                current_label="Clinical wall and ceiling system package",
+                replacement_label=f"{cleanable_finish_label} cleanable wall/ceiling systems",
+            )
+
+        if imaging_selected:
+            self._rename_trade_scope_system(
+                scope_items,
+                trade_key="mechanical",
+                current_label="Humidity control and room pressurization sequences",
+                replacement_label="Imaging Suite cooling loops and room temperature/pressurization control",
+            )
+
+        if icu_selected:
+            self._rename_trade_scope_system(
+                scope_items,
+                trade_key="mechanical",
+                current_label="Critical-care air distribution",
+                replacement_label="ICU critical-care air distribution and isolation recovery",
+            )
+            self._rename_trade_scope_system(
+                scope_items,
+                trade_key="electrical",
+                current_label="Critical branch distribution and ATS",
+                replacement_label="ICU critical branch distribution and ATS",
+            )
+            self._rename_trade_scope_system(
+                scope_items,
+                trade_key="finishes",
+                current_label="Patient room finish package",
+                replacement_label="Patient room and ICU support finish package",
+            )
+
+        if laboratory_selected:
+            self._rename_trade_scope_system(
+                scope_items,
+                trade_key="plumbing",
+                current_label="Lab/pharmacy pretreatment and specialty waste neutralization",
+                replacement_label="Laboratory pretreatment and specialty waste neutralization",
+            )
+            self._rename_trade_scope_system(
+                scope_items,
+                trade_key="finishes",
+                current_label="Infection-Control Transition Detailing",
+                replacement_label="Laboratory infection-control transition detailing",
+            )
+
+        if surgical_selected:
+            self._rename_trade_scope_system(
+                scope_items,
+                trade_key="finishes",
+                current_label="Surgical/care casework and millwork",
+                replacement_label="Surgical Suite sterile-core casework and millwork",
+            )
+
+        return scope_items
+
+    @staticmethod
     def _resolve_special_feature_allocation_display_quantity_and_unit(
         applied_pricing: AppliedSpecialFeaturePricing,
     ) -> Tuple[float, str]:
@@ -2528,6 +2710,8 @@ class UnifiedEngine:
 
     def _build_construction_view_scope_items(
         self,
+        building_type: BuildingType,
+        subtype: str,
         base_scope_items: Optional[List[Dict[str, Any]]],
         applied_special_feature_pricing: Optional[Iterable[AppliedSpecialFeaturePricing]],
     ) -> List[Dict[str, Any]]:
@@ -2536,6 +2720,11 @@ class UnifiedEngine:
             if isinstance(base_scope_items, list)
             else []
         )
+        if building_type == BuildingType.HEALTHCARE and str(subtype or "").strip().lower() == "hospital":
+            composed_scope_items = self._apply_hospital_construction_view_scope_story(
+                composed_scope_items,
+                applied_special_feature_pricing,
+            )
         trade_items_by_key: Dict[str, Dict[str, Any]] = {}
 
         for item in composed_scope_items:

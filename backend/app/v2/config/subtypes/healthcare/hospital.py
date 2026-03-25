@@ -22,11 +22,11 @@ CONFIG = (
         equipment_cost_per_sf=150,  # Medical equipment
         typical_floors=5,
         trades=TradeBreakdown(
-            structural=0.15,
-            mechanical=0.38,  # Medical gas, complex HVAC
-            electrical=0.22,  # Redundant power, medical equipment
-            plumbing=0.15,  # Medical gas, special drainage
-            finishes=0.10,  # Medical-grade surfaces
+            structural=0.20,
+            mechanical=0.30,  # Central plant + high-acuity airside systems
+            electrical=0.21,  # Essential power, clinical loads, low-voltage
+            plumbing=0.13,  # Medical gas and specialty waste infrastructure
+            finishes=0.16,  # Patient, ICU, and procedural finish intensity
         ),
         soft_costs=SoftCosts(
             design_fees=0.08,

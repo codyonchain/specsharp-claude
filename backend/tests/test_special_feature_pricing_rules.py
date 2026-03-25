@@ -1191,6 +1191,94 @@ def test_included_in_baseline_features_remain_zero_cost_and_do_not_allocate_with
     assert result["construction_view_trade_breakdown"] == pytest.approx(result["trade_breakdown"])
 
 
+def test_hospital_baseline_departments_surface_in_construction_view_without_double_counting():
+    result = unified_engine.calculate_project(
+        building_type=BuildingType.HEALTHCARE,
+        subtype="hospital",
+        square_footage=240_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        special_features=[
+            "surgical_suite",
+            "imaging_suite",
+            "icu",
+            "laboratory",
+            "emergency_department",
+            "cathlab",
+        ],
+    )
+
+    construction_costs = result["construction_costs"]
+    construction_view_scope_items = result["construction_view_scope_items"]
+    breakdown_by_id = _special_feature_breakdown_by_id(result)
+
+    assert construction_costs["special_features_total"] == pytest.approx(2_150_000.0)
+    assert breakdown_by_id["surgical_suite"]["pricing_status"] == INCLUDED_IN_BASELINE
+    assert breakdown_by_id["imaging_suite"]["pricing_status"] == INCLUDED_IN_BASELINE
+    assert breakdown_by_id["icu"]["pricing_status"] == INCLUDED_IN_BASELINE
+    assert breakdown_by_id["laboratory"]["pricing_status"] == INCLUDED_IN_BASELINE
+    assert breakdown_by_id["emergency_department"]["pricing_status"] == INCREMENTAL
+    assert breakdown_by_id["cathlab"]["pricing_status"] == INCREMENTAL
+
+    assert construction_costs["construction_view_allocated_special_features_total"] == pytest.approx(0.0)
+    assert construction_costs["construction_view_trade_total"] == pytest.approx(
+        construction_costs["construction_total"]
+    )
+    assert result["construction_view_trade_breakdown"] == pytest.approx(result["trade_breakdown"])
+    assert _scope_item_totals_by_trade(construction_view_scope_items) == pytest.approx(
+        result["construction_view_trade_breakdown"]
+    )
+    assert result["construction_view_scope_items"] != result["scope_items"]
+
+    labels_by_trade = {
+        str(trade.get("trade") or "").strip().lower(): [
+            str(system.get("name") or "")
+            for system in trade.get("systems", [])
+            if isinstance(system, dict)
+        ]
+        for trade in construction_view_scope_items
+        if isinstance(trade, dict)
+    }
+
+    assert (
+        "Surgical Suite and Imaging Suite vibration-isolation framing zones"
+        in labels_by_trade["structural"]
+    )
+    assert (
+        "ICU critical-care air distribution and isolation recovery"
+        in labels_by_trade["mechanical"]
+    )
+    assert (
+        "Surgical Suite and Laboratory exhaust, relief air, and pressure control"
+        in labels_by_trade["mechanical"]
+    )
+    assert (
+        "Imaging Suite cooling loops and room temperature/pressurization control"
+        in labels_by_trade["mechanical"]
+    )
+    assert (
+        "Surgical Suite and Imaging Suite power conditioning and isolation transformers"
+        in labels_by_trade["electrical"]
+    )
+    assert "ICU critical branch distribution and ATS" in labels_by_trade["electrical"]
+    assert (
+        "Surgical Suite and ICU medical gas, vacuum, and alarm panels"
+        in labels_by_trade["plumbing"]
+    )
+    assert "Laboratory pretreatment and specialty waste neutralization" in labels_by_trade["plumbing"]
+    assert "ICU and Laboratory cleanable wall/ceiling systems" in labels_by_trade["finishes"]
+    assert "Surgical Suite sterile-core casework and millwork" in labels_by_trade["finishes"]
+
+    allocated_scope_systems = [
+        system
+        for trade in construction_view_scope_items
+        if isinstance(trade, dict)
+        for system in trade.get("systems", [])
+        if isinstance(system, dict) and system.get("source") == "special_feature_trade_allocation"
+    ]
+    assert allocated_scope_systems == []
+
+
 def test_area_share_industrial_zones_reconcile_with_included_and_incremental_statuses():
     square_footage = 220_000
     result = unified_engine.calculate_project(

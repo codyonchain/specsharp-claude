@@ -99,6 +99,7 @@ def test_hospital_trade_breakdown_matches_config_percentages():
     trades = result["trade_breakdown"]
 
     assert construction_total > 0
+    assert trades["structural"] == pytest.approx(construction_total * cfg.trades.structural, rel=0, abs=1e-6)
     assert trades["mechanical"] == pytest.approx(construction_total * cfg.trades.mechanical, rel=0, abs=1e-6)
     assert trades["electrical"] == pytest.approx(construction_total * cfg.trades.electrical, rel=0, abs=1e-6)
     assert trades["plumbing"] == pytest.approx(construction_total * cfg.trades.plumbing, rel=0, abs=1e-6)
@@ -106,6 +107,17 @@ def test_hospital_trade_breakdown_matches_config_percentages():
 
     trade_sum = sum(trades.values())
     assert trade_sum == pytest.approx(construction_total, rel=0, abs=1e-6)
+
+
+def test_hospital_trade_breakdown_contract_uses_rebalanced_launch_mix():
+    cfg = get_building_config(BuildingType.HEALTHCARE, "hospital")
+    assert cfg is not None
+
+    assert cfg.trades.structural == pytest.approx(0.20)
+    assert cfg.trades.mechanical == pytest.approx(0.30)
+    assert cfg.trades.electrical == pytest.approx(0.21)
+    assert cfg.trades.plumbing == pytest.approx(0.13)
+    assert cfg.trades.finishes == pytest.approx(0.16)
 
 
 def test_project_class_multipliers_order_total_cost_per_sf():
@@ -146,14 +158,47 @@ def test_special_features_increase_hard_costs_for_hospital():
     emergency_row = breakdown["emergency_department"]
     cathlab_row = breakdown["cathlab"]
 
+    assert emergency_row["pricing_status"] == "incremental"
     assert emergency_row["pricing_basis"] == "AREA_SHARE_GSF"
     assert float(emergency_row.get("configured_area_share_of_gsf", 0.0) or 0.0) == pytest.approx(0.10)
     assert float(emergency_row.get("total_cost", 0.0) or 0.0) == pytest.approx(50000.0)
+    assert cathlab_row["pricing_status"] == "incremental"
     assert cathlab_row["pricing_basis"] == "COUNT_BASED"
     assert float(cathlab_row.get("configured_cost_per_count", 0.0) or 0.0) == pytest.approx(950000.0)
     assert float(cathlab_row.get("total_cost", 0.0) or 0.0) == pytest.approx(950000.0)
     assert with_features["totals"]["hard_costs"] > no_features["totals"]["hard_costs"]
     assert with_features["totals"]["total_project_cost"] > no_features["totals"]["total_project_cost"]
+
+
+def test_hospital_baseline_departments_remain_included_while_only_incrementals_price():
+    result = _calculate_healthcare(
+        subtype="hospital",
+        square_footage=240000,
+        special_features=[
+            "surgical_suite",
+            "imaging_suite",
+            "icu",
+            "laboratory",
+            "emergency_department",
+            "cathlab",
+        ],
+    )
+
+    breakdown = {
+        item["id"]: item
+        for item in result["construction_costs"]["special_features_breakdown"]
+        if isinstance(item, dict) and item.get("id")
+    }
+
+    for feature_id in ("surgical_suite", "imaging_suite", "icu", "laboratory"):
+        row = breakdown[feature_id]
+        assert row["pricing_status"] == "included_in_baseline"
+        assert float(row.get("total_cost", 0.0) or 0.0) == pytest.approx(0.0)
+        assert row["trade_composition_mode"] == "included_in_baseline"
+
+    assert breakdown["emergency_department"]["pricing_status"] == "incremental"
+    assert breakdown["cathlab"]["pricing_status"] == "incremental"
+    assert result["construction_costs"]["special_features_total"] == pytest.approx(2_150_000.0)
 
 
 def test_outpatient_profile_emits_facility_metrics():
