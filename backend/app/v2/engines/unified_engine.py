@@ -1231,9 +1231,9 @@ class UnifiedEngine:
         applied_special_feature_pricings: List[AppliedSpecialFeaturePricing] = []
         resolved_special_feature_ids: List[str] = []
         available_special_feature_pricing: List[Dict[str, Any]] = []
+        available_feature_keys = list(building_config.special_features.keys()) if building_config.special_features else []
         if special_features and building_config.special_features:
             healthcare_applied_feature_ids: set = set()
-            available_feature_keys = list(building_config.special_features.keys())
             for feature in special_features:
                 if isinstance(feature, dict):
                     continue
@@ -1385,6 +1385,38 @@ class UnifiedEngine:
                         ),
                         "subtype": subtype,
                         "operatory_count": dental_office_operatory_count,
+                    },
+                )
+
+        drive_thru_auto_pricing_resolution = self._resolve_numeric_drive_thru_auto_pricing_feature(
+            building_type=building_type,
+            subtype=subtype,
+            override_sources=pricing_override_sources,
+        )
+        if drive_thru_auto_pricing_resolution is not None:
+            drive_thru_feature_id, drive_thru_lane_count = drive_thru_auto_pricing_resolution
+            if (
+                drive_thru_feature_id in available_feature_keys
+                and drive_thru_feature_id not in resolved_special_feature_ids
+            ):
+                if drive_thru_feature_id == "double_drive_thru":
+                    resolved_special_feature_ids = [
+                        feature_id
+                        for feature_id in resolved_special_feature_ids
+                        if feature_id != "drive_thru"
+                    ]
+                resolved_special_feature_ids.append(drive_thru_feature_id)
+                self._log_trace(
+                    "special_feature_auto_activated_from_parsed_input",
+                    {
+                        "feature": drive_thru_feature_id,
+                        "building_type": (
+                            building_type.value
+                            if hasattr(building_type, "value")
+                            else str(building_type)
+                        ),
+                        "subtype": subtype,
+                        "drive_thru_lane_count": drive_thru_lane_count,
                     },
                 )
 
@@ -2393,6 +2425,44 @@ class UnifiedEngine:
             subtype_config=subtype_config,
             override_sources=override_sources,
         )
+
+    def _resolve_numeric_drive_thru_auto_pricing_feature(
+        self,
+        *,
+        building_type: BuildingType,
+        subtype: Any,
+        override_sources: List[Dict[str, Any]],
+    ) -> Optional[Tuple[str, int]]:
+        if not override_sources:
+            return None
+
+        drive_thru_lane_count = self._get_override_number(
+            override_sources,
+            [
+                "drive_thru_lane_count",
+                "driveThruLaneCount",
+            ],
+        )
+        if drive_thru_lane_count is None or drive_thru_lane_count <= 0:
+            return None
+
+        resolved_lane_count = max(1, int(round(drive_thru_lane_count)))
+        subtype_value = subtype.value if hasattr(subtype, "value") else subtype
+        subtype_key = str(subtype_value or "").strip().lower()
+
+        if building_type == BuildingType.RESTAURANT:
+            if subtype_key == "quick_service":
+                if resolved_lane_count <= 1:
+                    return None
+                return ("double_drive_thru", resolved_lane_count)
+            if subtype_key == "cafe":
+                return ("drive_thru", resolved_lane_count)
+            return None
+
+        if building_type == BuildingType.RETAIL and subtype_key == "shopping_center":
+            return ("drive_thru", resolved_lane_count)
+
+        return None
 
     def _resolve_explicit_dock_count_override(
         self,

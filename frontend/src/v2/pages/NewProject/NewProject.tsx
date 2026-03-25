@@ -149,6 +149,17 @@ const BUILDING_TYPE_DETECTION_CUES: RegExp[] = [
 const detectBuildingTypeInDescription = (text: string): boolean =>
   BUILDING_TYPE_DETECTION_CUES.some((pattern) => pattern.test(text));
 
+const QUICK_SERVICE_MULTI_LANE_DRIVE_THRU_REGEX =
+  /\b(\d{1,2})\s*drive[\s-]?(?:thru|through)\s+lanes?\b/i;
+
+const hasQuickServiceNumericMultiLaneDriveThru = (description: string): boolean => {
+  const match = description.match(QUICK_SERVICE_MULTI_LANE_DRIVE_THRU_REGEX);
+  if (!match) return false;
+
+  const laneCount = Number(match[1]);
+  return Number.isFinite(laneCount) && laneCount > 1;
+};
+
 const STATE_NAME_TO_CODE: Record<string, string> = {
   alabama: 'AL',
   alaska: 'AK',
@@ -427,17 +438,28 @@ export const resolveNewProjectAutoDetection = ({
       })
     )
   );
+  const correctedRawDetectedFeatureIds =
+    effectiveBuildingType === 'restaurant' &&
+    resolvedSubtype === 'quick_service' &&
+    hasQuickServiceNumericMultiLaneDriveThru(description)
+      ? Array.from(
+          new Set([
+            ...rawDetectedFeatureIds.filter((featureId) => featureId !== 'drive_thru'),
+            'double_drive_thru',
+          ])
+        )
+      : rawDetectedFeatureIds;
   const allowedFeatureIds = getNewProjectAvailableFeatures(
     effectiveBuildingType || '',
     resolvedSubtype
   ).map((feature) => feature.id);
   const allowedFeatureIdSet = new Set(allowedFeatureIds);
-  const filteredFeatureIds = rawDetectedFeatureIds.filter((featureId) =>
+  const filteredFeatureIds = correctedRawDetectedFeatureIds.filter((featureId) =>
     allowedFeatureIdSet.has(featureId)
   );
 
   return {
-    rawDetectedFeatureIds,
+    rawDetectedFeatureIds: correctedRawDetectedFeatureIds,
     allowedFeatureIds,
     filteredFeatureIds,
     effectiveBuildingType,

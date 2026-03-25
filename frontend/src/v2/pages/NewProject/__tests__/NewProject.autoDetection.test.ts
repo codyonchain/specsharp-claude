@@ -146,6 +146,14 @@ describe('NewProject auto-detection path', () => {
       unexpectedFilteredId: 'drive_thru',
     },
     {
+      name: 'quick service numeric multi lane exact id',
+      description: 'New 6,500 SF quick service restaurant with 2 drive-thru lanes in Nashville, TN',
+      parsedBuildingType: 'restaurant',
+      parsedSubtype: 'quick_service',
+      expectedFeatureId: 'double_drive_thru',
+      unexpectedFilteredId: 'drive_thru',
+    },
+    {
       name: 'surgical center operating rooms exact id',
       description: 'New 24,000 SF ambulatory surgery center with 6 operating rooms in Nashville, TN',
       parsedBuildingType: 'healthcare',
