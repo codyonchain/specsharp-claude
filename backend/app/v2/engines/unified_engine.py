@@ -1393,6 +1393,31 @@ class UnifiedEngine:
             subtype=subtype,
             override_sources=pricing_override_sources,
         )
+        imaging_center_auto_pricing_feature_counts = self._resolve_imaging_center_auto_pricing_feature_counts(
+            building_type=building_type,
+            subtype=subtype,
+            subtype_config=building_config,
+            override_sources=pricing_override_sources,
+        )
+        for feature_id, resolved_count in imaging_center_auto_pricing_feature_counts.items():
+            if (
+                feature_id in available_feature_keys
+                and feature_id not in resolved_special_feature_ids
+            ):
+                resolved_special_feature_ids.append(feature_id)
+                self._log_trace(
+                    "special_feature_auto_activated_from_parsed_input",
+                    {
+                        "feature": feature_id,
+                        "building_type": (
+                            building_type.value
+                            if hasattr(building_type, "value")
+                            else str(building_type)
+                        ),
+                        "subtype": subtype,
+                        "requested_quantity": resolved_count,
+                    },
+                )
         if drive_thru_auto_pricing_resolution is not None:
             drive_thru_feature_id, drive_thru_lane_count = drive_thru_auto_pricing_resolution
             if (
@@ -1794,6 +1819,15 @@ class UnifiedEngine:
             'market_factor': regional_market_factor,
             'location_display': pretty_location or regional_context.get('location_display') or location
         }
+        project_imaging_visible_unit_contract = self._resolve_imaging_center_visible_unit_contract(
+            subtype_config=building_config,
+            subtype_key=subtype,
+            override_sources=pricing_override_sources,
+        )
+        project_imaging_has_explicit_modality_counts = bool(
+            project_imaging_visible_unit_contract
+            and project_imaging_visible_unit_contract.get("has_explicit_modality_counts")
+        )
 
         # Build comprehensive response - FLATTENED structure to match frontend expectations
         totals_payload = {
@@ -1892,6 +1926,17 @@ class UnifiedEngine:
             'calculation_trace': self.calculation_trace,
             'timestamp': datetime.now().isoformat()
         }
+        if project_imaging_visible_unit_contract is not None:
+            result['project_info']['imaging_modality_program'] = project_imaging_visible_unit_contract
+            result['project_info']['unit_label'] = project_imaging_visible_unit_contract.get('unit_label')
+            result['project_info']['unit_type'] = project_imaging_visible_unit_contract.get('unit_label')
+            result['project_info']['unit_count_source'] = project_imaging_visible_unit_contract.get('unit_count_source')
+            if project_imaging_has_explicit_modality_counts:
+                result['project_info']['unit_count'] = project_imaging_visible_unit_contract.get(
+                    'total_specified_modality_suites'
+                )
+            else:
+                result['project_info'].pop('unit_count', None)
         result['construction_risk_drivers'] = build_construction_risk_drivers(result)
 
         if financing_assumptions:
@@ -2035,30 +2080,78 @@ class UnifiedEngine:
             }
         elif building_type == BuildingType.HEALTHCARE:
             financial_metrics_cfg = self._get_healthcare_financial_metrics(building_config)
-            primary_unit_label = financial_metrics_cfg.get('primary_unit', 'Units')
-            facility_profile = getattr(building_config, "facility_metrics_profile", None)
-            computed_units = self._resolve_healthcare_units(
-                building_config,
-                square_footage,
+            imaging_visible_unit_contract = self._resolve_imaging_center_visible_unit_contract(
+                subtype_config=building_config,
                 subtype_key=subtype,
                 override_sources=unit_override_sources,
             )
-            cost_per_unit = total_project_cost / computed_units if computed_units else 0
-            annual_revenue_value = self._coerce_number((result.get('revenue_analysis') or {}).get('annual_revenue')) or 0.0
-
-            revenue_per_unit_cfg = self._coerce_number(financial_metrics_cfg.get('revenue_per_unit_annual'))
-            if revenue_per_unit_cfg is not None and facility_profile == "healthcare_outpatient":
-                revenue_per_unit = revenue_per_unit_cfg
+            if imaging_visible_unit_contract is not None:
+                facility_metrics_payload = {
+                    'type': 'healthcare',
+                    'unit_label': imaging_visible_unit_contract.get('unit_label'),
+                    'unit_count_source': imaging_visible_unit_contract.get('unit_count_source'),
+                    'imaging_modality_program': imaging_visible_unit_contract,
+                }
+                if imaging_visible_unit_contract.get('has_explicit_modality_counts'):
+                    total_specified = imaging_visible_unit_contract.get('total_specified_modality_suites')
+                    metric_entries: List[Dict[str, Any]] = []
+                    mri_suites = imaging_visible_unit_contract.get('mri_suites')
+                    ct_suites = imaging_visible_unit_contract.get('ct_suites')
+                    if isinstance(mri_suites, int) and mri_suites > 0:
+                        metric_entries.append(
+                            {
+                                'id': 'mri_suites',
+                                'label': 'MRI Suites',
+                                'value': mri_suites,
+                                'unit': 'suites',
+                            }
+                        )
+                    if isinstance(ct_suites, int) and ct_suites > 0:
+                        metric_entries.append(
+                            {
+                                'id': 'ct_suites',
+                                'label': 'CT Suites',
+                                'value': ct_suites,
+                                'unit': 'suites',
+                            }
+                        )
+                    if isinstance(total_specified, int) and total_specified > 0:
+                        facility_metrics_payload['units'] = total_specified
+                        metric_entries.append(
+                            {
+                                'id': 'total_specified_modality_suites',
+                                'label': 'Total Specified Modality Suites',
+                                'value': total_specified,
+                                'unit': 'suites',
+                            }
+                        )
+                    if metric_entries:
+                        facility_metrics_payload['entries'] = metric_entries
             else:
-                revenue_per_unit = annual_revenue_value / computed_units if computed_units else 0
+                primary_unit_label = financial_metrics_cfg.get('primary_unit', 'Units')
+                facility_profile = getattr(building_config, "facility_metrics_profile", None)
+                computed_units = self._resolve_healthcare_units(
+                    building_config,
+                    square_footage,
+                    subtype_key=subtype,
+                    override_sources=unit_override_sources,
+                )
+                cost_per_unit = total_project_cost / computed_units if computed_units else 0
+                annual_revenue_value = self._coerce_number((result.get('revenue_analysis') or {}).get('annual_revenue')) or 0.0
 
-            facility_metrics_payload = {
-                'type': 'healthcare',
-                'units': computed_units,
-                'unit_label': primary_unit_label,
-                'cost_per_unit': cost_per_unit,
-                'revenue_per_unit': revenue_per_unit,
-            }
+                revenue_per_unit_cfg = self._coerce_number(financial_metrics_cfg.get('revenue_per_unit_annual'))
+                if revenue_per_unit_cfg is not None and facility_profile == "healthcare_outpatient":
+                    revenue_per_unit = revenue_per_unit_cfg
+                else:
+                    revenue_per_unit = annual_revenue_value / computed_units if computed_units else 0
+
+                facility_metrics_payload = {
+                    'type': 'healthcare',
+                    'units': computed_units,
+                    'unit_label': primary_unit_label,
+                    'cost_per_unit': cost_per_unit,
+                    'revenue_per_unit': revenue_per_unit,
+                }
         elif building_type == BuildingType.OFFICE:
             total_sf = float(square_footage) if square_footage else 0.0
             revenue_block = result.get('revenue_analysis') or {}
@@ -2425,6 +2518,82 @@ class UnifiedEngine:
             subtype_config=subtype_config,
             override_sources=override_sources,
         )
+
+    def _resolve_imaging_center_visible_unit_contract(
+        self,
+        *,
+        subtype_config: Any,
+        subtype_key: Any,
+        override_sources: Optional[List[Dict[str, Any]]],
+    ) -> Optional[Dict[str, Any]]:
+        subtype_value = subtype_key.value if hasattr(subtype_key, "value") else subtype_key
+        subtype_normalized = str(subtype_value or "").strip().lower()
+        if subtype_normalized != "imaging_center":
+            return None
+
+        mri_suite_count = self._resolve_explicit_count_override_for_special_feature(
+            subtype_config=subtype_config,
+            feature_id="mri_suite",
+            override_sources=override_sources,
+        )
+        ct_suite_count = self._resolve_explicit_count_override_for_special_feature(
+            subtype_config=subtype_config,
+            feature_id="ct_suite",
+            override_sources=override_sources,
+        )
+
+        total_specified_modality_suites = int((mri_suite_count or 0) + (ct_suite_count or 0))
+        has_explicit_modality_counts = total_specified_modality_suites > 0
+        unit_label = (
+            "specified modality suites"
+            if has_explicit_modality_counts
+            else "unspecified modality program"
+        )
+        unit_count_source = (
+            "explicit_modality_counts"
+            if has_explicit_modality_counts
+            else "unspecified_modality_program"
+        )
+
+        return {
+            "state": unit_count_source,
+            "has_explicit_modality_counts": has_explicit_modality_counts,
+            "mri_suites": mri_suite_count,
+            "ct_suites": ct_suite_count,
+            "total_specified_modality_suites": (
+                total_specified_modality_suites if has_explicit_modality_counts else None
+            ),
+            "unit_label": unit_label,
+            "unit_count_source": unit_count_source,
+        }
+
+    def _resolve_imaging_center_auto_pricing_feature_counts(
+        self,
+        *,
+        building_type: BuildingType,
+        subtype: Any,
+        subtype_config: Any,
+        override_sources: Optional[List[Dict[str, Any]]],
+    ) -> Dict[str, int]:
+        if building_type != BuildingType.HEALTHCARE:
+            return {}
+
+        visible_unit_contract = self._resolve_imaging_center_visible_unit_contract(
+            subtype_config=subtype_config,
+            subtype_key=subtype,
+            override_sources=override_sources,
+        )
+        if not visible_unit_contract or not visible_unit_contract.get("has_explicit_modality_counts"):
+            return {}
+
+        auto_pricing_counts: Dict[str, int] = {}
+        mri_suite_count = visible_unit_contract.get("mri_suites")
+        ct_suite_count = visible_unit_contract.get("ct_suites")
+        if isinstance(mri_suite_count, int) and mri_suite_count > 0:
+            auto_pricing_counts["mri_suite"] = mri_suite_count
+        if isinstance(ct_suite_count, int) and ct_suite_count > 0:
+            auto_pricing_counts["ct_suite"] = ct_suite_count
+        return auto_pricing_counts
 
     def _resolve_numeric_drive_thru_auto_pricing_feature(
         self,
@@ -3126,6 +3295,16 @@ class UnifiedEngine:
                 subtype_config=subtype_config,
                 override_sources=override_sources,
             )
+        if subtype_normalized == "imaging_center":
+            visible_unit_contract = self._resolve_imaging_center_visible_unit_contract(
+                subtype_config=subtype_config,
+                subtype_key=subtype_key,
+                override_sources=override_sources,
+            )
+            if visible_unit_contract and visible_unit_contract.get("has_explicit_modality_counts"):
+                total_specified = visible_unit_contract.get("total_specified_modality_suites")
+                if isinstance(total_specified, int) and total_specified > 0:
+                    return total_specified
         return None
 
     def _resolve_surgical_center_default_operating_room_baseline(
@@ -4690,6 +4869,18 @@ class UnifiedEngine:
             healthcare_profile
             and getattr(subtype_config, "facility_metrics_profile", None) == "healthcare_outpatient"
         )
+        imaging_visible_unit_contract = None
+        imaging_has_explicit_modality_counts = False
+        if healthcare_profile:
+            imaging_visible_unit_contract = self._resolve_imaging_center_visible_unit_contract(
+                subtype_config=subtype_config,
+                subtype_key=subtype,
+                override_sources=unit_override_sources,
+            )
+            imaging_has_explicit_modality_counts = bool(
+                imaging_visible_unit_contract
+                and imaging_visible_unit_contract.get("has_explicit_modality_counts")
+            )
         resolved_multifamily_units: Optional[int] = None
         resolved_multifamily_units_source: Optional[str] = None
         if building_enum == BuildingType.MULTIFAMILY:
@@ -4709,7 +4900,26 @@ class UnifiedEngine:
         units = calculations.get('units')
         if building_enum == BuildingType.MULTIFAMILY and resolved_multifamily_units is not None:
             units = resolved_multifamily_units
-        if not units:
+        if healthcare_profile and imaging_visible_unit_contract is not None:
+            imaging_unit_label = str(imaging_visible_unit_contract.get("unit_label") or "units")
+            calculations["unit_label"] = imaging_unit_label
+            calculations["unit_type"] = imaging_unit_label
+            calculations["unit_count_source"] = imaging_visible_unit_contract.get("unit_count_source")
+            if imaging_has_explicit_modality_counts:
+                total_specified = imaging_visible_unit_contract.get("total_specified_modality_suites")
+                if isinstance(total_specified, int) and total_specified > 0:
+                    units = total_specified
+                    calculations["units"] = total_specified
+                    calculations["resolved_unit_count"] = total_specified
+                else:
+                    units = 0
+            else:
+                units = 0
+                calculations.pop("units", None)
+                calculations.pop("resolved_unit_count", None)
+                calculations.pop("cost_per_unit", None)
+                calculations.pop("revenue_per_unit", None)
+        elif not units:
             units = 0
             if (
                 building_enum == BuildingType.MULTIFAMILY
@@ -4769,7 +4979,11 @@ class UnifiedEngine:
         
         # Surface per-unit data for downstream cards (MF heavy).
         operational_metrics.setdefault('per_unit', {})
-        if healthcare_profile and (not units or units <= 0):
+        if (
+            healthcare_profile
+            and (not units or units <= 0)
+            and not (imaging_visible_unit_contract is not None and not imaging_has_explicit_modality_counts)
+        ):
             units = self._resolve_healthcare_units(
                 subtype_config,
                 square_footage,
@@ -4785,24 +4999,40 @@ class UnifiedEngine:
         if building_enum == BuildingType.MULTIFAMILY and resolved_multifamily_units is not None:
             canonical_units = resolved_multifamily_units
             canonical_units_source = resolved_multifamily_units_source or 'derived'
+        elif imaging_visible_unit_contract is not None:
+            canonical_units = derived_units
+            canonical_units_source = str(
+                imaging_visible_unit_contract.get("unit_count_source") or "derived"
+            )
         else:
             canonical_units = derived_units
             canonical_units_source = 'derived'
-        operational_metrics['per_unit']['units'] = canonical_units
         operational_metrics['per_unit']['units_source'] = canonical_units_source
         if canonical_units and canonical_units > 0:
+            operational_metrics['per_unit']['units'] = canonical_units
+        else:
+            operational_metrics['per_unit'].pop('units', None)
+        if canonical_units and canonical_units > 0:
             calculations['units'] = canonical_units
-            if building_enum == BuildingType.MULTIFAMILY:
+            if building_enum == BuildingType.MULTIFAMILY or imaging_visible_unit_contract is not None:
                 calculations['resolved_unit_count'] = canonical_units
                 calculations['unit_count_source'] = canonical_units_source
-            cost_per_unit = total_cost / canonical_units
-            annual_revenue_per_unit = annual_revenue / canonical_units
-            monthly_revenue_per_unit = annual_revenue_per_unit / 12.0
-            operational_metrics['per_unit'].update({
-                'cost_per_unit': round(cost_per_unit, 2),
-                'annual_revenue_per_unit': round(annual_revenue_per_unit, 2),
-                'monthly_revenue_per_unit': round(monthly_revenue_per_unit, 2),
-            })
+            if imaging_visible_unit_contract is None:
+                cost_per_unit = total_cost / canonical_units
+                annual_revenue_per_unit = annual_revenue / canonical_units
+                monthly_revenue_per_unit = annual_revenue_per_unit / 12.0
+                operational_metrics['per_unit'].update({
+                    'cost_per_unit': round(cost_per_unit, 2),
+                    'annual_revenue_per_unit': round(annual_revenue_per_unit, 2),
+                    'monthly_revenue_per_unit': round(monthly_revenue_per_unit, 2),
+                })
+            else:
+                operational_metrics['per_unit'].pop('cost_per_unit', None)
+                operational_metrics['per_unit'].pop('annual_revenue_per_unit', None)
+                operational_metrics['per_unit'].pop('monthly_revenue_per_unit', None)
+        elif imaging_visible_unit_contract is not None:
+            calculations.pop('units', None)
+            calculations.pop('resolved_unit_count', None)
 
         operating_model = self.calculate_operating_model_for_display(
             building_type=building_type,
@@ -5981,6 +6211,93 @@ class UnifiedEngine:
                 )
             financial_metrics_cfg = self._get_healthcare_financial_metrics(subtype_config)
             operational_profile = self._resolve_healthcare_operational_profile(subtype_normalized, subtype_config)
+            imaging_visible_unit_contract = self._resolve_imaging_center_visible_unit_contract(
+                subtype_config=subtype_config,
+                subtype_key=subtype_normalized,
+                override_sources=unit_override_sources,
+            )
+            if imaging_visible_unit_contract is not None:
+                per_unit_payload = operational_metrics.setdefault("per_unit", {})
+                unit_label = str(imaging_visible_unit_contract.get("unit_label") or "units")
+                per_unit_payload.update(
+                    {
+                        "unit_label": unit_label,
+                        "unit_type": unit_label,
+                        "units_source": imaging_visible_unit_contract.get("unit_count_source"),
+                        "imaging_modality_program": dict(imaging_visible_unit_contract),
+                    }
+                )
+
+                revenue_per_sf = annual_revenue / square_footage if square_footage else None
+                labor_ratio_pct = (labor_cost / annual_revenue * 100.0) if annual_revenue else None
+                revenue_block: Dict[str, str] = {}
+                if revenue_per_sf is not None:
+                    revenue_block["Revenue per SF"] = f"${revenue_per_sf:,.0f}"
+                if labor_ratio_pct is not None:
+                    revenue_block["Labor Cost Ratio"] = f"{labor_ratio_pct:.0f}%"
+                revenue_block["Operating Margin"] = f"{operating_margin * 100:.1f}%"
+                operational_metrics["revenue"] = revenue_block
+
+                if imaging_visible_unit_contract.get("has_explicit_modality_counts"):
+                    total_specified = imaging_visible_unit_contract.get("total_specified_modality_suites")
+                    mri_suites = imaging_visible_unit_contract.get("mri_suites")
+                    ct_suites = imaging_visible_unit_contract.get("ct_suites")
+                    if isinstance(total_specified, int) and total_specified > 0:
+                        per_unit_payload["units"] = total_specified
+
+                    staffing_rows: List[Dict[str, str]] = []
+                    if isinstance(mri_suites, int) and mri_suites > 0:
+                        staffing_rows.append({"label": "MRI Suites", "value": str(mri_suites)})
+                    if isinstance(ct_suites, int) and ct_suites > 0:
+                        staffing_rows.append({"label": "CT Suites", "value": str(ct_suites)})
+                    if isinstance(total_specified, int) and total_specified > 0:
+                        staffing_rows.append(
+                            {
+                                "label": "Total Specified Modality Suites",
+                                "value": str(total_specified),
+                            }
+                        )
+                    operational_metrics["staffing"] = staffing_rows
+                    operational_metrics["kpis"] = [
+                        {
+                            "label": "Specified Modality Suites",
+                            "value": str(total_specified or 0),
+                            "color": "green",
+                        },
+                        {
+                            "label": "Modality Utilization",
+                            "value": "Explicit MRI/CT counts",
+                            "color": "green",
+                        },
+                        {
+                            "label": "Modality Program Efficiency",
+                            "value": "Visible units aligned",
+                            "color": "green",
+                        },
+                    ]
+                else:
+                    per_unit_payload.pop("units", None)
+                    operational_metrics["staffing"] = [
+                        {"label": "Modality Program", "value": "Unspecified"},
+                        {
+                            "label": "Visible Unit Contract",
+                            "value": "MRI/CT counts required",
+                        },
+                    ]
+                    operational_metrics["kpis"] = [
+                        {
+                            "label": "Modality Utilization",
+                            "value": "Unspecified",
+                            "color": "yellow",
+                        },
+                        {
+                            "label": "Modality Program Efficiency",
+                            "value": "Awaiting MRI/CT counts",
+                            "color": "yellow",
+                        },
+                    ]
+                return operational_metrics
+
             resolved_units = self._resolve_healthcare_units(
                 subtype_config,
                 square_footage,

@@ -2028,8 +2028,12 @@ def test_healthcare_runtime_emits_utilization_and_efficiency_metrics_for_all_sub
 
         assert staffing, f"{subtype} must emit staffing metrics"
         assert kpis, f"{subtype} must emit KPI metrics"
-        assert per_unit.get("units", 0) >= 1, f"{subtype} must emit non-zero unit count"
         assert facility_metrics.get("type") == "healthcare", f"{subtype} must emit healthcare facility metrics"
+        if subtype == "imaging_center":
+            assert per_unit.get("units") in (None, 0), "imaging_center should suppress numeric unit counts when modality counts are unspecified"
+            assert facility_metrics.get("unit_label") == "unspecified modality program"
+        else:
+            assert per_unit.get("units", 0) >= 1, f"{subtype} must emit non-zero unit count"
 
         kpi_labels = [str(entry.get("label", "")) for entry in kpis if isinstance(entry, dict)]
         assert any("Utilization" in label or "Occupancy" in label for label in kpi_labels), (

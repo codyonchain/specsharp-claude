@@ -22,12 +22,23 @@ interface FacilityMetricEntry {
   unit?: string;
 }
 
+interface ImagingModalityProgram {
+  state?: string;
+  hasExplicitModalityCounts?: boolean;
+  mriSuites?: number;
+  ctSuites?: number;
+  totalSpecifiedModalitySuites?: number;
+  unitLabel?: string;
+  unitCountSource?: string;
+}
+
 interface FacilityMetrics {
   units?: number;
   costPerUnit?: number;
   revenuePerUnit?: number;
   monthlyRevenuePerUnit?: number;
   unitLabel?: string;
+  unitCountSource?: string;
   buildingSize?: number;
   costPerSf?: number;
   revenuePerSf?: number;
@@ -41,6 +52,7 @@ interface FacilityMetrics {
   officeNoiPerSf?: number;
   type?: string;
   entries?: FacilityMetricEntry[];
+  imagingModalityProgram?: ImagingModalityProgram;
   restaurantSalesPerSf?: number;
   restaurantNoiPerSf?: number;
   restaurantCostPerSf?: number;
@@ -809,6 +821,50 @@ export class BackendDataMapper {
       typeof facilityMetricsPayload?.unit_label === 'string'
         ? facilityMetricsPayload.unit_label
         : undefined;
+    const payloadUnitCountSource =
+      typeof facilityMetricsPayload?.unit_count_source === 'string'
+        ? facilityMetricsPayload.unit_count_source
+        : typeof facilityMetricsPayload?.unitCountSource === 'string'
+          ? facilityMetricsPayload.unitCountSource
+          : undefined;
+    const imagingModalityProgramPayload =
+      facilityMetricsPayload?.imaging_modality_program ?? facilityMetricsPayload?.imagingModalityProgram;
+    const imagingModalityProgram: ImagingModalityProgram | undefined =
+      imagingModalityProgramPayload && typeof imagingModalityProgramPayload === 'object'
+        ? {
+            state:
+              typeof (imagingModalityProgramPayload as any)?.state === 'string'
+                ? (imagingModalityProgramPayload as any).state
+                : undefined,
+            hasExplicitModalityCounts:
+              (imagingModalityProgramPayload as any)?.has_explicit_modality_counts === true ||
+              (imagingModalityProgramPayload as any)?.hasExplicitModalityCounts === true,
+            mriSuites: toFiniteNumber(
+              (imagingModalityProgramPayload as any)?.mri_suites ??
+              (imagingModalityProgramPayload as any)?.mriSuites
+            ),
+            ctSuites: toFiniteNumber(
+              (imagingModalityProgramPayload as any)?.ct_suites ??
+              (imagingModalityProgramPayload as any)?.ctSuites
+            ),
+            totalSpecifiedModalitySuites: toFiniteNumber(
+              (imagingModalityProgramPayload as any)?.total_specified_modality_suites ??
+              (imagingModalityProgramPayload as any)?.totalSpecifiedModalitySuites
+            ),
+            unitLabel:
+              typeof (imagingModalityProgramPayload as any)?.unit_label === 'string'
+                ? (imagingModalityProgramPayload as any).unit_label
+                : typeof (imagingModalityProgramPayload as any)?.unitLabel === 'string'
+                  ? (imagingModalityProgramPayload as any).unitLabel
+                  : undefined,
+            unitCountSource:
+              typeof (imagingModalityProgramPayload as any)?.unit_count_source === 'string'
+                ? (imagingModalityProgramPayload as any).unit_count_source
+                : typeof (imagingModalityProgramPayload as any)?.unitCountSource === 'string'
+                  ? (imagingModalityProgramPayload as any).unitCountSource
+                  : undefined,
+          }
+        : undefined;
     const restaurantFacilityMetrics: FacilityMetrics | undefined = isRestaurantFacility
       ? (() => {
           const metricEntries = Array.isArray(facilityMetricsPayload?.metrics)
@@ -885,6 +941,8 @@ export class BackendDataMapper {
                 ? monthlyRevenuePerUnit
                 : undefined),
           unitLabel: payloadUnitLabel ?? unitLabel,
+          unitCountSource: payloadUnitCountSource,
+          imagingModalityProgram,
         }
       : undefined;
 

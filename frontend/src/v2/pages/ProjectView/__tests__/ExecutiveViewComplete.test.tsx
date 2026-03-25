@@ -772,6 +772,159 @@ const buildCrossTypeProject = (
   return project;
 };
 
+const buildImagingCenterProject = (options?: {
+  mriSuites?: number;
+  ctSuites?: number;
+}) => {
+  const project = buildCrossTypeProject(
+    "healthcare",
+    "imaging_center",
+    "healthcare_imaging_center_v1"
+  );
+  const mriSuites = options?.mriSuites ?? 0;
+  const ctSuites = options?.ctSuites ?? 0;
+  const hasExplicitModalityCounts = mriSuites + ctSuites > 0;
+  const unitLabel = hasExplicitModalityCounts
+    ? "specified modality suites"
+    : "unspecified modality program";
+  const unitCountSource = hasExplicitModalityCounts
+    ? "explicit_modality_counts"
+    : "unspecified_modality_program";
+  const totalSpecifiedModalitySuites = hasExplicitModalityCounts ? mriSuites + ctSuites : null;
+  const imagingModalityProgram = {
+    state: unitCountSource,
+    has_explicit_modality_counts: hasExplicitModalityCounts,
+    mri_suites: hasExplicitModalityCounts && mriSuites > 0 ? mriSuites : null,
+    ct_suites: hasExplicitModalityCounts && ctSuites > 0 ? ctSuites : null,
+    total_specified_modality_suites: totalSpecifiedModalitySuites,
+    unit_label: unitLabel,
+    unit_count_source: unitCountSource,
+  };
+
+  project.analysis.calculations.facility_metrics = {
+    type: "healthcare",
+    unit_label: unitLabel,
+    unit_count_source: unitCountSource,
+    imaging_modality_program: imagingModalityProgram,
+    ...(hasExplicitModalityCounts
+      ? {
+          units: totalSpecifiedModalitySuites,
+          entries: [
+            ...(mriSuites > 0
+              ? [{ id: "mri_suites", label: "MRI Suites", value: mriSuites, unit: "suites" }]
+              : []),
+            ...(ctSuites > 0
+              ? [{ id: "ct_suites", label: "CT Suites", value: ctSuites, unit: "suites" }]
+              : []),
+            {
+              id: "total_specified_modality_suites",
+              label: "Total Specified Modality Suites",
+              value: totalSpecifiedModalitySuites,
+              unit: "suites",
+            },
+          ],
+        }
+      : {}),
+  };
+  project.analysis.calculations.operational_metrics = {
+    staffing: hasExplicitModalityCounts
+      ? [
+          ...(mriSuites > 0 ? [{ label: "MRI Suites", value: String(mriSuites) }] : []),
+          ...(ctSuites > 0 ? [{ label: "CT Suites", value: String(ctSuites) }] : []),
+          {
+            label: "Total Specified Modality Suites",
+            value: String(totalSpecifiedModalitySuites),
+          },
+        ]
+      : [
+          { label: "Modality Program", value: "Unspecified" },
+          { label: "Visible Unit Contract", value: "MRI/CT counts required" },
+        ],
+    revenue: {
+      "Revenue per SF": "$433",
+      "Labor Cost Ratio": "32%",
+      "Operating Margin": "22.0%",
+    },
+    kpis: hasExplicitModalityCounts
+      ? [
+          { label: "Specified Modality Suites", value: String(totalSpecifiedModalitySuites), color: "green" },
+          { label: "Modality Utilization", value: "Explicit MRI/CT counts", color: "green" },
+          { label: "Modality Program Efficiency", value: "Visible units aligned", color: "green" },
+        ]
+      : [
+          { label: "Modality Utilization", value: "Unspecified", color: "yellow" },
+          { label: "Modality Program Efficiency", value: "Awaiting MRI/CT counts", color: "yellow" },
+        ],
+    per_unit: {
+      unit_label: unitLabel,
+      unit_type: unitLabel,
+      units_source: unitCountSource,
+      imaging_modality_program: imagingModalityProgram,
+      ...(hasExplicitModalityCounts ? { units: totalSpecifiedModalitySuites } : {}),
+    },
+  };
+  project.analysis.calculations.ownership_analysis.operational_metrics =
+    project.analysis.calculations.operational_metrics;
+  project.analysis.calculations.project_info = {
+    ...project.analysis.calculations.project_info,
+    unit_label: unitLabel,
+    unit_type: unitLabel,
+    unit_count_source: unitCountSource,
+    imaging_modality_program: imagingModalityProgram,
+    ...(hasExplicitModalityCounts ? { unit_count: totalSpecifiedModalitySuites } : {}),
+  };
+  if (!hasExplicitModalityCounts) {
+    delete project.analysis.calculations.project_info.unit_count;
+  }
+  project.analysis.calculations.unit_label = unitLabel;
+  project.analysis.calculations.unit_type = unitLabel;
+  if (hasExplicitModalityCounts) {
+    project.analysis.calculations.resolved_unit_count = totalSpecifiedModalitySuites;
+  } else {
+    delete project.analysis.calculations.resolved_unit_count;
+  }
+  return project;
+};
+
+const buildFetchedProjectViewProject = (project: any) => {
+  const parsedInput = {
+    ...(project.analysis?.parsed_input || {}),
+  };
+  if (
+    typeof parsedInput.building_subtype !== "string" &&
+    typeof parsedInput.subtype === "string"
+  ) {
+    parsedInput.building_subtype = parsedInput.subtype;
+  }
+
+  const calculationData = {
+    ...(project.analysis?.calculations || {}),
+    parsed_input: parsedInput,
+    request_data: {
+      ...(project.analysis?.calculations?.request_data || {}),
+      building_type: parsedInput.building_type,
+      subtype: parsedInput.subtype,
+      building_subtype: parsedInput.building_subtype,
+      location: parsedInput.location,
+      square_footage: parsedInput.square_footage,
+      floors: parsedInput.floors,
+    },
+  };
+
+  return {
+    ...project,
+    building_type:
+      parsedInput.building_type || project.analysis?.calculations?.project_info?.building_type,
+    subtype: parsedInput.subtype || project.analysis?.calculations?.project_info?.subtype,
+    calculation_data: calculationData,
+    roi_analysis: calculationData.roi_analysis,
+    revenue_analysis: calculationData.revenue_analysis,
+    analysis: {
+      calculations: calculationData,
+    },
+  };
+};
+
 const buildCrossTypeDealShieldViewModel = (
   profileId: string,
   decisionStatus: string,
@@ -3455,6 +3608,81 @@ describe("ExecutiveViewComplete", () => {
     expect(screen.queryByText("Soft Costs % of Total")).not.toBeInTheDocument();
     expect(screen.queryByText("Revenue Efficiency")).not.toBeInTheDocument();
     expect(screen.queryByText("Target KPIs")).not.toBeInTheDocument();
+  });
+
+  it("renders Imaging Center MRI-only cases with modality counts only and no fake per-suite economics", () => {
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildFetchedProjectViewProject(buildImagingCenterProject({ mriSuites: 2 }))}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "healthcare_imaging_center_v1",
+            "Needs Work",
+            "tight_flex_band"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getAllByText("MRI Suites").length).toBeGreaterThan(0);
+    expect(screen.queryByText("CT Suites")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Total Specified Modality Suites").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Cost per specified modality suites")).not.toBeInTheDocument();
+    expect(screen.queryByText("Revenue per specified modality suites")).not.toBeInTheDocument();
+    expect(screen.queryByText("Total Scan Rooms")).not.toBeInTheDocument();
+    expect(screen.queryByText(/scan rooms/i)).not.toBeInTheDocument();
+  });
+
+  it("renders Imaging Center modality counts without surfacing Total Scan Rooms when explicit MRI and CT counts are present", () => {
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildFetchedProjectViewProject(buildImagingCenterProject({ mriSuites: 2, ctSuites: 1 }))}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "healthcare_imaging_center_v1",
+            "Needs Work",
+            "tight_flex_band"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("MRI Suites")).toBeInTheDocument();
+    expect(screen.getByText("CT Suites")).toBeInTheDocument();
+    expect(screen.getAllByText("Total Specified Modality Suites").length).toBeGreaterThan(0);
+    expect(screen.getByText("MRI 2 • CT 1")).toBeInTheDocument();
+    expect(screen.queryByText("Cost per specified modality suites")).not.toBeInTheDocument();
+    expect(screen.queryByText("Revenue per specified modality suites")).not.toBeInTheDocument();
+    expect(screen.queryByText("Total Scan Rooms")).not.toBeInTheDocument();
+    expect(screen.queryByText(/scan rooms/i)).not.toBeInTheDocument();
+  });
+
+  it("renders Imaging Center no-count cases as an unspecified modality program instead of a fake room total", () => {
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildFetchedProjectViewProject(buildImagingCenterProject())}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "healthcare_imaging_center_v1",
+            "Needs Work",
+            "tight_flex_band"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getAllByText("Modality Program").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Unspecified").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(
+        "Imaging Center visible unit counts appear only when MRI or CT suite counts are provided."
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Total Specified Modality Suites")).not.toBeInTheDocument();
+    expect(screen.queryByText("Cost per unspecified modality program")).not.toBeInTheDocument();
+    expect(screen.queryByText("Revenue per unspecified modality program")).not.toBeInTheDocument();
+    expect(screen.queryByText("Total Scan Rooms")).not.toBeInTheDocument();
+    expect(screen.queryByText(/scan rooms/i)).not.toBeInTheDocument();
   });
 
   it("renders hotel-native operating model metrics for hospitality projects", () => {

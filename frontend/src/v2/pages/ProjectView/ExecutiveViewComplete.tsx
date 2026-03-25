@@ -237,13 +237,66 @@ const buildSafeAnalysis = (project?: Project | null): AnyRecord => {
     projectRecord.calculations,
     projectRecord
   );
-  const parsedInput = coalesceRecord(
-    rawAnalysis.parsed_input,
-    rawAnalysis.request_payload?.parsed_input,
-    projectRecord.parsed_input,
-    projectRecord.form_state,
-    projectRecord.form_inputs
+  const projectInfo = coalesceRecord(
+    calculations.project_info,
+    calculations.projectInfo
   );
+  const fetchedProjectContext = (() => {
+    const hydrated: AnyRecord = {};
+    const buildingType =
+      typeof projectRecord.building_type === 'string'
+        ? projectRecord.building_type
+        : typeof projectRecord.buildingType === 'string'
+          ? projectRecord.buildingType
+          : typeof projectInfo.building_type === 'string'
+            ? projectInfo.building_type
+            : typeof projectInfo.buildingType === 'string'
+              ? projectInfo.buildingType
+              : undefined;
+    const subtype =
+      typeof projectRecord.subtype === 'string'
+        ? projectRecord.subtype
+        : typeof projectRecord.building_subtype === 'string'
+          ? projectRecord.building_subtype
+          : typeof projectRecord.buildingSubtype === 'string'
+            ? projectRecord.buildingSubtype
+            : typeof projectInfo.subtype === 'string'
+              ? projectInfo.subtype
+              : typeof projectInfo.building_subtype === 'string'
+                ? projectInfo.building_subtype
+                : typeof projectInfo.buildingSubtype === 'string'
+                  ? projectInfo.buildingSubtype
+                  : undefined;
+    if (buildingType) {
+      hydrated.building_type = buildingType;
+    }
+    if (subtype) {
+      hydrated.subtype = subtype;
+      hydrated.building_subtype = subtype;
+    }
+    return hydrated;
+  })();
+  const parsedInput = {
+    ...fetchedProjectContext,
+    ...toRecord(projectRecord.form_inputs),
+    ...toRecord(projectRecord.formInputs),
+    ...toRecord(projectRecord.form_state),
+    ...toRecord(projectRecord.formState),
+    ...toRecord(projectRecord.request_data),
+    ...toRecord(projectRecord.requestData),
+    ...toRecord(projectRecord.parsed_input),
+    ...toRecord(projectRecord.parsedInput),
+    ...toRecord(calculations.request_data),
+    ...toRecord(calculations.requestData),
+    ...toRecord(calculations.parsed_input),
+    ...toRecord(calculations.parsedInput),
+    ...toRecord(rawAnalysis.request_payload?.parsed_input),
+    ...toRecord(rawAnalysis.request_payload?.parsedInput),
+    ...toRecord(rawAnalysis.requestPayload?.parsed_input),
+    ...toRecord(rawAnalysis.requestPayload?.parsedInput),
+    ...toRecord(rawAnalysis.parsed_input),
+    ...toRecord(rawAnalysis.parsedInput),
+  };
 
   return {
     ...rawAnalysis,
@@ -1257,6 +1310,46 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
       : typeof facilityMetrics?.costPerSf === 'number'
         ? facilityMetrics.costPerSf
         : undefined;
+  const imagingModalityProgram = isImagingCenter
+    ? coalesceRecord(
+        (facilityMetrics as AnyRecord)?.imagingModalityProgram,
+        (facilityMetrics as AnyRecord)?.imaging_modality_program,
+        calculationsRecord?.project_info?.imagingModalityProgram,
+        calculationsRecord?.project_info?.imaging_modality_program
+      )
+    : {};
+  const imagingProgramState =
+    typeof imagingModalityProgram?.state === 'string' ? imagingModalityProgram.state : undefined;
+  const imagingMriSuites = toFiniteNumber(
+    imagingModalityProgram?.mriSuites ?? imagingModalityProgram?.mri_suites
+  );
+  const imagingCtSuites = toFiniteNumber(
+    imagingModalityProgram?.ctSuites ?? imagingModalityProgram?.ct_suites
+  );
+  const imagingTotalSpecifiedSuites = toFiniteNumber(
+    imagingModalityProgram?.totalSpecifiedModalitySuites ??
+    imagingModalityProgram?.total_specified_modality_suites
+  );
+  const imagingHasExplicitModalityCounts =
+    isImagingCenter &&
+    imagingProgramState === 'explicit_modality_counts' &&
+    typeof imagingTotalSpecifiedSuites === 'number' &&
+    imagingTotalSpecifiedSuites > 0;
+  const imagingProgramSummary = imagingHasExplicitModalityCounts
+    ? [
+        typeof imagingMriSuites === 'number' && imagingMriSuites > 0
+          ? `MRI ${imagingMriSuites.toLocaleString()}`
+          : null,
+        typeof imagingCtSuites === 'number' && imagingCtSuites > 0
+          ? `CT ${imagingCtSuites.toLocaleString()}`
+          : null,
+      ]
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+        .join(' • ')
+    : 'Visible unit counts appear only when MRI or CT suite counts are provided.';
+  const imagingUnitContractLabel = imagingHasExplicitModalityCounts
+    ? 'Specified Modality Suites'
+    : 'Modality Program';
   const hasRestaurantSalesPerSf = typeof restaurantSalesPerSf === 'number' && Number.isFinite(restaurantSalesPerSf);
   const hasRestaurantNoiPerSf = typeof restaurantNoiPerSf === 'number' && Number.isFinite(restaurantNoiPerSf);
   const hasRestaurantCostPerSf = typeof restaurantCostPerSf === 'number' && Number.isFinite(restaurantCostPerSf);
@@ -2364,6 +2457,54 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                   </div>
                 </div>
               </div>
+            ) : isImagingCenter ? (
+              imagingHasExplicitModalityCounts ? (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs text-slate-700">
+                  {typeof imagingMriSuites === 'number' && imagingMriSuites > 0 ? (
+                    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        MRI Suites
+                      </div>
+                      <div className="text-2xl font-semibold">
+                        {imagingMriSuites.toLocaleString()}
+                      </div>
+                      <div className="text-[11px] text-slate-500">Explicitly specified in scope</div>
+                    </div>
+                  ) : null}
+                  {typeof imagingCtSuites === 'number' && imagingCtSuites > 0 ? (
+                    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        CT Suites
+                      </div>
+                      <div className="text-2xl font-semibold">
+                        {imagingCtSuites.toLocaleString()}
+                      </div>
+                      <div className="text-[11px] text-slate-500">Explicitly specified in scope</div>
+                    </div>
+                  ) : null}
+                  <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Total Specified Modality Suites
+                    </div>
+                    <div className="text-2xl font-semibold">
+                      {typeof imagingTotalSpecifiedSuites === 'number'
+                        ? imagingTotalSpecifiedSuites.toLocaleString()
+                        : '—'}
+                    </div>
+                    <div className="text-[11px] text-slate-500">Visible Imaging unit contract</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-5 text-slate-700 shadow-sm">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                    Modality Program
+                  </div>
+                  <div className="mt-2 text-2xl font-semibold text-slate-900">Unspecified</div>
+                  <div className="mt-2 text-xs text-slate-600">
+                    Imaging Center visible unit counts appear only when MRI or CT suite counts are provided.
+                  </div>
+                </div>
+              )
             ) : isOfficeProject ? (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs text-slate-700">
                 <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
@@ -2519,6 +2660,45 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                         : '—'}
                     </span>
                   </div>
+                </div>
+              </>
+            ) : isImagingCenter ? (
+              <>
+                <p className="text-3xl font-bold text-gray-900">
+                  {imagingHasExplicitModalityCounts && typeof imagingTotalSpecifiedSuites === 'number'
+                    ? formatters.units(imagingTotalSpecifiedSuites)
+                    : 'Unspecified'}
+                </p>
+                <p className="text-sm text-gray-500 mb-4">{imagingUnitContractLabel}</p>
+                <div className="space-y-2 pt-4 border-t">
+                  {imagingHasExplicitModalityCounts ? (
+                    <>
+                      {typeof imagingMriSuites === 'number' && imagingMriSuites > 0 ? (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">MRI Suites</span>
+                          <span className="font-bold">{imagingMriSuites.toLocaleString()}</span>
+                        </div>
+                      ) : null}
+                      {typeof imagingCtSuites === 'number' && imagingCtSuites > 0 ? (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">CT Suites</span>
+                          <span className="font-bold">{imagingCtSuites.toLocaleString()}</span>
+                        </div>
+                      ) : null}
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Total Specified Modality Suites</span>
+                        <span className="font-bold">
+                          {typeof imagingTotalSpecifiedSuites === 'number'
+                            ? imagingTotalSpecifiedSuites.toLocaleString()
+                            : '—'}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-gray-600">
+                      Imaging Center visible unit counts appear only when MRI or CT suite counts are provided.
+                    </p>
+                  )}
                 </div>
               </>
             ) : (
@@ -3575,6 +3755,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">
                   {isIndustrialProject
                     ? 'INVESTMENT PER SF'
+                    : isImagingCenter
+                      ? 'INVESTMENT PER SF'
                     : isRestaurantProject
                       ? 'COST PER SF'
                       : isLuxuryMultifamilyProject
@@ -3586,6 +3768,10 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                     ? typeof industrialCostPerSfValue === 'number'
                       ? formatters.costPerSF(industrialCostPerSfValue)
                       : 'N/A'
+                    : isImagingCenter
+                      ? typeof displayData.costPerSF === 'number'
+                        ? formatters.costPerSF(displayData.costPerSF)
+                        : 'N/A'
                     : isRestaurantProject
                       ? restaurantFooterCostPerSfText
                       : displayData.costPerUnit > 0
@@ -3595,6 +3781,8 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                 <p className="text-sm text-slate-500">
                   {isIndustrialProject
                     ? 'Total project cost normalized by gross square footage'
+                    : isImagingCenter
+                      ? 'Square-foot basis preserved while visible units follow MRI/CT suite counts'
                     : isRestaurantProject
                       ? 'Total project cost normalized by square footage'
                       : isLuxuryMultifamilyProject
@@ -3640,6 +3828,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
               !useHotelNativeFooterMetrics &&
               parsedBuildingType !== 'industrial' &&
               parsedBuildingType !== 'restaurant' &&
+              !isImagingCenter &&
               typeof displayData.units === 'number' &&
               displayData.units > 0;
             if (!showTotalUnitsFooter) return null;
@@ -3649,9 +3838,6 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
               }
               if (isHealthcareOutpatient) {
                 return 'Total Exam Rooms';
-              }
-              if (isImagingCenter) {
-                return 'Total Scan Rooms';
               }
               if (isSurgicalCenter) {
                 return 'Total Operating Rooms';
@@ -3672,6 +3858,19 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
             </div>
             );
           })()}
+          {isImagingCenter ? (
+            <div className="text-center">
+              <p className="text-xs text-slate-400 uppercase tracking-wider mb-3">
+                {imagingHasExplicitModalityCounts ? 'SPECIFIED MODALITY SUITES' : 'MODALITY PROGRAM'}
+              </p>
+              <p className="text-3xl font-bold text-white">
+                {imagingHasExplicitModalityCounts && typeof imagingTotalSpecifiedSuites === 'number'
+                  ? imagingTotalSpecifiedSuites.toLocaleString()
+                  : 'Unspecified'}
+              </p>
+              <p className="text-sm text-slate-500">{imagingProgramSummary}</p>
+            </div>
+          ) : null}
           </div>
         </div>
       </section>
