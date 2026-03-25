@@ -48,8 +48,6 @@ interface FacilityMetrics {
   occupancy?: number;
   revpar?: number;
   costPerKey?: number;
-  officeRentPerSf?: number;
-  officeNoiPerSf?: number;
   type?: string;
   entries?: FacilityMetricEntry[];
   imagingModalityProgram?: ImagingModalityProgram;
@@ -740,7 +738,7 @@ export class BackendDataMapper {
       toFiniteNumber(calculations?.total_cost) ??
       toFiniteNumber(calculations?.investment_required) ??
       undefined;
-    const officeRentPerSf = hasActiveOfficeFacilityMetricsPayload
+    const officeRevenuePerSf = hasActiveOfficeFacilityMetricsPayload
       ? officeFacilityMetricValues['revenue_per_sf']
       : (
           toFiniteNumber(calculations?.rent_per_sf) ??
@@ -770,10 +768,8 @@ export class BackendDataMapper {
       ? {
           buildingSize: officeBuildingSize,
           costPerSf: officeCostPerSf,
-          revenuePerSf: officeRentPerSf,
+          revenuePerSf: officeRevenuePerSf,
           noiPerSf: officeNoiPerSf,
-          officeRentPerSf,
-          officeNoiPerSf,
           entries:
             hasActiveOfficeFacilityMetricsPayload && officeFacilityMetricEntries.length > 0
               ? officeFacilityMetricEntries

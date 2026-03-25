@@ -2539,11 +2539,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-md shadow-slate-100 space-y-1">
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    Rent & NOI per SF
+                    Revenue & NOI per SF
                   </div>
                   <div className="mt-2 space-y-1">
                     <div className="flex items-baseline justify-between">
-                      <span className="text-[11px] text-slate-500">Rent</span>
+                      <span className="text-[11px] text-slate-500">Revenue</span>
                       <span className="text-sm font-semibold">
                         {typeof facilityMetrics?.revenuePerSf === 'number'
                           ? `$${facilityMetrics.revenuePerSf.toFixed(2)}`

@@ -411,7 +411,7 @@ CONSTRUCTION_SUBTYPE_SCHEDULES: Dict[BuildingType, Dict[str, ScheduleConfig]] = 
                 },
                 {
                     "id": "interior_finishes",
-                    "label": "Premium Tenant Buildout + Amenity Floors",
+                    "label": "Interior Buildout + Lobby / Amenity Interiors",
                     "start_month": 16,
                     "duration": 12,
                     "color": "pink",

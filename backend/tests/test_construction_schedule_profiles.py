@@ -137,6 +137,31 @@ def test_unknown_hospitality_subtype_falls_back_to_multifamily_baseline_determin
     assert hospitality_fallback["phases"] == multifamily_baseline["phases"]
 
 
+def test_office_class_a_schedule_uses_office_specific_interior_label_without_changing_sequence():
+    schedule = build_construction_schedule(BuildingType.OFFICE, subtype="class_a")
+
+    assert schedule["building_type"] == BuildingType.OFFICE.value
+    assert schedule["subtype"] == "class_a"
+    assert schedule["schedule_source"] == "subtype"
+    assert schedule["total_months"] == 30
+    assert [phase["id"] for phase in schedule["phases"]] == [
+        "site_foundation",
+        "structural",
+        "exterior_envelope",
+        "mep_rough",
+        "interior_finishes",
+        "mep_finishes",
+    ]
+
+    interior_phase = next(phase for phase in schedule["phases"] if phase["id"] == "interior_finishes")
+    assert interior_phase["label"] == "Interior Buildout + Lobby / Amenity Interiors"
+    assert interior_phase["start_month"] == 16
+    assert interior_phase["duration_months"] == 12
+    assert "Premium Tenant Buildout + Amenity Floors" not in {
+        phase["label"] for phase in schedule["phases"]
+    }
+
+
 def test_unknown_parking_subtype_truthfully_uses_building_type_fallback_source():
     parking_schedule = build_construction_schedule(BuildingType.PARKING, subtype="garage_variant_not_configured")
     industrial_default_schedule = build_construction_schedule(BuildingType.INDUSTRIAL)

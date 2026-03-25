@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { trustNarrative } from "@/content/trustNarrative";
 import { ExecutiveViewComplete } from "../ExecutiveViewComplete";
@@ -769,6 +769,51 @@ const buildCrossTypeProject = (
       };
     }
   }
+  return project;
+};
+
+const buildOfficeFacilityMetricsProject = (squareFootage: number) => {
+  const project = buildCrossTypeProject("office", "class_a", "office_class_a_v1");
+  const costPerSf = 465.25;
+  const revenuePerSf = 41.83;
+  const noiPerSf = 18.47;
+  const totalProjectCost = Number((costPerSf * squareFootage).toFixed(2));
+  const annualRevenue = Number((revenuePerSf * squareFootage).toFixed(2));
+  const annualNoi = Number((noiPerSf * squareFootage).toFixed(2));
+
+  project.analysis.parsed_input.square_footage = squareFootage;
+  project.analysis.calculations.project_info.square_footage = squareFootage;
+  project.analysis.calculations.totals = {
+    ...project.analysis.calculations.totals,
+    total_project_cost: totalProjectCost,
+    cost_per_sf: costPerSf,
+  };
+  project.analysis.calculations.revenue_analysis = {
+    ...project.analysis.calculations.revenue_analysis,
+    annual_revenue: annualRevenue,
+    net_income: annualNoi,
+  };
+  project.analysis.calculations.return_metrics = {
+    ...project.analysis.calculations.return_metrics,
+    estimated_annual_noi: annualNoi,
+  };
+  project.analysis.calculations.facility_metrics = {
+    type: "office",
+    total_square_feet: squareFootage,
+    metrics: [
+      { id: "cost_per_sf", label: "All-in Cost per SF", value: costPerSf, unit: "$/SF" },
+      { id: "revenue_per_sf", label: "Revenue per SF", value: revenuePerSf, unit: "$/SF" },
+      { id: "noi_per_sf", label: "NOI per SF", value: noiPerSf, unit: "$/SF" },
+    ],
+  };
+  project.analysis.calculations.total_gross_sf = 123456;
+  project.analysis.calculations.total_building_area = 123456;
+  project.analysis.calculations.total_project_cost = 12345678;
+  project.analysis.calculations.rent_per_sf = 9.99;
+  project.analysis.calculations.office_rent_per_sf = 8.88;
+  project.analysis.calculations.noi_per_sf = 7.77;
+  project.analysis.calculations.office_noi_per_sf = 6.66;
+
   return project;
 };
 
@@ -2034,39 +2079,7 @@ describe("ExecutiveViewComplete", () => {
   });
 
   it("renders office facility metrics from the backend facility_metrics contract instead of stale office keys", () => {
-    const project = buildCrossTypeProject("office", "class_a", "office_class_a_v1");
-    project.analysis.parsed_input.square_footage = 160000;
-    project.analysis.calculations.project_info.square_footage = 160000;
-    project.analysis.calculations.totals = {
-      ...project.analysis.calculations.totals,
-      total_project_cost: 74440000,
-      cost_per_sf: 465.25,
-    };
-    project.analysis.calculations.revenue_analysis = {
-      ...project.analysis.calculations.revenue_analysis,
-      annual_revenue: 6692800,
-      net_income: 2955200,
-    };
-    project.analysis.calculations.return_metrics = {
-      ...project.analysis.calculations.return_metrics,
-      estimated_annual_noi: 2955200,
-    };
-    project.analysis.calculations.facility_metrics = {
-      type: "office",
-      total_square_feet: 160000,
-      metrics: [
-        { id: "cost_per_sf", label: "All-in Cost per SF", value: 465.25, unit: "$/SF" },
-        { id: "revenue_per_sf", label: "Revenue per SF", value: 41.83, unit: "$/SF" },
-        { id: "noi_per_sf", label: "NOI per SF", value: 18.47, unit: "$/SF" },
-      ],
-    };
-    project.analysis.calculations.total_gross_sf = 123456;
-    project.analysis.calculations.total_building_area = 123456;
-    project.analysis.calculations.total_project_cost = 12345678;
-    project.analysis.calculations.rent_per_sf = 9.99;
-    project.analysis.calculations.office_rent_per_sf = 8.88;
-    project.analysis.calculations.noi_per_sf = 7.77;
-    project.analysis.calculations.office_noi_per_sf = 6.66;
+    const project = buildOfficeFacilityMetricsProject(160000);
 
     render(
       <MemoryRouter>
@@ -2081,13 +2094,45 @@ describe("ExecutiveViewComplete", () => {
       </MemoryRouter>
     );
 
+    const officeRevenueTile = screen.getByText("Revenue & NOI per SF").closest("div.rounded-lg");
+    expect(officeRevenueTile).not.toBeNull();
+    expect(within(officeRevenueTile as HTMLElement).getByText("Revenue")).toBeInTheDocument();
+    expect(within(officeRevenueTile as HTMLElement).queryByText(/^Rent$/)).not.toBeInTheDocument();
     expect(screen.getByText("160,000 SF")).toBeInTheDocument();
     expect(screen.getByText("$465.25")).toBeInTheDocument();
     expect(screen.getByText("$41.83")).toBeInTheDocument();
     expect(screen.getByText("$18.47")).toBeInTheDocument();
+    expect(screen.queryByText("Rent & NOI per SF")).not.toBeInTheDocument();
     expect(screen.queryByText("123,456 SF")).not.toBeInTheDocument();
     expect(screen.queryByText("$9.99")).not.toBeInTheDocument();
     expect(screen.queryByText("$7.77")).not.toBeInTheDocument();
+  });
+
+  it("keeps the Office facility metrics populated for the simpler 85,000 SF class A office case while using revenue semantics", () => {
+    const project = buildOfficeFacilityMetricsProject(85000);
+
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={project}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "office_class_a_v1",
+            "Needs Work",
+            "low_flex_before_break_buffer"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    const officeRevenueTile = screen.getByText("Revenue & NOI per SF").closest("div.rounded-lg");
+    expect(officeRevenueTile).not.toBeNull();
+    expect(within(officeRevenueTile as HTMLElement).getByText("Revenue")).toBeInTheDocument();
+    expect(within(officeRevenueTile as HTMLElement).getByText("NOI")).toBeInTheDocument();
+    expect(screen.getByText("85,000 SF")).toBeInTheDocument();
+    expect(screen.getByText("$465.25")).toBeInTheDocument();
+    expect(screen.getByText("$41.83")).toBeInTheDocument();
+    expect(screen.getByText("$18.47")).toBeInTheDocument();
+    expect(screen.queryByText("Rent & NOI per SF")).not.toBeInTheDocument();
   });
 
   it("keeps canonical decision status/reason/provenance contract parity across restaurant, hospitality, multifamily, and industrial", () => {

@@ -53,9 +53,9 @@ describe('BackendDataMapper office facility metrics', () => {
       costPerSf: 465.25,
       revenuePerSf: 41.83,
       noiPerSf: 18.47,
-      officeRentPerSf: 41.83,
-      officeNoiPerSf: 18.47,
     });
+    expect(displayData.facilityMetrics).not.toHaveProperty('officeRentPerSf');
+    expect(displayData.facilityMetrics).not.toHaveProperty('officeNoiPerSf');
     expect(displayData.facilityMetrics?.entries).toHaveLength(3);
   });
 
