@@ -52,6 +52,18 @@ def _calculate_from_description(description: str, *, special_features: list[str]
             {"operatory_count": 9},
         ),
         (
+            "New 9,000 SF urgent care with 12 exam rooms in Nashville, TN",
+            {"exam_room_count": 12},
+        ),
+        (
+            "New 9,000 SF urgent care with 10 exam rooms and 2 procedure rooms in Nashville, TN",
+            {"exam_room_count": 10, "procedure_room_count": 2},
+        ),
+        (
+            "New 9,000 SF urgent care with 2 x-ray rooms and 10 exam rooms in Nashville, TN",
+            {"x_ray_room_count": 2, "exam_room_count": 10},
+        ),
+        (
             "New 12,000 SF imaging center with 2 MRI suites and 1 CT suite in Nashville, TN",
             {"mri_suite_count": 2, "ct_suite_count": 1},
         ),
@@ -219,6 +231,17 @@ def test_explicit_crane_bay_count_from_prompt_reaches_count_based_pricing():
     assert row["included_baseline_quantity"] == pytest.approx(2.0)
     assert row["billed_quantity"] == pytest.approx(1.0)
     assert row["total_cost"] == pytest.approx(300000.0)
+
+
+def test_urgent_care_written_number_exam_and_procedure_counts_parse():
+    parsed = NLPService().extract_project_details(
+        "New 9,000 SF urgent care with twelve exam rooms and two procedure rooms in Nashville, TN"
+    )
+
+    assert parsed["building_type"] == "healthcare"
+    assert parsed["subtype"] == "urgent_care"
+    assert parsed["exam_room_count"] == 12
+    assert parsed["procedure_room_count"] == 2
 
 
 def test_no_explicit_count_prompt_preserves_current_default_behavior():

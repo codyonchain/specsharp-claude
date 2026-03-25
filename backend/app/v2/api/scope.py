@@ -469,6 +469,8 @@ async def analyze_project(
         override_keys = [
             "dock_doors", "dock_count",
             "operating_room_count", "operatory_count",
+            "exam_room_count", "exam_rooms_count", "procedure_room_count",
+            "x_ray_room_count", "xray_room_count", "xray_count",
             "mri_suite_count", "ct_suite_count", "pet_scan_count",
             "loading_dock_count", "dock_door_count",
             "service_bay_count", "crane_bay_count", "drive_thru_lane_count",
@@ -1221,6 +1223,8 @@ async def generate_scope(
         override_keys = [
             "dock_doors", "dock_count",
             "operating_room_count", "operatory_count",
+            "exam_room_count", "exam_rooms_count", "procedure_room_count",
+            "x_ray_room_count", "xray_room_count", "xray_count",
             "mri_suite_count", "ct_suite_count", "pet_scan_count",
             "loading_dock_count", "dock_door_count",
             "service_bay_count", "crane_bay_count", "drive_thru_lane_count",

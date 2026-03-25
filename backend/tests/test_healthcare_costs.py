@@ -164,9 +164,12 @@ def test_outpatient_profile_emits_facility_metrics():
     metrics = result.get("facility_metrics")
     assert metrics is not None
     assert metrics["type"] == "healthcare"
-    assert metrics["unit_label"] == cfg.financial_metrics["primary_unit"]
-    assert metrics["units"] >= 1
-    assert metrics["revenue_per_unit"] == cfg.financial_metrics["revenue_per_unit_annual"]
+    assert metrics["unit_label"] == "inferred exam rooms"
+    assert metrics["units"] == 14
+    assert metrics["unit_count_source"] == "inferred_exam_room_count"
+    assert metrics["revenue_per_unit"] == pytest.approx(
+        result["revenue_analysis"]["annual_revenue"] / metrics["units"]
+    )
 
 
 def test_healthcare_legacy_alias_ids_match_canonical_totals_by_subtype():

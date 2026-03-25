@@ -547,9 +547,11 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
       isDentalOffice
     });
   }
-  const isHealthcareOutpatient =
-    parsedBuildingType === 'healthcare' &&
-    ['outpatient_clinic', 'urgent_care'].includes(parsedSubtype);
+  const isUrgentCare =
+    parsedBuildingType === 'healthcare' && parsedSubtype === 'urgent_care';
+  const isOutpatientClinic =
+    parsedBuildingType === 'healthcare' && parsedSubtype === 'outpatient_clinic';
+  const isHealthcareOutpatient = isUrgentCare || isOutpatientClinic;
   const isImagingCenter =
     parsedBuildingType === 'healthcare' && parsedSubtype === 'imaging_center';
   const isSurgicalCenter =
@@ -688,7 +690,7 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
       : 'Units';
   let unitType = (facilityUnitLabel || displayData?.unitType || unitLabel || 'units').toString().toLowerCase();
   if (parsedBuildingType === 'healthcare') {
-    if (isHealthcareOutpatient) {
+    if (isOutpatientClinic) {
       unitLabel = 'Exam Rooms';
       unitType = 'exam rooms';
     } else if (isSurgicalCenter) {
@@ -1350,6 +1352,12 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
   const imagingUnitContractLabel = imagingHasExplicitModalityCounts
     ? 'Specified Modality Suites'
     : 'Modality Program';
+  const visibleProgramEntries = Array.isArray((facilityMetrics as AnyRecord)?.entries)
+    ? (facilityMetrics as AnyRecord).entries.filter((entry: any) => {
+        const label = typeof entry?.label === 'string' ? entry.label.trim() : '';
+        return label.length > 0 && toFiniteNumber(entry?.value) !== undefined;
+      })
+    : [];
   const hasRestaurantSalesPerSf = typeof restaurantSalesPerSf === 'number' && Number.isFinite(restaurantSalesPerSf);
   const hasRestaurantNoiPerSf = typeof restaurantNoiPerSf === 'number' && Number.isFinite(restaurantNoiPerSf);
   const hasRestaurantCostPerSf = typeof restaurantCostPerSf === 'number' && Number.isFinite(restaurantCostPerSf);
@@ -2714,6 +2722,19 @@ export const ExecutiveViewComplete: React.FC<Props> = ({ project, dealShieldData
                     <span className="text-gray-600">Revenue per {unitType}</span>
                     <span className="font-bold">{formatters.currency(displayData.revenuePerUnit)}</span>
                   </div>
+                  {visibleProgramEntries.map((entry: any) => {
+                    const rawValue = toFiniteNumber(entry?.value);
+                    const label = typeof entry?.label === 'string' ? entry.label.trim() : '';
+                    if (!label || rawValue === undefined) {
+                      return null;
+                    }
+                    return (
+                      <div key={`visible-program-${label}`} className="flex justify-between text-sm">
+                        <span className="text-gray-600">{label}</span>
+                        <span className="font-bold">{rawValue.toLocaleString()}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </>
             )}

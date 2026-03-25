@@ -87,12 +87,17 @@ TENANT_IMPROVEMENT_DESCRIPTION_PATTERNS = (
     re.compile(r"\bti\b"),
     re.compile(r"\bt\.i\.\b"),
 )
+SPECIAL_FEATURE_LABEL_OVERRIDES: Dict[str, str] = {
+    "x_ray": "X-Ray",
+}
 
 
 def _humanize_special_feature_label(feature_id: str) -> str:
     """Convert config feature keys into user-facing labels."""
     if not isinstance(feature_id, str):
         return "Special Feature"
+    if feature_id in SPECIAL_FEATURE_LABEL_OVERRIDES:
+        return SPECIAL_FEATURE_LABEL_OVERRIDES[feature_id]
     tokens = feature_id.replace("-", "_").split("_")
     words = [token for token in tokens if token]
     if not words:
@@ -1399,7 +1404,33 @@ class UnifiedEngine:
             subtype_config=building_config,
             override_sources=pricing_override_sources,
         )
+        urgent_care_auto_pricing_feature_counts = self._resolve_urgent_care_auto_pricing_feature_counts(
+            building_type=building_type,
+            subtype=subtype,
+            subtype_config=building_config,
+            square_footage=square_footage,
+            override_sources=pricing_override_sources,
+        )
         for feature_id, resolved_count in imaging_center_auto_pricing_feature_counts.items():
+            if (
+                feature_id in available_feature_keys
+                and feature_id not in resolved_special_feature_ids
+            ):
+                resolved_special_feature_ids.append(feature_id)
+                self._log_trace(
+                    "special_feature_auto_activated_from_parsed_input",
+                    {
+                        "feature": feature_id,
+                        "building_type": (
+                            building_type.value
+                            if hasattr(building_type, "value")
+                            else str(building_type)
+                        ),
+                        "subtype": subtype,
+                        "requested_quantity": resolved_count,
+                    },
+                )
+        for feature_id, resolved_count in urgent_care_auto_pricing_feature_counts.items():
             if (
                 feature_id in available_feature_keys
                 and feature_id not in resolved_special_feature_ids
@@ -1824,6 +1855,12 @@ class UnifiedEngine:
             subtype_key=subtype,
             override_sources=pricing_override_sources,
         )
+        project_urgent_care_visible_unit_contract = self._resolve_urgent_care_visible_unit_contract(
+            subtype_config=building_config,
+            subtype_key=subtype,
+            square_footage=square_footage,
+            override_sources=pricing_override_sources,
+        )
         project_imaging_has_explicit_modality_counts = bool(
             project_imaging_visible_unit_contract
             and project_imaging_visible_unit_contract.get("has_explicit_modality_counts")
@@ -1937,6 +1974,18 @@ class UnifiedEngine:
                 )
             else:
                 result['project_info'].pop('unit_count', None)
+        elif project_urgent_care_visible_unit_contract is not None:
+            result['project_info']['unit_label'] = project_urgent_care_visible_unit_contract.get('unit_label')
+            result['project_info']['unit_type'] = project_urgent_care_visible_unit_contract.get('unit_label')
+            result['project_info']['unit_count_source'] = project_urgent_care_visible_unit_contract.get(
+                'unit_count_source'
+            )
+            result['project_info']['unit_count'] = project_urgent_care_visible_unit_contract.get('exam_room_count')
+            if project_urgent_care_visible_unit_contract.get('entries'):
+                result['project_info']['urgent_care_room_program'] = {
+                    'state': project_urgent_care_visible_unit_contract.get('state'),
+                    'entries': project_urgent_care_visible_unit_contract.get('entries'),
+                }
         result['construction_risk_drivers'] = build_construction_risk_drivers(result)
 
         if financing_assumptions:
@@ -2085,6 +2134,12 @@ class UnifiedEngine:
                 subtype_key=subtype,
                 override_sources=unit_override_sources,
             )
+            urgent_care_visible_unit_contract = self._resolve_urgent_care_visible_unit_contract(
+                subtype_config=building_config,
+                subtype_key=subtype,
+                square_footage=square_footage,
+                override_sources=unit_override_sources,
+            )
             if imaging_visible_unit_contract is not None:
                 facility_metrics_payload = {
                     'type': 'healthcare',
@@ -2127,6 +2182,31 @@ class UnifiedEngine:
                         )
                     if metric_entries:
                         facility_metrics_payload['entries'] = metric_entries
+            elif urgent_care_visible_unit_contract is not None:
+                computed_units = int(urgent_care_visible_unit_contract.get('exam_room_count') or 1)
+                annual_revenue_value = (
+                    self._coerce_number((result.get('revenue_analysis') or {}).get('annual_revenue'))
+                    or 0.0
+                )
+                facility_metrics_payload = {
+                    'type': 'healthcare',
+                    'units': computed_units,
+                    'unit_label': urgent_care_visible_unit_contract.get('unit_label'),
+                    'unit_count_source': urgent_care_visible_unit_contract.get('unit_count_source'),
+                    'cost_per_unit': total_project_cost / computed_units if computed_units else 0,
+                    'revenue_per_unit': annual_revenue_value / computed_units if computed_units else 0,
+                }
+                if urgent_care_visible_unit_contract.get('entries'):
+                    facility_metrics_payload['entries'] = urgent_care_visible_unit_contract.get('entries')
+                facility_metrics_payload['urgent_care_room_program'] = {
+                    'state': urgent_care_visible_unit_contract.get('state'),
+                    'has_explicit_exam_room_count': urgent_care_visible_unit_contract.get(
+                        'has_explicit_exam_room_count'
+                    ),
+                    'exam_room_count': urgent_care_visible_unit_contract.get('exam_room_count'),
+                    'procedure_room_count': urgent_care_visible_unit_contract.get('procedure_room_count'),
+                    'x_ray_room_count': urgent_care_visible_unit_contract.get('x_ray_room_count'),
+                }
             else:
                 primary_unit_label = financial_metrics_cfg.get('primary_unit', 'Units')
                 facility_profile = getattr(building_config, "facility_metrics_profile", None)
@@ -2593,6 +2673,121 @@ class UnifiedEngine:
             auto_pricing_counts["mri_suite"] = mri_suite_count
         if isinstance(ct_suite_count, int) and ct_suite_count > 0:
             auto_pricing_counts["ct_suite"] = ct_suite_count
+        return auto_pricing_counts
+
+    def _resolve_urgent_care_visible_unit_contract(
+        self,
+        *,
+        subtype_config: Any,
+        subtype_key: Any,
+        square_footage: float,
+        override_sources: Optional[List[Dict[str, Any]]],
+    ) -> Optional[Dict[str, Any]]:
+        subtype_value = subtype_key.value if hasattr(subtype_key, "value") else subtype_key
+        subtype_normalized = str(subtype_value or "").strip().lower()
+        if subtype_normalized != "urgent_care":
+            return None
+
+        explicit_exam_resolution = self._resolve_explicit_count_override_with_source_for_special_feature(
+            subtype_config=subtype_config,
+            feature_id="exam_rooms",
+            override_sources=override_sources,
+        )
+        explicit_exam_room_count = explicit_exam_resolution[0] if explicit_exam_resolution else None
+        explicit_exam_room_source = explicit_exam_resolution[1] if explicit_exam_resolution else None
+        inferred_exam_room_count = self._resolve_default_count_baseline_for_special_feature(
+            subtype_config=subtype_config,
+            feature_id="exam_rooms",
+            square_footage=square_footage,
+        )
+        resolved_exam_room_count = explicit_exam_room_count or inferred_exam_room_count or 1
+        has_explicit_exam_room_count = explicit_exam_room_count is not None
+
+        procedure_room_count = self._resolve_explicit_count_override_for_special_feature(
+            subtype_config=subtype_config,
+            feature_id="procedure_room",
+            override_sources=override_sources,
+        )
+        x_ray_room_count = self._resolve_explicit_count_override_for_special_feature(
+            subtype_config=subtype_config,
+            feature_id="x_ray",
+            override_sources=override_sources,
+        )
+
+        program_entries: List[Dict[str, Any]] = []
+        if isinstance(procedure_room_count, int) and procedure_room_count > 0:
+            program_entries.append(
+                {
+                    "id": "procedure_rooms",
+                    "label": "Procedure Rooms",
+                    "value": procedure_room_count,
+                    "unit": "rooms",
+                }
+            )
+        if isinstance(x_ray_room_count, int) and x_ray_room_count > 0:
+            program_entries.append(
+                {
+                    "id": "x_ray_rooms",
+                    "label": "X-Ray Rooms",
+                    "value": x_ray_room_count,
+                    "unit": "rooms",
+                }
+            )
+
+        return {
+            "state": (
+                "explicit_exam_room_count"
+                if has_explicit_exam_room_count
+                else "inferred_exam_room_count"
+            ),
+            "has_explicit_exam_room_count": has_explicit_exam_room_count,
+            "exam_room_count": int(resolved_exam_room_count),
+            "procedure_room_count": procedure_room_count,
+            "x_ray_room_count": x_ray_room_count,
+            "unit_label": (
+                "exam rooms"
+                if has_explicit_exam_room_count
+                else "inferred exam rooms"
+            ),
+            "unit_count_source": explicit_exam_room_source or "inferred_exam_room_count",
+            "entries": program_entries,
+        }
+
+    def _resolve_urgent_care_auto_pricing_feature_counts(
+        self,
+        *,
+        building_type: BuildingType,
+        subtype: Any,
+        subtype_config: Any,
+        square_footage: float,
+        override_sources: Optional[List[Dict[str, Any]]],
+    ) -> Dict[str, int]:
+        if building_type != BuildingType.HEALTHCARE:
+            return {}
+
+        visible_unit_contract = self._resolve_urgent_care_visible_unit_contract(
+            subtype_config=subtype_config,
+            subtype_key=subtype,
+            square_footage=square_footage,
+            override_sources=override_sources,
+        )
+        if visible_unit_contract is None:
+            return {}
+
+        auto_pricing_counts: Dict[str, int] = {}
+        if visible_unit_contract.get("has_explicit_exam_room_count"):
+            exam_room_count = visible_unit_contract.get("exam_room_count")
+            if isinstance(exam_room_count, int) and exam_room_count > 0:
+                auto_pricing_counts["exam_rooms"] = exam_room_count
+
+        procedure_room_count = visible_unit_contract.get("procedure_room_count")
+        if isinstance(procedure_room_count, int) and procedure_room_count > 0:
+            auto_pricing_counts["procedure_room"] = procedure_room_count
+
+        x_ray_room_count = visible_unit_contract.get("x_ray_room_count")
+        if isinstance(x_ray_room_count, int) and x_ray_room_count > 0:
+            auto_pricing_counts["x_ray"] = x_ray_room_count
+
         return auto_pricing_counts
 
     def _resolve_numeric_drive_thru_auto_pricing_feature(
@@ -3173,6 +3368,23 @@ class UnifiedEngine:
         feature_id: str,
         override_sources: Optional[List[Dict[str, Any]]],
     ) -> Optional[int]:
+        resolution = self._resolve_explicit_count_override_with_source_for_special_feature(
+            subtype_config=subtype_config,
+            feature_id=feature_id,
+            override_sources=override_sources,
+        )
+        if resolution is None:
+            return None
+        explicit_count, _ = resolution
+        return explicit_count
+
+    def _resolve_explicit_count_override_with_source_for_special_feature(
+        self,
+        *,
+        subtype_config: Any,
+        feature_id: str,
+        override_sources: Optional[List[Dict[str, Any]]],
+    ) -> Optional[Tuple[int, str]]:
         if subtype_config is None or not override_sources:
             return None
 
@@ -3183,14 +3395,18 @@ class UnifiedEngine:
         if count_rule is None or not count_rule.count_override_keys:
             return None
 
-        explicit_count = self._get_override_number(
-            override_sources,
-            list(count_rule.count_override_keys),
-        )
-        if explicit_count is None or explicit_count <= 0:
-            return None
-
-        return max(1, int(round(explicit_count)))
+        for source in override_sources:
+            for key in count_rule.count_override_keys:
+                if key not in source:
+                    continue
+                explicit_count = self._coerce_number(source.get(key))
+                if explicit_count is None or explicit_count <= 0:
+                    continue
+                return (
+                    max(1, int(round(explicit_count))),
+                    f"explicit_override:{key}",
+                )
+        return None
 
     def _resolve_default_count_baseline_for_special_feature(
         self,
@@ -3247,6 +3463,14 @@ class UnifiedEngine:
             )
             if dental_office_baseline is not None:
                 return dental_office_baseline
+        elif subtype_normalized == "urgent_care":
+            urgent_care_baseline = self._resolve_default_count_baseline_for_special_feature(
+                subtype_config=subtype_config,
+                feature_id="exam_rooms",
+                square_footage=square_footage,
+            )
+            if urgent_care_baseline is not None:
+                return urgent_care_baseline
 
         if isinstance(fallback_units, int) and fallback_units > 0:
             return fallback_units
@@ -3293,6 +3517,12 @@ class UnifiedEngine:
         if subtype_normalized == "dental_office":
             return self._resolve_explicit_dental_operatory_count_override(
                 subtype_config=subtype_config,
+                override_sources=override_sources,
+            )
+        if subtype_normalized == "urgent_care":
+            return self._resolve_explicit_count_override_for_special_feature(
+                subtype_config=subtype_config,
+                feature_id="exam_rooms",
                 override_sources=override_sources,
             )
         if subtype_normalized == "imaging_center":
@@ -4871,10 +5101,17 @@ class UnifiedEngine:
         )
         imaging_visible_unit_contract = None
         imaging_has_explicit_modality_counts = False
+        urgent_care_visible_unit_contract = None
         if healthcare_profile:
             imaging_visible_unit_contract = self._resolve_imaging_center_visible_unit_contract(
                 subtype_config=subtype_config,
                 subtype_key=subtype,
+                override_sources=unit_override_sources,
+            )
+            urgent_care_visible_unit_contract = self._resolve_urgent_care_visible_unit_contract(
+                subtype_config=subtype_config,
+                subtype_key=subtype,
+                square_footage=square_footage,
                 override_sources=unit_override_sources,
             )
             imaging_has_explicit_modality_counts = bool(
@@ -4919,6 +5156,19 @@ class UnifiedEngine:
                 calculations.pop("resolved_unit_count", None)
                 calculations.pop("cost_per_unit", None)
                 calculations.pop("revenue_per_unit", None)
+        elif healthcare_profile and urgent_care_visible_unit_contract is not None:
+            urgent_care_unit_label = str(urgent_care_visible_unit_contract.get("unit_label") or "units")
+            urgent_care_units = int(urgent_care_visible_unit_contract.get("exam_room_count") or 1)
+            calculations["unit_label"] = urgent_care_unit_label
+            calculations["unit_type"] = urgent_care_unit_label
+            calculations["unit_count_source"] = urgent_care_visible_unit_contract.get("unit_count_source")
+            calculations["urgent_care_room_program"] = {
+                "state": urgent_care_visible_unit_contract.get("state"),
+                "entries": urgent_care_visible_unit_contract.get("entries") or [],
+            }
+            units = urgent_care_units
+            calculations["units"] = urgent_care_units
+            calculations["resolved_unit_count"] = urgent_care_units
         elif not units:
             units = 0
             if (
@@ -5004,6 +5254,11 @@ class UnifiedEngine:
             canonical_units_source = str(
                 imaging_visible_unit_contract.get("unit_count_source") or "derived"
             )
+        elif urgent_care_visible_unit_contract is not None:
+            canonical_units = derived_units
+            canonical_units_source = str(
+                urgent_care_visible_unit_contract.get("unit_count_source") or "derived"
+            )
         else:
             canonical_units = derived_units
             canonical_units_source = 'derived'
@@ -5014,7 +5269,11 @@ class UnifiedEngine:
             operational_metrics['per_unit'].pop('units', None)
         if canonical_units and canonical_units > 0:
             calculations['units'] = canonical_units
-            if building_enum == BuildingType.MULTIFAMILY or imaging_visible_unit_contract is not None:
+            if (
+                building_enum == BuildingType.MULTIFAMILY
+                or imaging_visible_unit_contract is not None
+                or urgent_care_visible_unit_contract is not None
+            ):
                 calculations['resolved_unit_count'] = canonical_units
                 calculations['unit_count_source'] = canonical_units_source
             if imaging_visible_unit_contract is None:
@@ -6216,6 +6475,12 @@ class UnifiedEngine:
                 subtype_key=subtype_normalized,
                 override_sources=unit_override_sources,
             )
+            urgent_care_visible_unit_contract = self._resolve_urgent_care_visible_unit_contract(
+                subtype_config=subtype_config,
+                subtype_key=subtype_normalized,
+                square_footage=square_footage,
+                override_sources=unit_override_sources,
+            )
             if imaging_visible_unit_contract is not None:
                 per_unit_payload = operational_metrics.setdefault("per_unit", {})
                 unit_label = str(imaging_visible_unit_contract.get("unit_label") or "units")
@@ -6306,6 +6571,11 @@ class UnifiedEngine:
                 override_sources=unit_override_sources,
             )
             unit_label = str(financial_metrics_cfg.get("primary_unit") or "units")
+            urgent_care_program_entries: List[Dict[str, Any]] = []
+            if urgent_care_visible_unit_contract is not None:
+                resolved_units = int(urgent_care_visible_unit_contract.get("exam_room_count") or resolved_units)
+                unit_label = str(urgent_care_visible_unit_contract.get("unit_label") or unit_label)
+                urgent_care_program_entries = list(urgent_care_visible_unit_contract.get("entries") or [])
             revenue_per_unit_cfg = self._coerce_number(financial_metrics_cfg.get("revenue_per_unit_annual"))
             operational_metrics.setdefault("per_unit", {})
             operational_metrics["per_unit"].update(
@@ -6315,6 +6585,14 @@ class UnifiedEngine:
                     "unit_type": unit_label,
                 }
             )
+            if urgent_care_visible_unit_contract is not None:
+                operational_metrics["per_unit"]["units_source"] = urgent_care_visible_unit_contract.get(
+                    "unit_count_source"
+                )
+                operational_metrics["per_unit"]["urgent_care_room_program"] = {
+                    "state": urgent_care_visible_unit_contract.get("state"),
+                    "entries": urgent_care_program_entries,
+                }
 
             is_inpatient = (
                 subtype_normalized in HEALTHCARE_INPATIENT_SUBTYPES
@@ -6401,6 +6679,12 @@ class UnifiedEngine:
                     {'label': 'Support Staff (FTE)', 'value': str(support_staff)},
                     {'label': f'{unit_label.title()}', 'value': str(resolved_units)},
                 ]
+                for entry in urgent_care_program_entries:
+                    entry_label = str(entry.get("label") or "").strip()
+                    entry_value = entry.get("value")
+                    if not entry_label or entry_value in (None, ""):
+                        continue
+                    staffing_rows.append({'label': entry_label, 'value': str(entry_value)})
                 if specialist_staff > 0:
                     staffing_rows.append({'label': specialist_label, 'value': str(specialist_staff)})
                 operational_metrics['staffing'] = staffing_rows
@@ -6846,6 +7130,12 @@ class UnifiedEngine:
 
         if building_type_normalized == "healthcare":
             variant = "healthcare_operating_model"
+            per_unit_payload = operational_metrics.get("per_unit") if isinstance(operational_metrics, dict) else {}
+            units_source = (
+                per_unit_payload.get("units_source")
+                if isinstance(per_unit_payload, dict)
+                else None
+            )
             staffing_section = list_metrics(
                 "healthcare_staffing",
                 operational_metrics.get("staffing", []),
@@ -6872,6 +7162,13 @@ class UnifiedEngine:
             )
             sections = [entry for entry in [staffing_section, revenue_section, signals_section] if entry]
             notes.append("Backend-owned healthcare staffing, throughput, and utilization model.")
+            if (
+                subtype_normalized == "urgent_care"
+                and units_source == "inferred_exam_room_count"
+            ):
+                notes.append(
+                    "Primary exam-room count is inferred from square footage because no explicit exam-room count was parsed."
+                )
 
         elif building_type_normalized == "office":
             variant = "office_underwriting"

@@ -70,6 +70,28 @@ CONFIG = (
             "Miami": 1.05,
         },
         special_features={
+            "exam_rooms": {
+                "basis": "COUNT_BASED",
+                "value": 12000,
+                "count_pricing_mode": "overage_above_default",
+                "count_override_keys": ["exam_room_count", "exam_rooms_count"],
+                "default_count_bands": [
+                    {"label": "compact_urgent_care", "max_square_footage": 3000, "count": 6},
+                    {"label": "small_urgent_care", "max_square_footage": 4500, "count": 8},
+                    {"label": "standard_urgent_care", "max_square_footage": 6000, "count": 10},
+                    {"label": "expanded_urgent_care", "max_square_footage": 7500, "count": 12},
+                    {"label": "large_urgent_care", "max_square_footage": 9000, "count": 14},
+                    {"label": "regional_urgent_care", "count": 18},
+                ],
+                "unit_label": "exam room",
+            },
+            "procedure_room": {
+                "basis": "COUNT_BASED",
+                "value": 175000,
+                "count": 1,
+                "count_override_keys": ["procedure_room_count"],
+                "unit_label": "procedure room",
+            },
             "trauma_room": {
                 "basis": "COUNT_BASED",
                 "value": 250000,
@@ -83,7 +105,7 @@ CONFIG = (
                 "count": 1,
                 "count_pricing_mode": "overage_above_default",
                 "count_override_keys": ["x_ray_room_count", "xray_room_count", "xray_count"],
-                "unit_label": "room",
+                "unit_label": "x-ray room",
             },
             "laboratory": {
                 "basis": "AREA_SHARE_GSF",
@@ -116,6 +138,8 @@ CONFIG = (
             },
         },
         special_feature_pricing_statuses={
+            "exam_rooms": "included_in_baseline",
+            "procedure_room": "incremental",
             "trauma_room": "incremental",
             "x_ray": "included_in_baseline",
             "laboratory": "included_in_baseline",
@@ -126,7 +150,6 @@ CONFIG = (
         },
         financial_metrics={
             "primary_unit": "exam rooms",
-            "units_per_sf": 1 / 450,
             "revenue_per_unit_annual": 180000,
             "target_occupancy": 0.75,
             "breakeven_occupancy": 0.65,

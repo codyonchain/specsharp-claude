@@ -936,13 +936,16 @@ export class BackendDataMapper {
           monthlyRevenuePerUnit:
             payloadMonthlyRevenuePerUnit ??
             (typeof payloadRevenuePerUnit === 'number'
-              ? payloadRevenuePerUnit / 12
+                ? payloadRevenuePerUnit / 12
               : typeof monthlyRevenuePerUnit === 'number'
                 ? monthlyRevenuePerUnit
                 : undefined),
           unitLabel: payloadUnitLabel ?? unitLabel,
           unitCountSource: payloadUnitCountSource,
           imagingModalityProgram,
+          entries: Array.isArray(facilityMetricsPayload?.entries)
+            ? facilityMetricsPayload.entries
+            : undefined,
         }
       : undefined;
 

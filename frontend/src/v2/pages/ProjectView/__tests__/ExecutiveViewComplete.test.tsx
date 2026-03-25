@@ -886,6 +886,116 @@ const buildImagingCenterProject = (options?: {
   return project;
 };
 
+const buildUrgentCareProject = (options?: {
+  examRooms?: number;
+  procedureRooms?: number;
+  xRayRooms?: number;
+  inferredExamRooms?: number;
+}) => {
+  const project = buildCrossTypeProject(
+    "healthcare",
+    "urgent_care",
+    "healthcare_urgent_care_v1"
+  );
+  const examRooms = options?.examRooms;
+  const procedureRooms = options?.procedureRooms ?? 0;
+  const xRayRooms = options?.xRayRooms ?? 0;
+  const inferredExamRooms = options?.inferredExamRooms ?? 14;
+  const hasExplicitExamRooms =
+    typeof examRooms === "number" && Number.isFinite(examRooms) && examRooms > 0;
+  const resolvedExamRooms = hasExplicitExamRooms ? examRooms : inferredExamRooms;
+  const unitLabel = hasExplicitExamRooms ? "exam rooms" : "inferred exam rooms";
+  const unitCountSource = hasExplicitExamRooms
+    ? "explicit_override:exam_room_count"
+    : "inferred_exam_room_count";
+  const annualRevenue =
+    project.analysis.calculations.revenue_analysis?.annual_revenue ?? 8550000;
+  const totalProjectCost =
+    project.analysis.calculations.totals?.total_project_cost ?? 6500000;
+  const entries = [
+    ...(procedureRooms > 0
+      ? [{ id: "procedure_rooms", label: "Procedure Rooms", value: procedureRooms, unit: "rooms" }]
+      : []),
+    ...(xRayRooms > 0
+      ? [{ id: "x_ray_rooms", label: "X-Ray Rooms", value: xRayRooms, unit: "rooms" }]
+      : []),
+  ];
+
+  if (hasExplicitExamRooms) {
+    project.analysis.parsed_input.exam_room_count = examRooms;
+  } else {
+    delete project.analysis.parsed_input.exam_room_count;
+  }
+  if (procedureRooms > 0) {
+    project.analysis.parsed_input.procedure_room_count = procedureRooms;
+  }
+  if (xRayRooms > 0) {
+    project.analysis.parsed_input.x_ray_room_count = xRayRooms;
+  }
+
+  project.analysis.calculations.facility_metrics = {
+    type: "healthcare",
+    units: resolvedExamRooms,
+    unit_label: unitLabel,
+    unit_count_source: unitCountSource,
+    cost_per_unit: totalProjectCost / resolvedExamRooms,
+    revenue_per_unit: annualRevenue / resolvedExamRooms,
+    ...(entries.length > 0 ? { entries } : {}),
+  };
+  project.analysis.calculations.operational_metrics = {
+    staffing: [
+      { label: hasExplicitExamRooms ? "Exam Rooms" : "Inferred Exam Rooms", value: String(resolvedExamRooms) },
+      ...(procedureRooms > 0 ? [{ label: "Procedure Rooms", value: String(procedureRooms) }] : []),
+      ...(xRayRooms > 0 ? [{ label: "X-Ray Rooms", value: String(xRayRooms) }] : []),
+    ],
+    revenue: {
+      [`Revenue per ${hasExplicitExamRooms ? "Exam Rooms" : "Inferred Exam Rooms"}`]: `$${Math.round(
+        annualRevenue / resolvedExamRooms
+      ).toLocaleString()}`,
+      "Operating Margin": "22.0%",
+    },
+    kpis: [
+      { label: "Visits / Day", value: "156.0", color: "green" },
+      {
+        label: hasExplicitExamRooms ? "Exam Room Utilization" : "Inferred Exam Room Utilization",
+        value: "80%",
+        color: "green",
+      },
+    ],
+    per_unit: {
+      units: resolvedExamRooms,
+      unit_label: unitLabel,
+      unit_type: unitLabel,
+      units_source: unitCountSource,
+      annual_revenue_per_unit: annualRevenue / resolvedExamRooms,
+      cost_per_unit: totalProjectCost / resolvedExamRooms,
+      ...(entries.length > 0
+        ? {
+            urgent_care_room_program: {
+              state: hasExplicitExamRooms
+                ? "explicit_exam_room_count"
+                : "inferred_exam_room_count",
+              entries,
+            },
+          }
+        : {}),
+    },
+  };
+  project.analysis.calculations.ownership_analysis.operational_metrics =
+    project.analysis.calculations.operational_metrics;
+  project.analysis.calculations.project_info = {
+    ...project.analysis.calculations.project_info,
+    unit_label: unitLabel,
+    unit_type: unitLabel,
+    unit_count_source: unitCountSource,
+    unit_count: resolvedExamRooms,
+  };
+  project.analysis.calculations.unit_label = unitLabel;
+  project.analysis.calculations.unit_type = unitLabel;
+  project.analysis.calculations.resolved_unit_count = resolvedExamRooms;
+  return project;
+};
+
 const buildFetchedProjectViewProject = (project: any) => {
   const parsedInput = {
     ...(project.analysis?.parsed_input || {}),
@@ -3683,6 +3793,49 @@ describe("ExecutiveViewComplete", () => {
     expect(screen.queryByText("Revenue per unspecified modality program")).not.toBeInTheDocument();
     expect(screen.queryByText("Total Scan Rooms")).not.toBeInTheDocument();
     expect(screen.queryByText(/scan rooms/i)).not.toBeInTheDocument();
+  });
+
+  it("renders Urgent Care no-count cases with Inferred Exam Rooms from backend truth", () => {
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildFetchedProjectViewProject(buildUrgentCareProject())}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "healthcare_urgent_care_v1",
+            "GO",
+            "base_value_gap_positive"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Inferred Exam Rooms")).toBeInTheDocument();
+    expect(screen.queryByText(/^Exam Rooms$/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Procedure Rooms")).not.toBeInTheDocument();
+    expect(screen.queryByText("X-Ray Rooms")).not.toBeInTheDocument();
+  });
+
+  it("renders Urgent Care procedure and x-ray room counts as separate visible program rows", () => {
+    render(
+      <MemoryRouter>
+        <ExecutiveViewComplete
+          project={buildFetchedProjectViewProject(
+            buildUrgentCareProject({ examRooms: 10, procedureRooms: 2, xRayRooms: 2 })
+          )}
+          dealShieldData={buildCrossTypeDealShieldViewModel(
+            "healthcare_urgent_care_v1",
+            "GO",
+            "base_value_gap_positive"
+          ) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Exam Rooms")).toBeInTheDocument();
+    expect(screen.getByText("Procedure Rooms")).toBeInTheDocument();
+    expect(screen.getByText("X-Ray Rooms")).toBeInTheDocument();
+    expect(screen.getAllByText("2").length).toBeGreaterThan(1);
+    expect(screen.queryByText("Inferred Exam Rooms")).not.toBeInTheDocument();
   });
 
   it("renders hotel-native operating model metrics for hospitality projects", () => {

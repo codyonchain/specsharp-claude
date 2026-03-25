@@ -1302,7 +1302,102 @@ class NLPService:
             return max(0, min(max_value, value))
         return None
 
-    def _extract_special_feature_count_overrides(self, text_lower: str) -> Dict[str, int]:
+    def _parse_written_number_token(self, raw_value: str) -> Optional[int]:
+        normalized = raw_value.strip().lower().replace("-", " ")
+        if not normalized:
+            return None
+
+        ones = {
+            "zero": 0,
+            "one": 1,
+            "two": 2,
+            "three": 3,
+            "four": 4,
+            "five": 5,
+            "six": 6,
+            "seven": 7,
+            "eight": 8,
+            "nine": 9,
+        }
+        teens = {
+            "ten": 10,
+            "eleven": 11,
+            "twelve": 12,
+            "thirteen": 13,
+            "fourteen": 14,
+            "fifteen": 15,
+            "sixteen": 16,
+            "seventeen": 17,
+            "eighteen": 18,
+            "nineteen": 19,
+        }
+        tens = {
+            "twenty": 20,
+            "thirty": 30,
+            "forty": 40,
+            "fifty": 50,
+            "sixty": 60,
+            "seventy": 70,
+            "eighty": 80,
+            "ninety": 90,
+        }
+
+        parts = [part for part in normalized.split() if part]
+        if not parts or len(parts) > 2:
+            return None
+        if len(parts) == 1:
+            if parts[0] in ones:
+                return ones[parts[0]]
+            if parts[0] in teens:
+                return teens[parts[0]]
+            if parts[0] in tens:
+                return tens[parts[0]]
+            return None
+        if parts[0] in tens and parts[1] in ones:
+            return tens[parts[0]] + ones[parts[1]]
+        return None
+
+    def _coerce_count_token(self, raw_value: str, *, max_value: int) -> Optional[int]:
+        normalized = raw_value.strip().lower()
+        if not normalized:
+            return None
+        try:
+            value = int(normalized)
+        except ValueError:
+            value = self._parse_written_number_token(normalized)
+        if value is None:
+            return None
+        return max(0, min(max_value, value))
+
+    def _extract_first_count_override(
+        self,
+        text_lower: str,
+        patterns: List[str],
+        *,
+        max_value: int = 300,
+    ) -> Optional[int]:
+        for pattern in patterns:
+            for match in re.finditer(pattern, text_lower, re.IGNORECASE):
+                raw_value = match.groupdict().get("count")
+                if raw_value is None:
+                    try:
+                        raw_value = match.group(1)
+                    except IndexError:
+                        raw_value = None
+                if not isinstance(raw_value, str):
+                    continue
+                value = self._coerce_count_token(raw_value, max_value=max_value)
+                if value is not None:
+                    return value
+        return None
+
+    def _extract_special_feature_count_overrides(
+        self,
+        text_lower: str,
+        *,
+        building_type: Optional[str] = None,
+        building_subtype: Optional[str] = None,
+    ) -> Dict[str, int]:
         feature_patterns: List[Tuple[str, List[str], int]] = [
             (
                 "operating_room_count",
@@ -1373,6 +1468,52 @@ class NLPService:
             overrides.setdefault("dock_door_count", loading_dock_count)
             overrides.setdefault("dock_count", loading_dock_count)
 
+        if (
+            str(building_type or "").strip().lower() == "healthcare"
+            and str(building_subtype or "").strip().lower() == "urgent_care"
+        ):
+            written_ones = "one|two|three|four|five|six|seven|eight|nine"
+            written_teens = (
+                "ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|"
+                "seventeen|eighteen|nineteen"
+            )
+            written_tens = "twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety"
+            written_number_pattern = (
+                rf"(?:{written_teens}|{written_ones}|{written_tens}(?:[-\s](?:{written_ones}))?)"
+            )
+            count_pattern = rf"(?P<count>\d{{1,3}}|{written_number_pattern})"
+            urgent_care_patterns: List[Tuple[str, List[str], int]] = [
+                (
+                    "exam_room_count",
+                    [
+                        rf"\b{count_pattern}\s+exam\s+rooms?\b",
+                    ],
+                    80,
+                ),
+                (
+                    "procedure_room_count",
+                    [
+                        rf"\b{count_pattern}\s+procedure\s+rooms?\b",
+                    ],
+                    20,
+                ),
+                (
+                    "x_ray_room_count",
+                    [
+                        rf"\b{count_pattern}\s+(?:x[\s-]?ray|xray)\s+rooms?\b",
+                    ],
+                    10,
+                ),
+            ]
+            for key, patterns, max_value in urgent_care_patterns:
+                value = self._extract_first_count_override(
+                    text_lower,
+                    patterns,
+                    max_value=max_value,
+                )
+                if value is not None:
+                    overrides[key] = value
+
         return overrides
 
     def extract_project_details(self, text: str) -> Dict[str, Any]:
@@ -1416,7 +1557,11 @@ class NLPService:
             except Exception:
                 pass
 
-        special_feature_count_overrides = self._extract_special_feature_count_overrides(text_lower)
+        special_feature_count_overrides = self._extract_special_feature_count_overrides(
+            text_lower,
+            building_type=building_type,
+            building_subtype=building_subtype,
+        )
         if special_feature_count_overrides:
             extracted.update(special_feature_count_overrides)
 
