@@ -84,7 +84,7 @@ CONFIG = (
             "loading_docks": 15,
             "extra_loading_docks": {
                 "basis": "COUNT_BASED",
-                "value": 65000,
+                "value": 50000,
                 "count_pricing_mode": "overage_above_default",
                 "count_override_keys": [
                     "extra_loading_dock_count",
@@ -94,10 +94,12 @@ CONFIG = (
                     "dock_count",
                 ],
                 "default_count_bands": [
-                    {"label": "mid_box", "max_square_footage": 150000, "count": 4},
-                    {"label": "regional", "max_square_footage": 300000, "count": 8},
-                    {"label": "large_box", "max_square_footage": 600000, "count": 12},
-                    {"label": "mega_box", "count": 16},
+                    {"label": "small_cross_dock", "max_square_footage": 150000, "count": 18},
+                    {"label": "regional_cross_dock", "max_square_footage": 200000, "count": 24},
+                    {"label": "high_throughput_regional", "max_square_footage": 250000, "count": 26},
+                    {"label": "large_sortation_hub", "max_square_footage": 300000, "count": 32},
+                    {"label": "mega_distribution_hub", "max_square_footage": 600000, "count": 60},
+                    {"label": "super_hub", "count": 72},
                 ],
                 "unit_label": "dock",
             },

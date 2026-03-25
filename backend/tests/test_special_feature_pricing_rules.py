@@ -1322,7 +1322,7 @@ def test_distribution_center_without_refrigerated_area_preserves_legacy_construc
         location="Nashville, TN",
         project_class=ProjectClass.GROUND_UP,
         special_features=["extra_loading_docks"],
-        parsed_input_overrides={"loading_dock_count": 10},
+        parsed_input_overrides={"loading_dock_count": 40},
     )
 
     construction_costs = result["construction_costs"]
@@ -1331,7 +1331,7 @@ def test_distribution_center_without_refrigerated_area_preserves_legacy_construc
     assert extra_loading_docks_row["pricing_status"] == INCREMENTAL
     assert extra_loading_docks_row["trade_composition_mode"] == "incremental_premium_only"
     assert "trade_allocation_applied" not in extra_loading_docks_row
-    assert construction_costs["special_features_total"] == pytest.approx(130_000.0)
+    assert construction_costs["special_features_total"] == pytest.approx(700_000.0)
     assert construction_costs["construction_view_allocated_special_features_total"] == pytest.approx(0.0)
     assert construction_costs["construction_view_trade_total"] == pytest.approx(
         construction_costs["construction_total"]
@@ -1545,8 +1545,8 @@ def test_mri_suite_count_override_bills_only_overage_above_included_baseline():
             "distribution_center",
             220_000,
             "extra_loading_docks",
-            {"loading_dock_count": 8},
-            8.0,
+            {"loading_dock_count": 26},
+            26.0,
             "size_band_default",
         ),
         (
@@ -1554,9 +1554,9 @@ def test_mri_suite_count_override_bills_only_overage_above_included_baseline():
             "warehouse",
             220_000,
             "loading_docks",
-            {"loading_dock_count": 8},
-            8.0,
-            "size_band_default",
+            {"loading_dock_count": 6},
+            6.0,
+            "default_count_rule:dock_count",
         ),
     ),
 )
@@ -1628,13 +1628,13 @@ def test_overage_mode_features_bill_zero_when_requested_count_does_not_exceed_ba
             "distribution_center",
             220_000,
             "extra_loading_docks",
-            {"loading_dock_count": 10},
-            130000.0,
+            {"loading_dock_count": 40},
+            700000.0,
             "overage_above_default",
-            2.0,
+            14.0,
             "dock",
             "overage_above_default",
-            8.0,
+            26.0,
         ),
         (
             BuildingType.INDUSTRIAL,
@@ -1642,12 +1642,12 @@ def test_overage_mode_features_bill_zero_when_requested_count_does_not_exceed_ba
             220_000,
             "loading_docks",
             {"loading_dock_count": 10},
-            130000.0,
+            260000.0,
             "overage_above_default",
-            2.0,
+            4.0,
             "dock",
             "overage_above_default",
-            8.0,
+            6.0,
         ),
         (
             BuildingType.INDUSTRIAL,
@@ -1778,14 +1778,14 @@ def test_overage_mode_incremental_features_preserve_safe_default_behavior_withou
 
     assert row["pricing_basis"] == SpecialFeaturePricingBasis.COUNT_BASED.value
     assert row["count_pricing_mode"] == "overage_above_default"
-    assert row["requested_quantity"] == pytest.approx(8.0)
-    assert row["included_baseline_quantity"] == pytest.approx(8.0)
-    assert row["billed_quantity"] == pytest.approx(8.0)
+    assert row["requested_quantity"] == pytest.approx(26.0)
+    assert row["included_baseline_quantity"] == pytest.approx(26.0)
+    assert row["billed_quantity"] == pytest.approx(26.0)
     assert row["quantity_source"] == "size_band_default"
-    assert row["cost_per_count"] == pytest.approx(65000.0)
-    assert row["applied_quantity"] == pytest.approx(8.0)
-    assert row["total_cost"] == pytest.approx(520000.0)
-    assert result["construction_costs"]["special_features_total"] == pytest.approx(520000.0)
+    assert row["cost_per_count"] == pytest.approx(50000.0)
+    assert row["applied_quantity"] == pytest.approx(26.0)
+    assert row["total_cost"] == pytest.approx(1300000.0)
+    assert result["construction_costs"]["special_features_total"] == pytest.approx(1300000.0)
 
 
 def test_warehouse_launch_feature_set_surfaces_baseline_docks_and_office_buildout_honestly():
@@ -1803,12 +1803,13 @@ def test_warehouse_launch_feature_set_surfaces_baseline_docks_and_office_buildou
                 "dock_door_count",
                 "dock_count",
             ],
-            "default_count_bands": [
-                {"label": "mid_box", "max_square_footage": 150000, "count": 4},
-                {"label": "regional", "max_square_footage": 300000, "count": 8},
-                {"label": "large_box", "max_square_footage": 600000, "count": 12},
-                {"label": "mega_box", "count": 16},
-            ],
+            "default_count_rule": {
+                "type": "dock_count",
+                "params": {
+                    "default_min": 4,
+                    "default_sf_per_dock": 40000.0,
+                },
+            },
             "unit_label": "dock",
         },
         "office_buildout": {
@@ -1847,11 +1848,12 @@ def test_warehouse_baseline_features_render_as_included_without_incremental_prem
     assert loading_docks_row["configured_value"] == pytest.approx(65000.0)
     assert loading_docks_row["configured_cost_per_count"] == pytest.approx(65000.0)
     assert loading_docks_row["cost_per_count"] == 0.0
-    assert loading_docks_row["requested_quantity"] == pytest.approx(8.0)
-    assert loading_docks_row["requested_quantity_source"] == "size_band_default"
-    assert loading_docks_row["included_baseline_quantity"] == pytest.approx(8.0)
-    assert loading_docks_row["billed_quantity"] == pytest.approx(8.0)
-    assert loading_docks_row["applied_quantity"] == pytest.approx(8.0)
+    assert loading_docks_row["requested_quantity"] == pytest.approx(6.0)
+    assert loading_docks_row["requested_quantity_source"] == "default_count_rule:dock_count"
+    assert loading_docks_row["included_baseline_quantity"] == pytest.approx(6.0)
+    assert loading_docks_row["included_baseline_quantity_source"] == "default_count_rule:dock_count"
+    assert loading_docks_row["billed_quantity"] == pytest.approx(6.0)
+    assert loading_docks_row["applied_quantity"] == pytest.approx(6.0)
     assert loading_docks_row["total_cost"] == 0.0
 
     assert office_buildout_row["pricing_basis"] == SpecialFeaturePricingBasis.AREA_SHARE_GSF.value
@@ -1867,9 +1869,13 @@ def test_warehouse_baseline_features_render_as_included_without_incremental_prem
         SpecialFeaturePricingBasis.COUNT_BASED.value
     )
     assert available_pricing_by_id["loading_docks"]["count_pricing_mode"] == "overage_above_default"
-    assert available_pricing_by_id["loading_docks"]["requested_quantity"] == pytest.approx(8.0)
+    assert available_pricing_by_id["loading_docks"]["requested_quantity"] == pytest.approx(6.0)
     assert available_pricing_by_id["loading_docks"]["included_baseline_quantity"] == pytest.approx(
-        8.0
+        6.0
+    )
+    assert (
+        available_pricing_by_id["loading_docks"]["included_baseline_quantity_source"]
+        == "default_count_rule:dock_count"
     )
     assert available_pricing_by_id["office_buildout"]["pricing_status"] == INCLUDED_IN_BASELINE
     assert available_pricing_by_id["office_buildout"]["pricing_basis"] == (
@@ -1894,17 +1900,18 @@ def test_warehouse_loading_docks_apply_overage_through_the_canonical_feature_id(
 
     assert sorted(breakdown_by_id) == ["loading_docks"]
     assert sorted(available_pricing_by_id) == ["loading_docks", "office_buildout"]
-    assert result["construction_costs"]["special_features_total"] == pytest.approx(130000.0)
+    assert result["construction_costs"]["special_features_total"] == pytest.approx(260000.0)
     assert loading_docks_row["pricing_basis"] == SpecialFeaturePricingBasis.COUNT_BASED.value
     assert loading_docks_row["pricing_status"] == INCLUDED_IN_BASELINE
     assert loading_docks_row["count_pricing_mode"] == "overage_above_default"
     assert loading_docks_row["requested_quantity"] == pytest.approx(10.0)
     assert loading_docks_row["requested_quantity_source"] == "explicit_override:loading_dock_count"
-    assert loading_docks_row["included_baseline_quantity"] == pytest.approx(8.0)
-    assert loading_docks_row["billed_quantity"] == pytest.approx(2.0)
-    assert loading_docks_row["applied_quantity"] == pytest.approx(2.0)
+    assert loading_docks_row["included_baseline_quantity"] == pytest.approx(6.0)
+    assert loading_docks_row["included_baseline_quantity_source"] == "default_count_rule:dock_count"
+    assert loading_docks_row["billed_quantity"] == pytest.approx(4.0)
+    assert loading_docks_row["applied_quantity"] == pytest.approx(4.0)
     assert loading_docks_row["unit_label"] == "dock"
-    assert loading_docks_row["total_cost"] == pytest.approx(130000.0)
+    assert loading_docks_row["total_cost"] == pytest.approx(260000.0)
     assert "extra_loading_docks" not in breakdown_by_id
     assert "extra_loading_docks" not in available_pricing_by_id
 
@@ -1992,18 +1999,18 @@ def test_available_special_feature_pricing_exposes_overage_preview_quantities_fo
         location="Nashville, TN",
         project_class=ProjectClass.GROUND_UP,
         special_features=["extra_loading_docks"],
-        parsed_input_overrides={"loading_dock_count": 10},
+        parsed_input_overrides={"loading_dock_count": 40},
     )
 
     pricing_row = _available_special_feature_pricing_by_id(result)["extra_loading_docks"]
 
     assert pricing_row["pricing_basis"] == SpecialFeaturePricingBasis.COUNT_BASED.value
     assert pricing_row["count_pricing_mode"] == "overage_above_default"
-    assert pricing_row["requested_quantity"] == pytest.approx(10.0)
+    assert pricing_row["requested_quantity"] == pytest.approx(40.0)
     assert pricing_row["requested_quantity_source"] == "explicit_override:loading_dock_count"
-    assert pricing_row["included_baseline_quantity"] == pytest.approx(8.0)
+    assert pricing_row["included_baseline_quantity"] == pytest.approx(26.0)
     assert pricing_row["included_baseline_quantity_source"] == "size_band_default"
-    assert pricing_row["billed_quantity"] == pytest.approx(2.0)
+    assert pricing_row["billed_quantity"] == pytest.approx(14.0)
     assert pricing_row["billed_quantity_source"] == "overage_above_default"
 
 
@@ -2027,8 +2034,8 @@ def test_warehouse_available_special_feature_pricing_uses_loading_docks_for_expl
     assert pricing_row["count_pricing_mode"] == "overage_above_default"
     assert pricing_row["requested_quantity"] == pytest.approx(10.0)
     assert pricing_row["requested_quantity_source"] == "explicit_override:loading_dock_count"
-    assert pricing_row["included_baseline_quantity"] == pytest.approx(8.0)
-    assert pricing_row["included_baseline_quantity_source"] == "size_band_default"
-    assert pricing_row["billed_quantity"] == pytest.approx(2.0)
+    assert pricing_row["included_baseline_quantity"] == pytest.approx(6.0)
+    assert pricing_row["included_baseline_quantity_source"] == "default_count_rule:dock_count"
+    assert pricing_row["billed_quantity"] == pytest.approx(4.0)
     assert pricing_row["billed_quantity_source"] == "overage_above_default"
     assert "extra_loading_docks" not in pricing_by_id

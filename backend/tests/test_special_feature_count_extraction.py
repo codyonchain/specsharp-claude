@@ -125,20 +125,20 @@ def test_explicit_operating_room_count_from_prompt_changes_requested_and_billed_
 
 def test_explicit_loading_dock_count_from_prompt_reaches_overage_pricing():
     parsed, result = _calculate_from_description(
-        "New 220,000 SF distribution center with 10 loading docks in Nashville, TN",
+        "New 220,000 SF distribution center with 40 loading docks in Nashville, TN",
         special_features=["extra_loading_docks"],
     )
 
     row = _special_feature_breakdown_by_id(result)["extra_loading_docks"]
 
-    assert parsed["loading_dock_count"] == 10
-    assert parsed["dock_door_count"] == 10
-    assert parsed["dock_count"] == 10
-    assert row["requested_quantity"] == pytest.approx(10.0)
+    assert parsed["loading_dock_count"] == 40
+    assert parsed["dock_door_count"] == 40
+    assert parsed["dock_count"] == 40
+    assert row["requested_quantity"] == pytest.approx(40.0)
     assert row["requested_quantity_source"] == "explicit_override:loading_dock_count"
-    assert row["included_baseline_quantity"] == pytest.approx(8.0)
-    assert row["billed_quantity"] == pytest.approx(2.0)
-    assert row["total_cost"] == pytest.approx(130000.0)
+    assert row["included_baseline_quantity"] == pytest.approx(26.0)
+    assert row["billed_quantity"] == pytest.approx(14.0)
+    assert row["total_cost"] == pytest.approx(700000.0)
 
 
 def test_explicit_warehouse_loading_dock_count_bills_overage_through_loading_docks():
@@ -154,9 +154,10 @@ def test_explicit_warehouse_loading_dock_count_bills_overage_through_loading_doc
     assert parsed["loading_dock_count"] == 10
     assert row["requested_quantity"] == pytest.approx(10.0)
     assert row["requested_quantity_source"] == "explicit_override:loading_dock_count"
-    assert row["included_baseline_quantity"] == pytest.approx(8.0)
-    assert row["billed_quantity"] == pytest.approx(2.0)
-    assert row["total_cost"] == pytest.approx(130000.0)
+    assert row["included_baseline_quantity"] == pytest.approx(6.0)
+    assert row["included_baseline_quantity_source"] == "default_count_rule:dock_count"
+    assert row["billed_quantity"] == pytest.approx(4.0)
+    assert row["total_cost"] == pytest.approx(260000.0)
 
 
 def test_explicit_service_bay_count_from_prompt_reaches_overage_pricing():

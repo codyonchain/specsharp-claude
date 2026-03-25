@@ -23,11 +23,11 @@ CONFIG = (
         equipment_cost_per_sf=5,  # Dock equipment, minimal FFE
         typical_floors=1,
         trades=TradeBreakdown(
-            structural=0.48,  # Large clear spans
-            mechanical=0.11,  # Minimal HVAC
-            electrical=0.15,
-            plumbing=0.05,  # Minimal plumbing
-            finishes=0.21,
+            structural=0.45,  # Slab/shell still leads, but dock interfaces are not the whole story
+            mechanical=0.12,  # Lean HVAC with ventilation/unit-heater support
+            electrical=0.19,  # High-bay lighting + service/power density
+            plumbing=0.07,  # ESFR + lean domestic plumbing
+            finishes=0.17,  # Limited office pod + durable shell finishes
         ),
         soft_costs=SoftCosts(
             design_fees=0.04,
@@ -63,12 +63,13 @@ CONFIG = (
                     "dock_door_count",
                     "dock_count",
                 ],
-                "default_count_bands": [
-                    {"label": "mid_box", "max_square_footage": 150000, "count": 4},
-                    {"label": "regional", "max_square_footage": 300000, "count": 8},
-                    {"label": "large_box", "max_square_footage": 600000, "count": 12},
-                    {"label": "mega_box", "count": 16},
-                ],
+                "default_count_rule": {
+                    "type": "dock_count",
+                    "params": {
+                        "default_min": 4,
+                        "default_sf_per_dock": 40000.0,
+                    },
+                },
                 "unit_label": "dock",
             },
             "office_buildout": {

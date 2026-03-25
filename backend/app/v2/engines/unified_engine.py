@@ -71,6 +71,16 @@ MIXED_USE_REVENUE_COMPONENT_MULTIPLIERS: Dict[str, float] = {
     "hotel": 1.12,
     "transit": 0.93,
 }
+FLEX_OFFICE_SHARE_OVERRIDE_KEYS: Tuple[str, ...] = (
+    "office_percent",
+    "office_pct",
+    "officePercent",
+    "officePct",
+    "office_share",
+    "officeShare",
+    "office_split",
+    "officeSplit",
+)
 TENANT_IMPROVEMENT_DESCRIPTION_PATTERNS = (
     re.compile(r"\btenant[\s-]+improvements?\b"),
     re.compile(r"\bti\b"),
@@ -1143,6 +1153,7 @@ class UnifiedEngine:
         })
 
         mixed_use_split_contract: Optional[Dict[str, Any]] = None
+        flex_office_pricing_contract: Optional[Dict[str, float]] = None
         if building_type == BuildingType.MIXED_USE:
             description_for_split = None
             if isinstance(parsed_input_overrides, dict):
@@ -1178,13 +1189,6 @@ class UnifiedEngine:
                 "value": split_value,
                 "invalid_mix": mixed_use_split_contract.get("invalid_mix"),
             })
-        
-        # Calculate base construction cost
-        construction_cost = final_cost_per_sf * square_footage
-        
-        # Calculate equipment cost with finish/regional adjustments
-        equipment_multiplier = modifiers.get('finish_cost_factor', 1.0)
-        equipment_cost = building_config.equipment_cost_per_sf * equipment_multiplier * square_footage
 
         scope_context = self._resolve_scope_context(special_features)
         pricing_override_sources: List[Dict[str, Any]] = []
@@ -1192,6 +1196,33 @@ class UnifiedEngine:
             pricing_override_sources.append(parsed_input_overrides)
         if isinstance(scope_context, dict):
             pricing_override_sources.extend(self._collect_scope_override_sources(scope_context))
+
+        flex_office_pricing_contract = self._resolve_flex_office_pricing_contract(
+            building_type=building_type,
+            subtype=subtype,
+            building_config=building_config,
+            override_sources=pricing_override_sources,
+        )
+        if isinstance(flex_office_pricing_contract, dict):
+            flex_cost_factor = float(flex_office_pricing_contract.get("cost_factor_applied", 1.0) or 1.0)
+            if flex_cost_factor > 0.0:
+                final_cost_per_sf = final_cost_per_sf * flex_cost_factor
+            self._log_trace("flex_office_pricing_resolved", {
+                "office_share": round(float(flex_office_pricing_contract.get("office_share", 0.0) or 0.0), 6),
+                "baseline_share": round(float(flex_office_pricing_contract.get("baseline_share", 0.0) or 0.0), 6),
+                "office_cost_multiplier": round(
+                    float(flex_office_pricing_contract.get("office_cost_multiplier", 0.0) or 0.0),
+                    6,
+                ),
+                "cost_factor_applied": round(flex_cost_factor, 6),
+            })
+
+        # Calculate base construction cost
+        construction_cost = final_cost_per_sf * square_footage
+        
+        # Calculate equipment cost with finish/regional adjustments
+        equipment_multiplier = modifiers.get('finish_cost_factor', 1.0)
+        equipment_cost = building_config.equipment_cost_per_sf * equipment_multiplier * square_footage
         
         # Add special features if any
         special_features_cost = 0
@@ -1227,6 +1258,56 @@ class UnifiedEngine:
 
                 if canonical_feature_key in building_config.special_features:
                     resolved_special_feature_ids.append(canonical_feature_key)
+
+            auto_pricing_dock_count = self._resolve_distribution_center_auto_pricing_dock_count(
+                building_type=building_type,
+                subtype=subtype,
+                scope_context=scope_context,
+            )
+            if (
+                auto_pricing_dock_count is not None
+                and "extra_loading_docks" in available_feature_keys
+                and "extra_loading_docks" not in resolved_special_feature_ids
+            ):
+                resolved_special_feature_ids.append("extra_loading_docks")
+                self._log_trace(
+                    "special_feature_auto_activated_from_parsed_input",
+                    {
+                        "feature": "extra_loading_docks",
+                        "building_type": (
+                            building_type.value
+                            if hasattr(building_type, "value")
+                            else str(building_type)
+                        ),
+                        "subtype": subtype,
+                        "dock_count": auto_pricing_dock_count,
+                    },
+                )
+
+            warehouse_auto_pricing_dock_count = self._resolve_warehouse_auto_pricing_dock_count(
+                building_type=building_type,
+                subtype=subtype,
+                scope_context=scope_context,
+            )
+            if (
+                warehouse_auto_pricing_dock_count is not None
+                and "loading_docks" in available_feature_keys
+                and "loading_docks" not in resolved_special_feature_ids
+            ):
+                resolved_special_feature_ids.append("loading_docks")
+                self._log_trace(
+                    "special_feature_auto_activated_from_parsed_input",
+                    {
+                        "feature": "loading_docks",
+                        "building_type": (
+                            building_type.value
+                            if hasattr(building_type, "value")
+                            else str(building_type)
+                        ),
+                        "subtype": subtype,
+                        "dock_count": warehouse_auto_pricing_dock_count,
+                    },
+                )
 
         available_feature_ids = list(building_config.special_features.keys()) if building_config.special_features else []
         available_special_feature_resolution = resolve_special_feature_pricing(
@@ -1521,6 +1602,9 @@ class UnifiedEngine:
                 'percentage_difference': round((modifiers.get('market_factor', 1.0) - 1.0) * 100, 1)
             }
         }
+        if isinstance(flex_office_pricing_contract, dict):
+            cost_dna['flex_office_mix'] = flex_office_pricing_contract
+            cost_dna['applied_adjustments']['after_flex_office_mix'] = final_cost_per_sf
         
         # Add special features if present
         if special_features:
@@ -1547,6 +1631,13 @@ class UnifiedEngine:
                 'label': 'Finish Level',
                 'multiplier': finish_cost_factor
             })
+        if isinstance(flex_office_pricing_contract, dict):
+            flex_cost_factor = self._coerce_number(flex_office_pricing_contract.get("cost_factor_applied")) or 1.0
+            if abs(flex_cost_factor - 1.0) > 1e-9:
+                cost_build_up.append({
+                    'label': 'Flex Office Mix',
+                    'multiplier': flex_cost_factor
+                })
         
         # Ensure the build-up array always has something meaningful so frontend visuals don't break
         fallback_cost_build_up = cost_build_up if cost_build_up else [
@@ -2133,6 +2224,64 @@ class UnifiedEngine:
 
         return sources
 
+    def _resolve_distribution_center_auto_pricing_dock_count(
+        self,
+        building_type: BuildingType,
+        subtype: Any,
+        scope_context: Optional[Dict[str, Any]],
+    ) -> Optional[int]:
+        if building_type != BuildingType.INDUSTRIAL:
+            return None
+
+        subtype_value = subtype.value if hasattr(subtype, "value") else subtype
+        subtype_key = str(subtype_value or "").strip().lower()
+        if subtype_key != "distribution_center":
+            return None
+
+        return self._resolve_explicit_dock_count_override(scope_context)
+
+    def _resolve_warehouse_auto_pricing_dock_count(
+        self,
+        building_type: BuildingType,
+        subtype: Any,
+        scope_context: Optional[Dict[str, Any]],
+    ) -> Optional[int]:
+        if building_type != BuildingType.INDUSTRIAL:
+            return None
+
+        subtype_value = subtype.value if hasattr(subtype, "value") else subtype
+        subtype_key = str(subtype_value or "").strip().lower()
+        if subtype_key != "warehouse":
+            return None
+
+        return self._resolve_explicit_dock_count_override(scope_context)
+
+    def _resolve_explicit_dock_count_override(
+        self,
+        scope_context: Optional[Dict[str, Any]],
+    ) -> Optional[int]:
+        override_sources = self._collect_scope_override_sources(scope_context)
+        if not override_sources:
+            return None
+
+        dock_count = self._get_override_number(
+            override_sources,
+            [
+                "loading_dock_count",
+                "dock_door_count",
+                "dock_doors",
+                "dock_count",
+                "loadingDockCount",
+                "dockDoorCount",
+                "dockDoors",
+                "dockCount",
+            ],
+        )
+        if dock_count is None or dock_count <= 0:
+            return None
+
+        return max(1, int(round(dock_count)))
+
     @staticmethod
     def _coerce_number(value: Any) -> Optional[float]:
         if value is None:
@@ -2169,6 +2318,61 @@ class UnifiedEngine:
         if percent > 1.0:
             percent = percent / 100.0
         return max(percent, 0.0)
+
+    def _resolve_flex_office_pricing_contract(
+        self,
+        building_type: BuildingType,
+        subtype: Any,
+        building_config: Any,
+        override_sources: List[Dict[str, Any]],
+    ) -> Optional[Dict[str, float]]:
+        if building_type != BuildingType.INDUSTRIAL:
+            return None
+
+        subtype_key = (subtype.value if hasattr(subtype, "value") else subtype) or ""
+        subtype_key = str(subtype_key).strip().lower()
+        if subtype_key != "flex_space":
+            return None
+
+        baseline_share = self._coerce_number(
+            getattr(building_config, "office_share_pricing_baseline", None)
+        )
+        office_cost_multiplier = self._coerce_number(
+            getattr(building_config, "office_share_cost_multiplier", None)
+        )
+        if baseline_share is None or office_cost_multiplier is None or office_cost_multiplier <= 0.0:
+            return None
+
+        office_share = self._get_percent_override(
+            override_sources,
+            list(FLEX_OFFICE_SHARE_OVERRIDE_KEYS),
+        )
+        if office_share is None:
+            return None
+
+        baseline_share = max(0.0, min(1.0, float(baseline_share)))
+        office_share = max(0.0, min(1.0, float(office_share)))
+        warehouse_cost_multiplier = 1.0
+        baseline_weighted_factor = (
+            ((1.0 - baseline_share) * warehouse_cost_multiplier)
+            + (baseline_share * float(office_cost_multiplier))
+        )
+        resolved_weighted_factor = (
+            ((1.0 - office_share) * warehouse_cost_multiplier)
+            + (office_share * float(office_cost_multiplier))
+        )
+
+        if baseline_weighted_factor <= 0.0:
+            cost_factor_applied = 1.0
+        else:
+            cost_factor_applied = resolved_weighted_factor / baseline_weighted_factor
+
+        return {
+            "office_share": office_share,
+            "baseline_share": baseline_share,
+            "office_cost_multiplier": float(office_cost_multiplier),
+            "cost_factor_applied": max(0.0, float(cost_factor_applied)),
+        }
 
     @staticmethod
     def _default_mixed_use_pair(subtype: Any) -> Tuple[str, str]:
@@ -2590,12 +2794,20 @@ class UnifiedEngine:
         percent_override_keys = (
             params.get("percent_override_keys") if isinstance(params.get("percent_override_keys"), list) else []
         )
-        office_pct_override = self._get_override_number(override_sources, percent_override_keys)
+        office_pct_override = self._get_percent_override(override_sources, percent_override_keys)
+        if office_pct_override is None:
+            office_pct_override = self._get_percent_override(
+                override_sources,
+                [
+                    "office_share",
+                    "officeShare",
+                    "office_split",
+                    "officeSplit",
+                ],
+            )
         percent: Optional[float] = None
         if office_pct_override is not None:
-            percent_value = float(office_pct_override)
-            if 0.0 <= percent_value <= 1.0:
-                percent = percent_value
+            percent = float(office_pct_override)
 
         if percent is None:
             percent = float(params.get("default_percent", 0.05) or 0.05)

@@ -101,6 +101,7 @@ class SpecialFeaturePricingRule(TypedDict, total=False):
     count_override_keys: List[str]
     unit_label: str
     default_count_bands: List["SpecialFeaturePricingCountBand"]
+    default_count_rule: "SpecialFeaturePricingDefaultCountRule"
     area_share_of_gsf: float
     size_band: str
     trade_allocation: "SpecialFeatureTradeAllocationRule"
@@ -111,6 +112,12 @@ class SpecialFeaturePricingCountBand(TypedDict, total=False):
     label: str
     max_square_footage: float
     count: float
+
+
+class SpecialFeaturePricingDefaultCountRule(TypedDict, total=False):
+    """Formula-driven default count contract for count-based pricing."""
+    type: str
+    params: Dict[str, Any]
 
 
 class SpecialFeatureTradeAllocationRule(TypedDict, total=False):
@@ -290,6 +297,8 @@ class BuildingConfig:
     scope_defaults: Dict[str, Any] = field(default_factory=dict)
     cost_clamp: Dict[str, Any] = field(default_factory=dict)
     finish_level_multipliers: Dict[str, Any] = field(default_factory=dict)
+    office_share_pricing_baseline: Optional[float] = None
+    office_share_cost_multiplier: Optional[float] = None
     facility_metrics_profile: Optional[str] = None
     exclude_from_facility_opex: List[str] = field(default_factory=list)
 

@@ -48,6 +48,12 @@ class NormalizedSpecialFeatureCountBand:
 
 
 @dataclass(frozen=True)
+class NormalizedSpecialFeatureDefaultCountRule:
+    rule_type: str
+    params: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class NormalizedSpecialFeaturePricingRule:
     feature_id: str
     basis: SpecialFeaturePricingBasis
@@ -58,6 +64,7 @@ class NormalizedSpecialFeaturePricingRule:
     count_override_keys: Tuple[str, ...] = ()
     unit_label: Optional[str] = None
     default_count_bands: Tuple[NormalizedSpecialFeatureCountBand, ...] = ()
+    default_count_rule: Optional[NormalizedSpecialFeatureDefaultCountRule] = None
     area_share_of_gsf: Optional[float] = None
     size_band: Optional[str] = None
     trade_allocation_weights: Tuple[Tuple[str, float], ...] = ()
@@ -271,6 +278,48 @@ def _normalize_default_count_bands(
     return tuple(normalized_bands)
 
 
+def _normalize_default_count_rule(
+    feature_id: str,
+    raw_rule: Any,
+) -> Optional[NormalizedSpecialFeatureDefaultCountRule]:
+    if raw_rule is None:
+        return None
+    if not isinstance(raw_rule, Mapping):
+        raise ValueError(
+            f"Special feature pricing field 'default_count_rule' for feature '{feature_id}' "
+            "must be a dictionary"
+        )
+
+    raw_rule_type = _coerce_optional_string(
+        feature_id=feature_id,
+        field_name="default_count_rule.type",
+        raw_value=raw_rule.get("type"),
+    )
+    if raw_rule_type is None:
+        raise ValueError(
+            f"Special feature pricing field 'default_count_rule.type' for feature '{feature_id}' "
+            "must be a non-empty string"
+        )
+
+    rule_type = raw_rule_type.strip().lower()
+    if rule_type not in {"dock_count"}:
+        raise ValueError(
+            f"Unsupported special feature default count rule '{raw_rule_type}' for feature '{feature_id}'"
+        )
+
+    raw_params = raw_rule.get("params") or {}
+    if not isinstance(raw_params, Mapping):
+        raise ValueError(
+            f"Special feature pricing field 'default_count_rule.params' for feature '{feature_id}' "
+            "must be a dictionary"
+        )
+
+    return NormalizedSpecialFeatureDefaultCountRule(
+        rule_type=rule_type,
+        params={str(key): value for key, value in raw_params.items()},
+    )
+
+
 def _normalize_trade_allocation_weights(
     feature_id: str,
     raw_allocation: Any,
@@ -365,6 +414,38 @@ def _resolve_default_count_quantity(
                     quantity=band_count,
                     source="size_band_default",
                     resolved_size_band=band.label,
+                )
+
+    default_count_rule = rule.default_count_rule
+    if default_count_rule is not None:
+        if default_count_rule.rule_type == "dock_count":
+            default_min = _coerce_optional_float(
+                feature_id=rule.feature_id,
+                field_name="default_count_rule.params.default_min",
+                raw_value=default_count_rule.params.get("default_min"),
+            )
+            default_sf_per_dock = _coerce_optional_float(
+                feature_id=rule.feature_id,
+                field_name="default_count_rule.params.default_sf_per_dock",
+                raw_value=default_count_rule.params.get("default_sf_per_dock"),
+            )
+            default_min_count = max(
+                0,
+                int(round(default_min if default_min is not None else 1.0)),
+            )
+            sf_per_dock = float(default_sf_per_dock if default_sf_per_dock is not None else 10000.0)
+            if sf_per_dock <= 0:
+                raise ValueError(
+                    f"Special feature default count rule 'dock_count' for feature '{rule.feature_id}' "
+                    "must define a positive 'default_sf_per_dock'"
+                )
+            resolved_quantity = _normalize_count_quantity(
+                max(default_min_count, int(round(sf_value / sf_per_dock)))
+            )
+            if resolved_quantity is not None:
+                return ResolvedSpecialFeatureCountQuantity(
+                    quantity=resolved_quantity,
+                    source="default_count_rule:dock_count",
                 )
 
     configured_count = _normalize_count_quantity(rule.count)
@@ -484,6 +565,10 @@ def normalize_special_feature_pricing_rule(
         feature_id=feature_id,
         raw_bands=raw_rule.get("default_count_bands"),
     )
+    normalized_default_count_rule = _normalize_default_count_rule(
+        feature_id=feature_id,
+        raw_rule=raw_rule.get("default_count_rule"),
+    )
     normalized_area_share_of_gsf = _coerce_optional_float(
         feature_id=feature_id,
         field_name="area_share_of_gsf",
@@ -494,6 +579,7 @@ def normalize_special_feature_pricing_rule(
         and count_pricing_mode == SpecialFeatureCountPricingMode.OVERAGE_ABOVE_DEFAULT
         and normalized_count is None
         and not normalized_default_count_bands
+        and normalized_default_count_rule is None
     ):
         raise ValueError(
             f"Count-based overage feature '{feature_id}' must define a baseline default count"
@@ -525,6 +611,7 @@ def normalize_special_feature_pricing_rule(
             raw_value=raw_rule.get("unit_label"),
         ),
         default_count_bands=normalized_default_count_bands,
+        default_count_rule=normalized_default_count_rule,
         area_share_of_gsf=normalized_area_share_of_gsf,
         size_band=raw_size_band,
         trade_allocation_weights=_normalize_trade_allocation_weights(
@@ -593,6 +680,11 @@ def serialize_special_feature_pricing_rule_preview(
                 }
                 for band in rule.default_count_bands
             ]
+        if rule.default_count_rule is not None:
+            preview["configured_default_count_rule"] = {
+                "type": rule.default_count_rule.rule_type,
+                "params": dict(rule.default_count_rule.params),
+            }
     if rule.basis == SpecialFeaturePricingBasis.AREA_SHARE_GSF:
         preview["configured_cost_per_feature_area_sf"] = rule.configured_value
     if rule.count is not None:

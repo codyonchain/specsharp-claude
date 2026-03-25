@@ -20,7 +20,7 @@ SCOPE_ITEM_PROFILES = {
                         "unit": "SF",
                         "allocation": {
                             "type": "share_of_trade",
-                            "share": 0.45,
+                            "share": 0.48,
                         },
                         "quantity_rule": {
                             "type": "sf",
@@ -33,7 +33,7 @@ SCOPE_ITEM_PROFILES = {
                         "unit": "SF",
                         "allocation": {
                             "type": "share_of_trade",
-                            "share": 0.25,
+                            "share": 0.30,
                         },
                         "quantity_rule": {
                             "type": "sf",
@@ -46,7 +46,7 @@ SCOPE_ITEM_PROFILES = {
                         "unit": "SF",
                         "allocation": {
                             "type": "share_of_trade",
-                            "share": 0.10,
+                            "share": 0.12,
                         },
                         "quantity_rule": {
                             "type": "sf",
@@ -55,17 +55,17 @@ SCOPE_ITEM_PROFILES = {
                     },
                     {
                         "key": "dock_pits_loading_aprons",
-                        "label": "Dock pits and loading aprons",
+                        "label": "Dock pits and localized loading apron interface",
                         "unit": "EA",
                         "allocation": {
                             "type": "share_of_trade",
-                            "share": 0.20,
+                            "share": 0.10,
                         },
                         "quantity_rule": {
                             "type": "dock_count",
                             "params": {
                                 "default_min": 4,
-                                "default_sf_per_dock": 10000.0,
+                                "default_sf_per_dock": 40000.0,
                                 "override_keys": [
                                     "dock_doors",
                                     "dock_count",
@@ -332,11 +332,11 @@ SCOPE_ITEM_PROFILES = {
                 "items": [
                     {
                         "key": "office_buildout",
-                        "label": "Office build-out (walls, ceilings, flooring)",
+                        "label": "Limited shipping office / restroom finish package",
                         "unit": "SF",
                         "allocation": {
                             "type": "share_of_trade",
-                            "share": 0.30,
+                            "share": 0.14,
                         },
                         "quantity_rule": {
                             "type": "office_sf",
@@ -359,41 +359,78 @@ SCOPE_ITEM_PROFILES = {
                     },
                     {
                         "key": "warehouse_floor_sealers",
-                        "label": "Warehouse floor sealers, striping, and protection",
+                        "label": "Warehouse floor sealer, striping, and wear protection",
                         "unit": "SF",
                         "allocation": {
                             "type": "share_of_trade",
-                            "share": 0.35,
+                            "share": 0.50,
                         },
                         "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
+                            "type": "warehouse_sf",
+                            "params": {
+                                "default_percent": 0.05,
+                                "default_min_sf": 1500.0,
+                                "office_override_keys": [
+                                    "office_sf",
+                                    "officeSquareFeet",
+                                    "office_space_sf",
+                                ],
+                                "office_percent_override_keys": [
+                                    "office_percent",
+                                    "office_pct",
+                                    "officePercent",
+                                    "officePct",
+                                ],
+                            },
                         },
                     },
                     {
                         "key": "minimal_interior_finishes",
-                        "label": "Minimal interior finishes allowance",
+                        "label": "Dock doors, bumpers, seals, and safety bollards",
+                        "unit": "EA",
+                        "allocation": {
+                            "type": "share_of_trade",
+                            "share": 0.16,
+                        },
+                        "quantity_rule": {
+                            "type": "dock_count",
+                            "params": {
+                                "default_min": 4,
+                                "default_sf_per_dock": 40000.0,
+                                "override_keys": [
+                                    "dock_doors",
+                                    "dock_count",
+                                    "dockDoors",
+                                    "dockCount",
+                                ],
+                            },
+                        },
+                    },
+                    {
+                        "key": "doors_hardware_misc",
+                        "label": "Protective painting, interior doors, and shell accessory allowance",
                         "unit": "SF",
                         "allocation": {
                             "type": "share_of_trade",
                             "share": 0.20,
                         },
                         "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
-                        },
-                    },
-                    {
-                        "key": "doors_hardware_misc",
-                        "label": "Doors, hardware, and misc interior finishes",
-                        "unit": "SF",
-                        "allocation": {
-                            "type": "share_of_trade",
-                            "share": 0.15,
-                        },
-                        "quantity_rule": {
-                            "type": "sf",
-                            "params": {},
+                            "type": "warehouse_sf",
+                            "params": {
+                                "default_percent": 0.05,
+                                "default_min_sf": 1500.0,
+                                "office_override_keys": [
+                                    "office_sf",
+                                    "officeSquareFeet",
+                                    "office_space_sf",
+                                ],
+                                "office_percent_override_keys": [
+                                    "office_percent",
+                                    "office_pct",
+                                    "officePercent",
+                                    "officePct",
+                                ],
+                            },
                         },
                     },
                 ],
