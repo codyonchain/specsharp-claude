@@ -58,6 +58,8 @@ CONFIG = (
         nlp=NLPConfig(
             keywords=[
                 "outpatient clinic",
+                "multispecialty clinic",
+                "multi specialty clinic",
                 "primary care clinic",
                 "primary care",
                 "family medicine clinic",
@@ -87,20 +89,20 @@ CONFIG = (
                 "basis": "COUNT_BASED",
                 "value": 12000,
                 "count_pricing_mode": "overage_above_default",
-                "count_override_keys": ["exam_room_count", "exam_rooms_count", "room_count"],
+                "count_override_keys": ["exam_room_count"],
                 "default_count_bands": [
                     {"label": "compact_clinic", "max_square_footage": 6000, "count": 8},
                     {"label": "standard_clinic", "max_square_footage": 12000, "count": 16},
                     {"label": "expanded_clinic", "count": 28},
                 ],
-                "unit_label": "room",
+                "unit_label": "exam room",
             },
             "procedure_room": {
                 "basis": "COUNT_BASED",
                 "value": 175000,
                 "count": 1,
-                "count_override_keys": ["procedure_room_count", "procedure_suite_count"],
-                "unit_label": "room",
+                "count_override_keys": ["procedure_room_count"],
+                "unit_label": "procedure room",
             },
             "laboratory": {
                 "basis": "AREA_SHARE_GSF",

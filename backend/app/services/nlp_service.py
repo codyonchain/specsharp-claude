@@ -1468,9 +1468,10 @@ class NLPService:
             overrides.setdefault("dock_door_count", loading_dock_count)
             overrides.setdefault("dock_count", loading_dock_count)
 
+        healthcare_subtype = str(building_subtype or "").strip().lower()
         if (
             str(building_type or "").strip().lower() == "healthcare"
-            and str(building_subtype or "").strip().lower() == "urgent_care"
+            and healthcare_subtype in {"urgent_care", "outpatient_clinic"}
         ):
             written_ones = "one|two|three|four|five|six|seven|eight|nine"
             written_teens = (
@@ -1482,30 +1483,48 @@ class NLPService:
                 rf"(?:{written_teens}|{written_ones}|{written_tens}(?:[-\s](?:{written_ones}))?)"
             )
             count_pattern = rf"(?P<count>\d{{1,3}}|{written_number_pattern})"
-            urgent_care_patterns: List[Tuple[str, List[str], int]] = [
-                (
-                    "exam_room_count",
-                    [
-                        rf"\b{count_pattern}\s+exam\s+rooms?\b",
-                    ],
-                    80,
-                ),
-                (
-                    "procedure_room_count",
-                    [
-                        rf"\b{count_pattern}\s+procedure\s+rooms?\b",
-                    ],
-                    20,
-                ),
-                (
-                    "x_ray_room_count",
-                    [
-                        rf"\b{count_pattern}\s+(?:x[\s-]?ray|xray)\s+rooms?\b",
-                    ],
-                    10,
-                ),
-            ]
-            for key, patterns, max_value in urgent_care_patterns:
+            healthcare_room_patterns: Dict[str, List[Tuple[str, List[str], int]]] = {
+                "urgent_care": [
+                    (
+                        "exam_room_count",
+                        [
+                            rf"\b{count_pattern}\s+exam\s+rooms?\b",
+                        ],
+                        80,
+                    ),
+                    (
+                        "procedure_room_count",
+                        [
+                            rf"\b{count_pattern}\s+procedure\s+rooms?\b",
+                        ],
+                        20,
+                    ),
+                    (
+                        "x_ray_room_count",
+                        [
+                            rf"\b{count_pattern}\s+(?:x[\s-]?ray|xray)\s+rooms?\b",
+                        ],
+                        10,
+                    ),
+                ],
+                "outpatient_clinic": [
+                    (
+                        "exam_room_count",
+                        [
+                            rf"\b{count_pattern}\s+exam\s+rooms?\b",
+                        ],
+                        120,
+                    ),
+                    (
+                        "procedure_room_count",
+                        [
+                            rf"\b{count_pattern}\s+procedure\s+rooms?\b",
+                        ],
+                        40,
+                    ),
+                ],
+            }
+            for key, patterns, max_value in healthcare_room_patterns.get(healthcare_subtype, []):
                 value = self._extract_first_count_override(
                     text_lower,
                     patterns,
