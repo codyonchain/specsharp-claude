@@ -471,6 +471,7 @@ export const DealShieldView: React.FC<Props> = ({
   const [controlsSaving, setControlsSaving] = useState(false);
   const [controlsError, setControlsError] = useState<string | null>(null);
   const [controls, setControls] = useState<DealShieldControls>(DEFAULT_DEALSHIELD_CONTROLS);
+  const [controlsExpanded, setControlsExpanded] = useState(false);
   const [hasPendingCostAnchorDraft, setHasPendingCostAnchorDraft] = useState(false);
   const lastProjectIdRef = useRef(projectId);
 
@@ -1008,6 +1009,7 @@ export const DealShieldView: React.FC<Props> = ({
     if (lastProjectIdRef.current === projectId) return;
     lastProjectIdRef.current = projectId;
     setHasPendingCostAnchorDraft(false);
+    setControlsExpanded(false);
     setControls(controlsFromPayload);
   }, [controlsFromPayload, projectId]);
 
@@ -1102,6 +1104,13 @@ export const DealShieldView: React.FC<Props> = ({
     context?.sf ??
     context?.gross_sf ??
     context?.grossSf;
+  const controlsStressBandText = `±${Math.trunc(Number(controls.stress_band_pct || DEFAULT_DEALSHIELD_CONTROLS.stress_band_pct))}%`;
+  const controlsAnchorSummaryText = controls.use_cost_anchor
+    ? `On${toFiniteNumber(controls.anchor_total_project_cost) !== null
+      ? ` (${formatDecisionMetricValue(controls.anchor_total_project_cost, 'totals.total_project_cost')})`
+      : ''}`
+    : 'Off';
+  const controlsSummaryText = `Stress ${controlsStressBandText} | Anchor ${controlsAnchorSummaryText}`;
 
   const persistControls = async (nextControls: DealShieldControls) => {
     if (!projectId) return;
@@ -1213,16 +1222,11 @@ export const DealShieldView: React.FC<Props> = ({
     <div className="space-y-6">
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-blue-600" />
               <h2 className="text-2xl font-semibold text-slate-900">DealShield</h2>
             </div>
-            {profileId && (
-              <p className="text-sm text-slate-500">
-                profile_id: <span className="font-medium text-slate-700">{profileId}</span>
-              </p>
-            )}
             <div className="flex flex-wrap gap-2 text-xs text-slate-600">
               {contextLocation && (
                 <span className="rounded-full bg-slate-100 px-2.5 py-1">
@@ -1235,87 +1239,11 @@ export const DealShieldView: React.FC<Props> = ({
                 </span>
               )}
             </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <p className="mb-3 text-xs leading-5 text-slate-600">
-                Use the default basis for conceptual screening. If you have a real bid or GMP,
-                anchor scenarios to that cost basis before comparing downside cases.
+            {dealShieldData && (
+              <p className="text-sm text-slate-500">
+                Current settings: <span className="font-medium text-slate-700">{controlsSummaryText}</span>
               </p>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <label className="flex h-full flex-col gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
-                  <span className="font-medium text-slate-900">Downside Stress Level</span>
-                  <select
-                    value={controls.stress_band_pct}
-                    onChange={handleStressBandChange}
-                    disabled={controlsSaving}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {DEALSHIELD_STRESS_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        ±{option}%
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-xs leading-5 text-slate-500">
-                    Controls how aggressively conservative and ugly cases move relative to the current project basis.
-                  </span>
-                </label>
-                <label className="flex h-full flex-col gap-2 rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
-                  <span className="flex items-start gap-2">
-                    <input
-                      type="checkbox"
-                      checked={controls.use_cost_anchor}
-                      onChange={handleUseCostAnchorChange}
-                      disabled={controlsSaving}
-                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span>
-                      <span className="block font-medium text-slate-900">Anchor scenarios to bid/GMP cost</span>
-                      <span className="mt-1 block text-xs leading-5 text-slate-500">
-                        Use this when downside scenarios should start from a known bid or GMP cost basis.
-                      </span>
-                    </span>
-                  </span>
-                </label>
-                <label
-                  className={`flex h-full flex-col gap-1.5 rounded-lg border px-3 py-3 text-sm ${
-                    controls.use_cost_anchor
-                      ? 'border-slate-200 bg-white text-slate-700'
-                      : 'border-slate-200 bg-slate-100 text-slate-400'
-                  }`}
-                >
-                  <span className={`font-medium ${controls.use_cost_anchor ? 'text-slate-900' : 'text-slate-500'}`}>
-                    Bid/GMP cost basis
-                  </span>
-                  <input
-                    type="number"
-                    value={controls.anchor_total_project_cost ?? ''}
-                    onChange={handleAnchorTotalCostChange}
-                    onBlur={handleAnchorTotalCostBlur}
-                    placeholder="15000000"
-                    disabled={controlsSaving || !controls.use_cost_anchor}
-                    className={`rounded-lg border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60 ${
-                      controls.use_cost_anchor
-                        ? 'border-slate-300 bg-white text-slate-700'
-                        : 'border-slate-200 bg-slate-100 text-slate-400'
-                    }`}
-                  />
-                  <span className={`text-xs leading-5 ${controls.use_cost_anchor ? 'text-slate-500' : 'text-slate-400'}`}>
-                    {controls.use_cost_anchor
-                      ? 'Used as the base cost before scenario stresses are applied.'
-                      : 'Turn on the anchor above to apply scenarios against a known bid/GMP cost.'}
-                  </span>
-                </label>
-              </div>
-              <p className="mt-3 text-[11px] text-slate-500">
-                These controls affect base and downside scenario comparisons only.
-              </p>
-              {controlsSaving && (
-                <p className="mt-2 text-xs text-slate-500">Updating DealShield scenarios...</p>
-              )}
-              {controlsError && (
-                <p className="mt-2 text-xs text-rose-600">{controlsError}</p>
-              )}
-            </div>
+            )}
           </div>
           <button
             type="button"
@@ -1464,25 +1392,6 @@ export const DealShieldView: React.FC<Props> = ({
                       <p className="mt-2 text-sm text-slate-700">{exposureConcentrationUnavailableReason ?? 'Unavailable.'}</p>
                     )}
                   </div>
-                </div>
-
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Ranked Most Likely Wrong</p>
-                  {rankedLikelyWrong.length > 0 ? (
-                    <ul className="mt-2 space-y-2 text-sm text-slate-700">
-                      {rankedLikelyWrong.map((entry, index) => (
-                        <li key={`${entry.id ?? 'ranked-likely-wrong'}-${index}`} className="rounded border border-slate-200 bg-white px-2.5 py-2">
-                          <p className="font-medium text-slate-800">{formatValue(entry.text ?? entry.id)}</p>
-                          <p className="mt-1 text-xs text-slate-600">
-                            Impact: {formatAssumptionPercent(entry.impact_pct)} | {isManufacturingProfile ? 'Risk' : 'Severity'}: {String(formatValue(entry.severity)).toLowerCase() === 'unknown' ? 'Unscored' : formatValue(entry.severity)}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-600">Why: {formatValue(entry.why)}</p>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="mt-2 text-sm text-slate-700">{rankedLikelyWrongUnavailableReason ?? 'Unavailable.'}</p>
-                  )}
                 </div>
 
                 {decisionInsuranceUnavailableNotes.length > 0 && (
@@ -1661,78 +1570,239 @@ export const DealShieldView: React.FC<Props> = ({
             )}
           </section>
 
+          <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setControlsExpanded((current) => !current)}
+              aria-expanded={controlsExpanded}
+              aria-controls="dealshield-scenario-settings"
+              className="flex w-full flex-col gap-3 text-left sm:flex-row sm:items-start sm:justify-between"
+            >
+              <div className="space-y-1">
+                <h3 className="text-xl font-semibold tracking-tight text-slate-900">Scenario Settings</h3>
+                <p className="text-sm text-slate-600">
+                  Adjust downside stress and cost anchor inputs after the decision read.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 text-sm text-slate-600">
+                <span className="rounded-full bg-white px-3 py-1 font-medium text-slate-700 shadow-sm">
+                  {controlsSummaryText}
+                </span>
+                <span className="font-medium text-blue-700">
+                  {controlsExpanded ? 'Hide settings' : 'Show settings'}
+                </span>
+              </div>
+            </button>
+            {controlsExpanded && (
+              <div
+                id="dealshield-scenario-settings"
+                className="mt-4 rounded-xl border border-slate-200 bg-white p-3"
+              >
+                <p className="mb-3 text-xs leading-5 text-slate-600">
+                  Use the default basis for conceptual screening. If you have a real bid or GMP,
+                  anchor scenarios to that cost basis before comparing downside cases.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <label className="flex h-full flex-col gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
+                    <span className="font-medium text-slate-900">Downside Stress Level</span>
+                    <select
+                      value={controls.stress_band_pct}
+                      onChange={handleStressBandChange}
+                      disabled={controlsSaving}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {DEALSHIELD_STRESS_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          ±{option}%
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-xs leading-5 text-slate-500">
+                      Controls how aggressively conservative and ugly cases move relative to the current project basis.
+                    </span>
+                  </label>
+                  <label className="flex h-full flex-col gap-2 rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
+                    <span className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={controls.use_cost_anchor}
+                        onChange={handleUseCostAnchorChange}
+                        disabled={controlsSaving}
+                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span>
+                        <span className="block font-medium text-slate-900">Anchor scenarios to bid/GMP cost</span>
+                        <span className="mt-1 block text-xs leading-5 text-slate-500">
+                          Use this when downside scenarios should start from a known bid or GMP cost basis.
+                        </span>
+                      </span>
+                    </span>
+                  </label>
+                  <label
+                    className={`flex h-full flex-col gap-1.5 rounded-lg border px-3 py-3 text-sm ${
+                      controls.use_cost_anchor
+                        ? 'border-slate-200 bg-white text-slate-700'
+                        : 'border-slate-200 bg-slate-100 text-slate-400'
+                    }`}
+                  >
+                    <span className={`font-medium ${controls.use_cost_anchor ? 'text-slate-900' : 'text-slate-500'}`}>
+                      Bid/GMP cost basis
+                    </span>
+                    <input
+                      type="number"
+                      value={controls.anchor_total_project_cost ?? ''}
+                      onChange={handleAnchorTotalCostChange}
+                      onBlur={handleAnchorTotalCostBlur}
+                      placeholder="15000000"
+                      disabled={controlsSaving || !controls.use_cost_anchor}
+                      className={`rounded-lg border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60 ${
+                        controls.use_cost_anchor
+                          ? 'border-slate-300 bg-white text-slate-700'
+                          : 'border-slate-200 bg-slate-100 text-slate-400'
+                      }`}
+                    />
+                    <span className={`text-xs leading-5 ${controls.use_cost_anchor ? 'text-slate-500' : 'text-slate-400'}`}>
+                      {controls.use_cost_anchor
+                        ? 'Used as the base cost before scenario stresses are applied.'
+                        : 'Turn on the anchor above to apply scenarios against a known bid/GMP cost.'}
+                    </span>
+                  </label>
+                </div>
+                <p className="mt-3 text-[11px] text-slate-500">
+                  These controls affect base and downside scenario comparisons only.
+                </p>
+                {controlsSaving && (
+                  <p className="mt-2 text-xs text-slate-500">Updating DealShield scenarios...</p>
+                )}
+                {controlsError && (
+                  <p className="mt-2 text-xs text-rose-600">{controlsError}</p>
+                )}
+              </div>
+            )}
+          </section>
+
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-5">
-            <div>
-              <h3 className="mb-2 text-xl font-semibold tracking-tight text-slate-900">Fastest-Change</h3>
-              <p className="text-sm text-slate-700">
+            <div className="space-y-1">
+              <h3 className="text-xl font-semibold tracking-tight text-slate-900">Verification Priorities</h3>
+              <p className="text-sm text-slate-600">
+                What to verify before trusting this recommendation.
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">What to verify first</p>
+              <p className="mt-2 text-sm text-slate-700">
                 {fastestChangeDisplayText}
               </p>
             </div>
-            <div>
-              <h3 className="mb-2 text-xl font-semibold tracking-tight text-slate-900">Most Likely Wrong</h3>
-              {mostLikelyWrong.length > 0 ? (
-                <ul className="list-disc pl-5 text-sm text-slate-700 space-y-1">
-                  {mostLikelyWrong.map((item: any, index: number) => (
-                    <li key={index}>{labelFrom(item)}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-slate-500">-</p>
-              )}
-            </div>
-            <div>
-              <h3 className="mb-2 text-xl font-semibold tracking-tight text-slate-900">Question Bank</h3>
-              {questionBank.length > 0 ? (
-                <div className="space-y-4">
-                  {Object.entries(questionGroups).map(([groupKey, items]) => (
-                    <div key={groupKey} className="space-y-2">
-                      {hasDriverTileId && (
-                        <p className="text-sm font-semibold text-slate-700">
-                          {driverLabelByTileId.get(groupKey) ?? groupKey}
+
+            <div className="grid gap-4 xl:grid-cols-2">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Where this is most likely wrong</p>
+                {rankedLikelyWrong.length > 0 ? (
+                  <ul className="mt-2 space-y-2 text-sm text-slate-700">
+                    {rankedLikelyWrong.map((entry, index) => (
+                      <li key={`${entry.id ?? 'ranked-likely-wrong'}-${index}`} className="rounded border border-slate-200 bg-white px-2.5 py-2">
+                        <p className="font-medium text-slate-800">{formatValue(entry.text ?? entry.id)}</p>
+                        <p className="mt-1 text-xs text-slate-600">
+                          Impact: {formatAssumptionPercent(entry.impact_pct)} | {isManufacturingProfile ? 'Risk' : 'Severity'}: {String(formatValue(entry.severity)).toLowerCase() === 'unknown' ? 'Unscored' : formatValue(entry.severity)}
                         </p>
-                      )}
-                      <ul className="list-disc pl-5 text-sm text-slate-700 space-y-1">
-                        {(items as any[]).flatMap((item, index) => {
-                          const questions = Array.isArray(item?.questions)
-                            ? item.questions
-                            : [labelFrom(item)];
-                          return questions.map((question: any, qIndex: number) => (
-                            <li key={`${index}-${qIndex}`}>{labelFrom(question)}</li>
-                          ));
-                        })}
-                      </ul>
+                        <p className="mt-1 text-xs text-slate-600">Why: {formatValue(entry.why)}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : mostLikelyWrong.length > 0 ? (
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                    {mostLikelyWrong.map((item: any, index: number) => (
+                      <li key={index}>{labelFrom(item)}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-500">{rankedLikelyWrongUnavailableReason ?? '-'}</p>
+                )}
+                {rankedLikelyWrong.length > 0 && mostLikelyWrong.length > 0 && (
+                  <div className="mt-3 border-t border-slate-200 pt-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Additional watchouts</p>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                      {mostLikelyWrong.map((item: any, index: number) => (
+                        <li key={`most-likely-wrong-${index}`}>{labelFrom(item)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Questions to resolve</p>
+                {questionBank.length > 0 ? (
+                  <div className="mt-2 space-y-4">
+                    {Object.entries(questionGroups).map(([groupKey, items]) => (
+                      <div key={groupKey} className="space-y-2">
+                        {hasDriverTileId && (
+                          <p className="text-sm font-semibold text-slate-700">
+                            {driverLabelByTileId.get(groupKey) ?? groupKey}
+                          </p>
+                        )}
+                        <ul className="list-disc pl-5 text-sm text-slate-700 space-y-1">
+                          {(items as any[]).flatMap((item, index) => {
+                            const questions = Array.isArray(item?.questions)
+                              ? item.questions
+                              : [labelFrom(item)];
+                            return questions.map((question: any, qIndex: number) => (
+                              <li key={`${index}-${qIndex}`}>{labelFrom(question)}</li>
+                            ));
+                          })}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-500">-</p>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Flags and actions</p>
+              {redFlagsActions.length > 0 ? (
+                <div className="mt-2 space-y-2">
+                  {redFlagsActions.map((item: any, index: number) => (
+                    <div key={`red-flag-action-${index}`} className="rounded border border-slate-200 bg-white px-3 py-2.5">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-rose-600">Flag</p>
+                      <p className="mt-1 text-sm text-slate-800">{labelFrom(item?.flag, '-')}</p>
+                      <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-blue-700">Action</p>
+                      <p className="mt-1 text-sm text-slate-800">{labelFrom(item?.action, '-')}</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-slate-500">-</p>
+                <div className="mt-2 grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-rose-600">Flags</p>
+                    {redFlags.length > 0 ? (
+                      <ul className="mt-2 list-disc pl-5 text-sm text-slate-700 space-y-1">
+                        {redFlags.map((item: any, index: number) => (
+                          <li key={index}>{labelFrom(item)}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-sm text-slate-500">-</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Actions</p>
+                    {actions.length > 0 ? (
+                      <ul className="mt-2 list-disc pl-5 text-sm text-slate-700 space-y-1">
+                        {actions.map((item: any, index: number) => (
+                          <li key={index}>{labelFrom(item)}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-sm text-slate-500">-</p>
+                    )}
+                  </div>
+                </div>
               )}
-            </div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div>
-                <h3 className="mb-2 text-xl font-semibold tracking-tight text-slate-900">Red Flags</h3>
-                {redFlags.length > 0 ? (
-                  <ul className="list-disc pl-5 text-sm text-slate-700 space-y-1">
-                    {redFlags.map((item: any, index: number) => (
-                      <li key={index}>{labelFrom(item)}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-slate-500">-</p>
-                )}
-              </div>
-              <div>
-                <h3 className="mb-2 text-xl font-semibold tracking-tight text-slate-900">Actions</h3>
-                {actions.length > 0 ? (
-                  <ul className="list-disc pl-5 text-sm text-slate-700 space-y-1">
-                    {actions.map((item: any, index: number) => (
-                      <li key={index}>{labelFrom(item)}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-slate-500">-</p>
-                )}
-              </div>
             </div>
           </section>
 
@@ -1744,6 +1814,12 @@ export const DealShieldView: React.FC<Props> = ({
             <p className="mb-3 text-xs text-slate-500">
               This receipt shows which scenario levers and controls were applied in this run. Plain-English levers are shown first; technical trace stays secondary.
             </p>
+            {profileId && (
+              <p className="mb-2 text-xs text-slate-600">
+                <span className="font-semibold text-slate-700">Profile ID:</span>{' '}
+                <span>{profileId}</span>
+              </p>
+            )}
             <p className="mb-2 text-xs text-slate-600">
               <span className="font-semibold text-slate-700">Profiles used:</span>{' '}
               Tile: {formatValue(tileProfileId)} | Content: {formatValue(contentProfileId)} | Scope: {formatValue(scopeProfileId)}

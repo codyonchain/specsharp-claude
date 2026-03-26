@@ -18,6 +18,10 @@ const HOSPITALITY_PROFILE_IDS = [
 
 const clonePayload = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
+const expectToAppearBefore = (first: HTMLElement, second: HTMLElement) => {
+  expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+};
+
 const SPECIALTY_POLICY_CONTRACT_CASES = [
   {
     subtype: "data_center",
@@ -2489,6 +2493,14 @@ describe("DealShieldView", () => {
       />
     );
 
+    const scenarioSettingsButton = screen.getByRole("button", { name: /Scenario Settings/i });
+    expect(scenarioSettingsButton).toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: /Downside Stress Level/i })
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(scenarioSettingsButton);
+
     expect(
       screen.getByText(
         "Use the default basis for conceptual screening. If you have a real bid or GMP, anchor scenarios to that cost basis before comparing downside cases."
@@ -2530,6 +2542,8 @@ describe("DealShieldView", () => {
         error={null}
       />
     );
+
+    fireEvent.click(screen.getByRole("button", { name: /Scenario Settings/i }));
 
     expect(
       screen.getByRole("checkbox", { name: /Anchor scenarios to bid\/GMP cost/i })
@@ -2573,6 +2587,8 @@ describe("DealShieldView", () => {
         error={null}
       />
     );
+
+    fireEvent.click(screen.getByRole("button", { name: /Scenario Settings/i }));
 
     const checkbox = screen.getByRole("checkbox", {
       name: /Anchor scenarios to bid\/GMP cost/i,
@@ -2660,6 +2676,65 @@ describe("DealShieldView", () => {
     });
     expect(provenanceMatches.length).toBeGreaterThan(0);
     expect(screen.queryByText("Decision Insurance unavailable for this profile/run.")).not.toBeInTheDocument();
+  });
+
+  it("puts the decision read ahead of scenario settings and merges advisory content into verification priorities", () => {
+    render(
+      <DealShieldView
+        projectId="proj_dealshield_structure_order"
+        data={buildRestaurantDealShieldPayload("restaurant_full_service_v1") as any}
+        loading={false}
+        error={null}
+      />
+    );
+
+    const decisionStatusHeading = screen.getByRole("heading", { name: "Decision Status" });
+    const decisionInsuranceHeading = screen.getByRole("heading", { name: "Decision Insurance" });
+    const decisionMetricsHeading = screen.getByRole("heading", { name: "Decision Metrics" });
+    const scenarioSettingsButton = screen.getByRole("button", { name: /Scenario Settings/i });
+    const verificationHeading = screen.getByRole("heading", { name: "Verification Priorities" });
+    const provenanceHeading = screen.getByRole("heading", { name: "Provenance" });
+
+    expectToAppearBefore(decisionStatusHeading, decisionInsuranceHeading);
+    expectToAppearBefore(decisionInsuranceHeading, decisionMetricsHeading);
+    expectToAppearBefore(decisionMetricsHeading, scenarioSettingsButton);
+    expectToAppearBefore(scenarioSettingsButton, verificationHeading);
+    expectToAppearBefore(verificationHeading, provenanceHeading);
+
+    expect(screen.getByText("What to verify first")).toBeInTheDocument();
+    expect(screen.getByText("Where this is most likely wrong")).toBeInTheDocument();
+    expect(screen.getByText("Questions to resolve")).toBeInTheDocument();
+    expect(screen.getByText("Flags and actions")).toBeInTheDocument();
+    expect(screen.queryByText("Fastest-Change")).not.toBeInTheDocument();
+    expect(screen.queryByText("Most Likely Wrong")).not.toBeInTheDocument();
+    expect(screen.queryByText("Question Bank")).not.toBeInTheDocument();
+    expect(screen.queryByText("Red Flags")).not.toBeInTheDocument();
+  });
+
+  it("keeps the new structure stable when optional advisory content is sparse", () => {
+    const payload = buildRestaurantDealShieldPayload("restaurant_cafe_v1") as any;
+    payload.view_model.content.fastest_change = { drivers: [] };
+    payload.view_model.content.most_likely_wrong = [];
+    payload.view_model.content.question_bank = [];
+    payload.view_model.content.red_flags = [];
+    payload.view_model.content.actions = [];
+    payload.view_model.content.red_flags_actions = [];
+    payload.view_model.ranked_likely_wrong = [];
+
+    render(
+      <DealShieldView
+        projectId="proj_dealshield_sparse_structure"
+        data={payload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: "Decision Metrics" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Scenario Settings/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Verification Priorities" })).toBeInTheDocument();
+    expect(screen.getByText("What to verify first")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Provenance" })).toBeInTheDocument();
   });
 
   it("renders quick-service subtype-authored control and throughput/equipment prompts", () => {
@@ -4566,10 +4641,11 @@ describe("DealShieldView", () => {
         ).toBeInTheDocument();
       }
 
-      expect(screen.getByText("Fastest-Change")).toBeInTheDocument();
-      expect(screen.getByText("Most Likely Wrong")).toBeInTheDocument();
-      expect(screen.getByText("Question Bank")).toBeInTheDocument();
-      expect(screen.getByText("Red Flags")).toBeInTheDocument();
+      expect(screen.getByText("Verification Priorities")).toBeInTheDocument();
+      expect(screen.getByText("What to verify first")).toBeInTheDocument();
+      expect(screen.getByText("Where this is most likely wrong")).toBeInTheDocument();
+      expect(screen.getByText("Questions to resolve")).toBeInTheDocument();
+      expect(screen.getByText("Flags and actions")).toBeInTheDocument();
       expect(
         screen.getAllByText(`${testCase.subtype} downside concentration is under-modeled.`).length
       ).toBeGreaterThan(0);
@@ -4660,10 +4736,11 @@ describe("DealShieldView", () => {
         ).toBeInTheDocument();
       }
 
-      expect(screen.getByText("Fastest-Change")).toBeInTheDocument();
-      expect(screen.getByText("Most Likely Wrong")).toBeInTheDocument();
-      expect(screen.getByText("Question Bank")).toBeInTheDocument();
-      expect(screen.getByText("Red Flags")).toBeInTheDocument();
+      expect(screen.getByText("Verification Priorities")).toBeInTheDocument();
+      expect(screen.getByText("What to verify first")).toBeInTheDocument();
+      expect(screen.getByText("Where this is most likely wrong")).toBeInTheDocument();
+      expect(screen.getByText("Questions to resolve")).toBeInTheDocument();
+      expect(screen.getByText("Flags and actions")).toBeInTheDocument();
       expect(
         screen.getAllByText(`${testCase.subtype} downside concentration is under-modeled.`).length
       ).toBeGreaterThan(0);
@@ -4754,10 +4831,11 @@ describe("DealShieldView", () => {
         ).toBeInTheDocument();
       }
 
-      expect(screen.getByText("Fastest-Change")).toBeInTheDocument();
-      expect(screen.getByText("Most Likely Wrong")).toBeInTheDocument();
-      expect(screen.getByText("Question Bank")).toBeInTheDocument();
-      expect(screen.getByText("Red Flags")).toBeInTheDocument();
+      expect(screen.getByText("Verification Priorities")).toBeInTheDocument();
+      expect(screen.getByText("What to verify first")).toBeInTheDocument();
+      expect(screen.getByText("Where this is most likely wrong")).toBeInTheDocument();
+      expect(screen.getByText("Questions to resolve")).toBeInTheDocument();
+      expect(screen.getByText("Flags and actions")).toBeInTheDocument();
       expect(
         screen.getAllByText(`${testCase.subtype} downside concentration is under-modeled.`).length
       ).toBeGreaterThan(0);
@@ -4856,10 +4934,11 @@ describe("DealShieldView", () => {
         ).toBeInTheDocument();
       }
 
-      expect(screen.getByText("Fastest-Change")).toBeInTheDocument();
-      expect(screen.getByText("Most Likely Wrong")).toBeInTheDocument();
-      expect(screen.getByText("Question Bank")).toBeInTheDocument();
-      expect(screen.getByText("Red Flags")).toBeInTheDocument();
+      expect(screen.getByText("Verification Priorities")).toBeInTheDocument();
+      expect(screen.getByText("What to verify first")).toBeInTheDocument();
+      expect(screen.getByText("Where this is most likely wrong")).toBeInTheDocument();
+      expect(screen.getByText("Questions to resolve")).toBeInTheDocument();
+      expect(screen.getByText("Flags and actions")).toBeInTheDocument();
       expect(
         screen.getAllByText(`${testCase.subtype} downside concentration is under-modeled.`).length
       ).toBeGreaterThan(0);
@@ -4930,10 +5009,11 @@ describe("DealShieldView", () => {
         ).toBeInTheDocument();
       }
 
-      expect(screen.getByText("Fastest-Change")).toBeInTheDocument();
-      expect(screen.getByText("Most Likely Wrong")).toBeInTheDocument();
-      expect(screen.getByText("Question Bank")).toBeInTheDocument();
-      expect(screen.getByText("Red Flags")).toBeInTheDocument();
+      expect(screen.getByText("Verification Priorities")).toBeInTheDocument();
+      expect(screen.getByText("What to verify first")).toBeInTheDocument();
+      expect(screen.getByText("Where this is most likely wrong")).toBeInTheDocument();
+      expect(screen.getByText("Questions to resolve")).toBeInTheDocument();
+      expect(screen.getByText("Flags and actions")).toBeInTheDocument();
       expect(
         screen.getAllByText(`${testCase.subtype} downside concentration is under-modeled.`).length
       ).toBeGreaterThan(0);
