@@ -12,6 +12,19 @@ const clickNewestDashboardProject = async (page: Page) => {
   await newestProject.click();
 };
 
+const openScenarioSettings = async (page: Page) => {
+  const scenarioSettingsButton = page.getByRole("button", { name: /Scenario Settings/i });
+  await expect(scenarioSettingsButton).toBeVisible();
+
+  if ((await scenarioSettingsButton.getAttribute("aria-expanded")) !== "true") {
+    await scenarioSettingsButton.click();
+  }
+
+  const stressBandSelect = page.getByLabel("Downside Stress Level");
+  await expect(stressBandSelect).toBeVisible();
+  return stressBandSelect;
+};
+
 test.describe("Launch project flow", () => {
   test("creates a project from /new, reopens it from the dashboard, and exports launch packets", async ({ page }) => {
     test.setTimeout(120_000);
@@ -38,7 +51,7 @@ test.describe("Launch project flow", () => {
     const projectId = page.url().split("/project/")[1];
     await expect(page.getByRole("heading", { name: "DealShield" })).toBeVisible();
 
-    const stressBandSelect = page.getByLabel("Downside Stress Level");
+    const stressBandSelect = await openScenarioSettings(page);
     const currentStressBand = await stressBandSelect.inputValue();
     const nextStressBand = currentStressBand === "7" ? "5" : "7";
     const dealShieldControlsUpdateResponsePromise = page.waitForResponse((response) => {
@@ -71,7 +84,7 @@ test.describe("Launch project flow", () => {
 
     await page.reload();
     await expect(page.getByRole("heading", { name: "DealShield" })).toBeVisible();
-    await expect(page.getByLabel("Downside Stress Level")).toHaveValue(nextStressBand);
+    await expect(await openScenarioSettings(page)).toHaveValue(nextStressBand);
 
     const dealShieldExportResponsePromise = page.waitForResponse((response) => {
       return (
