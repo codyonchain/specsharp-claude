@@ -857,44 +857,63 @@ def test_finish_revenue_scaling_applies_once_from_occupancy_and_revenue_factor()
         std_revenue = float(standard["revenue_analysis"]["annual_revenue"])
         std_occ = float(standard["revenue_analysis"]["occupancy_rate"])
         std_rev_factor = float(standard["revenue_analysis"]["revenue_factor"])
+        std_cam = float(standard["revenue_analysis"].get("cam_charges", 0.0) or 0.0)
 
         premium_revenue = float(premium["revenue_analysis"]["annual_revenue"])
         premium_occ = float(premium["revenue_analysis"]["occupancy_rate"])
         premium_rev_factor = float(premium["revenue_analysis"]["revenue_factor"])
+        premium_cam = float(premium["revenue_analysis"].get("cam_charges", 0.0) or 0.0)
 
         luxury_revenue = float(luxury["revenue_analysis"]["annual_revenue"])
         luxury_occ = float(luxury["revenue_analysis"]["occupancy_rate"])
         luxury_rev_factor = float(luxury["revenue_analysis"]["revenue_factor"])
+        luxury_cam = float(luxury["revenue_analysis"].get("cam_charges", 0.0) or 0.0)
 
-        premium_ratio = premium_revenue / std_revenue if std_revenue > 0 else 1.0
         if building_type == BuildingType.OFFICE:
-            expected_premium_ratio = (
-                (premium_rev_factor / std_rev_factor)
+            assert premium_cam == pytest.approx(std_cam, rel=0, abs=0.01)
+            assert luxury_cam == pytest.approx(std_cam, rel=0, abs=0.01)
+
+            std_rent_revenue = std_revenue - std_cam
+            premium_rent_revenue = premium_revenue - premium_cam
+            luxury_rent_revenue = luxury_revenue - luxury_cam
+
+            expected_premium_rent_revenue = (
+                std_rent_revenue * (premium_rev_factor / std_rev_factor)
                 if std_rev_factor > 0
-                else 1.0
+                else std_rent_revenue
+            )
+            expected_luxury_rent_revenue = (
+                std_rent_revenue * (luxury_rev_factor / std_rev_factor)
+                if std_rev_factor > 0
+                else std_rent_revenue
+            )
+
+            assert premium_rent_revenue == pytest.approx(
+                expected_premium_rent_revenue,
+                rel=1e-3,
+                abs=1e-3,
+            )
+            assert luxury_rent_revenue == pytest.approx(
+                expected_luxury_rent_revenue,
+                rel=1e-3,
+                abs=1e-3,
             )
         else:
+            premium_ratio = premium_revenue / std_revenue if std_revenue > 0 else 1.0
             expected_premium_ratio = (
                 (premium_occ / std_occ) * (premium_rev_factor / std_rev_factor)
                 if std_occ > 0 and std_rev_factor > 0
                 else 1.0
             )
-        assert premium_ratio == pytest.approx(expected_premium_ratio, rel=1e-3, abs=1e-3)
+            assert premium_ratio == pytest.approx(expected_premium_ratio, rel=1e-3, abs=1e-3)
 
-        luxury_ratio = luxury_revenue / std_revenue if std_revenue > 0 else 1.0
-        if building_type == BuildingType.OFFICE:
-            expected_luxury_ratio = (
-                (luxury_rev_factor / std_rev_factor)
-                if std_rev_factor > 0
-                else 1.0
-            )
-        else:
+            luxury_ratio = luxury_revenue / std_revenue if std_revenue > 0 else 1.0
             expected_luxury_ratio = (
                 (luxury_occ / std_occ) * (luxury_rev_factor / std_rev_factor)
                 if std_occ > 0 and std_rev_factor > 0
                 else 1.0
             )
-        assert luxury_ratio == pytest.approx(expected_luxury_ratio, rel=1e-3, abs=1e-3)
+            assert luxury_ratio == pytest.approx(expected_luxury_ratio, rel=1e-3, abs=1e-3)
 
 def test_caprate_only_for_supported_types():
     """Cap-rate valuation should follow active engine defaults for any positive-NOI asset class."""
@@ -1970,11 +1989,24 @@ def test_healthcare_operational_metric_contract_by_subtype_class():
         assert financial_metrics.get("primary_unit"), f"{subtype} must define a healthcare primary unit"
 
         if subtype in outpatient_subtypes:
-            assert (
+            has_unit_density = (
                 financial_metrics.get("units_per_sf")
                 or getattr(config, "units_per_sf", None)
                 or getattr(config, "beds_per_sf", None)
-            ), f"{subtype} must define unit density for capacity math"
+            )
+            urgent_care_visible_unit_contract = False
+            if subtype == "urgent_care":
+                exam_room_rule = (getattr(config, "special_features", None) or {}).get("exam_rooms") or {}
+                default_count_bands = (
+                    exam_room_rule.get("default_count_bands")
+                    if isinstance(exam_room_rule, dict)
+                    else None
+                )
+                urgent_care_visible_unit_contract = isinstance(default_count_bands, list) and bool(default_count_bands)
+
+            assert (
+                has_unit_density or urgent_care_visible_unit_contract
+            ), f"{subtype} must define unit density or a visible-unit contract for capacity math"
 
             if subtype != "dental_office":
                 profile = financial_metrics.get("operational_metrics") or {}
