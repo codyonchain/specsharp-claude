@@ -436,7 +436,44 @@ def test_export_dealshield_html_renders():
     profile_id = payload.get("dealshield_tile_profile") or "retail_shopping_center_v1"
     profile = get_dealshield_profile(profile_id)
     view_model = build_dealshield_view_model("proj_test_export", payload, profile)
+    view_model.pop("construction_risk_drivers", None)
     html = render_dealshield_html(view_model)
 
     assert isinstance(html, str)
     assert "DealShield" in html
+    assert "Provenance" in html
+    assert "Top Construction Risk" not in html
+
+
+def test_export_dealshield_html_renders_top_construction_risk_before_content_sections():
+    payload = _calculate_project(
+        building_type=BuildingType.MULTIFAMILY,
+        subtype="market_rate_apartments",
+        square_footage=250000,
+        location="Nashville, TN",
+        floors=6,
+        special_features=["parking_garage"],
+        parsed_input_overrides={"unit_count": 220},
+    )
+    profile_id = payload.get("dealshield_tile_profile") or "multifamily_market_rate_apartments_v1"
+    profile = get_dealshield_profile(profile_id)
+    view_model = build_dealshield_view_model("proj_test_export_construction_risk", payload, profile)
+
+    drivers = view_model.get("construction_risk_drivers")
+    assert isinstance(drivers, list) and drivers
+
+    html = render_dealshield_html(view_model)
+
+    assert "Top Construction Risk" in html
+    assert "Why this is showing" in html
+    assert "Evidence" in html
+    assert "Verify next" in html
+    assert any(title in html for title in (
+        "Contingency Adequacy",
+        "Trade Procurement Concentration",
+        "Regional Cost Pressure",
+        "Critical Systems Scope Burden",
+    ))
+    assert html.index("Top Construction Risk") < html.index("What would change this decision fastest?")
+    assert "Provenance" in html
+    assert "Most likely wrong" in html

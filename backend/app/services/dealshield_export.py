@@ -330,6 +330,76 @@ def _dealshield_driver_refs(driver: Any) -> str:
     return str(driver)
 
 
+def _dealshield_extract_top_construction_risk(view_model: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    drivers = view_model.get("construction_risk_drivers")
+    if not isinstance(drivers, list):
+        return None
+
+    for driver in drivers:
+        if not isinstance(driver, dict):
+            continue
+        if driver.get("status") != "supported":
+            continue
+        severity = driver.get("severity")
+        if severity not in {"low", "moderate", "high"}:
+            continue
+
+        title = _dealshield_sanitize_text(driver.get("title"))
+        why_this_is_showing = _dealshield_sanitize_text(driver.get("why_this_is_showing"))
+        evidence_summary = _dealshield_sanitize_text(driver.get("evidence_summary"))
+        verify_next = _dealshield_sanitize_text(driver.get("verify_next"))
+        if not title or not why_this_is_showing or not evidence_summary or not verify_next:
+            continue
+
+        return {
+            "title": title,
+            "severity": str(severity),
+            "why_this_is_showing": why_this_is_showing,
+            "evidence_summary": evidence_summary,
+            "verify_next": verify_next,
+        }
+
+    return None
+
+
+def _dealshield_render_top_construction_risk(view_model: Dict[str, Any]) -> str:
+    top_construction_risk = _dealshield_extract_top_construction_risk(view_model)
+    if not isinstance(top_construction_risk, dict):
+        return ""
+
+    severity_label = {
+        "high": "Higher Risk",
+        "moderate": "Moderate Risk",
+        "low": "Lower Risk",
+    }.get(top_construction_risk["severity"], "Construction Risk")
+
+    return (
+        "<section>"
+        "<h2>Top Construction Risk</h2>"
+        "<div class=\"construction-risk-block\">"
+        "<div class=\"construction-risk-header\">"
+        f"<div class=\"construction-risk-title\">{html_module.escape(top_construction_risk['title'])}</div>"
+        f"<div class=\"construction-risk-severity\">{html_module.escape(severity_label)}</div>"
+        "</div>"
+        "<div class=\"construction-risk-grid\">"
+        "<div class=\"construction-risk-item\">"
+        "<div class=\"construction-risk-label\">Why this is showing</div>"
+        f"<div>{html_module.escape(top_construction_risk['why_this_is_showing'])}</div>"
+        "</div>"
+        "<div class=\"construction-risk-item\">"
+        "<div class=\"construction-risk-label\">Evidence</div>"
+        f"<div>{html_module.escape(top_construction_risk['evidence_summary'])}</div>"
+        "</div>"
+        "<div class=\"construction-risk-item\">"
+        "<div class=\"construction-risk-label\">Verify next</div>"
+        f"<div>{html_module.escape(top_construction_risk['verify_next'])}</div>"
+        "</div>"
+        "</div>"
+        "</div>"
+        "</section>"
+    )
+
+
 def _dealshield_render_content_sections(view_model: Dict[str, Any]) -> str:
     content = view_model.get("content")
     if not isinstance(content, dict):
@@ -721,6 +791,7 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
                 disclosures.append(item)
     assumptions_block = _dealshield_render_assumptions(financing_assumptions, disclosures)
     decision_summary_block = _dealshield_render_decision_summary(view_model, rows, disclosures)
+    top_construction_risk_block = _dealshield_render_top_construction_risk(view_model)
 
     meta_block = f"<div class=\"meta\">{html_module.escape(header_meta)}</div>" if header_meta else ""
     content_sections = _dealshield_render_content_sections(view_model)
@@ -780,6 +851,13 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
     .decision-summary-item-wide {{ grid-column: 1 / -1; }}
     .decision-summary-label {{ font-weight: 600; color: #475569; }}
     .decision-summary-note {{ margin-top: 6px; font-size: 11px; color: #475569; }}
+    .construction-risk-block {{ margin-top: 8px; border: 1px solid #e5e7eb; background: #f8fafc; border-radius: 6px; padding: 10px 12px; }}
+    .construction-risk-header {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }}
+    .construction-risk-title {{ font-size: 13px; font-weight: 700; color: #111827; }}
+    .construction-risk-severity {{ white-space: nowrap; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #475569; }}
+    .construction-risk-grid {{ margin-top: 8px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; font-size: 11px; line-height: 1.45; color: #334155; }}
+    .construction-risk-item {{ margin: 0; }}
+    .construction-risk-label {{ margin-bottom: 2px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #6b7280; }}
   </style>
 </head>
 <body>
@@ -806,6 +884,7 @@ def render_dealshield_html(view_model: Dict[str, Any]) -> str:
     {profiles_controls_block}
     {provenance_table}
   </section>
+  {top_construction_risk_block}
   {content_sections}
 </body>
 </html>"""
