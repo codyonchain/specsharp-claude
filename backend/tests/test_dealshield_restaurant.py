@@ -200,6 +200,33 @@ def test_restaurant_subtypes_define_deterministic_scope_and_dealshield_profile_i
         assert config.scope_items_profile == RESTAURANT_SCOPE_PROFILE_IDS[subtype]
 
 
+def test_dealshield_view_model_passes_through_construction_risk_drivers():
+    payload = unified_engine.calculate_project(
+        building_type=BuildingType.RESTAURANT,
+        subtype="full_service",
+        square_footage=8_000,
+        location="Nashville, TN",
+        project_class=ProjectClass.GROUND_UP,
+        floors=1,
+    )
+    profile = get_dealshield_profile(RESTAURANT_PROFILE_IDS["full_service"])
+
+    source_drivers = payload.get("construction_risk_drivers")
+    assert isinstance(source_drivers, list) and source_drivers
+
+    view_model = build_dealshield_view_model(
+        project_id="restaurant-construction-risk-dealshield",
+        payload=payload,
+        profile=profile,
+    )
+
+    passed_drivers = view_model.get("construction_risk_drivers")
+    assert isinstance(passed_drivers, list) and passed_drivers
+    assert passed_drivers[0]["id"] == source_drivers[0]["id"]
+    assert passed_drivers[0]["title"] == source_drivers[0]["title"]
+    assert passed_drivers[0]["status"] == source_drivers[0]["status"]
+
+
 def test_restaurant_scope_defaults_and_profiles_resolve():
     assert restaurant_scope_profiles.SCOPE_ITEM_DEFAULTS == RESTAURANT_SCOPE_PROFILE_IDS
 

@@ -2173,6 +2173,9 @@ def build_dealshield_view_model(project_id: str, payload: Dict[str, Any], profil
         view_model["value_gap"] = summary_copy.get("value_gap")
         view_model["value_gap_pct"] = summary_copy.get("value_gap_pct")
         provenance["decision_summary"] = summary_copy
+    construction_risk_drivers = payload.get("construction_risk_drivers")
+    if isinstance(construction_risk_drivers, list) and construction_risk_drivers:
+        view_model["construction_risk_drivers"] = copy.deepcopy(construction_risk_drivers)
     content_profile: Optional[Dict[str, Any]] = None
     if content_profile_id:
         try:

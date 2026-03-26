@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, ShieldCheck } from 'lucide-react';
 import { api } from '../../api/client';
 import {
+  ConstructionRiskDriver,
   DealShieldControls,
   DealShieldViewModel,
   DecisionStatus,
@@ -34,6 +35,45 @@ const DEFAULT_DEALSHIELD_CONTROLS: DealShieldControls = {
 };
 
 type DecisionMetricType = 'currency' | 'percent' | 'ratio' | 'number';
+
+const isConstructionRiskDriver = (value: unknown): value is ConstructionRiskDriver => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const driver = value as Record<string, unknown>;
+  const affects = Array.isArray(driver.affects) ? driver.affects : [];
+
+  return (
+    typeof driver.id === 'string' &&
+    typeof driver.title === 'string' &&
+    (driver.severity === 'low' || driver.severity === 'moderate' || driver.severity === 'high') &&
+    typeof driver.why_this_is_showing === 'string' &&
+    affects.every(
+      (affect) =>
+        affect === 'basis' ||
+        affect === 'cost_confidence' ||
+        affect === 'procurement' ||
+        affect === 'schedule'
+    ) &&
+    typeof driver.verify_next === 'string' &&
+    typeof driver.evidence_summary === 'string' &&
+    typeof driver.source === 'string' &&
+    (driver.status === 'supported' || driver.status === 'unavailable')
+  );
+};
+
+const constructionRiskSeverityBadgeClass = (severity: ConstructionRiskDriver['severity']) => {
+  if (severity === 'high') return 'border-rose-100 bg-rose-50 text-rose-700';
+  if (severity === 'moderate') return 'border-amber-100 bg-amber-50 text-amber-700';
+  return 'border-emerald-100 bg-emerald-50 text-emerald-700';
+};
+
+const constructionRiskSeverityLabel = (severity: ConstructionRiskDriver['severity']) => {
+  if (severity === 'high') return 'Higher Risk';
+  if (severity === 'moderate') return 'Moderate Risk';
+  return 'Lower Risk';
+};
 
 const toFiniteNumber = (value: unknown): number | null => {
   if (typeof value === 'number') {
@@ -516,6 +556,19 @@ export const DealShieldView: React.FC<Props> = ({
   const fallbackRows = Array.isArray((viewModel as any)?.rows) ? (viewModel as any).rows : [];
   const columns = Array.isArray(decisionTable?.columns) ? decisionTable.columns : fallbackColumns;
   const rows = Array.isArray(decisionTable?.rows) ? decisionTable.rows : fallbackRows;
+  const constructionRiskDriversRaw =
+    (viewModel as any)?.construction_risk_drivers ??
+    (viewModel as any)?.constructionRiskDrivers ??
+    (dealShieldData as any)?.construction_risk_drivers ??
+    (dealShieldData as any)?.constructionRiskDrivers;
+  const topConstructionRisk = useMemo(() => {
+    if (!Array.isArray(constructionRiskDriversRaw)) return null;
+    return (
+      constructionRiskDriversRaw
+        .filter(isConstructionRiskDriver)
+        .find((driver) => driver.status === 'supported') ?? null
+    );
+  }, [constructionRiskDriversRaw]);
 
   const fastestChangeDrivers = Array.isArray(content?.fastest_change?.drivers)
     ? content.fastest_change.drivers
@@ -1688,6 +1741,53 @@ export const DealShieldView: React.FC<Props> = ({
                 What to verify before trusting this recommendation.
               </p>
             </div>
+
+            {topConstructionRisk && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Top Construction Risk
+                    </p>
+                    <h4 className="mt-1 text-sm font-semibold text-slate-900">
+                      {topConstructionRisk.title}
+                    </h4>
+                  </div>
+                  <span
+                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium whitespace-nowrap ${constructionRiskSeverityBadgeClass(topConstructionRisk.severity)}`}
+                  >
+                    {constructionRiskSeverityLabel(topConstructionRisk.severity)}
+                  </span>
+                </div>
+
+                <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                      Why this is showing
+                    </p>
+                    <p className="mt-1 text-sm text-slate-700">
+                      {topConstructionRisk.why_this_is_showing}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                      Evidence
+                    </p>
+                    <p className="mt-1 text-sm text-slate-700">
+                      {topConstructionRisk.evidence_summary}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                      Verify next
+                    </p>
+                    <p className="mt-1 text-sm text-slate-700">
+                      {topConstructionRisk.verify_next}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">What to verify first</p>

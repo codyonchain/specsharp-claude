@@ -18,6 +18,32 @@ const HOSPITALITY_PROFILE_IDS = [
 
 const clonePayload = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
+const SAMPLE_CONSTRUCTION_RISK_DRIVERS = [
+  {
+    id: "trade_procurement_concentration",
+    title: "Trade Procurement Concentration",
+    severity: "high",
+    why_this_is_showing:
+      "Mechanical and electrical packages are carrying an outsized share of total construction exposure.",
+    affects: ["procurement", "cost_confidence"],
+    verify_next: "Confirm bid coverage and long-lead buyout status for the top two equipment packages.",
+    evidence_summary: "Lead packages represent 46% of core construction and include switchgear and rooftop units.",
+    source: "trade_breakdown,scope_items",
+    status: "supported",
+  },
+  {
+    id: "regional_cost_pressure",
+    title: "Regional Cost Pressure",
+    severity: "moderate",
+    why_this_is_showing: "Location-driven labor and material premiums remain elevated.",
+    affects: ["basis", "cost_confidence"],
+    verify_next: "Validate current bid dates against recent regional trade coverage.",
+    evidence_summary: "Regional multiplier remains above baseline for the active market.",
+    source: "construction_costs.regional_multiplier",
+    status: "supported",
+  },
+] as const;
+
 const expectToAppearBefore = (first: HTMLElement, second: HTMLElement) => {
   expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 };
@@ -2734,7 +2760,75 @@ describe("DealShieldView", () => {
     expect(screen.getByRole("button", { name: /Scenario Settings/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Verification Priorities" })).toBeInTheDocument();
     expect(screen.getByText("What to verify first")).toBeInTheDocument();
+    expect(screen.queryByText("Top Construction Risk")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Provenance" })).toBeInTheDocument();
+  });
+
+  it("renders the top supported construction risk inside verification priorities", () => {
+    const payload = buildPolicyBackedDealShieldPayload(MULTIFAMILY_POLICY_CONTRACT_CASES[0]) as any;
+    payload.view_model.construction_risk_drivers = clonePayload(SAMPLE_CONSTRUCTION_RISK_DRIVERS);
+
+    render(
+      <DealShieldView
+        projectId="proj_dealshield_multifamily_construction_risk"
+        data={payload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    const verificationHeading = screen.getByRole("heading", { name: "Verification Priorities" });
+    const constructionRiskLabel = screen.getByText("Top Construction Risk");
+    const constructionRiskTitle = screen.getByText("Trade Procurement Concentration");
+    const verifyFirstLabel = screen.getByText("What to verify first");
+
+    expect(verificationHeading).toBeInTheDocument();
+    expect(constructionRiskLabel).toBeInTheDocument();
+    expect(constructionRiskTitle).toBeInTheDocument();
+    expect(screen.getByText("Higher Risk")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Mechanical and electrical packages are carrying an outsized share of total construction exposure."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Lead packages represent 46% of core construction and include switchgear and rooftop units."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Confirm bid coverage and long-lead buyout status for the top two equipment packages."
+      )
+    ).toBeInTheDocument();
+    expectToAppearBefore(constructionRiskLabel, verifyFirstLabel);
+  });
+
+  it("falls back to the first supported construction risk when earlier entries are unavailable", () => {
+    const payload = buildSubtypePolicyPayload(OFFICE_POLICY_CONTRACT_CASES[0]) as any;
+    payload.view_model.construction_risk_drivers = [
+      {
+        ...clonePayload(SAMPLE_CONSTRUCTION_RISK_DRIVERS[0]),
+        id: "unsupported_trade_procurement_concentration",
+        title: "Trade Procurement Concentration",
+        status: "unavailable",
+      },
+      clonePayload(SAMPLE_CONSTRUCTION_RISK_DRIVERS[1]),
+    ];
+
+    render(
+      <DealShieldView
+        projectId="proj_dealshield_office_construction_risk"
+        data={payload}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(screen.getByText("Top Construction Risk")).toBeInTheDocument();
+    expect(screen.getByText("Regional Cost Pressure")).toBeInTheDocument();
+    expect(screen.getByText("Moderate Risk")).toBeInTheDocument();
+    expect(screen.queryByText("Higher Risk")).not.toBeInTheDocument();
   });
 
   it("renders quick-service subtype-authored control and throughput/equipment prompts", () => {
