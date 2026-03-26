@@ -40,6 +40,7 @@ from app.services.pdf_export_service import pdf_export_service
 from app.services.decision_packet_export import (
     compose_decision_packet_input,
     hydrate_project_payload_for_packet,
+    sanitize_decision_packet_export,
 )
 from app.v2.services.dealshield_scenarios import (
     DealShieldScenarioError,
@@ -806,36 +807,10 @@ async def health_check():
     """
     Health check endpoint for V2 API
     """
-    try:
-        # Check that we can access the config
-        building_count = len(MASTER_CONFIG)
-        subtype_count = sum(len(subtypes) for subtypes in MASTER_CONFIG.values())
-        
-        return ProjectResponse(
-            success=True,
-            data={
-                'status': 'healthy',
-                'version': '2.0',
-                'engine': 'unified',
-                'building_types': building_count,
-                'total_subtypes': subtype_count,
-                'features': [
-                    'Natural language parsing',
-                    'Direct calculation',
-                    'Scenario comparison',
-                    'Full traceability',
-                    'Ownership analysis'
-                ]
-            }
-        )
-        
-    except Exception as e:
-        _log_route_exception("scope.health", e)
-        return ProjectResponse(
-            success=False,
-            data={'status': 'unhealthy'},
-            errors=[HEALTH_ERROR_MESSAGE]
-        )
+    return ProjectResponse(
+        success=True,
+        data={"status": "healthy"},
+    )
 
 @router.get("/test-nlp")
 @limiter.limit("15/minute")
@@ -1557,6 +1532,7 @@ async def export_project_pdf(
         dealshield_view_model=canonical_dealshield_view_model,
         client_name=client_name,
     )
+    packet = sanitize_decision_packet_export(packet)
 
     try:
         pdf_buffer = pdf_export_service.generate_decision_packet_pdf(packet)

@@ -930,6 +930,589 @@ def compose_decision_packet_input(
     }
 
 
+def _customer_safe_unavailable_note(value: Any) -> str:
+    reason = _sanitize_text(value)
+    if not reason:
+        return ""
+
+    mapped = {
+        "profile_policy_missing": "Downside screening guidance was incomplete for this packet.",
+        "no_driver_impact_available": "Some downside driver rankings were unavailable for this packet.",
+        "zero_driver_delta_denominator": "Some downside driver comparisons could not be normalized for this packet.",
+        "operator_or_numeric_inputs_unavailable": "Some downside threshold details were unavailable for this packet.",
+        "first_break_condition_unavailable": "The first modeled break condition could not be determined from the current inputs.",
+        "base_row_missing": "The base downside comparison row was unavailable for this packet.",
+        "base_row_gap_or_total_cost_missing": "Some base-case cost and value-gap inputs were unavailable for this packet.",
+        "base_row_metric_missing_for_policy_collapse": "Some base-case screening metrics were unavailable for this packet.",
+        "base_already_broken_policy": "The current base case already falls outside the modeled downside guardrails.",
+        "policy_threshold_not_reached": "The modeled downside threshold was not reached in this packet.",
+        "break_row_metric_or_total_cost_missing": "Some downside break-point inputs were unavailable for this packet.",
+        "non_positive_interpolation_denominator": "Some downside interpolation inputs were unavailable for this packet.",
+        "base_already_broken": "The current base case already falls outside the modeled downside guardrails.",
+        "no_modeled_break_condition": "No modeled downside break condition was available for this packet.",
+        "break_row_gap_or_total_cost_missing": "Some downside break-point cost and value-gap inputs were unavailable for this packet.",
+        "policy_calibrated_fallback": "Fallback downside calibration was used for this packet.",
+        "insufficient_break_risk_inputs": "Break-risk details were limited for this packet.",
+    }
+    if reason in mapped:
+        return mapped[reason]
+    if " " in reason and "_" not in reason:
+        return reason
+    return "Some downside diagnostics were unavailable for this packet."
+
+
+def _format_export_metric_display(metric_ref: Any, raw_value: Any, display_value: Any) -> str:
+    display_text = _sanitize_text(display_value)
+    if display_text:
+        return display_text
+
+    metric_key = _sanitize_text(metric_ref).lower()
+    if metric_key and "dscr" in metric_key:
+        return _format_ratio(raw_value)
+    if metric_key and "yield" in metric_key:
+        return _format_percent(raw_value)
+    if metric_key and any(token in metric_key for token in ("cost", "revenue", "value", "noi", "income")):
+        return _format_money(raw_value)
+    return _sanitize_text(raw_value) or "—"
+
+
+def _resolve_export_row_label(value: Any, fallback: str) -> str:
+    label = _sanitize_text(value)
+    if label:
+        return label
+    fallback_label = _titleize_label(value)
+    if fallback_label:
+        return fallback_label
+    return fallback
+
+
+def _build_export_control_rows(raw_provenance: Dict[str, Any]) -> List[Dict[str, str]]:
+    scenario_inputs = _as_dict(raw_provenance.get("scenario_inputs"))
+    base_inputs = _as_dict(scenario_inputs.get("base"))
+    controls = _as_dict(raw_provenance.get("dealshield_controls"))
+
+    rows: List[Dict[str, str]] = []
+
+    stress_band = _to_number(base_inputs.get("stress_band_pct"))
+    if stress_band is None:
+        stress_band = _to_number(controls.get("stress_band_pct"))
+    if stress_band is not None:
+        rows.append({
+            "label": "Downside stress band",
+            "value": f"±{int(round(stress_band))}% downside cases",
+        })
+
+    cost_anchor_used = base_inputs.get("cost_anchor_used")
+    if not isinstance(cost_anchor_used, bool):
+        legacy_cost_anchor = controls.get("use_anchor")
+        if not isinstance(legacy_cost_anchor, bool):
+            legacy_cost_anchor = controls.get("use_cost_anchor")
+        cost_anchor_used = legacy_cost_anchor if isinstance(legacy_cost_anchor, bool) else None
+    cost_anchor_value = _to_number(base_inputs.get("cost_anchor_value"))
+    if cost_anchor_value is None:
+        cost_anchor_value = _to_number(controls.get("anchor_total_cost"))
+    if cost_anchor_value is None:
+        cost_anchor_value = _to_number(controls.get("anchor_total_project_cost"))
+    if cost_anchor_used is not None or cost_anchor_value is not None:
+        rows.append({
+            "label": "Cost basis anchor",
+            "value": (
+                f"Applied at {_format_money(cost_anchor_value)}"
+                if cost_anchor_used is True and cost_anchor_value is not None
+                else "Not applied"
+            ),
+        })
+
+    revenue_anchor_used = base_inputs.get("revenue_anchor_used")
+    if isinstance(revenue_anchor_used, bool) or _to_number(base_inputs.get("revenue_anchor_value")) is not None:
+        revenue_anchor_value = _to_number(base_inputs.get("revenue_anchor_value"))
+        rows.append({
+            "label": "Revenue anchor",
+            "value": (
+                f"Applied at {_format_money(revenue_anchor_value)} annual revenue"
+                if revenue_anchor_used is True and revenue_anchor_value is not None
+                else "Not applied"
+            ),
+        })
+
+    return rows
+
+
+def _build_export_scenario_summaries(raw_provenance: Dict[str, Any]) -> List[Dict[str, str]]:
+    scenario_inputs = _as_dict(raw_provenance.get("scenario_inputs"))
+    summaries: List[Dict[str, str]] = []
+    for index, (scenario_id, raw_entry) in enumerate(scenario_inputs.items()):
+        entry = _as_dict(raw_entry)
+        if not entry:
+            continue
+        label = _resolve_export_row_label(
+            entry.get("scenario_label") or scenario_id,
+            fallback=f"Scenario {index + 1}",
+        )
+        lever_labels = [
+            _sanitize_text(item)
+            for item in _as_list(entry.get("applied_lever_labels"))
+            if _sanitize_text(item)
+        ]
+        explain = _sanitize_text(_as_dict(entry.get("explain")).get("short"))
+        if label.lower() == "base":
+            summary = "Base scenario using the current project assumptions."
+        elif lever_labels:
+            summary = "Modeled levers: " + ", ".join(lever_labels)
+        elif "profile-defined levers applied" in explain.lower():
+            summary = "Downside scenario with the listed lever changes applied."
+        elif explain:
+            summary = explain
+        else:
+            summary = "Scenario compared against the same core project assumptions."
+        summaries.append({
+            "label": label,
+            "summary": summary,
+        })
+    return summaries
+
+
+def _sanitize_export_decision_banner(section: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "decision_status": _sanitize_text(section.get("decision_status")),
+        "summary": _sanitize_text(section.get("summary")),
+        "detail": _sanitize_text(section.get("detail")),
+        "policy_basis_line": _sanitize_text(section.get("policy_basis_line")),
+    }
+
+
+def _sanitize_export_decision_insurance(section: Dict[str, Any], raw_provenance: Dict[str, Any]) -> Dict[str, Any]:
+    primary = _as_dict(section.get("primary_control_variable"))
+    first_break = _as_dict(section.get("first_break_condition"))
+    break_risk = _as_dict(section.get("break_risk"))
+
+    primary_label = _format_export_primary_control_label(
+        primary.get("label") or primary.get("id"),
+        raw_provenance.get("profile_id"),
+    )
+
+    ranked_likely_wrong: List[Dict[str, Any]] = []
+    for entry in _as_list(section.get("ranked_likely_wrong")):
+        item = _as_dict(entry)
+        text = _sanitize_text(item.get("text") or item.get("label"))
+        why = _sanitize_text(item.get("why"))
+        if not text and not why:
+            continue
+        ranked_likely_wrong.append({
+            "text": text or "Modeled downside factor",
+            "why": why,
+            "impact_pct": _to_number(item.get("impact_pct")),
+            "severity": _sanitize_text(item.get("severity")),
+        })
+
+    unavailable_notes: List[str] = []
+    for note in _as_list(section.get("unavailable_notes")):
+        humanized = _customer_safe_unavailable_note(note)
+        if humanized and humanized not in unavailable_notes:
+            unavailable_notes.append(humanized)
+
+    return {
+        "primary_control_variable": {
+            "label": primary_label or "Unavailable",
+            "impact_pct": _to_number(primary.get("impact_pct")),
+            "severity": _sanitize_text(primary.get("severity")),
+        },
+        "first_break_condition": {
+            "summary_text": _sanitize_text(first_break.get("summary_text")),
+            "scenario_label": _resolve_export_row_label(
+                first_break.get("scenario_label") or first_break.get("scenario_id"),
+                fallback="Scenario",
+            ),
+            "observed_value": first_break.get("observed_value"),
+            "operator": _sanitize_text(first_break.get("operator")),
+            "threshold_value": first_break.get("threshold_value"),
+        },
+        "flex_before_break_pct": _to_number(section.get("flex_before_break_pct")),
+        "flex_before_break_band": _sanitize_text(section.get("flex_before_break_band")),
+        "exposure_concentration_pct": _to_number(section.get("exposure_concentration_pct")),
+        "break_risk": {
+            "level": _sanitize_text(break_risk.get("level")),
+        },
+        "ranked_likely_wrong": ranked_likely_wrong,
+        "unavailable_notes": unavailable_notes,
+    }
+
+
+def _sanitize_export_decision_metrics_table(section: Dict[str, Any]) -> Dict[str, Any]:
+    raw_columns = [col for col in _as_list(section.get("columns")) if isinstance(col, dict)]
+    raw_rows = [row for row in _as_list(section.get("rows")) if isinstance(row, dict)]
+    safe_columns: List[Dict[str, Any]] = []
+    column_meta: List[Dict[str, Any]] = []
+
+    for index, column in enumerate(raw_columns):
+        export_id = f"metric_{index + 1}"
+        label = _resolve_export_row_label(
+            column.get("label") or column.get("title") or column.get("id") or column.get("col_id") or column.get("tile_id"),
+            fallback=f"Metric {index + 1}",
+        )
+        lookup_keys = [
+            key
+            for key in (
+                column.get("id"),
+                column.get("col_id"),
+                column.get("tile_id"),
+                column.get("colId"),
+                column.get("tileId"),
+            )
+            if isinstance(key, str) and key
+        ]
+        safe_columns.append({
+            "id": export_id,
+            "label": label,
+        })
+        column_meta.append({
+            "export_id": export_id,
+            "metric_ref": column.get("metric_ref") or column.get("metricRef"),
+            "lookup_keys": lookup_keys,
+        })
+
+    safe_rows: List[Dict[str, Any]] = []
+    for row_index, row in enumerate(raw_rows):
+        cells_by_key: Dict[str, Dict[str, Any]] = {}
+        for cell in _as_list(row.get("cells")):
+            if not isinstance(cell, dict):
+                continue
+            for key in (
+                cell.get("col_id"),
+                cell.get("tile_id"),
+                cell.get("id"),
+                cell.get("colId"),
+                cell.get("tileId"),
+            ):
+                if isinstance(key, str) and key:
+                    cells_by_key[key] = cell
+
+        safe_cells: List[Dict[str, Any]] = []
+        for column in column_meta:
+            cell = None
+            for lookup_key in column.get("lookup_keys") or []:
+                cell = cells_by_key.get(lookup_key)
+                if cell is not None:
+                    break
+            safe_cells.append({
+                "col_id": column["export_id"],
+                "display_value": _format_export_metric_display(
+                    column.get("metric_ref"),
+                    cell.get("value") if isinstance(cell, dict) else None,
+                    cell.get("display_value") if isinstance(cell, dict) else None,
+                ),
+            })
+
+        row_label = _sanitize_text(row.get("label") or row.get("scenario_label"))
+        if not row_label:
+            row_label = _titleize_label(row.get("scenario_id")) or f"Scenario {row_index + 1}"
+        safe_rows.append({
+            "label": row_label,
+            "cells": safe_cells,
+        })
+
+    return {
+        "columns": safe_columns,
+        "rows": safe_rows,
+    }
+
+
+def _sanitize_export_assumptions(section: Dict[str, Any]) -> Dict[str, Any]:
+    financing_summary = _as_dict(section.get("financing_summary"))
+    financing_summary_items: List[Dict[str, Any]] = []
+    for item in _as_list(financing_summary.get("items")):
+        row = _as_dict(item)
+        label = _sanitize_text(row.get("label"))
+        if not label:
+            continue
+        clean_item: Dict[str, Any] = {
+            "label": label,
+            "value": row.get("value"),
+            "format": _sanitize_text(row.get("format")),
+        }
+        decimals = _to_number(row.get("decimals"))
+        if decimals is not None:
+            clean_item["decimals"] = int(decimals)
+        financing_summary_items.append(clean_item)
+
+    financing_assumptions = _as_dict(section.get("financing_assumptions"))
+    safe_financing_assumptions = {
+        key: financing_assumptions.get(key)
+        for key in (
+            "debt_pct",
+            "ltv",
+            "interest_rate_pct",
+            "amort_years",
+            "loan_term_years",
+            "interest_only_months",
+            "annual_debt_service",
+            "monthly_debt_service",
+            "target_dscr",
+            "calculated_dscr",
+        )
+        if financing_assumptions.get(key) is not None
+    }
+
+    disclosures: List[str] = []
+    for item in _as_list(section.get("disclosures")):
+        text = _sanitize_text(item)
+        if text and text not in disclosures:
+            disclosures.append(text)
+
+    return {
+        "financing_summary": {"items": financing_summary_items} if financing_summary_items else {},
+        "financing_assumptions": safe_financing_assumptions,
+        "disclosures": disclosures,
+        "decision_summary": {},
+        "not_modeled_reason": _sanitize_text(section.get("not_modeled_reason")),
+    }
+
+
+def _sanitize_export_metric_section(section: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
+    return {
+        key: section.get(key)
+        for key in keys
+        if section.get(key) is not None
+    }
+
+
+def _sanitize_export_construction_summary(section: Dict[str, Any]) -> Dict[str, Any]:
+    special_features_breakdown: List[Dict[str, Any]] = []
+    for item in _as_list(section.get("special_features_breakdown")):
+        row = _as_dict(item)
+        label = _sanitize_text(row.get("label"))
+        if not label:
+            continue
+        detail_lines = [
+            _sanitize_text(line)
+            for line in _resolve_special_feature_detail_lines(row)
+            if _sanitize_text(line)
+        ]
+        special_features_breakdown.append({
+            "label": label,
+            "total_cost": _to_number(row.get("total_cost")),
+            "treatment": _resolve_special_feature_treatment(row),
+            "detail_lines": detail_lines,
+        })
+
+    safe_section = _sanitize_export_metric_section(
+        section,
+        [
+            "hard_costs",
+            "soft_costs",
+            "construction_total",
+            "total_project_cost",
+            "cost_per_sqft",
+            "special_features_total",
+        ],
+    )
+    safe_section["special_features_breakdown"] = special_features_breakdown
+    return safe_section
+
+
+def _sanitize_export_trade_distribution(section: Dict[str, Any]) -> Dict[str, Any]:
+    items: List[Dict[str, Any]] = []
+    for item in _as_list(section.get("items")):
+        row = _as_dict(item)
+        label = _sanitize_text(row.get("label"))
+        if not label:
+            continue
+        items.append({
+            "label": label,
+            "amount": row.get("amount"),
+            "percent": row.get("percent"),
+        })
+    return {"items": items}
+
+
+def _sanitize_export_cost_build_up(section: Dict[str, Any]) -> Dict[str, Any]:
+    items: List[Dict[str, Any]] = []
+    for item in _as_list(section.get("items")):
+        row = _as_dict(item)
+        label = _sanitize_text(row.get("label") or row.get("name"))
+        if not label and _to_number(row.get("value")) is None and _to_number(row.get("value_per_sf")) is None and _to_number(row.get("multiplier")) is None:
+            continue
+        items.append({
+            "label": label,
+            "value_per_sf": row.get("value_per_sf"),
+            "value": row.get("value"),
+            "multiplier": row.get("multiplier"),
+        })
+    return {"items": items}
+
+
+def _sanitize_export_schedule(section: Dict[str, Any]) -> Dict[str, Any]:
+    phases: List[Dict[str, Any]] = []
+    for index, phase in enumerate(_as_list(section.get("phases"))):
+        row = _as_dict(phase)
+        phases.append({
+            "label": _resolve_export_row_label(row.get("label") or row.get("id"), fallback=f"Phase {index + 1}"),
+            "start_month": row.get("start_month"),
+            "duration_months": row.get("duration_months"),
+        })
+
+    milestones: List[Dict[str, Any]] = []
+    for index, milestone in enumerate(_as_list(section.get("milestones"))):
+        row = _as_dict(milestone)
+        milestones.append({
+            "label": _resolve_export_row_label(row.get("label") or row.get("id"), fallback=f"Milestone {index + 1}"),
+            "date_label": _sanitize_text(row.get("date_label")),
+        })
+
+    return {
+        "total_months": section.get("total_months"),
+        "phases": phases,
+        "milestones": milestones,
+    }
+
+
+def _sanitize_export_trust_sections(section: Dict[str, Any]) -> Dict[str, Any]:
+    most_likely_wrong: List[Dict[str, Any]] = []
+    for entry in _as_list(section.get("most_likely_wrong")):
+        item = _as_dict(entry)
+        text = _sanitize_text(item.get("text") or item.get("label"))
+        why = _sanitize_text(item.get("why"))
+        if not text and not why:
+            continue
+        most_likely_wrong.append({
+            "text": text or "Modeled downside factor",
+            "why": why,
+        })
+
+    question_bank: List[Dict[str, Any]] = []
+    for entry in _as_list(section.get("question_bank")):
+        item = _as_dict(entry)
+        questions = [
+            _sanitize_text(question)
+            for question in _as_list(item.get("questions"))
+            if _sanitize_text(question)
+        ]
+        if not questions:
+            continue
+        question_bank.append({
+            "label": _resolve_question_bank_label(item),
+            "questions": questions,
+        })
+
+    red_flags_actions: List[Dict[str, Any]] = []
+    for entry in _as_list(section.get("red_flags_actions")):
+        item = _as_dict(entry)
+        flag = _sanitize_text(item.get("flag"))
+        action = _sanitize_text(item.get("action"))
+        if not flag and not action:
+            continue
+        red_flags_actions.append({
+            "flag": flag,
+            "action": action,
+        })
+
+    return {
+        "most_likely_wrong": most_likely_wrong,
+        "question_bank": question_bank,
+        "red_flags_actions": red_flags_actions,
+    }
+
+
+def _sanitize_export_provenance(section: Dict[str, Any], decision_banner: Dict[str, Any]) -> Dict[str, Any]:
+    safe_section = {
+        "decision_status": _sanitize_text(section.get("decision_status") or decision_banner.get("decision_status")),
+        "decision_basis": _sanitize_text(decision_banner.get("policy_basis_line"))
+        or "Decision reflects the modeled assumptions and downside scenarios summarized in this packet.",
+        "assumptions_used": _build_export_control_rows(section),
+        "scenario_summaries": _build_export_scenario_summaries(section),
+    }
+    return safe_section
+
+
+def sanitize_decision_packet_export(packet: Dict[str, Any]) -> Dict[str, Any]:
+    raw_packet = _as_dict(packet)
+    decision_banner = _sanitize_export_decision_banner(_as_dict(raw_packet.get("decision_banner")))
+    raw_provenance = _as_dict(raw_packet.get("provenance"))
+
+    return {
+        "cover_summary": _sanitize_export_metric_section(
+            _as_dict(raw_packet.get("cover_summary")),
+            [
+                "project_name",
+                "client_name",
+                "location",
+                "building_type",
+                "building_type_label",
+                "subtype",
+                "subtype_label",
+                "project_classification",
+                "square_footage",
+                "generated_at",
+            ],
+        ),
+        "decision_banner": decision_banner,
+        "key_metrics": _sanitize_export_metric_section(
+            _as_dict(raw_packet.get("key_metrics")),
+            [
+                "total_project_cost",
+                "yield_on_cost",
+                "dscr",
+                "annual_revenue",
+                "annual_noi",
+            ],
+        ),
+        "decision_insurance": _sanitize_export_decision_insurance(
+            _as_dict(raw_packet.get("decision_insurance")),
+            raw_provenance,
+        ),
+        "decision_metrics_table": _sanitize_export_decision_metrics_table(
+            _as_dict(raw_packet.get("decision_metrics_table"))
+        ),
+        "assumptions_not_modeled": _sanitize_export_assumptions(
+            _as_dict(raw_packet.get("assumptions_not_modeled"))
+        ),
+        "economics_snapshot": _sanitize_export_metric_section(
+            _as_dict(raw_packet.get("economics_snapshot")),
+            [
+                "total_project_cost",
+                "cost_per_sqft",
+                "annual_revenue",
+                "annual_noi",
+                "yield_on_cost",
+                "dscr",
+                "property_value",
+                "target_yield",
+            ],
+        ),
+        "revenue_required": _sanitize_export_metric_section(
+            _as_dict(raw_packet.get("revenue_required")),
+            [
+                "target_yield",
+                "operating_margin",
+                "required_noi",
+                "current_noi",
+                "noi_gap",
+                "required_annual_revenue",
+                "current_annual_revenue",
+                "revenue_gap",
+                "required_revenue_per_sf",
+                "current_revenue_per_sf",
+            ],
+        ),
+        "construction_summary": _sanitize_export_construction_summary(
+            _as_dict(raw_packet.get("construction_summary"))
+        ),
+        "trade_distribution": _sanitize_export_trade_distribution(
+            _as_dict(raw_packet.get("trade_distribution"))
+        ),
+        "cost_build_up": _sanitize_export_cost_build_up(
+            _as_dict(raw_packet.get("cost_build_up"))
+        ),
+        "schedule_milestones": _sanitize_export_schedule(
+            _as_dict(raw_packet.get("schedule_milestones"))
+        ),
+        "trust_sections": _sanitize_export_trust_sections(
+            _as_dict(raw_packet.get("trust_sections"))
+        ),
+        "provenance": _sanitize_export_provenance(raw_provenance, decision_banner),
+    }
+
+
 def _render_metric_grid(metrics: List[str]) -> str:
     if not metrics:
         return "<div class=\"empty-note\">No metrics available.</div>"
@@ -985,13 +1568,18 @@ def _render_decision_banner(banner: Dict[str, Any]) -> str:
     detail = _sanitize_text(banner.get("detail")) or ""
     basis = _sanitize_text(banner.get("policy_basis_line")) or ""
 
+    reason_html = (
+        f"<div class=\"decision-reason\">Reason code: {html_module.escape(reason)}</div>"
+        if reason and reason != "—"
+        else ""
+    )
     detail_html = f"<p class=\"banner-detail\">{html_module.escape(detail)}</p>" if detail else ""
     basis_html = f"<p class=\"banner-basis\">{html_module.escape(basis)}</p>" if basis else ""
 
     return (
         f"<section class=\"decision-banner {_status_class(status)}\">"
         f"<div class=\"decision-status-chip\">{html_module.escape(status)}</div>"
-        f"<div class=\"decision-reason\">Reason code: {html_module.escape(reason)}</div>"
+        f"{reason_html}"
         f"<h2>{html_module.escape(summary)}</h2>"
         f"{detail_html}"
         f"{basis_html}"
@@ -1350,8 +1938,14 @@ def _render_construction_summary(section: Dict[str, Any]) -> str:
         for item in special_features_rows:
             label = _sanitize_text(item.get("label")) or "Special Feature"
             amount = _format_money(item.get("total_cost"))
-            treatment = _resolve_special_feature_treatment(item)
-            detail_lines = _resolve_special_feature_detail_lines(item)
+            treatment = _sanitize_text(item.get("treatment")) or _resolve_special_feature_treatment(item)
+            detail_lines = [
+                _sanitize_text(line)
+                for line in _as_list(item.get("detail_lines"))
+                if _sanitize_text(line)
+            ]
+            if not detail_lines:
+                detail_lines = _resolve_special_feature_detail_lines(item)
             detail_html = (
                 "".join(
                     f"<div class=\"list-detail\">{html_module.escape(line)}</div>"
@@ -1650,6 +2244,94 @@ def _render_red_flags_actions(items: List[Any]) -> str:
 
 
 def _render_provenance(section: Dict[str, Any]) -> str:
+    decision_basis = _sanitize_text(section.get("decision_basis"))
+    assumptions_used = [
+        item for item in _as_list(section.get("assumptions_used")) if isinstance(item, dict)
+    ]
+    scenario_summaries = [
+        item for item in _as_list(section.get("scenario_summaries")) if isinstance(item, dict)
+    ]
+
+    if decision_basis or assumptions_used or scenario_summaries:
+        info_rows = []
+        decision_status = _sanitize_text(section.get("decision_status"))
+        if decision_status:
+            info_rows.append(("Decision Status", decision_status))
+
+        info_grid = (
+            "<div class=\"info-grid\">"
+            + "".join(
+                "<div class=\"info-item\">"
+                f"<span class=\"info-label\">{html_module.escape(label)}</span>"
+                f"<span class=\"info-value\">{html_module.escape(value)}</span>"
+                "</div>"
+                for label, value in info_rows
+            )
+            + "</div>"
+            if info_rows
+            else ""
+        )
+
+        basis_html = (
+            "<div class=\"note-block\">"
+            f"<strong>Decision basis:</strong> {html_module.escape(decision_basis)}"
+            "</div>"
+            if decision_basis
+            else ""
+        )
+
+        assumptions_rows = []
+        for item in assumptions_used:
+            label = _sanitize_text(item.get("label"))
+            value = _sanitize_text(item.get("value"))
+            if not label or not value:
+                continue
+            assumptions_rows.append(
+                "<tr>"
+                f"<td>{html_module.escape(label)}</td>"
+                f"<td>{html_module.escape(value)}</td>"
+                "</tr>"
+            )
+        assumptions_html = (
+            "<div class=\"subsection\"><h3>Assumptions Used</h3>"
+            "<table class=\"simple-table\"><tbody>"
+            + "".join(assumptions_rows)
+            + "</tbody></table></div>"
+            if assumptions_rows
+            else ""
+        )
+
+        scenario_rows = []
+        for item in scenario_summaries:
+            label = _sanitize_text(item.get("label"))
+            summary = _sanitize_text(item.get("summary"))
+            if not label or not summary:
+                continue
+            scenario_rows.append(
+                "<tr>"
+                f"<td>{html_module.escape(label)}</td>"
+                f"<td>{html_module.escape(summary)}</td>"
+                "</tr>"
+            )
+        scenarios_html = (
+            "<div class=\"subsection\"><h3>Modeled Scenario Summaries</h3>"
+            "<table class=\"simple-table\"><thead><tr><th>Scenario</th><th>Summary</th></tr></thead><tbody>"
+            + "".join(scenario_rows)
+            + "</tbody></table></div>"
+            if scenario_rows
+            else ""
+        )
+
+        return (
+            "<section>"
+            "<h2>Provenance / Decision Basis</h2>"
+            + info_grid
+            + basis_html
+            + assumptions_html
+            + scenarios_html
+            + "</section>"
+        )
+
     rows = [
         ("Tile Profile", _sanitize_text(section.get("profile_id")) or "—"),
         ("Content Profile", _sanitize_text(section.get("content_profile_id")) or "—"),

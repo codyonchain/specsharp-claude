@@ -150,7 +150,4 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "SpecSharp API",
-        "cors_origins": settings.cors_origins,
-        "environment": settings.environment,
-        "frontend_url": settings.frontend_url,
     }
